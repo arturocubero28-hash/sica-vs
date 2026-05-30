@@ -190,3 +190,9 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
   margin: 8px auto; display: block;
 }
 .qr-resultado h3 { color: #F48723; }
+
+/* ---- Escáner de cámara del guardia ---- */
+.guardia-btn.scan-cam { background: #022E45; font-size: 19px; }
+.guardia-btn.scan-cam:hover { background: #033a58; }
+.qr-reader { width: 100%; max-width: 360px; margin: 0 auto; border-radius: 14px; overflow: hidden; border: 3px solid #F48723; }
+.qr-reader video { width: 100% !important; height: auto !important; display: block; }

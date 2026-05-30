@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { Html5Qrcode } from "html5-qrcode";
 import { validarQR, registrarAcceso, type VisitaDTO } from "../../api/client";
 
 /**
@@ -14,20 +15,61 @@ export function GuardiaPanel() {
   const [fotoPlaca, setFotoPlaca] = useState("");
   const [procesando, setProcesando] = useState(false);
   const [resultado, setResultado] = useState("");
+  const [escaneando, setEscaneando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
 
-  async function escanear() {
+  // Validar un token (venga de cámara o manual)
+  async function validar(token: string) {
     setError("");
-    const token = qrInput.trim();
-    if (!token) { setError("Ingresa o escanea un código QR"); return; }
+    if (!token.trim()) { setError("Ingresa o escanea un código QR"); return; }
     try {
-      const data = await validarQR(token);
+      const data = await validarQR(token.trim());
       setVisita(data.visita);
       setStep("review");
     } catch (e) {
       setError((e as Error).message);
     }
   }
+
+  async function escanear() {
+    await validar(qrInput);
+  }
+
+  // Iniciar la cámara para escanear
+  async function iniciarCamara() {
+    setError("");
+    setEscaneando(true);
+    try {
+      const scanner = new Html5Qrcode("qr-reader");
+      scannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: "environment" },  // cámara trasera
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        async (decodedText) => {
+          await detenerCamara();
+          await validar(decodedText);
+        },
+        () => { /* ignorar errores de frame sin QR */ }
+      );
+    } catch (e) {
+      setError("No se pudo abrir la cámara. Verifica los permisos o usa el código manual.");
+      setEscaneando(false);
+    }
+  }
+
+  async function detenerCamara() {
+    if (scannerRef.current) {
+      try { await scannerRef.current.stop(); } catch { /* ya detenido */ }
+      scannerRef.current = null;
+    }
+    setEscaneando(false);
+  }
+
+  // Limpiar cámara al desmontar
+  useEffect(() => {
+    return () => { if (scannerRef.current) scannerRef.current.stop().catch(() => {}); };
+  }, []);
 
   async function darAcceso() {
     if (!visita) return;
@@ -82,18 +124,30 @@ export function GuardiaPanel() {
       {/* PASO 1: Escanear QR */}
       {step === "scan" && (
         <div className="guardia-scan">
-          <p className="muted">Ingresa el código QR de la visita:</p>
-          <input
-            ref={inputRef}
-            className="guardia-input"
-            placeholder="Pega o escanea el código QR aquí"
-            value={qrInput}
-            onChange={e => setQrInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && escanear()}
-            autoFocus
-          />
+          {!escaneando ? (
+            <>
+              <button className="guardia-btn scan-cam" onClick={iniciarCamara}>
+                📷 Escanear con cámara
+              </button>
+              <p className="muted" style={{ margin: "14px 0 6px" }}>o ingresá el código manualmente:</p>
+              <input
+                ref={inputRef}
+                className="guardia-input"
+                placeholder="Código QR de la visita"
+                value={qrInput}
+                onChange={e => setQrInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && escanear()}
+              />
+              <button className="ghost" onClick={escanear}>Validar código manual</button>
+            </>
+          ) : (
+            <>
+              <div id="qr-reader" className="qr-reader"></div>
+              <p className="muted">Apuntá la cámara al código QR del visitante</p>
+              <button className="ghost" onClick={detenerCamara}>Cancelar escaneo</button>
+            </>
+          )}
           {error && <div className="error">{error}</div>}
-          <button className="guardia-btn" onClick={escanear}>Validar código</button>
         </div>
       )}
 

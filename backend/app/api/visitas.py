@@ -301,8 +301,11 @@ COLOR_BLANCO = (255, 255, 255)
 
 
 def _generar_tarjeta_qr(visita):
-    """Genera una imagen PNG tipo tarjeta con el QR y datos de la visita."""
-    # 1. Generar el QR con módulos redondeados, color azul marino
+    """Genera una tarjeta PNG de alta resolución con el QR y datos de la visita."""
+    ESCALA = 2  # render a 2x para nitidez
+    W, H = 600 * ESCALA, 880 * ESCALA
+
+    # 1. QR azul marino con módulos redondeados
     qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_H,
                        box_size=10, border=2)
     qr.add_data(str(visita.qr.token))
@@ -311,70 +314,95 @@ def _generar_tarjeta_qr(visita):
         image_factory=StyledPilImage,
         module_drawer=RoundedModuleDrawer(),
         color_mask=SolidFillColorMask(front_color=COLOR_AZUL, back_color=COLOR_BLANCO),
-    ).convert("RGB")
+    ).convert("RGBA")
 
-    # 2. Lienzo de la tarjeta (blanco con franja naranja arriba)
-    W, H = 600, 800
+    # 2. Lienzo blanco
     card = Image.new("RGB", (W, H), COLOR_BLANCO)
     draw = ImageDraw.Draw(card)
 
-    # Franja superior naranja con degradado sutil
-    for y in range(140):
-        # de naranja fuerte a naranja claro
-        t = y / 140
+    def fuente(size, bold=False):
+        r = ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
+             else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+        return ImageFont.truetype(r, size * ESCALA) if os.path.exists(r) else ImageFont.load_default()
+
+    # 3. Encabezado: franja naranja con degradado
+    head_h = 175 * ESCALA
+    for y in range(head_h):
+        t = y / head_h
         r = int(244 + (255 - 244) * t)
-        g = int(135 + (200 - 135) * t)
-        b = int(35 + (120 - 35) * t)
+        g = int(135 + (190 - 135) * t)
+        b = int(35 + (110 - 35) * t)
         draw.line([(0, y), (W, y)], fill=(r, g, b))
 
-    # Esquinas redondeadas naranjas decorativas abajo
-    draw.rectangle([0, H - 12, W, H], fill=COLOR_NARANJA)
+    # 4. Logo dentro de un círculo blanco a la izquierda del encabezado
+    try:
+        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "logo.png")
+        if os.path.exists(logo_path):
+            logo = Image.open(logo_path).convert("RGBA")
+            logo_sz = 105 * ESCALA
+            logo = logo.resize((logo_sz, logo_sz))
+            # círculo blanco de fondo
+            cx, cy = 70 * ESCALA, head_h // 2
+            rad = 58 * ESCALA
+            draw.ellipse([cx - rad, cy - rad, cx + rad, cy + rad], fill=COLOR_BLANCO)
+            card.paste(logo, (cx - logo_sz // 2, cy - logo_sz // 2), logo)
+    except Exception:
+        pass
 
-    # 3. Fuentes
-    def fuente(size, bold=False):
-        rutas = [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
-            else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        ]
-        for r in rutas:
-            if os.path.exists(r):
-                return ImageFont.truetype(r, size)
-        return ImageFont.load_default()
+    # 5. Texto del encabezado, a la derecha del logo
+    tx = 150 * ESCALA
+    draw.text((tx, 58 * ESCALA), "RESIDENCIAL", font=fuente(24, bold=True), fill=COLOR_BLANCO, anchor="lm")
+    draw.text((tx, 105 * ESCALA), "VILLAS DEL SOL", font=fuente(32, bold=True), fill=COLOR_BLANCO, anchor="lm")
 
-    # 4. Título en la franja
-    titulo = "RESIDENCIAL"
-    sub = "VILLAS DEL SOL"
-    f_tit = fuente(30, bold=True)
-    f_sub = fuente(38, bold=True)
-    draw.text((W // 2, 45), titulo, font=f_tit, fill=COLOR_BLANCO, anchor="mm")
-    draw.text((W // 2, 92), sub, font=f_sub, fill=COLOR_BLANCO, anchor="mm")
-
-    # 5. Pegar el QR centrado
-    qr_size = 360
+    # 6. QR centrado con marco naranja
+    qr_size = 380 * ESCALA
     qr_img = qr_img.resize((qr_size, qr_size))
     qr_x = (W - qr_size) // 2
-    qr_y = 185
-    # Marco naranja alrededor del QR
-    draw.rounded_rectangle([qr_x - 14, qr_y - 14, qr_x + qr_size + 14, qr_y + qr_size + 14],
-                           radius=20, outline=COLOR_NARANJA, width=4)
-    card.paste(qr_img, (qr_x, qr_y))
+    qr_y = head_h + 40 * ESCALA
+    draw.rounded_rectangle(
+        [qr_x - 16 * ESCALA, qr_y - 16 * ESCALA, qr_x + qr_size + 16 * ESCALA, qr_y + qr_size + 16 * ESCALA],
+        radius=24 * ESCALA, outline=COLOR_NARANJA, width=5 * ESCALA)
+    card.paste(qr_img, (qr_x, qr_y), qr_img)
 
-    # 6. Datos de la visita
-    y = qr_y + qr_size + 45
-    tipos = {"unica": "Visita única", "recurrente": "Visita recurrente", "repartidor": "Repartidor"}
-    f_nombre = fuente(34, bold=True)
-    f_dato = fuente(22)
+    # 7. Línea separadora
+    y = qr_y + qr_size + 50 * ESCALA
+    draw.line([(80 * ESCALA, y), (W - 80 * ESCALA, y)], fill=(230, 230, 230), width=2 * ESCALA)
+    y += 35 * ESCALA
 
-    draw.text((W // 2, y), visita.nombre_visitante, font=f_nombre, fill=COLOR_AZUL, anchor="mm")
-    y += 45
-    draw.text((W // 2, y), tipos.get(visita.tipo, visita.tipo), font=f_dato, fill=COLOR_NARANJA, anchor="mm")
-    y += 38
+    # 8. Datos del visitante (grandes y legibles)
+    tipos = {"unica": "VISITA ÚNICA", "recurrente": "VISITA RECURRENTE", "repartidor": "REPARTIDOR"}
+    # Nombre grande
+    draw.text((W // 2, y), visita.nombre_visitante, font=fuente(34, bold=True), fill=COLOR_AZUL, anchor="mm")
+    y += 50 * ESCALA
+    # Tipo en pill naranja
+    tipo_txt = tipos.get(visita.tipo, visita.tipo.upper())
+    tf = fuente(19, bold=True)
+    bbox = draw.textbbox((0, 0), tipo_txt, font=tf)
+    tw = bbox[2] - bbox[0]
+    pill_w = tw + 50 * ESCALA
+    pill_x = (W - pill_w) // 2
+    draw.rounded_rectangle([pill_x, y - 18 * ESCALA, pill_x + pill_w, y + 18 * ESCALA],
+                           radius=18 * ESCALA, fill=COLOR_NARANJA)
+    draw.text((W // 2, y), tipo_txt, font=tf, fill=COLOR_BLANCO, anchor="mm")
+    y += 50 * ESCALA
+
+    # Detalles
     if visita.valido_hasta:
-        vence = visita.valido_hasta.strftime("%d/%m/%Y %H:%M")
-        draw.text((W // 2, y), f"Válido hasta: {vence}", font=fuente(18), fill=(110, 110, 110), anchor="mm")
-    y += 30
+        vence = visita.valido_hasta.strftime("%d/%m/%Y a las %H:%M")
+        draw.text((W // 2, y), f"Válido hasta: {vence}", font=fuente(17), fill=(90, 90, 90), anchor="mm")
+        y += 32 * ESCALA
     if visita.placa_vehiculo:
-        draw.text((W // 2, y), f"Placa: {visita.placa_vehiculo}", font=fuente(18), fill=(110, 110, 110), anchor="mm")
+        draw.text((W // 2, y), f"Vehículo: {visita.placa_vehiculo}", font=fuente(17), fill=(90, 90, 90), anchor="mm")
+        y += 32 * ESCALA
+    if visita.empresa:
+        draw.text((W // 2, y), f"Empresa: {visita.empresa}", font=fuente(17), fill=(90, 90, 90), anchor="mm")
+        y += 32 * ESCALA
+
+    # 9. Pie
+    draw.text((W // 2, H - 45 * ESCALA), "Presente este código al guardia en la entrada",
+              font=fuente(15), fill=(150, 150, 150), anchor="mm")
+    # Franja inferior naranja
+    draw.rectangle([0, H - 14 * ESCALA, W, H], fill=COLOR_NARANJA)
 
     return card
 
