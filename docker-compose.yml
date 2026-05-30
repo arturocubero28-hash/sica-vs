@@ -1,0 +1,87 @@
+# =====================================================================
+# SICA-VS — Entorno de desarrollo local (réplica del droplet)
+# Levanta todo con:  docker compose up
+# =====================================================================
+services:
+
+  # ---- Base de datos PostgreSQL ----
+  db:
+    image: postgres:15
+    container_name: sicavs_db
+    environment:
+      POSTGRES_DB: sicavs
+      POSTGRES_USER: sicavs
+      POSTGRES_PASSWORD: sicavs_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # El schema.sql se ejecuta automáticamente la primera vez que arranca la BD
+      - ./backend/migrations/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./backend/migrations/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sicavs"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---- Redis: caché, sesiones en vivo, broker de Celery ----
+  redis:
+    image: redis:7-alpine
+    container_name: sicavs_redis
+    ports:
+      - "6379:6379"
+
+  # ---- Backend Flask (API REST) ----
+  backend:
+    build: ./backend
+    container_name: sicavs_backend
+    command: flask run --host=0.0.0.0 --port=5000 --debug
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app          # hot-reload: editas y se refleja al instante
+    environment:
+      FLASK_APP: wsgi.py
+      FLASK_ENV: development
+      DATABASE_URL: postgresql://sicavs:sicavs_dev@db:5432/sicavs
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: cambiar_esto_en_produccion
+      CORS_ORIGINS: http://localhost:5173
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # ---- Worker de Celery (notificaciones, cuotas, alertas de mora) ----
+  worker:
+    build: ./backend
+    container_name: sicavs_worker
+    command: celery -A app.tasks.celery_app.celery worker --beat --loglevel=info
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql://sicavs:sicavs_dev@db:5432/sicavs
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - backend
+      - redis
+
+  # ---- Frontend React + Vite ----
+  frontend:
+    build: ./frontend
+    container_name: sicavs_frontend
+    command: npm run dev -- --host
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules       # evita pisar node_modules del contenedor
+    environment:
+      VITE_API_URL: http://localhost:5000/api/v1
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

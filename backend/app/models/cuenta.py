@@ -1,0 +1,192 @@
+"""
+Módulo 2 — Unidades, Cuentas, Residentes y Tarjetas (Integrante 2).
+
+Jerarquía:
+    Unidad (casa | edificio)
+      └── Cuenta (la que paga y genera QR; casa=1, edificio=N apartamentos)
+            ├── Residente (titular | miembro)  -> vinculado a un Usuario
+            └── Tarjeta de proximidad (varias por cuenta)
+
+Sigue el patrón del modelo Usuario (uuid_publico, to_dict, timestamps).
+"""
+import uuid
+import datetime as dt
+
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from app.extensions import db
+
+
+def _uuid_col():
+    return db.Column(PG_UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
+
+
+def _now():
+    return dt.datetime.utcnow()
+
+
+# ---------------------------------------------------------------------
+# UNIDAD: entidad raíz (casa o edificio)
+# ---------------------------------------------------------------------
+class Unidad(db.Model):
+    __tablename__ = "unidades"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid_col()
+    tipo = db.Column(db.String(10), nullable=False)        # 'casa' | 'edificio'
+    identificador = db.Column(db.String(60), unique=True, nullable=False)  # "Casa 24", "Edificio 1"
+    direccion_ref = db.Column(db.String(160))
+    activa = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
+
+    cuentas = db.relationship("Cuenta", backref="unidad", lazy="select")
+
+    def to_dict(self, incluir_cuentas=False):
+        d = {
+            "id": str(self.uuid_publico),
+            "tipo": self.tipo,
+            "identificador": self.identificador,
+            "direccion_ref": self.direccion_ref,
+            "activa": self.activa,
+            "total_cuentas": len(self.cuentas),
+        }
+        if incluir_cuentas:
+            d["cuentas"] = [c.to_dict() for c in self.cuentas]
+        return d
+
+
+# ---------------------------------------------------------------------
+# CUENTA: quien paga y genera QR (casa o apartamento)
+# ---------------------------------------------------------------------
+class Cuenta(db.Model):
+    __tablename__ = "cuentas"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid_col()
+    unidad_id = db.Column(db.BigInteger, db.ForeignKey("unidades.id"), nullable=False)
+    apartamento = db.Column(db.String(40))                 # NULL si es casa; "1A" si es apto
+    tarifa_id = db.Column(db.BigInteger, db.ForeignKey("tarifas.id"), nullable=False)
+    dia_pago = db.Column(db.SmallInteger, nullable=False)   # 1..28
+    fecha_alta = db.Column(db.Date, nullable=False, default=dt.date.today)
+    estado = db.Column(db.String(20), nullable=False, default="al_dia")
+    bloqueada = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
+
+    residentes = db.relationship("Residente", backref="cuenta", lazy="select")
+    tarjetas = db.relationship("Tarjeta", backref="cuenta", lazy="select")
+    tarifa = db.relationship("Tarifa", lazy="joined")
+
+    def titular(self):
+        for r in self.residentes:
+            if r.rol_cuenta == "titular" and r.activo:
+                return r
+        return None
+
+    def to_dict(self, detalle=False):
+        t = self.titular()
+        d = {
+            "id": str(self.uuid_publico),
+            "apartamento": self.apartamento,
+            "dia_pago": self.dia_pago,
+            "estado": self.estado,
+            "bloqueada": self.bloqueada,
+            "tarifa": self.tarifa.nombre if self.tarifa else None,
+            "monto": float(self.tarifa.monto) if self.tarifa else None,
+            "titular": t.to_dict() if t else None,
+            "total_residentes": len([r for r in self.residentes if r.activo]),
+            "total_tarjetas": len([x for x in self.tarjetas if x.estado == "activa"]),
+        }
+        if detalle:
+            d["residentes"] = [r.to_dict() for r in self.residentes if r.activo]
+            d["tarjetas"] = [x.to_dict() for x in self.tarjetas]
+        return d
+
+
+# ---------------------------------------------------------------------
+# TARIFA (catálogo; ya existe en el schema, modelo mínimo para relación)
+# ---------------------------------------------------------------------
+class Tarifa(db.Model):
+    __tablename__ = "tarifas"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    nombre = db.Column(db.String(80), nullable=False)
+    monto = db.Column(db.Numeric(10, 2), nullable=False)
+    descripcion = db.Column(db.String(255))
+    activa = db.Column(db.Boolean, nullable=False, default=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nombre": self.nombre,
+            "monto": float(self.monto),
+            "descripcion": self.descripcion,
+            "activa": self.activa,
+        }
+
+
+# ---------------------------------------------------------------------
+# RESIDENTE: vínculo Usuario <-> Cuenta
+# ---------------------------------------------------------------------
+class Residente(db.Model):
+    __tablename__ = "residentes"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid_col()
+    usuario_id = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
+    cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
+    rol_cuenta = db.Column(db.String(10), nullable=False, default="miembro")  # titular | miembro
+    relacion = db.Column(db.String(60))                    # propietario, inquilino, hijo...
+    activo = db.Column(db.Boolean, nullable=False, default=True)
+    fecha_ingreso = db.Column(db.Date, nullable=False, default=dt.date.today)
+    fecha_baja = db.Column(db.Date)
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
+
+    usuario = db.relationship("Usuario", lazy="joined")
+
+    def to_dict(self):
+        u = self.usuario
+        return {
+            "id": str(self.uuid_publico),
+            "rol_cuenta": self.rol_cuenta,
+            "relacion": self.relacion,
+            "activo": self.activo,
+            "nombre": f"{u.nombre} {u.apellido}" if u else None,
+            "email": u.email if u else None,
+            # estado de activación de la cuenta de acceso del residente
+            "estado_acceso": "activo" if (u and u.activo and u.password_hash) else "pendiente",
+        }
+
+
+# ---------------------------------------------------------------------
+# TARJETA de proximidad
+# ---------------------------------------------------------------------
+class Tarjeta(db.Model):
+    __tablename__ = "tarjetas_proximidad"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid_col()
+    card_uid = db.Column(db.String(64), unique=True, nullable=False)
+    cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
+    residente_id = db.Column(db.BigInteger, db.ForeignKey("residentes.id"))
+    etiqueta = db.Column(db.String(80))                    # "Tarjeta principal", "Auto 2"
+    estado = db.Column(db.String(20), nullable=False, default="activa")
+    fecha_asignacion = db.Column(db.Date, nullable=False, default=dt.date.today)
+    fecha_baja = db.Column(db.Date)
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
+
+    residente = db.relationship("Residente", lazy="joined")
+
+    def to_dict(self):
+        return {
+            "id": str(self.uuid_publico),
+            "card_uid": self.card_uid,
+            "etiqueta": self.etiqueta,
+            "estado": self.estado,
+            "asignada_a": (
+                f"{self.residente.usuario.nombre} {self.residente.usuario.apellido}"
+                if self.residente and self.residente.usuario else "Sin asignar"
+            ),
+        }
