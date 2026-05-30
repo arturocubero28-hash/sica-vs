@@ -174,3 +174,18 @@ export const registrarAcceso = (body: {
   foto_identidad?: string; foto_placa?: string;
 }) => request<{ evento: object; mensaje: string }>(
     "/visitas/accesos/visita", { method: "POST", body: JSON.stringify(body) });
+
+// URL de la imagen QR (con token en query para autenticación de imagen)
+export function urlImagenQR(visitaId: string): string {
+  const token = getToken();
+  return `${API_URL}/visitas/${visitaId}/qr-imagen?_auth=${token}`;
+}
+
+// Obtiene la imagen QR como blob (para descargar/compartir)
+export async function obtenerImagenQR(visitaId: string): Promise<Blob> {
+  const res = await fetch(`${API_URL}/visitas/${visitaId}/qr-imagen`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error("No se pudo generar la imagen");
+  return res.blob();
+}

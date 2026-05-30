@@ -1,8 +1,47 @@
 import { useState, useEffect } from "react";
 import {
-  miCuenta, misVisitas, crearVisita,
+  miCuenta, misVisitas, crearVisita, urlImagenQR, obtenerImagenQR,
   type MiCuentaDTO, type VisitaDTO,
 } from "../../api/client";
+
+// Comparte el QR por WhatsApp (descarga la imagen y abre WhatsApp con mensaje)
+async function compartirWhatsApp(visita: VisitaDTO) {
+  const vigencia = visita.valido_hasta
+    ? new Date(visita.valido_hasta).toLocaleString()
+    : "";
+  const mensaje =
+    `Hola ${visita.nombre_visitante}, aquí está tu código de acceso para Residencial Villas del Sol. ` +
+    `Preséntalo al guardia en la entrada.` +
+    (vigencia ? ` Válido hasta: ${vigencia}.` : "");
+
+  // Intentar compartir la imagen nativamente (móvil)
+  try {
+    const blob = await obtenerImagenQR(visita.id);
+    const file = new File([blob], "qr-visita.png", { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], text: mensaje });
+      return;
+    }
+  } catch { /* sigue al fallback */ }
+
+  // Fallback: abrir WhatsApp con el mensaje de texto
+  window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, "_blank");
+}
+
+// Descarga la imagen del QR
+async function descargarQR(visita: VisitaDTO) {
+  try {
+    const blob = await obtenerImagenQR(visita.id);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `qr_${visita.nombre_visitante.replace(/ /g, "_")}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("No se pudo descargar la imagen");
+  }
+}
 
 export function ResidentePortal() {
   const [tab, setTab] = useState<"qr" | "historial" | "cuenta">("qr");
@@ -103,20 +142,24 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
   if (resultado) {
     return (
       <div className="qr-resultado">
-        <h3>QR generado</h3>
-        <div className="qr-code-box">
-          <code className="qr-token">{resultado.qr_token}</code>
-        </div>
-        <p>Comparte este código con <b>{resultado.nombre_visitante}</b> para que lo presente al guardia.</p>
-        <p className="muted small">
-          Vigente hasta: {resultado.valido_hasta ? new Date(resultado.valido_hasta).toLocaleString() : "—"}
-        </p>
+        <h3>¡QR generado!</h3>
+        <img
+          className="qr-imagen"
+          src={urlImagenQR(resultado.id)}
+          alt="Código QR de la visita"
+        />
+        <p>Compartí esta imagen con <b>{resultado.nombre_visitante}</b> para que la presente al guardia.</p>
         <div className="row-btns">
-          <button onClick={() => {
-            navigator.clipboard?.writeText(resultado.qr_token || "");
-          }}>Copiar código</button>
-          <button className="ghost" onClick={onVolver}>Generar otro</button>
+          <button onClick={() => compartirWhatsApp(resultado)}>
+            Compartir por WhatsApp
+          </button>
+          <button onClick={() => descargarQR(resultado)}>
+            Descargar imagen
+          </button>
         </div>
+        <button className="ghost" style={{ marginTop: 10 }} onClick={onVolver}>
+          Generar otro
+        </button>
       </div>
     );
   }

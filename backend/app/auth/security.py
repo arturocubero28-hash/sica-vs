@@ -39,11 +39,15 @@ def generar_token(usuario: Usuario) -> str:
 
 
 def _usuario_desde_request():
-    """Extrae y valida el token del header Authorization. Devuelve el Usuario o None."""
+    """Extrae y valida el token. Acepta header Authorization o query param _auth (para imágenes)."""
     auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
+    if auth.startswith("Bearer "):
+        token = auth.split(" ", 1)[1]
+    else:
+        # Para <img src> que no puede mandar headers, aceptar token por query
+        token = request.args.get("_auth", "")
+    if not token:
         return None
-    token = auth.split(" ", 1)[1]
     try:
         payload = jwt.decode(
             token, current_app.config["JWT_SECRET"], algorithms=["HS256"]
