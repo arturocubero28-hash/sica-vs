@@ -189,3 +189,19 @@ export async function obtenerImagenQR(visitaId: string): Promise<Blob> {
   if (!res.ok) throw new Error("No se pudo generar la imagen");
   return res.blob();
 }
+
+// =====================================================================
+// Dashboard administrativo
+// =====================================================================
+export interface MetricasDTO {
+  qr_generados_hoy: number; visitantes_activos: number;
+  qr_utilizados: number; qr_expirados: number;
+  total_unidades: number; total_cuentas: number;
+  total_residentes: number; cuentas_bloqueadas: number; accesos_hoy: number;
+}
+export interface VisitaTablaDTO {
+  id: string; residente: string; unidad: string; visitante: string;
+  tipo: string; estado: string; vigencia: string; creado: string;
+}
+export const dashboardMetricas = () => request<MetricasDTO>("/dashboard/metricas");
+export const dashboardVisitas = () => request<VisitaTablaDTO[]>("/dashboard/visitas-tabla");

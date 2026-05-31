@@ -5,7 +5,7 @@ import {
   type Cuenta, type Unidad, type Tarifa,
 } from "../../api/client";
 
-export function UnidadesPanel() {
+export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
   const [tab, setTab] = useState<"cuentas" | "nueva">("cuentas");
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [seleccionada, setSeleccionada] = useState<Cuenta | null>(null);
@@ -13,11 +13,11 @@ export function UnidadesPanel() {
   async function recargar() { setCuentas(await listarCuentas()); }
   useEffect(() => { recargar(); }, []);
 
-  return (
-    <div className="card wide">
+  const contenido = (
+    <>
       <div className="tabs">
         <button className={tab === "cuentas" ? "tab on" : "tab"} onClick={() => setTab("cuentas")}>
-          Casas y residentes
+          Lista de casas
         </button>
         <button className={tab === "nueva" ? "tab on" : "tab"} onClick={() => setTab("nueva")}>
           + Dar de alta
@@ -35,8 +35,11 @@ export function UnidadesPanel() {
         <DetalleCuenta cuenta={seleccionada} onCerrar={() => setSeleccionada(null)}
           onCambio={async () => setSeleccionada(await detalleCuenta(seleccionada.id))} />
       )}
-    </div>
+    </>
   );
+
+  if (embedded) return <div style={{ marginTop: 8 }}>{contenido}</div>;
+  return <div className="card wide">{contenido}</div>;
 }
 
 function ListaCuentas({ cuentas, onAbrir }: { cuentas: Cuenta[]; onAbrir: (c: Cuenta) => void }) {
@@ -76,6 +79,18 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
   const [enlace, setEnlace] = useState<{ email: string; url: string } | null>(null);
   const [nuevaUnidadTipo, setNuevaUnidadTipo] = useState<"casa" | "edificio">("casa");
   const [nuevaUnidadId, setNuevaUnidadId] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [mostrarSug, setMostrarSug] = useState(false);
+
+  const sugerencias = unidades.filter(u =>
+    u.identificador.toLowerCase().includes(busqueda.toLowerCase())
+  ).slice(0, 8);
+
+  function seleccionarUnidad(u: Unidad) {
+    setUnidadId(u.id);
+    setBusqueda(u.identificador);
+    setMostrarSug(false);
+  }
 
   async function recargarUnidades() {
     setUnidades(await listarUnidades());

@@ -7,6 +7,7 @@ import {
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
 import { ResidentePortal } from "./modules/residente/ResidentePortal";
 import { GuardiaPanel } from "./modules/guardia/GuardiaPanel";
+import { DashboardAdmin } from "./modules/dashboard/DashboardAdmin";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -180,6 +181,24 @@ function ResetPassword({ token, onOk }: { token: string; onOk: () => void }) {
   );
 }
 
+// ─── Vista admin con pestañas ────────────────────────────────
+function AdminView() {
+  const [vista, setVista] = useState<"dashboard" | "casas">("dashboard");
+  return (
+    <div className="card wide">
+      <div className="tabs">
+        <button className={vista === "dashboard" ? "tab on" : "tab"} onClick={() => setVista("dashboard")}>
+          Centro de Monitoreo
+        </button>
+        <button className={vista === "casas" ? "tab on" : "tab"} onClick={() => setVista("casas")}>
+          Casas y residentes
+        </button>
+      </div>
+      {vista === "dashboard" ? <DashboardAdmin /> : <UnidadesPanel embedded />}
+    </div>
+  );
+}
+
 // ─── Dashboard ───────────────────────────────────────────────
 function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => void }) {
   return (
@@ -190,7 +209,7 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
         <button className="ghost mini" onClick={onLogout}>Salir</button>
       </header>
       <main>
-        {(usuario.rol === "admin" || usuario.rol === "super_admin") && <UnidadesPanel />}
+        {(usuario.rol === "admin" || usuario.rol === "super_admin") && <AdminView />}
         {usuario.rol === "guardia" && <GuardiaPanel />}
         {usuario.rol === "residente" && <ResidentePortal />}
       </main>

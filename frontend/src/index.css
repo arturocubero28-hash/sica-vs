@@ -196,3 +196,39 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .guardia-btn.scan-cam:hover { background: #033a58; }
 .qr-reader { width: 100%; max-width: 360px; margin: 0 auto; border-radius: 14px; overflow: hidden; border: 3px solid #F48723; }
 .qr-reader video { width: 100% !important; height: auto !important; display: block; }
+
+/* ---- Video del escaner nativo ---- */
+.qr-video {
+  width: 100%; max-width: 380px; border-radius: 14px;
+  border: 3px solid #F48723; display: block; margin: 0 auto;
+  background: #000;
+}
+
+/* ---- Dashboard admin ---- */
+.dash { display: flex; flex-direction: column; gap: 18px; }
+.dash-head h2 { color: #022E45; margin: 0; }
+.dash-head { display: flex; align-items: baseline; gap: 12px; }
+
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.metric-grid.small { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+
+.metric-card { border-radius: 14px; padding: 18px; color: #fff; position: relative; overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.metric-card.azul { background: linear-gradient(135deg, #022E45, #044a6e); }
+.metric-card.verde { background: linear-gradient(135deg, #1d8a4a, #25a85b); }
+.metric-card.naranja { background: linear-gradient(135deg, #F48723, #ff9d3d); }
+.metric-card.gris { background: linear-gradient(135deg, #5a6472, #737d8c); }
+.metric-top { display: flex; justify-content: space-between; align-items: center; }
+.metric-label { font-size: 13px; opacity: .92; font-weight: 600; }
+.metric-icon { font-size: 18px; opacity: .8; background: rgba(255,255,255,.2);
+  width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+.metric-valor { font-size: 38px; font-weight: 800; margin-top: 10px; }
+
+.mini-metric { background: #f7f9fc; border: 1px solid #e3e9f2; border-radius: 11px; padding: 14px; text-align: center; }
+.mini-metric.alerta { background: #fde8e8; border-color: #f5b5b5; }
+.mini-valor { font-size: 26px; font-weight: 800; color: #022E45; }
+.mini-metric.alerta .mini-valor { color: #c81e1e; }
+.mini-label { font-size: 11px; color: var(--gris); margin-top: 4px; }
+
+.dash-card { background: #fff; border: 1px solid #e3e9f2; border-radius: 14px; padding: 18px; }
+.dash-card h3 { color: #022E45; margin: 0 0 12px; }

@@ -1,11 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Html5Qrcode } from "html5-qrcode";
 import { validarQR, registrarAcceso, type VisitaDTO } from "../../api/client";
 
-/**
- * Panel del Guardia — optimizado para tablet/móvil.
- * Flujo: ingresar código QR → validar → ver datos → tomar fotos → dar acceso
- */
 export function GuardiaPanel() {
   const [step, setStep] = useState<"scan" | "review" | "done">("scan");
   const [qrInput, setQrInput] = useState("");
@@ -16,180 +11,199 @@ export function GuardiaPanel() {
   const [procesando, setProcesando] = useState(false);
   const [resultado, setResultado] = useState("");
   const [escaneando, setEscaneando] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const [tomandoFoto, setTomandoFoto] = useState<null | "id" | "placa">(null);
 
-  // Validar un token (venga de cámara o manual)
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const fotoVideoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const fotoStreamRef = useRef<MediaStream | null>(null);
+  const animRef = useRef<number>(0);
+
   async function validar(token: string) {
     setError("");
-    if (!token.trim()) { setError("Ingresa o escanea un código QR"); return; }
+    if (!token.trim()) { setError("Ingresa o escanea un codigo QR"); return; }
     try {
       const data = await validarQR(token.trim());
       setVisita(data.visita);
       setStep("review");
-    } catch (e) {
-      setError((e as Error).message);
-    }
+    } catch (e) { setError((e as Error).message); }
   }
 
-  async function escanear() {
-    await validar(qrInput);
-  }
-
-  // Iniciar la cámara para escanear
+  // ─── Escaneo de QR ───
   async function iniciarCamara() {
-    setError("");
-    setEscaneando(true);
+    setError(""); setEscaneando(true);
     try {
-      const scanner = new Html5Qrcode("qr-reader");
-      scannerRef.current = scanner;
-      await scanner.start(
-        { facingMode: "environment" },  // cámara trasera
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        async (decodedText) => {
-          await detenerCamara();
-          await validar(decodedText);
-        },
-        () => { /* ignorar errores de frame sin QR */ }
-      );
-    } catch (e) {
-      setError("No se pudo abrir la cámara. Verifica los permisos o usa el código manual.");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" }
+      });
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+      escanearFrames();
+    } catch {
+      setError("No se pudo abrir la camara. Verifica los permisos.");
       setEscaneando(false);
     }
   }
 
-  async function detenerCamara() {
-    if (scannerRef.current) {
-      try { await scannerRef.current.stop(); } catch { /* ya detenido */ }
-      scannerRef.current = null;
+  function escanearFrames() {
+    if (!("BarcodeDetector" in window)) {
+      setError("Tu navegador no soporta escaneo. Usa el codigo manual.");
+      detenerCamara(); return;
     }
+    const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+    async function tick() {
+      if (!videoRef.current || !streamRef.current) return;
+      try {
+        const codes = await detector.detect(videoRef.current);
+        if (codes.length > 0) { detenerCamara(); await validar(codes[0].rawValue); return; }
+      } catch {}
+      animRef.current = requestAnimationFrame(tick);
+    }
+    animRef.current = requestAnimationFrame(tick);
+  }
+
+  function detenerCamara() {
+    cancelAnimationFrame(animRef.current);
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     setEscaneando(false);
   }
 
-  // Limpiar cámara al desmontar
-  useEffect(() => {
-    return () => { if (scannerRef.current) scannerRef.current.stop().catch(() => {}); };
-  }, []);
+  // ─── Tomar foto INLINE (sin salir de la app) ───
+  async function abrirCamaraFoto(cual: "id" | "placa") {
+    setError(""); setTomandoFoto(cual);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" }
+      });
+      fotoStreamRef.current = stream;
+      // pequeño delay para que el video element exista
+      setTimeout(() => {
+        if (fotoVideoRef.current) { fotoVideoRef.current.srcObject = stream; fotoVideoRef.current.play(); }
+      }, 100);
+    } catch {
+      setError("No se pudo abrir la camara para la foto.");
+      setTomandoFoto(null);
+    }
+  }
+
+  function capturarFoto() {
+    if (!fotoVideoRef.current) return;
+    const video = fotoVideoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")!.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+    if (tomandoFoto === "id") setFotoId(dataUrl);
+    else if (tomandoFoto === "placa") setFotoPlaca(dataUrl);
+    cerrarCamaraFoto();
+  }
+
+  function cerrarCamaraFoto() {
+    if (fotoStreamRef.current) { fotoStreamRef.current.getTracks().forEach(t => t.stop()); fotoStreamRef.current = null; }
+    setTomandoFoto(null);
+  }
+
+  useEffect(() => { return () => { detenerCamara(); cerrarCamaraFoto(); }; }, []);
 
   async function darAcceso() {
     if (!visita) return;
     setProcesando(true);
     try {
       const r = await registrarAcceso({
-        visita_id: visita.id,
-        direccion: "entrada",
-        acceso_id: 1,
-        foto_identidad: fotoId || undefined,
-        foto_placa: fotoPlaca || undefined,
+        visita_id: visita.id, direccion: "entrada", acceso_id: 1,
+        foto_identidad: fotoId || undefined, foto_placa: fotoPlaca || undefined,
       });
       setResultado(r.mensaje);
       setStep("done");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setProcesando(false);
-    }
+    } catch (e) { setError((e as Error).message); }
+    finally { setProcesando(false); }
   }
 
   function reiniciar() {
-    setStep("scan");
-    setQrInput("");
-    setVisita(null);
-    setError("");
-    setFotoId("");
-    setFotoPlaca("");
-    setResultado("");
-    setTimeout(() => inputRef.current?.focus(), 100);
+    setStep("scan"); setQrInput(""); setVisita(null);
+    setError(""); setFotoId(""); setFotoPlaca(""); setResultado("");
   }
 
-  function capturarFoto(setter: (v: string) => void) {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.capture = "environment";
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => setter(reader.result as string);
-      reader.readAsDataURL(file);
-    };
-    input.click();
+  // ─── Pantalla de tomar foto inline ───
+  if (tomandoFoto) {
+    return (
+      <div className="card wide guardia-panel">
+        <h2>{tomandoFoto === "id" ? "Foto de identidad" : "Foto de placa"}</h2>
+        <div className="foto-camara">
+          <video ref={fotoVideoRef} autoPlay playsInline muted className="qr-video" />
+          <div className="row-btns" style={{ marginTop: 12 }}>
+            <button className="guardia-btn access" onClick={capturarFoto}>Tomar foto</button>
+            <button className="ghost" onClick={cerrarCamaraFoto}>Cancelar</button>
+          </div>
+        </div>
+        {error && <div className="error">{error}</div>}
+      </div>
+    );
   }
 
   return (
     <div className="card wide guardia-panel">
       <h2>Panel de Guardia</h2>
 
-      {/* PASO 1: Escanear QR */}
       {step === "scan" && (
         <div className="guardia-scan">
           {!escaneando ? (
             <>
-              <button className="guardia-btn scan-cam" onClick={iniciarCamara}>
-                📷 Escanear con cámara
-              </button>
-              <p className="muted" style={{ margin: "14px 0 6px" }}>o ingresá el código manualmente:</p>
-              <input
-                ref={inputRef}
-                className="guardia-input"
-                placeholder="Código QR de la visita"
-                value={qrInput}
-                onChange={e => setQrInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && escanear()}
-              />
-              <button className="ghost" onClick={escanear}>Validar código manual</button>
+              <button className="guardia-btn scan-cam" onClick={iniciarCamara}>Escanear con camara</button>
+              <p className="muted" style={{ margin: "14px 0 6px" }}>o ingresa el codigo manualmente:</p>
+              <input className="guardia-input" placeholder="Codigo QR de la visita"
+                value={qrInput} onChange={e => setQrInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && validar(qrInput)} />
+              <button className="ghost" onClick={() => validar(qrInput)}>Validar codigo manual</button>
             </>
           ) : (
             <>
-              <div id="qr-reader" className="qr-reader"></div>
-              <p className="muted">Apuntá la cámara al código QR del visitante</p>
-              <button className="ghost" onClick={detenerCamara}>Cancelar escaneo</button>
+              <video ref={videoRef} className="qr-video" autoPlay playsInline muted />
+              <p className="muted">Apunta la camara al codigo QR</p>
+              <button className="ghost" onClick={detenerCamara}>Cancelar</button>
             </>
           )}
           {error && <div className="error">{error}</div>}
         </div>
       )}
 
-      {/* PASO 2: Revisar datos y tomar fotos */}
       {step === "review" && visita && (
         <div className="guardia-review">
           <div className="visit-card ok-box">
-            <span className="pill green big">QR VÁLIDO</span>
+            <span className="pill green big">QR VALIDO</span>
             <h3>{visita.nombre_visitante}</h3>
             <div className="visit-detail">
               {visita.documento_id && <div><span className="muted">Identidad:</span> <b>{visita.documento_id}</b></div>}
               {visita.empresa && <div><span className="muted">Empresa:</span> <b>{visita.empresa}</b></div>}
               {visita.en_vehiculo && <div><span className="muted">Placa:</span> <b>{visita.placa_vehiculo}</b></div>}
               <div><span className="muted">Tipo:</span> <b>{visita.tipo}</b></div>
-              <div><span className="muted">Generado por:</span> <b>{visita.generada_por}</b></div>
+              <div><span className="muted">Autorizado por:</span> <b>{visita.generada_por}</b></div>
             </div>
           </div>
 
           <div className="guardia-fotos">
-            <div className="foto-slot" onClick={() => capturarFoto(setFotoId)}>
-              {fotoId ? <img src={fotoId} alt="ID" /> : <><span className="foto-icon">📷</span><span>Foto identidad</span></>}
+            <div className="foto-slot" onClick={() => abrirCamaraFoto("id")}>
+              {fotoId ? <img src={fotoId} alt="ID" /> : <span className="foto-icon">Foto identidad</span>}
             </div>
-            <div className="foto-slot" onClick={() => capturarFoto(setFotoPlaca)}>
-              {fotoPlaca ? <img src={fotoPlaca} alt="Placa" /> : <><span className="foto-icon">🚗</span><span>Foto placa</span></>}
+            <div className="foto-slot" onClick={() => abrirCamaraFoto("placa")}>
+              {fotoPlaca ? <img src={fotoPlaca} alt="Placa" /> : <span className="foto-icon">Foto placa</span>}
             </div>
           </div>
 
           {error && <div className="error">{error}</div>}
-
           <div className="row-btns">
             <button className="guardia-btn access" onClick={darAcceso} disabled={procesando}>
-              {procesando ? "Procesando..." : "✓ Dar acceso"}
+              {procesando ? "Procesando..." : "Dar acceso"}
             </button>
             <button className="ghost" onClick={reiniciar}>Cancelar</button>
           </div>
         </div>
       )}
 
-      {/* PASO 3: Acceso concedido */}
       {step === "done" && (
         <div className="guardia-done">
-          <div className="done-icon">✓</div>
+          <div className="done-icon">V</div>
           <h2>Acceso concedido</h2>
           <p>{resultado}</p>
           <p className="muted">Visitante: <b>{visita?.nombre_visitante}</b></p>

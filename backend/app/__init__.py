@@ -41,6 +41,9 @@ def create_app(config_class=Config):
     from app.api.visitas import visitas_bp
     app.register_blueprint(visitas_bp, url_prefix="/api/v1/visitas")
 
+    from app.api.dashboard import dashboard_bp
+    app.register_blueprint(dashboard_bp, url_prefix="/api/v1/dashboard")
+
     # --- Healthcheck y manejo de errores estándar ---
     @app.get("/api/v1/health")
     def health():
