@@ -28,7 +28,7 @@ def create_app(config_class=Config):
     from app.models import usuario  # noqa: F401  (Integrante 1 — ejemplo base)
     from app.models import cuenta   # noqa: F401  (Integrante 2)
     from app.models import visita   # noqa: F401  (Integrante 3)
-    # from app.models import pago        # Integrante 4
+    from app.models.cuenta import Cuota, Pago  # noqa: F401  cuotas y pagos
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp
@@ -43,6 +43,9 @@ def create_app(config_class=Config):
 
     from app.api.dashboard import dashboard_bp
     app.register_blueprint(dashboard_bp, url_prefix="/api/v1/dashboard")
+
+    from app.api.cuotas import cuotas_bp
+    app.register_blueprint(cuotas_bp, url_prefix="/api/v1/cuotas")
 
     # --- Healthcheck y manejo de errores estándar ---
     @app.get("/api/v1/health")

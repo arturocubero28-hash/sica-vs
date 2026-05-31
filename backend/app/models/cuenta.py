@@ -190,3 +190,78 @@ class Tarjeta(db.Model):
                 if self.residente and self.residente.usuario else "Sin asignar"
             ),
         }
+
+
+# ---------------------------------------------------------------------
+# CUOTA: cuota mensual generada automáticamente por Celery
+# ---------------------------------------------------------------------
+class Cuota(db.Model):
+    __tablename__ = "cuotas"
+
+    id                = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico      = _uuid_col()
+    cuenta_id         = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
+    periodo           = db.Column(db.Date, nullable=False)          # primer día del mes: 2026-06-01
+    monto             = db.Column(db.Numeric(10, 2), nullable=False)
+    fecha_vencimiento = db.Column(db.Date, nullable=False)
+    estado            = db.Column(db.String(20), nullable=False, default="pendiente")
+    created_at        = db.Column(db.DateTime(timezone=True), default=_now)
+    updated_at        = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
+
+    cuenta = db.relationship("Cuenta", backref="cuotas")
+    pagos  = db.relationship("Pago", backref="cuota", lazy="dynamic")
+
+    def to_dict(self, con_pagos=False):
+        d = {
+            "id":               str(self.uuid_publico),
+            "periodo":          self.periodo.isoformat(),
+            "mes_label":        self.periodo.strftime("%B %Y"),
+            "monto":            float(self.monto),
+            "fecha_vencimiento": self.fecha_vencimiento.isoformat(),
+            "estado":           self.estado,
+            "created_at":       self.created_at.isoformat(),
+        }
+        if con_pagos:
+            d["pagos"] = [p.to_dict() for p in self.pagos.all()]
+        return d
+
+
+# ---------------------------------------------------------------------
+# PAGO: comprobante subido por el residente, revisado por el admin
+# ---------------------------------------------------------------------
+class Pago(db.Model):
+    __tablename__ = "pagos"
+
+    id                   = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico         = _uuid_col()
+    cuota_id             = db.Column(db.BigInteger, db.ForeignKey("cuotas.id"), nullable=False)
+    cuenta_id            = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
+    subido_por           = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
+    metodo               = db.Column(db.String(20), nullable=False, default="transferencia")
+    monto                = db.Column(db.Numeric(10, 2), nullable=False)
+    comprobante_archivo  = db.Column(db.String(255))
+    referencia           = db.Column(db.String(120))
+    estado               = db.Column(db.String(20), nullable=False, default="en_revision")
+    revisado_por         = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
+    revisado_en          = db.Column(db.DateTime(timezone=True))
+    nota_admin           = db.Column(db.String(255))
+    created_at           = db.Column(db.DateTime(timezone=True), default=_now)
+    updated_at           = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
+
+    cuenta   = db.relationship("Cuenta", foreign_keys=[cuenta_id], backref="pagos")
+    uploader = db.relationship("Usuario", foreign_keys=[subido_por])
+    revisor  = db.relationship("Usuario", foreign_keys=[revisado_por])
+
+    def to_dict(self):
+        return {
+            "id":                  str(self.uuid_publico),
+            "cuota_id":            str(self.cuota.uuid_publico) if self.cuota else None,
+            "monto":               float(self.monto),
+            "metodo":              self.metodo,
+            "referencia":          self.referencia,
+            "comprobante_archivo": self.comprobante_archivo,
+            "estado":              self.estado,
+            "nota_admin":          self.nota_admin,
+            "revisado_en":         self.revisado_en.isoformat() if self.revisado_en else None,
+            "created_at":          self.created_at.isoformat(),
+        }

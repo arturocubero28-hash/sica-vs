@@ -1,32 +1,111 @@
 """
-Tarea de ejemplo: revisión de mora (Integrante 4).
-
-Esto es un ESQUELETO con la lógica que acordamos, comentada paso a paso.
-El Integrante 4 lo completa cuando existan los modelos de cuenta y cuota.
-
-Lógica de mora acordada:
-  -1 día:   "Tu fecha de pago está por vencer mañana"
-   0 día:   "Hoy vence tu cuota"
-  +1, +2:   "Tienes X días de atraso" (acceso aún activo)
-  +3 o más: BLOQUEO -> tarjetas inactivas + no puede generar QR
+Tareas Celery para SICA-VS:
+  - generar_cuotas_mensuales: corre el 1ro de cada mes a las 00:05
+  - revisar_mora: corre cada noche a la 01:00
 """
+import datetime as dt
+from celery.schedules import crontab
 from app.tasks.celery_app import celery
 
 
-@celery.task
+# ── Registro de tareas periódicas ─────────────────────────────────────────────
+@celery.on_after_finalize.connect
+def setup_periodic_tasks(sender, **kwargs):
+    # 1ro de cada mes a las 00:05 → generar cuotas
+    sender.add_periodic_task(
+        crontab(hour=0, minute=5, day_of_month=1),
+        generar_cuotas_mensuales.s(),
+        name="generar-cuotas-1ro-de-mes",
+    )
+    # Cada noche a la 01:00 → revisar mora
+    sender.add_periodic_task(
+        crontab(hour=1, minute=0),
+        revisar_mora.s(),
+        name="revisar-mora-diaria",
+    )
+
+
+# ── Generación automática de cuotas ───────────────────────────────────────────
+@celery.task(name="tasks.generar_cuotas_mensuales")
+def generar_cuotas_mensuales():
+    """
+    Genera una cuota por cada cuenta activa para el mes en curso.
+    Usa UNIQUE (cuenta_id, periodo) del schema para evitar duplicados.
+    Vencimiento: día 15 del mes.
+    """
+    from app import create_app
+    from app.extensions import db
+    from app.models.cuenta import Cuenta, Cuota
+
+    app = create_app()
+    with app.app_context():
+        hoy = dt.date.today()
+        periodo = dt.date(hoy.year, hoy.month, 1)
+        vencimiento = dt.date(hoy.year, hoy.month, 15)
+
+        cuentas = Cuenta.query.all()
+        creadas = 0
+
+        for cuenta in cuentas:
+            existe = Cuota.query.filter_by(
+                cuenta_id=cuenta.id, periodo=periodo
+            ).first()
+            if existe:
+                continue
+
+            cuota = Cuota(
+                cuenta_id=cuenta.id,
+                periodo=periodo,
+                monto=float(cuenta.tarifa.monto),
+                fecha_vencimiento=vencimiento,
+                estado="pendiente",
+            )
+            db.session.add(cuota)
+            creadas += 1
+
+        db.session.commit()
+        return {"generadas": creadas, "total_cuentas": len(cuentas)}
+
+
+# ── Revisión diaria de mora ────────────────────────────────────────────────────
+@celery.task(name="tasks.revisar_mora")
 def revisar_mora():
-    """Se ejecuta a diario. Revisa todas las cuentas y aplica la lógica de mora."""
-    # Pseudocódigo / pasos a implementar:
-    #
-    # 1. hoy = date.today()
-    # 2. Para cada cuota pendiente:
-    #      dias = (hoy - cuota.fecha_vencimiento).days
-    #      if dias == -1:  notificar("pago_por_vencer")
-    #      elif dias == 0: notificar("pago_vence_hoy")
-    #      elif 1 <= dias <= 2: notificar("pago_atrasado", dias)
-    #      elif dias >= 3:
-    #           bloquear_cuenta(cuota.cuenta_id)   # tarjetas a 'bloqueada', bloquea QR
-    #           notificar("acceso_bloqueado", dias)
-    #
-    # 3. El desbloqueo NO ocurre aquí: se dispara cuando el admin aprueba un pago.
-    return {"status": "pendiente_de_implementar"}
+    """
+    Revisa cuotas pendientes/vencidas y aplica la lógica de mora acordada:
+      -1 día  → notificación (futuro: email)
+       0 días → notificación
+      +1, +2  → notificación de atraso
+      +3 o +  → bloquear cuenta (estado='bloqueada', bloqueada=True)
+    El desbloqueo ocurre cuando el admin aprueba un pago, no aquí.
+    """
+    from app import create_app
+    from app.extensions import db
+    from app.models.cuenta import Cuota, Cuenta
+
+    app = create_app()
+    with app.app_context():
+        hoy = dt.date.today()
+        bloqueadas = 0
+        procesadas = 0
+
+        cuotas = Cuota.query.filter(
+            Cuota.estado.in_(["pendiente", "vencida"])
+        ).all()
+
+        for cuota in cuotas:
+            dias = (hoy - cuota.fecha_vencimiento).days
+            cuenta = cuota.cuenta
+
+            if dias >= 3:
+                cuota.estado = "vencida"
+                if not cuenta.bloqueada:
+                    cuenta.estado = "bloqueada"
+                    cuenta.bloqueada = True
+                    bloqueadas += 1
+            elif dias >= 0:
+                cuota.estado = "vencida"
+
+            procesadas += 1
+
+        db.session.commit()
+        return {"procesadas": procesadas, "cuentas_bloqueadas": bloqueadas}
