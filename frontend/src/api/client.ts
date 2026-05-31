@@ -201,10 +201,28 @@ export interface MetricasDTO {
   qr_utilizados: number; qr_expirados: number;
   total_unidades: number; total_cuentas: number;
   total_residentes: number; cuentas_bloqueadas: number; accesos_hoy: number;
+  adentro_ahora: number;
 }
 export interface VisitaTablaDTO {
   id: string; residente: string; unidad: string; visitante: string;
   tipo: string; estado: string; vigencia: string; creado: string;
 }
+export interface VisitaActivaDTO {
+  id: string;
+  visitante: string; tipo: string; empresa?: string;
+  documento_id?: string; telefono?: string;
+  en_vehiculo: boolean; placa?: string;
+  residente: string; unidad: string;
+  guardia_autorizo?: string;
+  hora_creacion?: string; hora_entrada?: string; hora_salida?: string;
+  foto_identidad?: string; foto_placa?: string;
+}
 export const dashboardMetricas = () => request<MetricasDTO>("/dashboard/metricas");
 export const dashboardVisitas = () => request<VisitaTablaDTO[]>("/dashboard/visitas-tabla");
+export const dashboardVisitasActivas = () => request<VisitaActivaDTO[]>("/dashboard/visitas-activas");
+
+// URL de una foto tomada por el guardia (con token para autenticación)
+export function urlFotoGuardia(nombreArchivo: string): string {
+  const token = getToken();
+  return `${API_URL}/dashboard/fotos/${nombreArchivo}?_auth=${token}`;
+}

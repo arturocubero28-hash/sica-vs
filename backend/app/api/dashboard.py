@@ -5,14 +5,15 @@ Módulo de Dashboard administrativo — estadísticas reales desde la base de da
   GET /api/v1/dashboard/visitas-tabla  -> tabla de visitas recientes con datos reales
 """
 import datetime as dt
+import os
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, send_from_directory, current_app
 from sqlalchemy import func
 
 from app.extensions import db
 from app.models.visita import Visita, CodigoQR, EventoAcceso
 from app.models.cuenta import Cuenta, Unidad, Residente
-from app.auth.security import roles_required
+from app.auth.security import roles_required, token_required
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -45,6 +46,9 @@ def metricas(usuario_actual):
     # Accesos registrados hoy
     accesos_hoy = EventoAcceso.query.filter(EventoAcceso.ocurrido_en >= hoy_inicio).count()
 
+    # Visitas actualmente DENTRO de la residencial (entraron y no han salido)
+    adentro_ahora = len(_visitas_adentro())
+
     return jsonify({"data": {
         "qr_generados_hoy": qr_hoy,
         "visitantes_activos": activas,
@@ -55,6 +59,7 @@ def metricas(usuario_actual):
         "total_residentes": total_residentes,
         "cuentas_bloqueadas": cuentas_bloqueadas,
         "accesos_hoy": accesos_hoy,
+        "adentro_ahora": adentro_ahora,
     }})
 
 
@@ -84,3 +89,103 @@ def visitas_tabla(usuario_actual):
             "creado": v.created_at.strftime("%Y-%m-%d %H:%M") if v.created_at else "—",
         })
     return jsonify({"data": filas})
+
+
+# =====================================================================
+# VISITAS ACTUALMENTE DENTRO DE LA RESIDENCIAL
+# =====================================================================
+def _visitas_adentro():
+    """
+    Devuelve las visitas que entraron pero aún no han salido.
+    Una visita está 'adentro' si su último evento de acceso es una 'entrada'.
+    """
+    # Visitas que tienen al menos un evento de entrada
+    visitas_con_entrada = (
+        Visita.query
+        .join(EventoAcceso, EventoAcceso.visita_id == Visita.id)
+        .filter(EventoAcceso.direccion == "entrada")
+        .distinct()
+        .all()
+    )
+
+    adentro = []
+    for v in visitas_con_entrada:
+        eventos = (
+            EventoAcceso.query
+            .filter_by(visita_id=v.id)
+            .order_by(EventoAcceso.ocurrido_en.asc())
+            .all()
+        )
+        if not eventos:
+            continue
+        # Si el último evento es 'entrada', sigue adentro
+        if eventos[-1].direccion == "entrada":
+            adentro.append((v, eventos))
+    return adentro
+
+
+@dashboard_bp.get("/visitas-activas")
+@roles_required("admin", "super_admin")
+def visitas_activas(usuario_actual):
+    """
+    Lista detallada de visitas actualmente DENTRO de la residencial.
+    Incluye: quién generó el QR, placa, horas de creación/entrada/salida,
+    guardia que autorizó, y fotos tomadas en el ingreso.
+    """
+    adentro = _visitas_adentro()
+
+    filas = []
+    for v, eventos in adentro:
+        cuenta = Cuenta.query.get(v.cuenta_id)
+        unidad = Unidad.query.get(cuenta.unidad_id) if cuenta else None
+
+        residente_nombre = "—"
+        if v.residente and v.residente.usuario:
+            residente_nombre = f"{v.residente.usuario.nombre} {v.residente.usuario.apellido}"
+
+        entrada = next((e for e in eventos if e.direccion == "entrada"), None)
+        salida = next((e for e in reversed(eventos) if e.direccion == "salida"), None)
+
+        guardia_nombre = None
+        foto_identidad = None
+        foto_placa = None
+        if entrada:
+            guardia_nombre = (
+                f"{entrada.guardia.nombre} {entrada.guardia.apellido}"
+                if entrada.guardia else None
+            )
+            foto_identidad = entrada.foto_identidad
+            foto_placa = entrada.foto_placa
+
+        filas.append({
+            "id": str(v.uuid_publico),
+            "visitante": v.nombre_visitante,
+            "tipo": v.tipo,
+            "empresa": v.empresa,
+            "documento_id": v.documento_id,
+            "telefono": v.telefono,
+            "en_vehiculo": v.en_vehiculo,
+            "placa": v.placa_vehiculo or (entrada.placa_vehiculo if entrada else None),
+            "residente": residente_nombre,
+            "unidad": unidad.identificador if unidad else "—",
+            "guardia_autorizo": guardia_nombre,
+            "hora_creacion": v.created_at.isoformat() if v.created_at else None,
+            "hora_entrada": entrada.ocurrido_en.isoformat() if entrada and entrada.ocurrido_en else None,
+            "hora_salida": salida.ocurrido_en.isoformat() if salida and salida.ocurrido_en else None,
+            "foto_identidad": foto_identidad,
+            "foto_placa": foto_placa,
+        })
+
+    # Ordenar por hora de entrada (más reciente primero)
+    filas.sort(key=lambda f: f["hora_entrada"] or "", reverse=True)
+    return jsonify({"data": filas})
+
+
+# =====================================================================
+# SERVIR FOTOS TOMADAS POR EL GUARDIA (cédula, placa)
+# =====================================================================
+@dashboard_bp.get("/fotos/<nombre_archivo>")
+@token_required
+def ver_foto(usuario_actual, nombre_archivo):
+    carpeta = current_app.config.get("UPLOAD_FOLDER", "/app/uploads")
+    return send_from_directory(carpeta, nombre_archivo)
