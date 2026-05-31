@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  miCuenta, misVisitas, crearVisita, urlImagenQR, obtenerImagenQR,
+  miCuenta, misVisitas, crearVisita, cancelarVisita, urlImagenQR, obtenerImagenQR,
   type MiCuentaDTO, type VisitaDTO,
 } from "../../api/client";
 
@@ -43,33 +43,20 @@ async function descargarQR(visita: VisitaDTO) {
   }
 }
 
-export function ResidentePortal() {
-  const [tab, setTab] = useState<"qr" | "historial" | "cuenta">("qr");
+export function ResidentePortal({ seccion = "qr" }: { seccion?: string }) {
   const [cuenta, setCuenta] = useState<MiCuentaDTO | null>(null);
 
   useEffect(() => { miCuenta().then(setCuenta).catch(() => {}); }, []);
 
   return (
     <div className="card wide">
-      <div className="tabs">
-        <button className={tab === "qr" ? "tab on" : "tab"} onClick={() => setTab("qr")}>
-          Generar QR
-        </button>
-        <button className={tab === "historial" ? "tab on" : "tab"} onClick={() => setTab("historial")}>
-          Mis visitas
-        </button>
-        <button className={tab === "cuenta" ? "tab on" : "tab"} onClick={() => setTab("cuenta")}>
-          Mi cuenta
-        </button>
-      </div>
-
       {cuenta?.cuenta.bloqueada && (
         <div className="error">Tu cuenta está bloqueada por mora. No puedes generar códigos QR hasta regularizar tu pago.</div>
       )}
 
-      {tab === "qr" && <GenerarQR bloqueada={cuenta?.cuenta.bloqueada || false} />}
-      {tab === "historial" && <Historial />}
-      {tab === "cuenta" && cuenta && <EstadoCuenta data={cuenta} />}
+      {seccion === "qr" && <GenerarQR bloqueada={cuenta?.cuenta.bloqueada || false} />}
+      {seccion === "historial" && <Historial />}
+      {seccion === "cuenta" && cuenta && <EstadoCuenta data={cuenta} />}
     </div>
   );
 }
@@ -206,7 +193,22 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
 // ─── Historial ───────────────────────────────────────────────
 function Historial() {
   const [visitas, setVisitas] = useState<VisitaDTO[]>([]);
+  const [cancelando, setCancelando] = useState<string | null>(null);
+
   useEffect(() => { misVisitas().then(setVisitas).catch(() => {}); }, []);
+
+  async function cancelar(v: VisitaDTO) {
+    if (!confirm(`¿Cancelar la visita de ${v.nombre_visitante}? El código QR dejará de funcionar.`)) return;
+    setCancelando(v.id);
+    try {
+      const actualizada = await cancelarVisita(v.id);
+      setVisitas(prev => prev.map(x => x.id === v.id ? actualizada : x));
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setCancelando(null);
+    }
+  }
 
   if (visitas.length === 0) return <p className="muted">No tienes visitas registradas.</p>;
 
@@ -215,7 +217,7 @@ function Historial() {
     activa: "Activa",
     usada: "Ingresó",
     expirada: "Expirada",
-    revocada: "Revocada",
+    revocada: "Cancelada",
   };
   const estadoColor: Record<string, string> = {
     activa: "green",
@@ -225,26 +227,38 @@ function Historial() {
   };
 
   return (
-    <table className="data">
-      <thead>
-        <tr><th>Visitante</th><th>Tipo</th><th>Documento</th><th>Fecha</th><th>Estado</th></tr>
-      </thead>
-      <tbody>
-        {visitas.map(v => (
-          <tr key={v.id}>
-            <td>{v.nombre_visitante}{v.empresa ? ` (${v.empresa})` : ""}</td>
-            <td>{tipos[v.tipo] || v.tipo}</td>
-            <td className="small">{v.documento_id || "—"}</td>
-            <td className="small">{v.created_at ? new Date(v.created_at).toLocaleString() : "—"}</td>
-            <td>
-              <span className={`pill ${estadoColor[v.estado] || ""}`}>
-                {estadoLabel[v.estado] || v.estado}
-              </span>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="visita-list">
+      {visitas.map(v => (
+        <div key={v.id} className="visita-item">
+          <div className="visita-item-top">
+            <div className="visita-nombre">
+              {v.nombre_visitante}
+              {v.empresa ? <span className="muted small"> · {v.empresa}</span> : ""}
+            </div>
+            <span className={`pill ${estadoColor[v.estado] || ""}`}>
+              {estadoLabel[v.estado] || v.estado}
+            </span>
+          </div>
+          <div className="visita-meta">
+            <span className="visita-tag">{tipos[v.tipo] || v.tipo}</span>
+            {v.documento_id && <span className="muted small">ID: {v.documento_id}</span>}
+            {v.en_vehiculo && v.placa_vehiculo && <span className="muted small">🚗 {v.placa_vehiculo}</span>}
+          </div>
+          <div className="visita-fecha muted small">
+            {v.created_at ? new Date(v.created_at).toLocaleString() : "—"}
+          </div>
+          {v.estado === "activa" && (
+            <button
+              className="ghost mini visita-cancelar"
+              onClick={() => cancelar(v)}
+              disabled={cancelando === v.id}
+            >
+              {cancelando === v.id ? "Cancelando…" : "Cancelar visita"}
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 

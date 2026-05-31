@@ -165,6 +165,9 @@ export const crearVisita = (body: {
   en_vehiculo?: boolean; valido_hasta?: string; modo_recurrencia?: string;
 }) => request<VisitaDTO>("/visitas", { method: "POST", body: JSON.stringify(body) });
 
+export const cancelarVisita = (visitaId: string) =>
+  request<VisitaDTO>(`/visitas/${visitaId}/cancelar`, { method: "POST" });
+
 export const validarQR = (token: string) =>
   request<{ visita: VisitaDTO; valido: boolean; mensaje: string }>(
     "/visitas/qr/validar", { method: "POST", body: JSON.stringify({ token }) });

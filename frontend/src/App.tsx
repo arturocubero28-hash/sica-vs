@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   login, getMe, logout, getToken, setToken,
   activarCuenta, solicitarRecuperacion, restablecerPassword,
-  type Usuario,
+  type Usuario, type Rol,
 } from "./api/client";
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
 import { ResidentePortal } from "./modules/residente/ResidentePortal";
@@ -182,37 +182,112 @@ function ResetPassword({ token, onOk }: { token: string; onOk: () => void }) {
 }
 
 // ─── Vista admin con pestañas ────────────────────────────────
-function AdminView() {
-  const [vista, setVista] = useState<"dashboard" | "casas">("dashboard");
-  return (
-    <div className="card wide">
-      <div className="tabs">
-        <button className={vista === "dashboard" ? "tab on" : "tab"} onClick={() => setVista("dashboard")}>
-          Centro de Monitoreo
-        </button>
-        <button className={vista === "casas" ? "tab on" : "tab"} onClick={() => setVista("casas")}>
-          Casas y residentes
-        </button>
-      </div>
-      {vista === "dashboard" ? <DashboardAdmin /> : <UnidadesPanel embedded />}
-    </div>
-  );
+function AdminView({ seccion }: { seccion: string }) {
+  if (seccion === "casas") return <UnidadesPanel embedded />;
+  return <DashboardAdmin />;
 }
 
-// ─── Dashboard ───────────────────────────────────────────────
+// ─── Dashboard con sidebar moderno ───────────────────────────
+type NavItem = { id: string; label: string; icon: string };
+
+function navParaRol(rol: Rol): NavItem[] {
+  if (rol === "admin" || rol === "super_admin") {
+    return [
+      { id: "dashboard", label: "Monitoreo", icon: "📊" },
+      { id: "casas", label: "Casas y residentes", icon: "🏘️" },
+    ];
+  }
+  if (rol === "residente") {
+    return [
+      { id: "qr", label: "Generar QR", icon: "🎫" },
+      { id: "historial", label: "Mis visitas", icon: "📋" },
+      { id: "cuenta", label: "Mi cuenta", icon: "👤" },
+    ];
+  }
+  return [{ id: "guardia", label: "Caseta", icon: "🛡️" }];
+}
+
 function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => void }) {
+  const nav = navParaRol(usuario.rol);
+  const [seccion, setSeccion] = useState(nav[0].id);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const esAdmin = usuario.rol === "admin" || usuario.rol === "super_admin";
+  const esResidente = usuario.rol === "residente";
+
+  const iniciales = `${usuario.nombre?.[0] || ""}${usuario.apellido?.[0] || ""}`.toUpperCase();
+  const rolLabel: Record<string, string> = {
+    admin: "Administrador", super_admin: "Super Admin",
+    guardia: "Guardia", residente: "Residente",
+  };
+
   return (
-    <div className="app">
-      <header>
-        <b>SICA-VS</b>
-        <span className="muted">{usuario.nombre} · {usuario.rol}</span>
-        <button className="ghost mini" onClick={onLogout}>Salir</button>
-      </header>
-      <main>
-        {(usuario.rol === "admin" || usuario.rol === "super_admin") && <AdminView />}
-        {usuario.rol === "guardia" && <GuardiaPanel />}
-        {usuario.rol === "residente" && <ResidentePortal />}
-      </main>
+    <div className="shell">
+      {/* Sidebar */}
+      <aside className={`sidebar ${menuAbierto ? "abierto" : ""}`}>
+        <div className="sidebar-brand">
+          <div className="brand-logo">VS</div>
+          <div className="brand-text">
+            <b>SICA-VS</b>
+            <span>Villas del Sol</span>
+          </div>
+        </div>
+
+        <nav className="sidebar-nav">
+          {nav.map(item => (
+            <button
+              key={item.id}
+              className={`nav-item ${seccion === item.id ? "on" : ""}`}
+              onClick={() => { setSeccion(item.id); setMenuAbierto(false); }}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-foot">
+          <div className="user-chip">
+            <div className="user-avatar">{iniciales}</div>
+            <div className="user-info">
+              <b>{usuario.nombre} {usuario.apellido}</b>
+              <span>{rolLabel[usuario.rol] || usuario.rol}</span>
+            </div>
+          </div>
+          <button className="ghost mini logout-btn" onClick={onLogout}>Cerrar sesión</button>
+        </div>
+      </aside>
+
+      {/* Overlay para cerrar menú en móvil */}
+      {menuAbierto && <div className="sidebar-overlay" onClick={() => setMenuAbierto(false)} />}
+
+      {/* Área principal */}
+      <div className="main-area">
+        <header className="topbar">
+          <button className="hamburger" onClick={() => setMenuAbierto(true)} aria-label="Menú">☰</button>
+          <b className="topbar-title">{nav.find(n => n.id === seccion)?.label}</b>
+          <div className="user-avatar small">{iniciales}</div>
+        </header>
+
+        <main className="content">
+          {esAdmin && <AdminView seccion={seccion} />}
+          {usuario.rol === "guardia" && <GuardiaPanel />}
+          {esResidente && <ResidentePortal seccion={seccion} />}
+        </main>
+      </div>
+
+      {/* Barra de navegación inferior (solo móvil) */}
+      <nav className="bottom-nav">
+        {nav.map(item => (
+          <button
+            key={item.id}
+            className={`bottom-item ${seccion === item.id ? "on" : ""}`}
+            onClick={() => setSeccion(item.id)}
+          >
+            <span className="bottom-icon">{item.icon}</span>
+            <span className="bottom-label">{item.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

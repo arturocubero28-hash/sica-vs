@@ -151,6 +151,35 @@ def mis_visitas(usuario_actual):
 
 
 # =====================================================================
+# RESIDENTE: cancelar / revocar una visita propia
+# =====================================================================
+@visitas_bp.post("/<visita_uuid>/cancelar")
+@token_required
+def cancelar_visita(usuario_actual, visita_uuid):
+    residente = _mi_residente(usuario_actual)
+    if not residente:
+        return jsonify({"error": {"code": "no_residente",
+                                  "message": "No tienes una cuenta de residente activa"}}), 403
+
+    visita = Visita.query.filter_by(uuid_publico=visita_uuid).first()
+    if not visita or visita.cuenta_id != residente.cuenta_id:
+        return jsonify({"error": {"code": "no_encontrada",
+                                  "message": "Visita no encontrada"}}), 404
+
+    if visita.estado in ("usada", "expirada", "revocada"):
+        return jsonify({"error": {"code": "no_cancelable",
+                                  "message": f"No se puede cancelar una visita {visita.estado}"}}), 400
+
+    visita.estado = "revocada"
+    # Invalidar también el QR asociado si existe
+    if visita.qr:
+        visita.qr.revocado = True
+
+    db.session.commit()
+    return jsonify({"data": visita.to_dict()})
+
+
+# =====================================================================
 # RESIDENTE: mi cuenta (estado de cuenta simplificado)
 # =====================================================================
 @visitas_bp.get("/mi-cuenta")
