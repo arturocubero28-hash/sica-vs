@@ -169,7 +169,10 @@ export const cancelarVisita = (visitaId: string) =>
   request<VisitaDTO>(`/visitas/${visitaId}/cancelar`, { method: "POST" });
 
 export const validarQR = (token: string) =>
-  request<{ visita: VisitaDTO; valido: boolean; mensaje: string }>(
+  request<{
+    visita: VisitaDTO; valido: boolean; mensaje: string;
+    adentro?: boolean; direccion_sugerida?: "entrada" | "salida";
+  }>(
     "/visitas/qr/validar", { method: "POST", body: JSON.stringify({ token }) });
 
 export const registrarAcceso = (body: {

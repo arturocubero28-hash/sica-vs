@@ -5,6 +5,7 @@ export function GuardiaPanel() {
   const [step, setStep] = useState<"scan" | "review" | "done">("scan");
   const [qrInput, setQrInput] = useState("");
   const [visita, setVisita] = useState<VisitaDTO | null>(null);
+  const [direccion, setDireccion] = useState<"entrada" | "salida">("entrada");
   const [error, setError] = useState("");
   const [fotoId, setFotoId] = useState("");
   const [fotoPlaca, setFotoPlaca] = useState("");
@@ -25,6 +26,7 @@ export function GuardiaPanel() {
     try {
       const data = await validarQR(token.trim());
       setVisita(data.visita);
+      setDireccion(data.direccion_sugerida || "entrada");
       setStep("review");
     } catch (e) { setError((e as Error).message); }
   }
@@ -111,8 +113,9 @@ export function GuardiaPanel() {
     setProcesando(true);
     try {
       const r = await registrarAcceso({
-        visita_id: visita.id, direccion: "entrada", acceso_id: 1,
-        foto_identidad: fotoId || undefined, foto_placa: fotoPlaca || undefined,
+        visita_id: visita.id, direccion, acceso_id: 1,
+        foto_identidad: direccion === "entrada" ? (fotoId || undefined) : undefined,
+        foto_placa: direccion === "entrada" ? (fotoPlaca || undefined) : undefined,
       });
       setResultado(r.mensaje);
       setStep("done");
@@ -121,7 +124,7 @@ export function GuardiaPanel() {
   }
 
   function reiniciar() {
-    setStep("scan"); setQrInput(""); setVisita(null);
+    setStep("scan"); setQrInput(""); setVisita(null); setDireccion("entrada");
     setError(""); setFotoId(""); setFotoPlaca(""); setResultado("");
   }
 
@@ -170,8 +173,10 @@ export function GuardiaPanel() {
 
       {step === "review" && visita && (
         <div className="guardia-review">
-          <div className="visit-card ok-box">
-            <span className="pill green big">QR VALIDO</span>
+          <div className={`visit-card ${direccion === "salida" ? "salida-box" : "ok-box"}`}>
+            <span className={`pill big ${direccion === "salida" ? "amber" : "green"}`}>
+              {direccion === "salida" ? "REGISTRAR SALIDA" : "QR VALIDO"}
+            </span>
             <h3>{visita.nombre_visitante}</h3>
             <div className="visit-detail">
               {visita.documento_id && <div><span className="muted">Identidad:</span> <b>{visita.documento_id}</b></div>}
@@ -182,19 +187,29 @@ export function GuardiaPanel() {
             </div>
           </div>
 
-          <div className="guardia-fotos">
-            <div className="foto-slot" onClick={() => abrirCamaraFoto("id")}>
-              {fotoId ? <img src={fotoId} alt="ID" /> : <span className="foto-icon">Foto identidad</span>}
+          {direccion === "salida" ? (
+            <div className="nota">
+              Esta visita ya ingresó. Confirma su salida para liberar el registro.
             </div>
-            <div className="foto-slot" onClick={() => abrirCamaraFoto("placa")}>
-              {fotoPlaca ? <img src={fotoPlaca} alt="Placa" /> : <span className="foto-icon">Foto placa</span>}
+          ) : (
+            <div className="guardia-fotos">
+              <div className="foto-slot" onClick={() => abrirCamaraFoto("id")}>
+                {fotoId ? <img src={fotoId} alt="ID" /> : <span className="foto-icon">Foto identidad</span>}
+              </div>
+              <div className="foto-slot" onClick={() => abrirCamaraFoto("placa")}>
+                {fotoPlaca ? <img src={fotoPlaca} alt="Placa" /> : <span className="foto-icon">Foto placa</span>}
+              </div>
             </div>
-          </div>
+          )}
 
           {error && <div className="error">{error}</div>}
           <div className="row-btns">
-            <button className="guardia-btn access" onClick={darAcceso} disabled={procesando}>
-              {procesando ? "Procesando..." : "Dar acceso"}
+            <button
+              className={`guardia-btn ${direccion === "salida" ? "salida" : "access"}`}
+              onClick={darAcceso}
+              disabled={procesando}
+            >
+              {procesando ? "Procesando..." : direccion === "salida" ? "Dar salida" : "Dar acceso"}
             </button>
             <button className="ghost" onClick={reiniciar}>Cancelar</button>
           </div>

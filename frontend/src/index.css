@@ -517,3 +517,40 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
   .detalle-grid { grid-template-columns: 1fr; }
   .detalle-fotos { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   FIX: tablas que se desbordan en móvil (solución global)
+   Todas las tablas .data se vuelven scrolleables horizontalmente
+   ============================================================ */
+@media (max-width: 860px) {
+  /* La tabla se convierte en bloque scrolleable */
+  table.data {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    width: 100%;
+  }
+  table.data thead, table.data tbody { display: table; width: 100%; min-width: 460px; }
+
+  /* inline-create no debe desbordar */
+  .inline-create { width: 100%; }
+  .inline-create input, .inline-create select { min-width: 0; flex: 1 1 auto; }
+
+  /* El modal de detalle de cuenta cabe en pantalla */
+  .modal-body { padding: 18px; max-height: 92vh; }
+
+  /* Formularios en fila se apilan */
+  .form .row { flex-direction: column; }
+
+  /* Tabs scrollean si no caben */
+  .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab { white-space: nowrap; flex-shrink: 0; }
+}
+
+/* ============================================================
+   GUARDIA — botón y caja de SALIDA
+   ============================================================ */
+.guardia-btn.salida { background: #9a6700; font-size: 20px; }
+.guardia-btn.salida:hover { background: #835800; }
+.visit-card.salida-box { background: #fff8ec; border: 1px solid #f0d9a8; }
