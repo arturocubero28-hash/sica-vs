@@ -7,7 +7,7 @@
  *   - Cada módulo agrega sus funciones tipadas (ver ejemplos al final).
  */
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
+const API_URL = "/api/v1";
 
 // ---- Tipos compartidos (cada módulo amplía los suyos en src/api) ----
 export type Rol = "super_admin" | "admin" | "guardia" | "residente";
