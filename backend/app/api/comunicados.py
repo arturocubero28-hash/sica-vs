@@ -4,22 +4,15 @@ Módulo de Comunicados — /api/v1/comunicados/
 Admin crea/borra anuncios. Residentes los leen en su Home.
 """
 import os
-import uuid as uuid_lib
 
-from flask import Blueprint, request, jsonify, current_app, send_file
-from werkzeug.utils import secure_filename
+from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db
 from app.models.comunicado import Comunicado
 from app.auth.security import token_required, roles_required
+from app.utils.archivos import guardar_imagen_segura, servir_archivo_seguro, EXT_IMAGEN
 
 comunicados_bp = Blueprint("comunicados", __name__)
-
-ALLOWED_EXT = {"png", "jpg", "jpeg", "webp", "gif"}
-
-
-def _ext_valida(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
 
 def _carpeta():
@@ -46,17 +39,17 @@ def crear(usuario_actual):
     if not titulo or not cuerpo:
         return jsonify({"error": {"code": "datos_incompletos",
                                   "message": "Título y contenido son obligatorios"}}), 400
+    if len(titulo) > 160:
+        return jsonify({"error": {"code": "titulo_largo",
+                                  "message": "El título es demasiado largo"}}), 400
 
     nombre_imagen = None
-    if "imagen" in request.files:
-        archivo = request.files["imagen"]
-        if archivo and archivo.filename:
-            if not _ext_valida(archivo.filename):
-                return jsonify({"error": {"code": "formato_invalido",
-                                          "message": "Solo imágenes PNG, JPG, WEBP o GIF"}}), 400
-            ext = archivo.filename.rsplit(".", 1)[1].lower()
-            nombre_imagen = f"{uuid_lib.uuid4()}.{ext}"
-            archivo.save(os.path.join(_carpeta(), nombre_imagen))
+    if "imagen" in request.files and request.files["imagen"].filename:
+        nombre_imagen, error = guardar_imagen_segura(
+            request.files["imagen"], _carpeta(), EXT_IMAGEN
+        )
+        if error:
+            return jsonify({"error": {"code": "imagen_invalida", "message": error}}), 400
 
     com = Comunicado(
         titulo=titulo, cuerpo=cuerpo, imagen=nombre_imagen,
@@ -75,7 +68,6 @@ def borrar(usuario_actual, uuid_com):
     if not com:
         return jsonify({"error": {"code": "no_encontrado", "message": "Comunicado no encontrado"}}), 404
 
-    # Borrar imagen del disco si existe
     if com.imagen:
         try:
             os.remove(os.path.join(_carpeta(), com.imagen))
@@ -91,7 +83,4 @@ def borrar(usuario_actual, uuid_com):
 @comunicados_bp.get("/imagenes/<nombre_archivo>")
 @token_required
 def ver_imagen(usuario_actual, nombre_archivo):
-    ruta = os.path.join(_carpeta(), secure_filename(nombre_archivo))
-    if not os.path.exists(ruta):
-        return jsonify({"error": {"code": "no_encontrada", "message": "Imagen no encontrada"}}), 404
-    return send_file(ruta)
+    return servir_archivo_seguro(_carpeta(), nombre_archivo)

@@ -200,8 +200,6 @@ def visitas_activas(usuario_actual):
 @dashboard_bp.get("/fotos/<nombre_archivo>")
 @token_required
 def ver_foto(usuario_actual, nombre_archivo):
+    from app.utils.archivos import servir_archivo_seguro
     carpeta = current_app.config.get("UPLOAD_FOLDER", "/app/uploads")
-    ruta = os.path.join(carpeta, nombre_archivo)
-    if not os.path.exists(ruta):
-        return jsonify({"error": {"code": "no_encontrada", "message": "Foto no encontrada"}}), 404
-    return send_file(ruta)
+    return servir_archivo_seguro(carpeta, nombre_archivo)

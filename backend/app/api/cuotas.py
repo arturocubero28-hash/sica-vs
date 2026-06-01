@@ -13,23 +13,16 @@ Endpoints:
     GET  /comprobantes/<archivo>      → servir imagen del comprobante
 """
 import os
-import uuid as uuid_lib
 import datetime as dt
 
-from flask import Blueprint, request, jsonify, current_app, send_file
-from werkzeug.utils import secure_filename
+from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db
 from app.models.cuenta import Cuota, Pago, Residente, Cuenta
 from app.auth.security import token_required, roles_required
+from app.utils.archivos import guardar_imagen_segura, servir_archivo_seguro, EXT_DOCUMENTO
 
 cuotas_bp = Blueprint("cuotas", __name__)
-
-ALLOWED_EXT = {"png", "jpg", "jpeg", "pdf"}
-
-
-def _ext_valida(filename: str) -> bool:
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
 
 def _carpeta_comprobantes():
@@ -95,10 +88,6 @@ def subir_comprobante(usuario_actual, uuid_cuota):
     if "comprobante" not in request.files:
         return jsonify({"error": {"code": "SIN_ARCHIVO", "message": "Adjuntá el comprobante"}}), 400
 
-    archivo = request.files["comprobante"]
-    if not archivo.filename or not _ext_valida(archivo.filename):
-        return jsonify({"error": {"code": "FORMATO_INVALIDO", "message": "Solo PNG, JPG o PDF"}}), 400
-
     # Validar monto
     monto_str = request.form.get("monto", "")
     try:
@@ -108,12 +97,14 @@ def subir_comprobante(usuario_actual, uuid_cuota):
     except ValueError:
         return jsonify({"error": {"code": "MONTO_INVALIDO", "message": "Indicá un monto válido"}}), 400
 
-    referencia = request.form.get("referencia", "")
+    referencia = request.form.get("referencia", "")[:120]
 
-    # Guardar archivo con nombre único
-    ext = archivo.filename.rsplit(".", 1)[1].lower()
-    nombre_archivo = f"{uuid_lib.uuid4()}.{ext}"
-    archivo.save(os.path.join(_carpeta_comprobantes(), nombre_archivo))
+    # Guardar archivo de forma segura (valida tipo real, genera nombre propio)
+    nombre_archivo, error = guardar_imagen_segura(
+        request.files["comprobante"], _carpeta_comprobantes(), EXT_DOCUMENTO
+    )
+    if error:
+        return jsonify({"error": {"code": "FORMATO_INVALIDO", "message": error}}), 400
 
     pago = Pago(
         cuota_id=cuota.id,
@@ -135,10 +126,7 @@ def subir_comprobante(usuario_actual, uuid_cuota):
 @cuotas_bp.get("/comprobantes/<nombre_archivo>")
 @token_required
 def ver_comprobante(usuario_actual, nombre_archivo):
-    ruta = os.path.join(_carpeta_comprobantes(), secure_filename(nombre_archivo))
-    if not os.path.exists(ruta):
-        return jsonify({"error": {"code": "no_encontrado", "message": "Comprobante no encontrado"}}), 404
-    return send_file(ruta)
+    return servir_archivo_seguro(_carpeta_comprobantes(), nombre_archivo)
 
 
 # ── ADMIN: pagos en revisión ──────────────────────────────────────────────────
