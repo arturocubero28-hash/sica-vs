@@ -4,6 +4,7 @@ import { listarComunicados, urlImagenComunicado, type ComunicadoDTO } from "../.
 export function HomeResidente() {
   const [comunicados, setComunicados] = useState<ComunicadoDTO[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [abierto, setAbierto] = useState<ComunicadoDTO | null>(null);
 
   useEffect(() => {
     listarComunicados().then(setComunicados).catch(() => {}).finally(() => setCargando(false));
@@ -26,38 +27,55 @@ export function HomeResidente() {
         </div>
       ) : (
         <div className="comunicado-feed">
-          {comunicados.map(c => <ComunicadoCard key={c.id} com={c} />)}
+          {comunicados.map(c => (
+            <ComunicadoMini key={c.id} com={c} onAbrir={() => setAbierto(c)} />
+          ))}
         </div>
       )}
+
+      {abierto && <ComunicadoModal com={abierto} onCerrar={() => setAbierto(null)} />}
     </div>
   );
 }
 
-function ComunicadoCard({ com }: { com: ComunicadoDTO }) {
-  const [abierto, setAbierto] = useState(false);
-  const esLargo = com.cuerpo.length > 180;
+// Card compacta: solo título, fecha y foto pequeña
+function ComunicadoMini({ com, onAbrir }: { com: ComunicadoDTO; onAbrir: () => void }) {
   const fecha = new Date(com.created_at).toLocaleDateString("es-HN", {
     day: "numeric", month: "long", year: "numeric",
   });
-
   return (
-    <div className={`comunicado-card ${abierto ? "abierto" : ""}`} onClick={() => esLargo && setAbierto(!abierto)}>
+    <div className="comunicado-mini" onClick={onAbrir}>
       {com.imagen && (
-        <div className="comunicado-img-wrap">
-          <img src={urlImagenComunicado(com.imagen)} alt={com.titulo} />
-        </div>
+        <img className="comunicado-mini-foto" src={urlImagenComunicado(com.imagen)} alt="" />
       )}
-      <div className="comunicado-contenido">
+      <div className="comunicado-mini-texto">
         <div className="comunicado-fecha">{fecha}</div>
-        <h3 className="comunicado-titulo">{com.titulo}</h3>
-        <p className={`comunicado-cuerpo ${!abierto && esLargo ? "truncado" : ""}`}>
-          {com.cuerpo}
-        </p>
-        {esLargo && (
-          <button className="comunicado-toggle" onClick={(e) => { e.stopPropagation(); setAbierto(!abierto); }}>
-            {abierto ? "Ver menos" : "Leer más"}
-          </button>
+        <h3 className="comunicado-mini-titulo">{com.titulo}</h3>
+      </div>
+      <span className="comunicado-mini-chevron">›</span>
+    </div>
+  );
+}
+
+// Modal con el comunicado completo
+function ComunicadoModal({ com, onCerrar }: { com: ComunicadoDTO; onCerrar: () => void }) {
+  const fecha = new Date(com.created_at).toLocaleDateString("es-HN", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+  return (
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>{com.titulo}</h3>
+          <button className="ghost mini" onClick={onCerrar}>✕</button>
+        </div>
+        <div className="comunicado-fecha" style={{ marginBottom: 12 }}>{fecha}</div>
+        {com.imagen && (
+          <div className="comunicado-modal-img">
+            <img src={urlImagenComunicado(com.imagen)} alt={com.titulo} />
+          </div>
         )}
+        <p className="comunicado-modal-cuerpo">{com.cuerpo}</p>
         <div className="comunicado-autor muted small">Publicado por {com.autor}</div>
       </div>
     </div>

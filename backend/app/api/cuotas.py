@@ -208,9 +208,9 @@ def revisar_pago(usuario_actual, uuid_pago):
 def generar_cuotas_manual(usuario_actual):
     """Dispara la generación de cuotas del mes en curso sin esperar a Celery."""
     import datetime as _dt
+    import calendar as _cal
     hoy = _dt.date.today()
     periodo = _dt.date(hoy.year, hoy.month, 1)
-    vencimiento = _dt.date(hoy.year, hoy.month, 15)
 
     cuentas = Cuenta.query.all()
     creadas = 0
@@ -220,6 +220,10 @@ def generar_cuotas_manual(usuario_actual):
             continue
         if not cuenta.tarifa:
             continue
+        # Vencimiento según el día de pago de la cuenta (sin pasarse del último día del mes)
+        ultimo_dia = _cal.monthrange(hoy.year, hoy.month)[1]
+        dia = min(cuenta.dia_pago or 15, ultimo_dia)
+        vencimiento = _dt.date(hoy.year, hoy.month, dia)
         cuota = Cuota(
             cuenta_id=cuenta.id, periodo=periodo,
             monto=float(cuenta.tarifa.monto),

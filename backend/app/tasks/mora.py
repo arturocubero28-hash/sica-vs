@@ -12,10 +12,11 @@ from app.tasks.celery_app import celery
 @celery.task(name="tasks.generar_cuotas_mensuales")
 def generar_cuotas_mensuales():
     """
-    Genera una cuota por cada cuenta activa para el mes en curso.
-    Usa UNIQUE (cuenta_id, periodo) del schema para evitar duplicados.
-    Vencimiento: día 15 del mes.
+    Genera una cuota por cada cuenta para el mes en curso.
+    Usa UNIQUE (cuenta_id, periodo) para evitar duplicados.
+    El vencimiento respeta el dia_pago configurado en cada cuenta.
     """
+    import calendar
     from app import create_app
     from app.extensions import db
     from app.models.cuenta import Cuenta, Cuota
@@ -24,7 +25,7 @@ def generar_cuotas_mensuales():
     with app.app_context():
         hoy = dt.date.today()
         periodo = dt.date(hoy.year, hoy.month, 1)
-        vencimiento = dt.date(hoy.year, hoy.month, 15)
+        ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
 
         cuentas = Cuenta.query.all()
         creadas = 0
@@ -35,6 +36,12 @@ def generar_cuotas_mensuales():
             ).first()
             if existe:
                 continue
+            if not cuenta.tarifa:
+                continue
+
+            # Vencimiento según el día de pago de la cuenta
+            dia = min(cuenta.dia_pago or 15, ultimo_dia)
+            vencimiento = dt.date(hoy.year, hoy.month, dia)
 
             cuota = Cuota(
                 cuenta_id=cuenta.id,
