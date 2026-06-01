@@ -16,7 +16,7 @@ import os
 import uuid as uuid_lib
 import datetime as dt
 
-from flask import Blueprint, request, jsonify, current_app, send_from_directory
+from flask import Blueprint, request, jsonify, current_app, send_file
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
@@ -135,12 +135,14 @@ def subir_comprobante(usuario_actual, uuid_cuota):
 @cuotas_bp.get("/comprobantes/<nombre_archivo>")
 @token_required
 def ver_comprobante(usuario_actual, nombre_archivo):
-    return send_from_directory(_carpeta_comprobantes(), nombre_archivo)
+    ruta = os.path.join(_carpeta_comprobantes(), secure_filename(nombre_archivo))
+    if not os.path.exists(ruta):
+        return jsonify({"error": {"code": "no_encontrado", "message": "Comprobante no encontrado"}}), 404
+    return send_file(ruta)
 
 
 # ── ADMIN: pagos en revisión ──────────────────────────────────────────────────
 @cuotas_bp.get("/pendientes")
-@token_required
 @roles_required("admin")
 def pagos_pendientes(usuario_actual):
     pagos = (
@@ -161,7 +163,6 @@ def pagos_pendientes(usuario_actual):
 
 # ── ADMIN: todas las cuotas ───────────────────────────────────────────────────
 @cuotas_bp.get("/todas")
-@token_required
 @roles_required("admin")
 def todas_las_cuotas(usuario_actual):
     estado = request.args.get("estado")  # filtro opcional
@@ -180,7 +181,6 @@ def todas_las_cuotas(usuario_actual):
 
 # ── ADMIN: aprobar o rechazar pago ────────────────────────────────────────────
 @cuotas_bp.post("/pagos/<uuid_pago>/revisar")
-@token_required
 @roles_required("admin")
 def revisar_pago(usuario_actual, uuid_pago):
     pago = Pago.query.filter_by(uuid_publico=uuid_pago).first()

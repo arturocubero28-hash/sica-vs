@@ -7,7 +7,7 @@ Módulo de Dashboard administrativo — estadísticas reales desde la base de da
 import datetime as dt
 import os
 
-from flask import Blueprint, jsonify, send_from_directory, current_app
+from flask import Blueprint, jsonify, send_file, current_app
 from sqlalchemy import func
 
 from app.extensions import db
@@ -201,4 +201,7 @@ def visitas_activas(usuario_actual):
 @token_required
 def ver_foto(usuario_actual, nombre_archivo):
     carpeta = current_app.config.get("UPLOAD_FOLDER", "/app/uploads")
-    return send_from_directory(carpeta, nombre_archivo)
+    ruta = os.path.join(carpeta, nombre_archivo)
+    if not os.path.exists(ruta):
+        return jsonify({"error": {"code": "no_encontrada", "message": "Foto no encontrada"}}), 404
+    return send_file(ruta)

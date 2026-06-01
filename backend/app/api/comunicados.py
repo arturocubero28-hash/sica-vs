@@ -6,7 +6,7 @@ Admin crea/borra anuncios. Residentes los leen en su Home.
 import os
 import uuid as uuid_lib
 
-from flask import Blueprint, request, jsonify, current_app, send_from_directory
+from flask import Blueprint, request, jsonify, current_app, send_file
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
@@ -91,4 +91,7 @@ def borrar(usuario_actual, uuid_com):
 @comunicados_bp.get("/imagenes/<nombre_archivo>")
 @token_required
 def ver_imagen(usuario_actual, nombre_archivo):
-    return send_from_directory(_carpeta(), nombre_archivo)
+    ruta = os.path.join(_carpeta(), secure_filename(nombre_archivo))
+    if not os.path.exists(ruta):
+        return jsonify({"error": {"code": "no_encontrada", "message": "Imagen no encontrada"}}), 404
+    return send_file(ruta)
