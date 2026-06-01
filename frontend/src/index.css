@@ -691,3 +691,86 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
   .config-cam { flex-direction: column; align-items: flex-start; }
   .config-cam-acciones { flex-wrap: wrap; }
 }
+
+/* ============================================================
+   DASHBOARD — header pro y padrón
+   ============================================================ */
+.dash-header-pro {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 4px;
+}
+.dash-titulo { font-size: 24px; color: var(--marca-azul); margin: 0 0 2px; font-weight: 800; }
+.dash-fecha { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.dash-fecha-dia { font-weight: 700; color: var(--marca-naranja); text-transform: capitalize; font-size: 15px; }
+.dash-fecha-completa { font-size: 13px; color: var(--gris); text-transform: capitalize; }
+
+.padron-card {
+  background: #fff; border: 1px solid #e9eef5; border-radius: 14px;
+  padding: 16px 18px;
+}
+.padron-titulo { text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin-bottom: 12px; }
+.padron-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.padron-item { display: flex; align-items: center; gap: 12px; }
+.padron-icon {
+  font-size: 22px; width: 46px; height: 46px; border-radius: 12px;
+  background: #f1f6fc; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.padron-item div { display: flex; flex-direction: column; line-height: 1.2; }
+.padron-item b { font-size: 22px; color: var(--marca-azul); }
+.padron-item span { font-size: 12px; color: var(--gris); }
+
+@media (max-width: 860px) {
+  .padron-grid { grid-template-columns: 1fr; gap: 10px; }
+  .dash-fecha { align-items: flex-start; text-align: left; }
+}
+
+/* ============================================================
+   HOME RESIDENTE — feed de comunicados
+   ============================================================ */
+.home-residente { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+.home-saludo h2 { color: var(--marca-azul); margin: 0 0 2px; font-size: 22px; }
+.comunicado-feed { display: flex; flex-direction: column; gap: 14px; }
+
+.comunicado-card {
+  background: #fff; border: 1px solid #e9eef5; border-radius: 16px;
+  overflow: hidden; transition: box-shadow .15s, transform .15s;
+}
+.comunicado-card:hover { box-shadow: 0 6px 22px rgba(2,46,69,.08); }
+.comunicado-img-wrap { width: 100%; max-height: 220px; overflow: hidden; background: #f1f4f8; }
+.comunicado-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; max-height: 220px; }
+.comunicado-contenido { padding: 16px 18px; }
+.comunicado-fecha { font-size: 12px; color: var(--marca-naranja); font-weight: 700; text-transform: capitalize; margin-bottom: 4px; }
+.comunicado-titulo { color: var(--marca-azul); font-size: 18px; margin: 0 0 8px; }
+.comunicado-cuerpo { color: #3a4a5e; font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; margin: 0; }
+.comunicado-cuerpo.truncado {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.comunicado-toggle {
+  background: none; border: none; color: var(--marca-naranja);
+  font-weight: 700; font-size: 13.5px; padding: 8px 0 0; cursor: pointer;
+}
+.comunicado-autor { margin-top: 10px; }
+
+/* ============================================================
+   COMUNICADOS ADMIN
+   ============================================================ */
+.comunicados-admin { display: flex; flex-direction: column; gap: 16px; }
+.comunicado-admin-list { display: flex; flex-direction: column; gap: 10px; }
+.comunicado-admin-item {
+  background: #fff; border: 1px solid #e9eef5; border-radius: 12px;
+  padding: 14px; display: flex; align-items: center; gap: 14px;
+}
+.comunicado-admin-thumb { width: 64px; height: 64px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+.comunicado-admin-info { flex: 1; min-width: 0; }
+.comunicado-admin-titulo { font-weight: 700; color: var(--marca-azul); font-size: 15px; }
+.comunicado-admin-preview { margin-top: 4px; }
+.comunicado-textarea {
+  border: 1.5px solid #dce4ef; border-radius: 10px; padding: 12px 14px;
+  font-size: 15px; font-family: inherit; resize: vertical; line-height: 1.5;
+}
+.comunicado-textarea:focus { border-color: var(--marca-naranja); outline: none; }
+
+@media (max-width: 860px) {
+  .comunicado-admin-item { flex-wrap: wrap; }
+}

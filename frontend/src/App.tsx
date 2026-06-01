@@ -10,6 +10,7 @@ import { GuardiaPanel } from "./modules/guardia/GuardiaPanel";
 import { DashboardAdmin } from "./modules/dashboard/DashboardAdmin";
 import { PagosAdmin } from "./modules/dashboard/PagosAdmin";
 import { MonitoreoCamaras } from "./modules/camaras/MonitoreoCamaras";
+import { ComunicadosAdmin } from "./modules/comunicados/ComunicadosAdmin";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -188,6 +189,7 @@ function AdminView({ seccion }: { seccion: string }) {
   if (seccion === "casas") return <UnidadesPanel embedded />;
   if (seccion === "pagos") return <PagosAdmin />;
   if (seccion === "monitoreo") return <MonitoreoCamaras />;
+  if (seccion === "comunicados") return <ComunicadosAdmin />;
   return <DashboardAdmin />;
 }
 
@@ -201,10 +203,12 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "monitoreo", label: "Monitoreo", icon: "📹" },
       { id: "casas", label: "Casas y residentes", icon: "🏘️" },
       { id: "pagos", label: "Revisión de pagos", icon: "💳" },
+      { id: "comunicados", label: "Comunicados", icon: "📣" },
     ];
   }
   if (rol === "residente") {
     return [
+      { id: "home", label: "Inicio", icon: "🏠" },
       { id: "qr", label: "Generar QR", icon: "🎫" },
       { id: "historial", label: "Mis visitas", icon: "📋" },
       { id: "cuotas", label: "Mis cuotas", icon: "💳" },

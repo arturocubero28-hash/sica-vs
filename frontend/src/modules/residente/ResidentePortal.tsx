@@ -4,6 +4,7 @@ import {
   type MiCuentaDTO, type VisitaDTO,
 } from "../../api/client";
 import { CuotasResidente } from "./CuotasResidente";
+import { HomeResidente } from "./HomeResidente";
 
 // Comparte el QR por WhatsApp (descarga la imagen y abre WhatsApp con mensaje)
 async function compartirWhatsApp(visita: VisitaDTO) {
@@ -44,7 +45,7 @@ async function descargarQR(visita: VisitaDTO) {
   }
 }
 
-export function ResidentePortal({ seccion = "qr" }: { seccion?: string }) {
+export function ResidentePortal({ seccion = "home" }: { seccion?: string }) {
   const [cuenta, setCuenta] = useState<MiCuentaDTO | null>(null);
 
   useEffect(() => { miCuenta().then(setCuenta).catch(() => {}); }, []);
@@ -55,6 +56,7 @@ export function ResidentePortal({ seccion = "qr" }: { seccion?: string }) {
         <div className="error">Tu cuenta está bloqueada por mora. No puedes generar códigos QR hasta regularizar tu pago.</div>
       )}
 
+      {seccion === "home" && <HomeResidente />}
       {seccion === "qr" && <GenerarQR bloqueada={cuenta?.cuenta.bloqueada || false} />}
       {seccion === "historial" && <Historial />}
       {seccion === "cuotas" && <CuotasResidente />}

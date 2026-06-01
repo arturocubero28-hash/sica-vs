@@ -295,3 +295,35 @@ export function urlStreamCamara(uuid: string): string {
   const token = getToken();
   return `${API_URL}/camaras/${uuid}/stream?_auth=${token}`;
 }
+
+// ── COMUNICADOS ───────────────────────────────────────────────────────────────
+export interface ComunicadoDTO {
+  id: string; titulo: string; cuerpo: string;
+  imagen?: string; autor: string; created_at: string;
+}
+export const listarComunicados = () => request<ComunicadoDTO[]>("/comunicados");
+export const eliminarComunicado = (uuid: string) =>
+  request<{ eliminado: boolean }>(`/comunicados/${uuid}`, { method: "DELETE" });
+
+export async function crearComunicado(
+  titulo: string, cuerpo: string, imagen?: File | null
+): Promise<ComunicadoDTO> {
+  const token = getToken();
+  const form = new FormData();
+  form.append("titulo", titulo);
+  form.append("cuerpo", cuerpo);
+  if (imagen) form.append("imagen", imagen);
+  const res = await fetch(`${API_URL}/comunicados`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || "Error al crear comunicado");
+  return json.data;
+}
+
+export function urlImagenComunicado(nombre: string): string {
+  const token = getToken();
+  return `${API_URL}/comunicados/imagenes/${nombre}?_auth=${token}`;
+}

@@ -30,6 +30,7 @@ def create_app(config_class=Config):
     from app.models import visita   # noqa: F401  (Integrante 3)
     from app.models.cuenta import Cuota, Pago  # noqa: F401  cuotas y pagos
     from app.models.camara import Camara  # noqa: F401  cámaras ONVIF/RTSP
+    from app.models.comunicado import Comunicado  # noqa: F401  comunicados
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp
@@ -50,6 +51,9 @@ def create_app(config_class=Config):
 
     from app.api.camaras import camaras_bp
     app.register_blueprint(camaras_bp, url_prefix="/api/v1/camaras")
+
+    from app.api.comunicados import comunicados_bp
+    app.register_blueprint(comunicados_bp, url_prefix="/api/v1/comunicados")
 
     # --- Healthcheck y manejo de errores estándar ---
     @app.get("/api/v1/health")

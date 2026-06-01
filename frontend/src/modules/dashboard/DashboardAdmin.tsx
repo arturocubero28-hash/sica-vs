@@ -41,9 +41,15 @@ export function DashboardAdmin() {
 
   return (
     <div className="dash">
-      <div className="dash-head">
-        <h2>Dashboard</h2>
-        <span className="muted">Villas del Sol · datos en vivo</span>
+      <div className="dash-header-pro">
+        <div>
+          <h2 className="dash-titulo">Panel de control</h2>
+          <span className="muted">Residencial Villas del Sol</span>
+        </div>
+        <div className="dash-fecha">
+          <span className="dash-fecha-dia">{new Date().toLocaleDateString("es-HN", { weekday: "long" })}</span>
+          <span className="dash-fecha-completa">{new Date().toLocaleDateString("es-HN", { day: "numeric", month: "long", year: "numeric" })}</span>
+        </div>
       </div>
 
       {/* MÉTRICA PRINCIPAL — visitas adentro ahora (clicable) */}
@@ -65,11 +71,23 @@ export function DashboardAdmin() {
           color={m?.cuentas_bloqueadas ? "rojo" : "gris"} />
       </div>
 
-      {/* Resumen del padrón (compacto) */}
-      <div className="metric-grid small">
-        <MiniMetric label="Casas / Edificios" valor={m?.total_unidades} />
-        <MiniMetric label="Cuentas" valor={m?.total_cuentas} />
-        <MiniMetric label="Residentes" valor={m?.total_residentes} />
+      {/* Resumen del padrón */}
+      <div className="padron-card">
+        <div className="padron-titulo muted small">Padrón de la residencial</div>
+        <div className="padron-grid">
+          <div className="padron-item">
+            <span className="padron-icon">🏘️</span>
+            <div><b>{m?.total_unidades ?? "—"}</b><span>Casas / Edificios</span></div>
+          </div>
+          <div className="padron-item">
+            <span className="padron-icon">📄</span>
+            <div><b>{m?.total_cuentas ?? "—"}</b><span>Cuentas</span></div>
+          </div>
+          <div className="padron-item">
+            <span className="padron-icon">👥</span>
+            <div><b>{m?.total_residentes ?? "—"}</b><span>Residentes</span></div>
+          </div>
+        </div>
       </div>
 
       {/* Tabla de visitas recientes */}
@@ -271,16 +289,6 @@ function MetricCard({ label, valor, icon, color }:
         <span className="metric-icon">{icon}</span>
       </div>
       <div className="metric-valor">{valor ?? "—"}</div>
-    </div>
-  );
-}
-
-function MiniMetric({ label, valor, alerta }:
-  { label: string; valor?: number; alerta?: boolean }) {
-  return (
-    <div className={`mini-metric ${alerta ? "alerta" : ""}`}>
-      <div className="mini-valor">{valor ?? "—"}</div>
-      <div className="mini-label">{label}</div>
     </div>
   );
 }
