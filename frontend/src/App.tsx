@@ -11,6 +11,7 @@ import { DashboardAdmin } from "./modules/dashboard/DashboardAdmin";
 import { PagosAdmin } from "./modules/dashboard/PagosAdmin";
 import { MonitoreoCamaras } from "./modules/camaras/MonitoreoCamaras";
 import { ComunicadosAdmin } from "./modules/comunicados/ComunicadosAdmin";
+import { Reporteria } from "./modules/reportes/Reporteria";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -190,6 +191,7 @@ function AdminView({ seccion }: { seccion: string }) {
   if (seccion === "pagos") return <PagosAdmin />;
   if (seccion === "monitoreo") return <MonitoreoCamaras />;
   if (seccion === "comunicados") return <ComunicadosAdmin />;
+  if (seccion === "reportes") return <Reporteria />;
   return <DashboardAdmin />;
 }
 
@@ -203,6 +205,7 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "monitoreo", label: "Monitoreo", icon: "📹" },
       { id: "casas", label: "Casas y residentes", icon: "🏘️" },
       { id: "pagos", label: "Revisión de pagos", icon: "💳" },
+      { id: "reportes", label: "Reportería", icon: "📈" },
       { id: "comunicados", label: "Comunicados", icon: "📣" },
     ];
   }

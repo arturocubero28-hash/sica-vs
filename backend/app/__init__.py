@@ -55,6 +55,9 @@ def create_app(config_class=Config):
     from app.api.comunicados import comunicados_bp
     app.register_blueprint(comunicados_bp, url_prefix="/api/v1/comunicados")
 
+    from app.api.reportes import reportes_bp
+    app.register_blueprint(reportes_bp, url_prefix="/api/v1/reportes")
+
     # --- Healthcheck y manejo de errores estándar ---
     @app.get("/api/v1/health")
     def health():

@@ -336,3 +336,21 @@ export function urlComprobante(nombre: string): string {
   const token = getToken();
   return `${API_URL}/cuotas/comprobantes/${nombre}?_auth=${token}`;
 }
+
+// ── REPORTES ──────────────────────────────────────────────────────────────────
+export interface MorosoDTO {
+  unidad: string; titular: string; monto: number;
+  estado: string; vencimiento: string; dias_atraso: number;
+}
+export interface AlDiaDTO { unidad: string; titular: string; monto: number; }
+export interface TendenciaDTO { mes_label: string; esperado: number; recaudado: number; }
+export interface ReporteFinancieroDTO {
+  periodo: string; mes_label: string;
+  total_esperado: number; total_recaudado: number; total_pendiente: number;
+  pct_cobranza: number; cuentas_al_dia: number; cuentas_morosas: number;
+  al_dia: AlDiaDTO[]; morosos: MorosoDTO[]; tendencia: TendenciaDTO[];
+}
+export const reporteFinanciero = (anio?: number, mes?: number) => {
+  const q = anio && mes ? `?anio=${anio}&mes=${mes}` : "";
+  return request<ReporteFinancieroDTO>(`/reportes/financiero${q}`);
+};

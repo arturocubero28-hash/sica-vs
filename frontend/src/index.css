@@ -803,7 +803,34 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .comunicado-modal-img {
   width: 100%; border-radius: 12px; overflow: hidden; margin-bottom: 14px; background: #f1f4f8;
 }
-.comunicado-modal-img img { width: 100%; height: auto; display: block; max-height: 320px; object-fit: cover; }
+.comunicado-modal-img img { width: 100%; height: auto; display: block; max-height: 320px; object-fit: contain; }
 .comunicado-modal-cuerpo {
   color: #3a4a5e; font-size: 15px; line-height: 1.6; white-space: pre-wrap; margin: 0 0 14px;
 }
+
+/* ============================================================
+   REPORTERÍA FINANCIERA
+   ============================================================ */
+.reporteria { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+.reporte-export { display: flex; gap: 8px; }
+
+/* Barra de cobranza */
+.cobranza-bar-wrap { background: #fff; border: 1px solid #e9eef5; border-radius: 14px; padding: 16px; }
+.cobranza-bar-label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.cobranza-bar-label span:first-child { color: #1d8a4a; }
+.cobranza-bar-label span:last-child { color: #c81e1e; }
+.cobranza-bar { height: 14px; background: #fdecec; border-radius: 8px; overflow: hidden; }
+.cobranza-fill { height: 100%; background: linear-gradient(90deg, #1d8a4a, #2ecc71); border-radius: 8px; transition: width .4s; }
+
+/* Gráfico de tendencia */
+.tendencia-chart { display: flex; align-items: flex-end; gap: 12px; height: 160px; padding: 10px 0; }
+.tend-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; }
+.tend-bars { flex: 1; display: flex; align-items: flex-end; gap: 3px; width: 100%; justify-content: center; }
+.tend-bar { width: 38%; border-radius: 4px 4px 0 0; min-height: 2px; transition: height .3s; }
+.tend-bar.esperado { background: #c5d2e4; }
+.tend-bar.recaudado { background: var(--marca-naranja); }
+.tend-label { font-size: 10.5px; color: var(--gris); text-transform: capitalize; }
+.tend-leyenda { display: flex; gap: 18px; justify-content: center; font-size: 12px; color: var(--gris); margin-top: 8px; }
+.tend-leyenda i.leg { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+.leg.esperado { background: #c5d2e4; }
+.leg.recaudado { background: var(--marca-naranja); }
