@@ -19,7 +19,6 @@ camaras_bp = Blueprint("camaras", __name__)
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 @camaras_bp.get("")
-@token_required
 @roles_required("admin", "super_admin")
 def listar_camaras(usuario_actual):
     camaras = Camara.query.order_by(Camara.orden.asc(), Camara.id.asc()).all()
@@ -27,7 +26,6 @@ def listar_camaras(usuario_actual):
 
 
 @camaras_bp.post("")
-@token_required
 @roles_required("admin", "super_admin")
 def crear_camara(usuario_actual):
     body = request.get_json() or {}
@@ -53,7 +51,6 @@ def crear_camara(usuario_actual):
 
 
 @camaras_bp.put("/<uuid_camara>")
-@token_required
 @roles_required("admin", "super_admin")
 def editar_camara(usuario_actual, uuid_camara):
     cam = Camara.query.filter_by(uuid_publico=uuid_camara).first()
@@ -77,7 +74,6 @@ def editar_camara(usuario_actual, uuid_camara):
 
 
 @camaras_bp.delete("/<uuid_camara>")
-@token_required
 @roles_required("admin", "super_admin")
 def eliminar_camara(usuario_actual, uuid_camara):
     cam = Camara.query.filter_by(uuid_publico=uuid_camara).first()
@@ -90,7 +86,6 @@ def eliminar_camara(usuario_actual, uuid_camara):
 
 # ── Probar conexión a una cámara ───────────────────────────────────────────────
 @camaras_bp.post("/<uuid_camara>/probar")
-@token_required
 @roles_required("admin", "super_admin")
 def probar_camara(usuario_actual, uuid_camara):
     cam = Camara.query.filter_by(uuid_publico=uuid_camara).first()
