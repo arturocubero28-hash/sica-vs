@@ -8,6 +8,7 @@ import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
 import { ResidentePortal } from "./modules/residente/ResidentePortal";
 import { GuardiaPanel } from "./modules/guardia/GuardiaPanel";
 import { DashboardAdmin } from "./modules/dashboard/DashboardAdmin";
+import { PagosAdmin } from "./modules/dashboard/PagosAdmin";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -184,6 +185,7 @@ function ResetPassword({ token, onOk }: { token: string; onOk: () => void }) {
 // ─── Vista admin con pestañas ────────────────────────────────
 function AdminView({ seccion }: { seccion: string }) {
   if (seccion === "casas") return <UnidadesPanel embedded />;
+  if (seccion === "pagos") return <PagosAdmin />;
   return <DashboardAdmin />;
 }
 
@@ -195,12 +197,14 @@ function navParaRol(rol: Rol): NavItem[] {
     return [
       { id: "dashboard", label: "Monitoreo", icon: "📊" },
       { id: "casas", label: "Casas y residentes", icon: "🏘️" },
+      { id: "pagos", label: "Revisión de pagos", icon: "💳" },
     ];
   }
   if (rol === "residente") {
     return [
       { id: "qr", label: "Generar QR", icon: "🎫" },
       { id: "historial", label: "Mis visitas", icon: "📋" },
+      { id: "cuotas", label: "Mis cuotas", icon: "💳" },
       { id: "cuenta", label: "Mi cuenta", icon: "👤" },
     ];
   }

@@ -46,21 +46,23 @@ function ListaCuentas({ cuentas, onAbrir }: { cuentas: Cuenta[]; onAbrir: (c: Cu
   if (cuentas.length === 0)
     return <p className="muted">No hay cuentas. Usá "Dar de alta" para crear la primera.</p>;
   return (
-    <table className="data">
-      <thead><tr><th>Identificador</th><th>Titular</th><th>Tarifa</th><th>Día pago</th><th>Estado</th><th></th></tr></thead>
-      <tbody>
-        {cuentas.map((c) => (
-          <tr key={c.id}>
-            <td>{c.apartamento ? `Apto ${c.apartamento}` : "Casa"}</td>
-            <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
-            <td>{c.tarifa} (L {c.monto})</td>
-            <td>{c.dia_pago}</td>
-            <td><span className={c.bloqueada ? "pill red" : "pill green"}>{c.bloqueada ? "Bloqueada" : c.estado}</span></td>
-            <td><button className="mini" onClick={() => onAbrir(c)}>Ver</button></td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="scroll-x">
+      <table className="data">
+        <thead><tr><th>Identificador</th><th>Titular</th><th>Tarifa</th><th>Día pago</th><th>Estado</th><th></th></tr></thead>
+        <tbody>
+          {cuentas.map((c) => (
+            <tr key={c.id}>
+              <td>{c.apartamento ? `Apto ${c.apartamento}` : "Casa"}</td>
+              <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
+              <td>{c.tarifa} (L {c.monto})</td>
+              <td>{c.dia_pago}</td>
+              <td><span className={c.bloqueada ? "pill red" : "pill green"}>{c.bloqueada ? "Bloqueada" : c.estado}</span></td>
+              <td><button className="mini" onClick={() => onAbrir(c)}>Ver</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -270,7 +272,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         </div>
 
         <div className="sub">Residentes</div>
-        <table className="data">
+        <div className="scroll-x"><table className="data">
           <tbody>
             {(cuenta.residentes || []).map((r) => (
               <tr key={r.id}>
@@ -281,7 +283,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
 
         {miembroEnlace && (
           <div className="activacion-box">
@@ -300,7 +302,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         </div>
 
         <div className="sub">Tarjetas de proximidad</div>
-        <table className="data">
+        <div className="scroll-x"><table className="data">
           <tbody>
             {(cuenta.tarjetas || []).map((t) => (
               <tr key={t.id}>
@@ -314,7 +316,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
               <tr><td colSpan={4} className="muted">Sin tarjetas asignadas</td></tr>
             )}
           </tbody>
-        </table>
+        </table></div>
         <div className="inline-create">
           <input placeholder="Código de tarjeta (card_uid)" value={cardUid}
             onChange={(e) => setCardUid(e.target.value)} />

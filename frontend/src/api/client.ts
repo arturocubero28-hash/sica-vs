@@ -229,3 +229,46 @@ export function urlFotoGuardia(nombreArchivo: string): string {
   const token = getToken();
   return `${API_URL}/dashboard/fotos/${nombreArchivo}?_auth=${token}`;
 }
+
+// ── CUOTAS Y PAGOS ────────────────────────────────────────────────────────────
+export interface CuotaDTO {
+  id: string; periodo: string; mes_label: string;
+  monto: number; fecha_vencimiento: string; estado: string;
+  created_at: string; pagos?: PagoDTO[];
+}
+export interface PagoDTO {
+  id: string; cuota_id: string; monto: number; metodo: string;
+  referencia?: string; comprobante_archivo?: string;
+  estado: string; nota_admin?: string; revisado_en?: string; created_at: string;
+}
+export interface PagoAdminDTO extends PagoDTO {
+  unidad: string; periodo: string; mes_label: string;
+}
+
+export const misCuotas = () => request<CuotaDTO[]>("/cuotas/mias");
+export const detalleCuota = (uuid: string) => request<CuotaDTO>(`/cuotas/mias/${uuid}`);
+
+export async function subirComprobante(
+  cuotaUuid: string, archivo: File, monto: number, referencia: string
+): Promise<PagoDTO> {
+  const token = getToken();
+  const form = new FormData();
+  form.append("comprobante", archivo);
+  form.append("monto", String(monto));
+  form.append("referencia", referencia);
+  const res = await fetch(`${API_URL}/cuotas/mias/${cuotaUuid}/pagar`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || "Error al subir comprobante");
+  return json.data;
+}
+
+export const cuotasPendientesAdmin = () => request<PagoAdminDTO[]>("/cuotas/pendientes");
+export const revisarPago = (uuid: string, accion: "aprobar" | "rechazar", nota?: string) =>
+  request<PagoDTO>(`/cuotas/pagos/${uuid}/revisar`, {
+    method: "POST",
+    body: JSON.stringify({ accion, nota: nota || "" }),
+  });

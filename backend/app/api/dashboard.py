@@ -66,7 +66,7 @@ def metricas(usuario_actual):
 @dashboard_bp.get("/visitas-tabla")
 @roles_required("admin", "super_admin")
 def visitas_tabla(usuario_actual):
-    """Tabla de visitas recientes con el residente que las generó."""
+    """Tabla de visitas recientes. El estado mostrado refleja el ÚLTIMO evento de acceso."""
     visitas = (Visita.query
                .order_by(Visita.created_at.desc())
                .limit(40).all())
@@ -78,13 +78,26 @@ def visitas_tabla(usuario_actual):
         residente_nombre = "—"
         if v.residente and v.residente.usuario:
             residente_nombre = f"{v.residente.usuario.nombre} {v.residente.usuario.apellido}"
+
+        # Determinar estado real basado en el último evento de acceso
+        ultimo_evento = (
+            EventoAcceso.query
+            .filter_by(visita_id=v.id)
+            .order_by(EventoAcceso.ocurrido_en.desc())
+            .first()
+        )
+        if ultimo_evento:
+            estado_real = "adentro" if ultimo_evento.direccion == "entrada" else "salio"
+        else:
+            estado_real = v.estado  # activa, expirada, revocada
+
         filas.append({
             "id": str(v.uuid_publico),
             "residente": residente_nombre,
             "unidad": unidad.identificador if unidad else "—",
             "visitante": v.nombre_visitante,
             "tipo": v.tipo,
-            "estado": v.estado,
+            "estado": estado_real,
             "vigencia": v.valido_hasta.strftime("%Y-%m-%d %H:%M") if v.valido_hasta else "—",
             "creado": v.created_at.strftime("%Y-%m-%d %H:%M") if v.created_at else "—",
         })

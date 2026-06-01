@@ -32,10 +32,11 @@ export function DashboardAdmin() {
   }
 
   const estadoColor: Record<string, string> = {
-    activa: "green", usada: "amber", expirada: "", revocada: "red",
+    activa: "green", adentro: "green", salio: "", expirada: "", revocada: "red",
   };
   const estadoLabel: Record<string, string> = {
-    activa: "Activa", usada: "Ingresó", expirada: "Expirada", revocada: "Cancelada",
+    activa: "Activa", adentro: "Adentro 🟢", salio: "Salió ✓",
+    expirada: "Expirada", revocada: "Cancelada",
   };
 
   return (
@@ -77,7 +78,7 @@ export function DashboardAdmin() {
         {visitas.length === 0 ? (
           <p className="muted">No hay visitas registradas todavía.</p>
         ) : (
-          <div className="tabla-scroll">
+          <div className="scroll-x">
             <table className="data">
               <thead>
                 <tr><th>Residente</th><th>Unidad</th><th>Visitante</th><th>Tipo</th><th>Estado</th></tr>
