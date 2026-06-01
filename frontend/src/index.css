@@ -625,3 +625,69 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .pago-ver { color: var(--marca-naranja); font-size: 13px; font-weight: 600; margin-top: 8px; }
 .comprobante-img { width: 100%; max-height: 280px; object-fit: contain; border-radius: 10px; border: 1px solid #e3e9f2; background: #f4f7fb; }
 .comprobante-preview { display: flex; flex-direction: column; gap: 8px; }
+
+/* ============================================================
+   MÓDULO DE MONITOREO — cámaras
+   ============================================================ */
+.monitoreo { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+
+/* Selector de grilla */
+.layout-selector { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.layout-btn {
+  background: #fff; border: 1.5px solid #dce4ef; color: var(--marca-azul);
+  border-radius: 9px; padding: 7px 14px; font-weight: 700; cursor: pointer;
+  font-size: 14px; transition: all .15s; min-width: 42px;
+}
+.layout-btn:hover { border-color: var(--marca-naranja); }
+.layout-btn.on { background: var(--marca-azul); color: #fff; border-color: var(--marca-azul); }
+
+/* Grilla de cámaras */
+.camara-grid { display: grid; gap: 10px; width: 100%; }
+.camara-tile {
+  background: #0a1620; border-radius: 12px; overflow: hidden;
+  display: flex; flex-direction: column; aspect-ratio: 16/9;
+  border: 1px solid #1a2a3a;
+}
+.camara-tile.vacio {
+  background: #f1f4f8; border: 1.5px dashed #c5d2e4;
+  align-items: center; justify-content: center; aspect-ratio: 16/9;
+}
+.camara-tile-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; background: rgba(0,0,0,.4); position: absolute; z-index: 2;
+  width: 100%; box-sizing: border-box;
+}
+.camara-nombre { color: #fff; font-size: 13px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.camara-dot { width: 9px; height: 9px; border-radius: 50%; }
+.camara-dot.on { background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
+.camara-dot.off { background: #e74c3c; }
+.camara-video { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; }
+.camara-video img { width: 100%; height: 100%; object-fit: cover; }
+.camara-loading { position: absolute; color: rgba(255,255,255,.6); font-size: 13px; }
+.camara-sin-senal {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  color: rgba(255,255,255,.5); font-size: 13px;
+}
+.sin-senal-icon { font-size: 28px; }
+
+.camaras-vacio { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 50px 20px; text-align: center; }
+.camaras-vacio-icon { font-size: 48px; }
+
+/* Panel de configuración */
+.config-list { display: flex; flex-direction: column; gap: 10px; }
+.config-cam {
+  background: #fff; border: 1px solid #e9eef5; border-radius: 12px;
+  padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.config-cam-nombre { font-weight: 700; color: var(--marca-azul); }
+.config-cam-acciones { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.ok-btn { color: #1d8a4a !important; border-color: #a8e0c0 !important; }
+.fail-btn { color: #c81e1e !important; border-color: #f3c2c2 !important; }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--marca-azul); font-weight: 600; }
+.check-row input { width: 18px; height: 18px; }
+
+@media (max-width: 860px) {
+  .camara-grid { grid-template-columns: 1fr !important; }
+  .config-cam { flex-direction: column; align-items: flex-start; }
+  .config-cam-acciones { flex-wrap: wrap; }
+}

@@ -9,6 +9,7 @@ import { ResidentePortal } from "./modules/residente/ResidentePortal";
 import { GuardiaPanel } from "./modules/guardia/GuardiaPanel";
 import { DashboardAdmin } from "./modules/dashboard/DashboardAdmin";
 import { PagosAdmin } from "./modules/dashboard/PagosAdmin";
+import { MonitoreoCamaras } from "./modules/camaras/MonitoreoCamaras";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -186,6 +187,7 @@ function ResetPassword({ token, onOk }: { token: string; onOk: () => void }) {
 function AdminView({ seccion }: { seccion: string }) {
   if (seccion === "casas") return <UnidadesPanel embedded />;
   if (seccion === "pagos") return <PagosAdmin />;
+  if (seccion === "monitoreo") return <MonitoreoCamaras />;
   return <DashboardAdmin />;
 }
 
@@ -195,7 +197,8 @@ type NavItem = { id: string; label: string; icon: string };
 function navParaRol(rol: Rol): NavItem[] {
   if (rol === "admin" || rol === "super_admin") {
     return [
-      { id: "dashboard", label: "Monitoreo", icon: "📊" },
+      { id: "dashboard", label: "Dashboard", icon: "📊" },
+      { id: "monitoreo", label: "Monitoreo", icon: "📹" },
       { id: "casas", label: "Casas y residentes", icon: "🏘️" },
       { id: "pagos", label: "Revisión de pagos", icon: "💳" },
     ];

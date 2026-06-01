@@ -42,7 +42,7 @@ export function DashboardAdmin() {
   return (
     <div className="dash">
       <div className="dash-head">
-        <h2>Centro de Monitoreo</h2>
+        <h2>Dashboard</h2>
         <span className="muted">Villas del Sol · datos en vivo</span>
       </div>
 

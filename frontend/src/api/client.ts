@@ -272,3 +272,26 @@ export const revisarPago = (uuid: string, accion: "aprobar" | "rechazar", nota?:
     method: "POST",
     body: JSON.stringify({ accion, nota: nota || "" }),
   });
+
+// ── CÁMARAS ───────────────────────────────────────────────────────────────────
+export interface CamaraDTO {
+  id: string; nombre: string; ip: string;
+  puerto_rtsp: number; puerto_onvif: number;
+  usuario?: string; ruta_stream?: string;
+  acceso_id?: number; activa: boolean; orden: number;
+}
+export const listarCamaras = () => request<CamaraDTO[]>("/camaras");
+export const crearCamara = (body: Partial<CamaraDTO> & { password?: string }) =>
+  request<CamaraDTO>("/camaras", { method: "POST", body: JSON.stringify(body) });
+export const editarCamara = (uuid: string, body: Partial<CamaraDTO> & { password?: string }) =>
+  request<CamaraDTO>(`/camaras/${uuid}`, { method: "PUT", body: JSON.stringify(body) });
+export const eliminarCamara = (uuid: string) =>
+  request<{ eliminada: boolean }>(`/camaras/${uuid}`, { method: "DELETE" });
+export const probarCamara = (uuid: string) =>
+  request<{ online: boolean; error?: string }>(`/camaras/${uuid}/probar`, { method: "POST" });
+
+// URL del stream MJPEG (con token para autenticación en el <img>)
+export function urlStreamCamara(uuid: string): string {
+  const token = getToken();
+  return `${API_URL}/camaras/${uuid}/stream?_auth=${token}`;
+}
