@@ -194,6 +194,9 @@ def revisar_pago(usuario_actual, uuid_pago):
         cuenta = pago.cuenta
         cuenta.estado = "al_dia"
         cuenta.bloqueada = False
+    else:
+        # Rechazado: la cuota vuelve a pendiente para que el residente reintente
+        pago.cuota.estado = "pendiente"
 
     db.session.commit()
     return jsonify({"data": pago.to_dict()})

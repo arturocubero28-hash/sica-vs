@@ -83,9 +83,16 @@ function CuotaCard({ cuota, onPagar }: { cuota: CuotaDTO; onPagar?: () => void }
         Vence: {new Date(cuota.fecha_vencimiento).toLocaleDateString("es-HN")}
         {vencida && cuota.estado !== "en_revision" && <span className="mora-tag">⚠ En mora</span>}
       </div>
+      {cuota.pago_rechazado && (cuota.estado === "pendiente" || cuota.estado === "vencida") && (
+        <div className="cuota-rechazo">
+          <b>Tu comprobante anterior fue rechazado.</b>
+          {cuota.nota_rechazo ? <span> Motivo: {cuota.nota_rechazo}</span> : null}
+          <span> Podés subir un nuevo comprobante.</span>
+        </div>
+      )}
       {(cuota.estado === "pendiente" || cuota.estado === "vencida") && onPagar && (
         <button className="cuota-btn-pagar" onClick={onPagar}>
-          Subir comprobante de pago
+          {cuota.pago_rechazado ? "Subir nuevo comprobante" : "Subir comprobante de pago"}
         </button>
       )}
       {cuota.estado === "en_revision" && (

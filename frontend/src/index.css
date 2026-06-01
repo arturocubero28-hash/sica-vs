@@ -774,3 +774,11 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 @media (max-width: 860px) {
   .comunicado-admin-item { flex-wrap: wrap; }
 }
+
+/* Aviso de comprobante rechazado */
+.cuota-rechazo {
+  background: #fdecec; border: 1px solid #f3c2c2; color: #9a2020;
+  border-radius: 9px; padding: 10px 12px; font-size: 13px; line-height: 1.5;
+  margin-bottom: 10px;
+}
+.cuota-rechazo b { color: #c81e1e; }

@@ -221,6 +221,11 @@ class Cuota(db.Model):
             "estado":           self.estado,
             "created_at":       self.created_at.isoformat(),
         }
+        # Si el último pago fue rechazado, exponer el motivo para que el residente reintente
+        ultimo = self.pagos.order_by(Pago.created_at.desc()).first()
+        if ultimo and ultimo.estado == "rechazado":
+            d["pago_rechazado"] = True
+            d["nota_rechazo"] = ultimo.nota_admin or ""
         if con_pagos:
             d["pagos"] = [p.to_dict() for p in self.pagos.all()]
         return d
