@@ -2,27 +2,10 @@
 Tareas Celery para SICA-VS:
   - generar_cuotas_mensuales: corre el 1ro de cada mes a las 00:05
   - revisar_mora: corre cada noche a la 01:00
+La programación (beat_schedule) está centralizada en celery_app.py
 """
 import datetime as dt
-from celery.schedules import crontab
 from app.tasks.celery_app import celery
-
-
-# ── Registro de tareas periódicas ─────────────────────────────────────────────
-@celery.on_after_finalize.connect
-def setup_periodic_tasks(sender, **kwargs):
-    # 1ro de cada mes a las 00:05 → generar cuotas
-    sender.add_periodic_task(
-        crontab(hour=0, minute=5, day_of_month=1),
-        generar_cuotas_mensuales.s(),
-        name="generar-cuotas-1ro-de-mes",
-    )
-    # Cada noche a la 01:00 → revisar mora
-    sender.add_periodic_task(
-        crontab(hour=1, minute=0),
-        revisar_mora.s(),
-        name="revisar-mora-diaria",
-    )
 
 
 # ── Generación automática de cuotas ───────────────────────────────────────────

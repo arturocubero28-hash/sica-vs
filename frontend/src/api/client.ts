@@ -328,3 +328,11 @@ export function urlImagenComunicado(nombre: string): string {
   const token = getToken();
   return `${API_URL}/comunicados/imagenes/${nombre}?_auth=${token}`;
 }
+
+export const generarCuotasManual = () =>
+  request<{ generadas: number; total_cuentas: number }>("/cuotas/generar", { method: "POST" });
+
+export function urlComprobante(nombre: string): string {
+  const token = getToken();
+  return `${API_URL}/cuotas/comprobantes/${nombre}?_auth=${token}`;
+}

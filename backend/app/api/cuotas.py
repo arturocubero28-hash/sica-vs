@@ -200,3 +200,33 @@ def revisar_pago(usuario_actual, uuid_pago):
 
     db.session.commit()
     return jsonify({"data": pago.to_dict()})
+
+
+# ── ADMIN: generar cuotas del mes manualmente (botón en el panel) ─────────────
+@cuotas_bp.post("/generar")
+@roles_required("admin")
+def generar_cuotas_manual(usuario_actual):
+    """Dispara la generación de cuotas del mes en curso sin esperar a Celery."""
+    import datetime as _dt
+    hoy = _dt.date.today()
+    periodo = _dt.date(hoy.year, hoy.month, 1)
+    vencimiento = _dt.date(hoy.year, hoy.month, 15)
+
+    cuentas = Cuenta.query.all()
+    creadas = 0
+    for cuenta in cuentas:
+        existe = Cuota.query.filter_by(cuenta_id=cuenta.id, periodo=periodo).first()
+        if existe:
+            continue
+        if not cuenta.tarifa:
+            continue
+        cuota = Cuota(
+            cuenta_id=cuenta.id, periodo=periodo,
+            monto=float(cuenta.tarifa.monto),
+            fecha_vencimiento=vencimiento, estado="pendiente",
+        )
+        db.session.add(cuota)
+        creadas += 1
+
+    db.session.commit()
+    return jsonify({"data": {"generadas": creadas, "total_cuentas": len(cuentas)}})

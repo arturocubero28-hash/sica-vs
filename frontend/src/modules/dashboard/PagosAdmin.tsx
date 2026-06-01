@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { cuotasPendientesAdmin, revisarPago, type PagoAdminDTO } from "../../api/client";
+import { cuotasPendientesAdmin, revisarPago, generarCuotasManual, urlComprobante, type PagoAdminDTO } from "../../api/client";
 
 export function PagosAdmin() {
   const [pagos, setPagos] = useState<PagoAdminDTO[]>([]);
@@ -32,7 +32,10 @@ export function PagosAdmin() {
     <div className="pagos-admin">
       <div className="dash-head">
         <h2>Revisión de pagos</h2>
-        {pagos.length > 0 && <span className="pill amber big">{pagos.length} pendiente{pagos.length > 1 ? "s" : ""}</span>}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {pagos.length > 0 && <span className="pill amber big">{pagos.length} pendiente{pagos.length > 1 ? "s" : ""}</span>}
+          <BotonGenerarCuotas />
+        </div>
       </div>
 
       {pagos.length === 0 ? (
@@ -81,7 +84,7 @@ export function PagosAdmin() {
                 <div className="sub">Comprobante adjunto</div>
                 {pagoDetalle.comprobante_archivo.endsWith(".pdf") ? (
                   <a
-                    href={`/api/v1/cuotas/comprobantes/${pagoDetalle.comprobante_archivo}`}
+                    href={urlComprobante(pagoDetalle.comprobante_archivo)}
                     target="_blank" rel="noreferrer"
                     className="cuota-btn-pagar"
                     style={{ display: "inline-block", textDecoration: "none", marginBottom: 12 }}
@@ -90,7 +93,7 @@ export function PagosAdmin() {
                   </a>
                 ) : (
                   <img
-                    src={`/api/v1/cuotas/comprobantes/${pagoDetalle.comprobante_archivo}`}
+                    src={urlComprobante(pagoDetalle.comprobante_archivo)}
                     alt="Comprobante"
                     className="comprobante-img"
                   />
@@ -137,5 +140,30 @@ function Dato({ label, valor }: { label: string; valor: string }) {
       <span className="muted small">{label}</span>
       <b>{valor}</b>
     </div>
+  );
+}
+
+function BotonGenerarCuotas() {
+  const [estado, setEstado] = useState<"idle" | "generando" | "ok">("idle");
+  const [msg, setMsg] = useState("");
+
+  async function generar() {
+    if (!confirm("¿Generar las cuotas del mes en curso para todas las cuentas que aún no la tengan?")) return;
+    setEstado("generando");
+    try {
+      const r = await generarCuotasManual();
+      setMsg(r.generadas > 0 ? `${r.generadas} cuota(s) generada(s)` : "Ya estaban todas generadas");
+      setEstado("ok");
+      setTimeout(() => setEstado("idle"), 4000);
+    } catch (e) {
+      alert((e as Error).message);
+      setEstado("idle");
+    }
+  }
+
+  return (
+    <button className="ghost mini" onClick={generar} disabled={estado === "generando"}>
+      {estado === "generando" ? "Generando…" : estado === "ok" ? `✓ ${msg}` : "⟳ Generar cuotas del mes"}
+    </button>
   );
 }
