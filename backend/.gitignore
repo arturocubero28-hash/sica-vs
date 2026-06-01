@@ -1,0 +1,13 @@
+# Celery
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+
+# Uploads generados
+uploads/
