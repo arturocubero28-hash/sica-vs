@@ -82,4 +82,20 @@ def create_app(config_class=Config):
         except Exception as e:
             app.logger.warning(f"db.create_all() omitido: {e}")
 
+        # Migración ligera: agrega columnas nuevas a tablas existentes.
+        # create_all() NO altera tablas que ya existen, así que las añadimos aquí.
+        # Cada ALTER usa IF NOT EXISTS, por lo que es seguro ejecutarlo siempre.
+        from sqlalchemy import text
+        columnas = [
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS activa BOOLEAN NOT NULL DEFAULT TRUE",
+        ]
+        for sql in columnas:
+            try:
+                db.session.execute(text(sql))
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                app.logger.warning(f"Migración de columna omitida: {e}")
+
     return app
