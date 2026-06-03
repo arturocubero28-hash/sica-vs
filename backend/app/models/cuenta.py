@@ -77,7 +77,7 @@ class Cuenta(db.Model):
     residentes = db.relationship("Residente", backref="cuenta", lazy="select")
     tarjetas = db.relationship("Tarjeta", backref="cuenta", lazy="select")
     tarifa = db.relationship("Tarifa", lazy="joined")
-    unidad = db.relationship("Unidad", lazy="joined")
+    # La relación 'unidad' ya existe automáticamente por el backref de Unidad.cuentas
 
     def titular(self):
         for r in self.residentes:
