@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   login, getMe, logout, getToken, setToken,
   activarCuenta, solicitarRecuperacion, restablecerPassword, cambiarPassword,
+  contarPagosPendientes,
   type Usuario, type Rol,
 } from "./api/client";
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
@@ -333,8 +334,20 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
   const nav = navParaRol(usuario.rol);
   const [seccion, setSeccion] = useState(nav[0].id);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [pagosBadge, setPagosBadge] = useState(0);
   const esAdmin = usuario.rol === "admin" || usuario.rol === "super_admin";
   const esResidente = usuario.rol === "residente";
+
+  // Polling de pagos pendientes cada 30 segundos (solo admin)
+  useEffect(() => {
+    if (!esAdmin) return;
+    function poll() {
+      contarPagosPendientes().then(r => setPagosBadge(r.pendientes)).catch(() => {});
+    }
+    poll();
+    const id = setInterval(poll, 30_000);
+    return () => clearInterval(id);
+  }, [esAdmin]);
 
   const iniciales = `${usuario.nombre?.[0] || ""}${usuario.apellido?.[0] || ""}`.toUpperCase();
   const rolLabel: Record<string, string> = {
@@ -363,6 +376,9 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
             >
               <span className="nav-icon">{item.icon}</span>
               <span className="nav-label">{item.label}</span>
+              {item.id === "pagos" && pagosBadge > 0 && (
+                <span className="nav-badge">{pagosBadge}</span>
+              )}
             </button>
           ))}
         </nav>
@@ -405,7 +421,12 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
             className={`bottom-item ${seccion === item.id ? "on" : ""}`}
             onClick={() => setSeccion(item.id)}
           >
-            <span className="bottom-icon">{item.icon}</span>
+            <span className="bottom-icon" style={{ position: "relative" }}>
+              {item.icon}
+              {item.id === "pagos" && pagosBadge > 0 && (
+                <span className="bottom-badge">{pagosBadge}</span>
+              )}
+            </span>
             <span className="bottom-label">{item.label}</span>
           </button>
         ))}

@@ -400,3 +400,7 @@ export const historialAccesos = (params: {
   const qs = q.toString();
   return request<HistorialDTO>(`/dashboard/historial${qs ? "?" + qs : ""}`);
 };
+
+// ── NOTIFICACIONES ────────────────────────────────────────────────────────────
+export const contarPagosPendientes = () =>
+  request<{ pendientes: number }>("/cuotas/pendientes/count");

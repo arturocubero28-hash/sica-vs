@@ -129,8 +129,12 @@ def ver_comprobante(usuario_actual, nombre_archivo):
     return servir_archivo_seguro(_carpeta_comprobantes(), nombre_archivo)
 
 
-# ── ADMIN: pagos en revisión ──────────────────────────────────────────────────
-@cuotas_bp.get("/pendientes")
+# ── ADMIN: contar pagos pendientes (para notificaciones) ──────────────────────
+@cuotas_bp.get("/pendientes/count")
+@roles_required("admin")
+def contar_pendientes(usuario_actual):
+    n = Pago.query.filter_by(estado="en_revision").count()
+    return jsonify({"data": {"pendientes": n}})
 @roles_required("admin")
 def pagos_pendientes(usuario_actual):
     pagos = (

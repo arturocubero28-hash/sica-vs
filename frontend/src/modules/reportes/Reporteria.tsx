@@ -6,15 +6,27 @@ function L(n: number) {
 }
 
 export function Reporteria() {
+  const hoy = new Date();
+  const [anio, setAnio] = useState(hoy.getFullYear());
+  const [mes, setMes] = useState(hoy.getMonth() + 1);
   const [data, setData] = useState<ReporteFinancieroDTO | null>(null);
   const [cargando, setCargando] = useState(true);
 
-  useEffect(() => {
-    reporteFinanciero().then(setData).catch(() => {}).finally(() => setCargando(false));
-  }, []);
+  function cargar(a = anio, m = mes) {
+    setCargando(true);
+    reporteFinanciero(a, m).then(setData).catch(() => {}).finally(() => setCargando(false));
+  }
+
+  useEffect(() => { cargar(); }, []);
 
   if (cargando) return <p className="muted">Cargando reporte…</p>;
   if (!data) return <p className="muted">No se pudo cargar el reporte.</p>;
+
+  const meses = [
+    "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
+  ];
+  const anios = Array.from({ length: 3 }, (_, i) => hoy.getFullYear() - i);
 
   async function exportarPDF() {
     const { jsPDF } = await import("jspdf");
@@ -95,9 +107,18 @@ export function Reporteria() {
           <h2 className="dash-titulo">Reportería financiera</h2>
           <span className="muted">{data.mes_label}</span>
         </div>
-        <div className="reporte-export">
-          <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
-          <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
+        <div className="reporte-controles">
+          <select className="periodo-select" value={mes} onChange={e => setMes(Number(e.target.value))}>
+            {meses.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+          <select className="periodo-select" value={anio} onChange={e => setAnio(Number(e.target.value))}>
+            {anios.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <button className="ghost mini" onClick={() => cargar()}>Ver →</button>
+          <div className="reporte-export">
+            <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
+            <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
+          </div>
         </div>
       </div>
 
