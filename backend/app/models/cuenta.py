@@ -70,12 +70,14 @@ class Cuenta(db.Model):
     fecha_alta = db.Column(db.Date, nullable=False, default=dt.date.today)
     estado = db.Column(db.String(20), nullable=False, default="al_dia")
     bloqueada = db.Column(db.Boolean, nullable=False, default=False)
+    activa = db.Column(db.Boolean, nullable=False, default=True)   # baja: deja de generar cuotas y accesos
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
     residentes = db.relationship("Residente", backref="cuenta", lazy="select")
     tarjetas = db.relationship("Tarjeta", backref="cuenta", lazy="select")
     tarifa = db.relationship("Tarifa", lazy="joined")
+    unidad = db.relationship("Unidad", lazy="joined")
 
     def titular(self):
         for r in self.residentes:
@@ -85,12 +87,19 @@ class Cuenta(db.Model):
 
     def to_dict(self, detalle=False):
         t = self.titular()
+        unidad = None
+        try:
+            unidad = self.unidad.identificador if self.unidad else None
+        except Exception:
+            unidad = None
         d = {
             "id": str(self.uuid_publico),
             "apartamento": self.apartamento,
+            "identificador": unidad,
             "dia_pago": self.dia_pago,
             "estado": self.estado,
             "bloqueada": self.bloqueada,
+            "activa": self.activa,
             "tarifa": self.tarifa.nombre if self.tarifa else None,
             "monto": float(self.tarifa.monto) if self.tarifa else None,
             "titular": t.to_dict() if t else None,

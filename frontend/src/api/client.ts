@@ -99,8 +99,8 @@ export interface TarjetaDTO {
   id: string; card_uid: string; etiqueta?: string; estado: string; asignada_a: string;
 }
 export interface Cuenta {
-  id: string; apartamento?: string; dia_pago: number; estado: string;
-  bloqueada: boolean; tarifa: string; monto: number;
+  id: string; apartamento?: string; identificador?: string; dia_pago: number; estado: string;
+  bloqueada: boolean; activa?: boolean; tarifa: string; monto: number;
   titular?: ResidenteDTO; total_residentes: number; total_tarjetas: number;
   residentes?: ResidenteDTO[]; tarjetas?: TarjetaDTO[];
 }
@@ -109,6 +109,10 @@ export const listarUnidades = () => request<Unidad[]>("/unidades");
 export const listarCuentas = () => request<Cuenta[]>("/unidades/cuentas");
 export const listarTarifas = () => request<Tarifa[]>("/unidades/tarifas");
 export const detalleCuenta = (id: string) => request<Cuenta>(`/unidades/cuentas/${id}`);
+export const darBajaCuenta = (id: string) =>
+  request<Cuenta>(`/unidades/cuentas/${id}/baja`, { method: "POST" });
+export const reactivarCuenta = (id: string) =>
+  request<Cuenta>(`/unidades/cuentas/${id}/reactivar`, { method: "POST" });
 
 export const crearUnidad = (body: { tipo: string; identificador: string; direccion_ref?: string }) =>
   request<Unidad>("/unidades", { method: "POST", body: JSON.stringify(body) });

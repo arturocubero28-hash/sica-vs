@@ -966,3 +966,18 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
   font-size: 14px; color: var(--marca-azul); background: #fff; cursor: pointer;
 }
 .periodo-select:focus { border-color: var(--marca-naranja); outline: none; }
+
+/* ============================================================
+   CASAS — buscador y filtros
+   ============================================================ */
+.casas-filtros {
+  display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;
+}
+.casas-buscar {
+  flex: 1; min-width: 220px; border: 1.5px solid #dce4ef; border-radius: 10px;
+  padding: 11px 14px; font-size: 14px;
+}
+.casas-buscar:focus { border-color: var(--marca-naranja); outline: none; }
+.casas-contador { margin-bottom: 10px; }
+.fila-baja { opacity: 0.55; }
+.fila-baja td { background: #fafafa; }

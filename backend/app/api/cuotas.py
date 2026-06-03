@@ -216,7 +216,7 @@ def generar_cuotas_manual(usuario_actual):
     hoy = _dt.date.today()
     periodo = _dt.date(hoy.year, hoy.month, 1)
 
-    cuentas = Cuenta.query.all()
+    cuentas = Cuenta.query.filter_by(activa=True).all()
     creadas = 0
     for cuenta in cuentas:
         existe = Cuota.query.filter_by(cuenta_id=cuenta.id, periodo=periodo).first()

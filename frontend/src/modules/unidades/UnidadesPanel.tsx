@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   listarCuentas, listarUnidades, listarTarifas, crearUnidad, crearCuenta,
-  detalleCuenta, agregarMiembro, asignarTarjeta,
+  detalleCuenta, agregarMiembro, asignarTarjeta, darBajaCuenta, reactivarCuenta,
   type Cuenta, type Unidad, type Tarifa,
 } from "../../api/client";
 
@@ -25,7 +25,7 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
       </div>
 
       {tab === "cuentas" && (
-        <ListaCuentas cuentas={cuentas} onAbrir={async (c) =>
+        <ListaCuentas cuentas={cuentas} onRecargar={recargar} onAbrir={async (c) =>
           setSeleccionada(await detalleCuenta(c.id))} />
       )}
       {tab === "nueva" && (
@@ -42,26 +42,99 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
   return <div className="card wide">{contenido}</div>;
 }
 
-function ListaCuentas({ cuentas, onAbrir }: { cuentas: Cuenta[]; onAbrir: (c: Cuenta) => void }) {
-  if (cuentas.length === 0)
-    return <p className="muted">No hay cuentas. Usá "Dar de alta" para crear la primera.</p>;
+function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
+  cuentas: Cuenta[]; onAbrir: (c: Cuenta) => void; onRecargar: () => void;
+}) {
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("todas");
+  const [procesando, setProcesando] = useState<string | null>(null);
+
+  async function baja(c: Cuenta) {
+    const nombre = c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "esta casa");
+    if (!confirm(`¿Dar de baja ${nombre}? Dejará de generar cuotas y sus residentes perderán acceso. Podés reactivarla luego.`)) return;
+    setProcesando(c.id);
+    try { await darBajaCuenta(c.id); onRecargar(); }
+    finally { setProcesando(null); }
+  }
+  async function reactivar(c: Cuenta) {
+    setProcesando(c.id);
+    try { await reactivarCuenta(c.id); onRecargar(); }
+    finally { setProcesando(null); }
+  }
+
+  // Filtrado en memoria
+  const q = busqueda.trim().toLowerCase();
+  const filtradas = cuentas.filter((c) => {
+    // Filtro de texto: identificador, apartamento, nombre del titular
+    if (q) {
+      const blob = `${c.identificador || ""} ${c.apartamento || ""} ${c.titular?.nombre || ""}`.toLowerCase();
+      if (!blob.includes(q)) return false;
+    }
+    // Filtro de estado
+    if (filtroEstado === "activas" && c.activa === false) return false;
+    if (filtroEstado === "baja" && c.activa !== false) return false;
+    if (filtroEstado === "bloqueadas" && !c.bloqueada) return false;
+    if (filtroEstado === "al_dia" && (c.bloqueada || c.estado !== "al_dia")) return false;
+    if (filtroEstado === "mora" && !c.bloqueada) return false;
+    return true;
+  });
+
   return (
-    <div className="scroll-x">
-      <table className="data">
-        <thead><tr><th>Identificador</th><th>Titular</th><th>Tarifa</th><th>Día pago</th><th>Estado</th><th></th></tr></thead>
-        <tbody>
-          {cuentas.map((c) => (
-            <tr key={c.id}>
-              <td>{c.apartamento ? `Apto ${c.apartamento}` : "Casa"}</td>
-              <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
-              <td>{c.tarifa} (L {c.monto})</td>
-              <td>{c.dia_pago}</td>
-              <td><span className={c.bloqueada ? "pill red" : "pill green"}>{c.bloqueada ? "Bloqueada" : c.estado}</span></td>
-              <td><button className="mini" onClick={() => onAbrir(c)}>Ver</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div>
+      {/* Buscador y filtros */}
+      <div className="casas-filtros">
+        <input
+          className="casas-buscar"
+          placeholder="🔍 Buscar por casa, número o titular…"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
+        <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="periodo-select">
+          <option value="todas">Todas</option>
+          <option value="activas">Solo activas</option>
+          <option value="baja">Dadas de baja</option>
+          <option value="al_dia">Al día</option>
+          <option value="mora">En mora / bloqueadas</option>
+        </select>
+      </div>
+
+      <div className="casas-contador muted small">
+        {filtradas.length} de {cuentas.length} {cuentas.length === 1 ? "casa" : "casas"}
+      </div>
+
+      {filtradas.length === 0 ? (
+        <p className="muted">No hay casas que coincidan con la búsqueda.</p>
+      ) : (
+        <div className="scroll-x">
+          <table className="data">
+            <thead><tr><th>Identificador</th><th>Titular</th><th>Tarifa</th><th>Día pago</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+              {filtradas.map((c) => {
+                const dadaBaja = c.activa === false;
+                return (
+                  <tr key={c.id} className={dadaBaja ? "fila-baja" : ""}>
+                    <td>{c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "Casa")}</td>
+                    <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
+                    <td>{c.tarifa} (L {c.monto})</td>
+                    <td>{c.dia_pago}</td>
+                    <td>
+                      {dadaBaja
+                        ? <span className="pill" style={{ background: "#6b7280", color: "#fff" }}>Baja</span>
+                        : <span className={c.bloqueada ? "pill red" : "pill green"}>{c.bloqueada ? "Bloqueada" : c.estado}</span>}
+                    </td>
+                    <td style={{ display: "flex", gap: 6 }}>
+                      <button className="mini" onClick={() => onAbrir(c)}>Ver</button>
+                      {dadaBaja
+                        ? <button className="mini" disabled={procesando === c.id} onClick={() => reactivar(c)}>Reactivar</button>
+                        : <button className="mini" style={{ color: "#c81e1e" }} disabled={procesando === c.id} onClick={() => baja(c)}>Dar de baja</button>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

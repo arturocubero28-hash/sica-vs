@@ -27,7 +27,7 @@ def generar_cuotas_mensuales():
         periodo = dt.date(hoy.year, hoy.month, 1)
         ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
 
-        cuentas = Cuenta.query.all()
+        cuentas = Cuenta.query.filter_by(activa=True).all()
         creadas = 0
 
         for cuenta in cuentas:

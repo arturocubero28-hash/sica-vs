@@ -190,6 +190,41 @@ def detalle_cuenta(usuario_actual, cuenta_uuid):
     return jsonify({"data": cuenta.to_dict(detalle=True)})
 
 
+@cuentas_bp.post("/cuentas/<cuenta_uuid>/baja")
+@roles_required("admin", "super_admin")
+def dar_baja_cuenta(usuario_actual, cuenta_uuid):
+    """Da de baja una cuenta: deja de generar cuotas y se desactivan sus accesos."""
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+
+    cuenta.activa = False
+    cuenta.estado = "baja"
+    # Desactivar el acceso de todos los residentes de la cuenta
+    for r in cuenta.residentes:
+        if r.usuario:
+            r.usuario.activo = False
+    db.session.commit()
+    return jsonify({"data": cuenta.to_dict()})
+
+
+@cuentas_bp.post("/cuentas/<cuenta_uuid>/reactivar")
+@roles_required("admin", "super_admin")
+def reactivar_cuenta(usuario_actual, cuenta_uuid):
+    """Reactiva una cuenta dada de baja."""
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+
+    cuenta.activa = True
+    cuenta.estado = "al_dia"
+    for r in cuenta.residentes:
+        if r.usuario:
+            r.usuario.activo = True
+    db.session.commit()
+    return jsonify({"data": cuenta.to_dict()})
+
+
 # =====================================================================
 # RESIDENTES (miembros adicionales)
 # =====================================================================
