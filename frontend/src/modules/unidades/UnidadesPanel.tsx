@@ -4,6 +4,7 @@ import {
   detalleCuenta, agregarMiembro, asignarTarjeta, darBajaCuenta, reactivarCuenta,
   type Cuenta, type Unidad, type Tarifa,
 } from "../../api/client";
+import { LectorTarjeta } from "./LectorTarjeta";
 
 export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
   const [tab, setTab] = useState<"cuentas" | "nueva">("cuentas");
@@ -390,12 +391,11 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
             )}
           </tbody>
         </table></div>
-        <div className="inline-create">
-          <input placeholder="Código de tarjeta (card_uid)" value={cardUid}
-            onChange={(e) => setCardUid(e.target.value)} />
+        <div className="inline-create tarjeta-create">
+          <LectorTarjeta valor={cardUid} onLeida={setCardUid} />
           <input placeholder="Etiqueta (ej. Auto 1)" value={etiqueta}
             onChange={(e) => setEtiqueta(e.target.value)} />
-          <button className="mini" onClick={addTarjeta}>+ Asignar tarjeta</button>
+          <button className="mini" onClick={addTarjeta} disabled={!cardUid}>+ Asignar tarjeta</button>
         </div>
 
         {msg && <div className="error">{msg}</div>}

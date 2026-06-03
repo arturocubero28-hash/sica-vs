@@ -998,3 +998,43 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .perfil-info-grid { display: flex; flex-direction: column; gap: 12px; }
 .perfil-info-item { display: flex; flex-direction: column; gap: 2px; }
 .perfil-info-item b { color: var(--marca-azul); font-size: 15px; }
+
+/* ============================================================
+   LECTOR DE TARJETA RFID
+   ============================================================ */
+.lector-tarjeta { flex: 1; min-width: 220px; }
+.lector-input-oculto { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.lector-btn {
+  width: 100%; background: #f1f6fc; border: 1.5px dashed #a9c4e0;
+  color: var(--marca-azul); border-radius: 10px; padding: 12px;
+  font-weight: 600; font-size: 14px; cursor: pointer;
+}
+.lector-btn:hover { background: #e6f0fa; border-color: var(--marca-naranja); }
+
+.lector-esperando {
+  display: flex; align-items: center; gap: 12px;
+  background: #fff7ed; border: 1.5px solid #f5c98a; border-radius: 10px;
+  padding: 12px 14px; font-size: 14px; color: #9a6700; font-weight: 600;
+}
+.lector-pulse {
+  width: 14px; height: 14px; border-radius: 50%; background: var(--marca-naranja);
+  animation: lector-pulse 1.2s ease-in-out infinite; flex-shrink: 0;
+}
+@keyframes lector-pulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.6; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+.lector-esperando .ghost { margin-left: auto; }
+
+.lector-leida {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: #e6f7ee; border: 1.5px solid #b8e6cc; border-radius: 10px;
+  padding: 10px 14px;
+}
+.lector-check { color: #1d8a4a; font-weight: 700; font-size: 14px; }
+.lector-uid {
+  background: #fff; border: 1px solid #cde6d8; border-radius: 6px;
+  padding: 3px 10px; font-family: "Courier New", monospace; color: var(--marca-azul); font-weight: 700;
+}
+.lector-leida .ghost { margin-left: auto; }
+.tarjeta-create { align-items: flex-start; }
