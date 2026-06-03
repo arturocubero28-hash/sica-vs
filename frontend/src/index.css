@@ -981,3 +981,20 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .casas-contador { margin-bottom: 10px; }
 .fila-baja { opacity: 0.55; }
 .fila-baja td { background: #fafafa; }
+
+/* Botones de baja / reactivar con buen contraste */
+.btn-baja {
+  background: #fdecec !important; color: #c81e1e !important;
+  border: 1px solid #f3c2c2 !important; font-weight: 700 !important;
+}
+.btn-baja:hover { background: #fbd5d5 !important; }
+.btn-reactivar {
+  background: #e6f7ee !important; color: #1d8a4a !important;
+  border: 1px solid #b8e6cc !important; font-weight: 700 !important;
+}
+.btn-reactivar:hover { background: #d0f0de !important; }
+
+/* Perfil — datos en solo lectura */
+.perfil-info-grid { display: flex; flex-direction: column; gap: 12px; }
+.perfil-info-item { display: flex; flex-direction: column; gap: 2px; }
+.perfil-info-item b { color: var(--marca-azul); font-size: 15px; }

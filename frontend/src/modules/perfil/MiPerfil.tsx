@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getMe, cambiarPassword, actualizarPerfil, type Usuario } from "../../api/client";
+import { getMe, cambiarPassword, type Usuario } from "../../api/client";
 
 export function MiPerfil() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -28,45 +28,35 @@ export function MiPerfil() {
         </div>
       </div>
 
-      <DatosForm usuario={usuario} onActualizado={setUsuario} />
+      <DatosForm usuario={usuario} />
       <PasswordForm />
     </div>
   );
 }
 
-function DatosForm({ usuario, onActualizado }: { usuario: Usuario; onActualizado: (u: Usuario) => void }) {
-  const [nombre, setNombre] = useState(usuario.nombre);
-  const [apellido, setApellido] = useState(usuario.apellido);
-  const [telefono, setTelefono] = useState(usuario.telefono || "");
-  const [msg, setMsg] = useState("");
-  const [guardando, setGuardando] = useState(false);
-
-  async function guardar() {
-    setGuardando(true); setMsg("");
-    try {
-      const r = await actualizarPerfil({ nombre, apellido, telefono });
-      onActualizado(r.usuario);
-      setMsg("✓ Datos actualizados");
-      setTimeout(() => setMsg(""), 3000);
-    } catch (e) { setMsg((e as Error).message); }
-    finally { setGuardando(false); }
-  }
-
+function DatosForm({ usuario }: { usuario: Usuario }) {
   return (
     <div className="dash-card">
       <h3>Datos personales</h3>
-      <div className="form-pago">
-        <div className="form-field"><label>Nombre</label>
-          <input value={nombre} onChange={e => setNombre(e.target.value)} /></div>
-        <div className="form-field"><label>Apellido</label>
-          <input value={apellido} onChange={e => setApellido(e.target.value)} /></div>
-        <div className="form-field"><label>Teléfono</label>
-          <input value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="Opcional" /></div>
-        {msg && <div className={msg.startsWith("✓") ? "cuota-ok" : "error"}>{msg}</div>}
-        <button className="cuota-btn-pagar full" onClick={guardar} disabled={guardando}>
-          {guardando ? "Guardando…" : "Guardar cambios"}
-        </button>
+      <div className="perfil-info-grid">
+        <div className="perfil-info-item">
+          <span className="muted small">Nombre</span>
+          <b>{usuario.nombre} {usuario.apellido}</b>
+        </div>
+        <div className="perfil-info-item">
+          <span className="muted small">Correo</span>
+          <b>{usuario.email}</b>
+        </div>
+        {usuario.telefono && (
+          <div className="perfil-info-item">
+            <span className="muted small">Teléfono</span>
+            <b>{usuario.telefono}</b>
+          </div>
+        )}
       </div>
+      <p className="muted small" style={{ marginTop: 10 }}>
+        Para cambiar estos datos, contactá a la administración.
+      </p>
     </div>
   );
 }

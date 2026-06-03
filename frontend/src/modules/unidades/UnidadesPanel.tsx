@@ -125,8 +125,8 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
                     <td style={{ display: "flex", gap: 6 }}>
                       <button className="mini" onClick={() => onAbrir(c)}>Ver</button>
                       {dadaBaja
-                        ? <button className="mini" disabled={procesando === c.id} onClick={() => reactivar(c)}>Reactivar</button>
-                        : <button className="mini" style={{ color: "#c81e1e" }} disabled={procesando === c.id} onClick={() => baja(c)}>Dar de baja</button>}
+                        ? <button className="mini btn-reactivar" disabled={procesando === c.id} onClick={() => reactivar(c)}>Reactivar</button>
+                        : <button className="mini btn-baja" disabled={procesando === c.id} onClick={() => baja(c)}>Dar de baja</button>}
                     </td>
                   </tr>
                 );
