@@ -30,6 +30,7 @@ class Usuario(db.Model):
     # rol global: super_admin | admin | guardia | residente
     rol = db.Column(db.String(20), nullable=False, default="residente")
     activo = db.Column(db.Boolean, nullable=False, default=True)
+    debe_cambiar_password = db.Column(db.Boolean, nullable=False, default=False)
     biometria_activa = db.Column(db.Boolean, nullable=False, default=False)
     ultimo_acceso = db.Column(db.DateTime(timezone=True))
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
@@ -57,5 +58,6 @@ class Usuario(db.Model):
             "telefono": self.telefono,
             "rol": self.rol,
             "activo": self.activo,
+            "debe_cambiar_password": self.debe_cambiar_password,
             "biometria_activa": self.biometria_activa,
         }

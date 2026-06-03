@@ -74,6 +74,47 @@ def me(usuario_actual):
     return jsonify({"data": {"usuario": usuario_actual.to_dict()}})
 
 
+# ── Cambiar contraseña (usuario autenticado) ───────────────────
+@auth_bp.post("/cambiar-password")
+@token_required
+def cambiar_password(usuario_actual):
+    data = request.get_json(silent=True) or {}
+    actual = data.get("password_actual") or ""
+    nueva = data.get("password_nueva") or ""
+
+    # Si el usuario está obligado a cambiar (primer login), no exigimos la actual
+    if not usuario_actual.debe_cambiar_password:
+        if not usuario_actual.check_password(actual):
+            return jsonify({"error": {"code": "password_incorrecta",
+                                      "message": "La contraseña actual es incorrecta"}}), 400
+
+    if len(nueva) < 6:
+        return jsonify({"error": {"code": "password_debil",
+                                  "message": "La nueva contraseña debe tener al menos 6 caracteres"}}), 400
+
+    usuario_actual.set_password(nueva)
+    usuario_actual.debe_cambiar_password = False
+    db.session.commit()
+
+    return jsonify({"data": {"message": "Contraseña actualizada correctamente",
+                             "usuario": usuario_actual.to_dict()}})
+
+
+# ── Actualizar perfil (nombre, teléfono) ───────────────────────
+@auth_bp.put("/perfil")
+@token_required
+def actualizar_perfil(usuario_actual):
+    data = request.get_json(silent=True) or {}
+    if "nombre" in data and data["nombre"].strip():
+        usuario_actual.nombre = data["nombre"].strip()
+    if "apellido" in data and data["apellido"].strip():
+        usuario_actual.apellido = data["apellido"].strip()
+    if "telefono" in data:
+        usuario_actual.telefono = data["telefono"].strip()
+    db.session.commit()
+    return jsonify({"data": {"usuario": usuario_actual.to_dict()}})
+
+
 # ── Activación de cuenta ───────────────────────────────────────
 @auth_bp.post("/activar")
 def activar_cuenta():

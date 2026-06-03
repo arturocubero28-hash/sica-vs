@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   login, getMe, logout, getToken, setToken,
-  activarCuenta, solicitarRecuperacion, restablecerPassword,
+  activarCuenta, solicitarRecuperacion, restablecerPassword, cambiarPassword,
   type Usuario, type Rol,
 } from "./api/client";
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
@@ -12,11 +12,14 @@ import { PagosAdmin } from "./modules/dashboard/PagosAdmin";
 import { MonitoreoCamaras } from "./modules/camaras/MonitoreoCamaras";
 import { ComunicadosAdmin } from "./modules/comunicados/ComunicadosAdmin";
 import { Reporteria } from "./modules/reportes/Reporteria";
+import { GuardiasAdmin } from "./modules/guardias/GuardiasAdmin";
+import { HistorialAccesos } from "./modules/dashboard/HistorialAccesos";
+import { MiPerfil } from "./modules/perfil/MiPerfil";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [vista, setVista] = useState<"login" | "activar" | "recuperar" | "reset">("login");
+  const [vista, setVista] = useState<"landing" | "login" | "activar" | "recuperar" | "reset">("landing");
   const [tokenUrl, setTokenUrl] = useState("");
 
   useEffect(() => {
@@ -35,7 +38,7 @@ export function App() {
   }, []);
 
   function onLogin(u: Usuario) { setUsuario(u); setVista("login"); }
-  function onLogout() { logout(); setUsuario(null); setVista("login"); }
+  function onLogout() { logout(); setUsuario(null); setVista("landing"); }
 
   if (cargando) return <div className="center">Cargando…</div>;
 
@@ -43,12 +46,21 @@ export function App() {
   if (vista === "recuperar") return <RecuperarPassword onVolver={() => setVista("login")} />;
   if (vista === "reset") return <ResetPassword token={tokenUrl} onOk={() => setVista("login")} />;
 
-  if (!usuario) return <Login onLogin={onLogin} onRecuperar={() => setVista("recuperar")} />;
+  if (!usuario) {
+    if (vista === "landing") return <Landing onEntrar={() => setVista("login")} />;
+    return <Login onLogin={onLogin} onRecuperar={() => setVista("recuperar")} onVolver={() => setVista("landing")} />;
+  }
+
+  // Cambio obligatorio de contraseña en el primer login (guardias)
+  if (usuario.debe_cambiar_password) {
+    return <CambioObligatorio usuario={usuario} onListo={(u) => setUsuario(u)} />;
+  }
+
   return <Dashboard usuario={usuario} onLogout={onLogout} />;
 }
 
 // ─── Login ───────────────────────────────────────────────────
-function Login({ onLogin, onRecuperar }: { onLogin: (u: Usuario) => void; onRecuperar: () => void }) {
+function Login({ onLogin, onRecuperar, onVolver }: { onLogin: (u: Usuario) => void; onRecuperar: () => void; onVolver: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -63,7 +75,8 @@ function Login({ onLogin, onRecuperar }: { onLogin: (u: Usuario) => void; onRecu
 
   return (
     <div className="center">
-      <div className="card">
+      <div className="card login-card">
+        <img src="/logo-vs.png" alt="Villas del Sol" className="login-logo" />
         <h1>SICA-VS</h1>
         <p className="muted">Residencial Villas del Sol</p>
         <input placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} />
@@ -73,7 +86,92 @@ function Login({ onLogin, onRecuperar }: { onLogin: (u: Usuario) => void; onRecu
         <button onClick={entrar} disabled={enviando}>{enviando ? "Entrando…" : "Iniciar sesión"}</button>
         <button className="ghost" disabled title="Disponible más adelante">Ingresar con huella / Face ID</button>
         <button className="link-btn" onClick={onRecuperar}>¿Olvidaste tu contraseña?</button>
-        <p className="muted small">Admin: admin@villasdelsol.hn / admin123</p>
+        <button className="link-btn" onClick={onVolver}>← Volver al inicio</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Landing page pública ────────────────────────────────────
+function Landing({ onEntrar }: { onEntrar: () => void }) {
+  const features = [
+    { icon: "🎫", titulo: "Visitas con QR", desc: "Cada residente genera códigos QR para sus visitas. El guardia los valida en segundos." },
+    { icon: "📹", titulo: "Monitoreo en vivo", desc: "Cámaras de seguridad de toda la residencial en una sola pantalla." },
+    { icon: "💳", titulo: "Cuotas y pagos", desc: "Los residentes pagan en línea y la administración aprueba al instante." },
+    { icon: "📊", titulo: "Control total", desc: "Sabé quién entra, quién autorizó y cuándo. Reportes para el patronato." },
+  ];
+  return (
+    <div className="landing">
+      <header className="landing-nav">
+        <div className="landing-brand">
+          <img src="/logo-vs.png" alt="Villas del Sol" />
+          <span>SICA-VS</span>
+        </div>
+        <button className="landing-login-btn" onClick={onEntrar}>Iniciar sesión</button>
+      </header>
+
+      <section className="landing-hero">
+        <div className="landing-hero-text">
+          <h1>Control de accesos<br /><span>inteligente y seguro</span></h1>
+          <p>SICA-VS centraliza la seguridad de Residencial Villas del Sol: visitas con QR, monitoreo de cámaras, cuotas en línea y comunicación con los residentes — todo en una sola plataforma.</p>
+          <button className="landing-cta" onClick={onEntrar}>Acceder al sistema →</button>
+        </div>
+        <div className="landing-hero-logo">
+          <img src="/logo-vs.png" alt="Villas del Sol" />
+        </div>
+      </section>
+
+      <section className="landing-features">
+        {features.map((f, i) => (
+          <div key={i} className="landing-feature">
+            <div className="landing-feature-icon">{f.icon}</div>
+            <h3>{f.titulo}</h3>
+            <p>{f.desc}</p>
+          </div>
+        ))}
+      </section>
+
+      <footer className="landing-footer">
+        <p>Residencial Villas del Sol · San Pedro Sula, Honduras</p>
+        <p className="muted small">SICA-VS — Sistema Integral de Control de Accesos</p>
+      </footer>
+    </div>
+  );
+}
+
+// ─── Cambio obligatorio de contraseña ────────────────────────
+function CambioObligatorio({ usuario, onListo }: { usuario: Usuario; onListo: (u: Usuario) => void }) {
+  const [pass, setPass] = useState("");
+  const [pass2, setPass2] = useState("");
+  const [error, setError] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  async function guardar() {
+    if (pass.length < 6) { setError("La contraseña debe tener al menos 6 caracteres"); return; }
+    if (pass !== pass2) { setError("Las contraseñas no coinciden"); return; }
+    setError(""); setEnviando(true);
+    try {
+      const r = await cambiarPassword("", pass);
+      onListo(r.usuario);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="center">
+      <div className="card login-card">
+        <img src="/logo-vs.png" alt="Villas del Sol" className="login-logo" />
+        <h1>Bienvenido, {usuario.nombre}</h1>
+        <p className="muted">Por seguridad, definí una nueva contraseña antes de continuar.</p>
+        <input type="password" placeholder="Nueva contraseña" value={pass}
+          onChange={e => setPass(e.target.value)} />
+        <input type="password" placeholder="Repetir contraseña" value={pass2}
+          onChange={e => setPass2(e.target.value)} onKeyDown={e => e.key === "Enter" && guardar()} />
+        {error && <div className="error">{error}</div>}
+        <button onClick={guardar} disabled={enviando}>{enviando ? "Guardando…" : "Guardar y continuar"}</button>
       </div>
     </div>
   );
@@ -192,6 +290,9 @@ function AdminView({ seccion }: { seccion: string }) {
   if (seccion === "monitoreo") return <MonitoreoCamaras />;
   if (seccion === "comunicados") return <ComunicadosAdmin />;
   if (seccion === "reportes") return <Reporteria />;
+  if (seccion === "guardias") return <GuardiasAdmin />;
+  if (seccion === "historial") return <HistorialAccesos />;
+  if (seccion === "perfil") return <MiPerfil />;
   return <DashboardAdmin />;
 }
 
@@ -204,9 +305,12 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "dashboard", label: "Dashboard", icon: "📊" },
       { id: "monitoreo", label: "Monitoreo", icon: "📹" },
       { id: "casas", label: "Casas y residentes", icon: "🏘️" },
+      { id: "guardias", label: "Guardias", icon: "🛡️" },
+      { id: "historial", label: "Historial", icon: "📜" },
       { id: "pagos", label: "Revisión de pagos", icon: "💳" },
       { id: "reportes", label: "Reportería", icon: "📈" },
       { id: "comunicados", label: "Comunicados", icon: "📣" },
+      { id: "perfil", label: "Mi perfil", icon: "👤" },
     ];
   }
   if (rol === "residente") {
@@ -216,9 +320,13 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "historial", label: "Mis visitas", icon: "📋" },
       { id: "cuotas", label: "Mis cuotas", icon: "💳" },
       { id: "cuenta", label: "Mi cuenta", icon: "👤" },
+      { id: "perfil", label: "Mi perfil", icon: "⚙️" },
     ];
   }
-  return [{ id: "guardia", label: "Caseta", icon: "🛡️" }];
+  return [
+    { id: "guardia", label: "Caseta", icon: "🛡️" },
+    { id: "perfil", label: "Mi perfil", icon: "⚙️" },
+  ];
 }
 
 function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => void }) {
@@ -284,8 +392,8 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
 
         <main className="content">
           {esAdmin && <AdminView seccion={seccion} />}
-          {usuario.rol === "guardia" && <GuardiaPanel />}
-          {esResidente && <ResidentePortal seccion={seccion} />}
+          {usuario.rol === "guardia" && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <GuardiaPanel />)}
+          {esResidente && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <ResidentePortal seccion={seccion} />)}
         </main>
       </div>
 

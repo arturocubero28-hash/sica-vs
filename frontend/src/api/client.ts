@@ -20,6 +20,7 @@ export interface Usuario {
   telefono?: string;
   rol: Rol;
   activo: boolean;
+  debe_cambiar_password?: boolean;
   biometria_activa: boolean;
 }
 
@@ -353,4 +354,49 @@ export interface ReporteFinancieroDTO {
 export const reporteFinanciero = (anio?: number, mes?: number) => {
   const q = anio && mes ? `?anio=${anio}&mes=${mes}` : "";
   return request<ReporteFinancieroDTO>(`/reportes/financiero${q}`);
+};
+
+// ── PERFIL ────────────────────────────────────────────────────────────────────
+export const cambiarPassword = (passwordActual: string, passwordNueva: string) =>
+  request<{ message: string; usuario: Usuario }>("/auth/cambiar-password", {
+    method: "POST",
+    body: JSON.stringify({ password_actual: passwordActual, password_nueva: passwordNueva }),
+  });
+export const actualizarPerfil = (body: { nombre?: string; apellido?: string; telefono?: string }) =>
+  request<{ usuario: Usuario }>("/auth/perfil", { method: "PUT", body: JSON.stringify(body) });
+
+// ── GUARDIAS ──────────────────────────────────────────────────────────────────
+export interface GuardiaDTO {
+  id: string; nombre: string; apellido: string; email: string;
+  rol: string; activo: boolean; debe_cambiar_password?: boolean;
+  password_generica?: string;
+}
+export const listarGuardias = () => request<GuardiaDTO[]>("/guardias");
+export const crearGuardia = (body: { nombre: string; apellido: string; email: string }) =>
+  request<GuardiaDTO>("/guardias", { method: "POST", body: JSON.stringify(body) });
+export const editarGuardia = (uuid: string, body: { nombre?: string; apellido?: string; activo?: boolean }) =>
+  request<GuardiaDTO>(`/guardias/${uuid}`, { method: "PUT", body: JSON.stringify(body) });
+export const resetPasswordGuardia = (uuid: string) =>
+  request<{ message: string; password_generica: string }>(`/guardias/${uuid}/reset-password`, { method: "POST" });
+
+// ── HISTORIAL DE ACCESOS ──────────────────────────────────────────────────────
+export interface EventoHistorialDTO {
+  id: string; direccion: string; visitante: string;
+  unidad: string; guardia: string; placa?: string; ocurrido_en: string;
+}
+export interface HistorialDTO {
+  eventos: EventoHistorialDTO[];
+  pagina: number; por_pagina: number; total: number; total_paginas: number;
+}
+export const historialAccesos = (params: {
+  desde?: string; hasta?: string; direccion?: string; buscar?: string; pagina?: number;
+}) => {
+  const q = new URLSearchParams();
+  if (params.desde) q.set("desde", params.desde);
+  if (params.hasta) q.set("hasta", params.hasta);
+  if (params.direccion) q.set("direccion", params.direccion);
+  if (params.buscar) q.set("buscar", params.buscar);
+  if (params.pagina) q.set("pagina", String(params.pagina));
+  const qs = q.toString();
+  return request<HistorialDTO>(`/dashboard/historial${qs ? "?" + qs : ""}`);
 };

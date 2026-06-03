@@ -203,3 +203,79 @@ def ver_foto(usuario_actual, nombre_archivo):
     from app.utils.archivos import servir_archivo_seguro
     carpeta = current_app.config.get("UPLOAD_FOLDER", "/app/uploads")
     return servir_archivo_seguro(carpeta, nombre_archivo)
+
+
+# =====================================================================
+# HISTORIAL COMPLETO DE ACCESOS (con filtros)
+# =====================================================================
+@dashboard_bp.get("/historial")
+@roles_required("admin", "super_admin")
+def historial_accesos(usuario_actual):
+    """
+    Historial de eventos de acceso con filtros opcionales:
+      ?desde=YYYY-MM-DD  ?hasta=YYYY-MM-DD  ?direccion=entrada|salida
+      ?buscar=texto (placa, visitante, unidad)  ?pagina=1
+    """
+    from app.models.visita import Visita
+
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    direccion = request.args.get("direccion")
+    buscar = (request.args.get("buscar") or "").strip().lower()
+    pagina = max(1, int(request.args.get("pagina", 1)))
+    por_pagina = 30
+
+    q = EventoAcceso.query
+    if desde:
+        try:
+            q = q.filter(EventoAcceso.ocurrido_en >= dt.datetime.fromisoformat(desde))
+        except ValueError:
+            pass
+    if hasta:
+        try:
+            fin = dt.datetime.fromisoformat(hasta) + dt.timedelta(days=1)
+            q = q.filter(EventoAcceso.ocurrido_en < fin)
+        except ValueError:
+            pass
+    if direccion in ("entrada", "salida"):
+        q = q.filter(EventoAcceso.direccion == direccion)
+
+    q = q.order_by(EventoAcceso.ocurrido_en.desc())
+    total = q.count()
+    eventos = q.offset((pagina - 1) * por_pagina).limit(por_pagina).all()
+
+    filas = []
+    for e in eventos:
+        visita = Visita.query.get(e.visita_id) if e.visita_id else None
+        visitante = visita.nombre_visitante if visita else "—"
+        unidad = "—"
+        if visita:
+            cuenta = Cuenta.query.get(visita.cuenta_id)
+            if cuenta and cuenta.unidad:
+                unidad = cuenta.unidad.identificador
+        guardia = f"{e.guardia.nombre} {e.guardia.apellido}" if e.guardia else "—"
+        placa = e.placa_vehiculo or (visita.placa_vehiculo if visita else None)
+
+        fila = {
+            "id": str(e.uuid_publico),
+            "direccion": e.direccion,
+            "visitante": visitante,
+            "unidad": unidad,
+            "guardia": guardia,
+            "placa": placa,
+            "ocurrido_en": e.ocurrido_en.isoformat() if e.ocurrido_en else None,
+        }
+        # Filtro de texto en memoria (placa/visitante/unidad)
+        if buscar:
+            blob = f"{visitante} {unidad} {placa or ''}".lower()
+            if buscar not in blob:
+                continue
+        filas.append(fila)
+
+    return jsonify({"data": {
+        "eventos": filas,
+        "pagina": pagina,
+        "por_pagina": por_pagina,
+        "total": total,
+        "total_paginas": (total + por_pagina - 1) // por_pagina,
+    }})
