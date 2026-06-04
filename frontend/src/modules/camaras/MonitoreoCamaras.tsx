@@ -18,6 +18,7 @@ export function MonitoreoCamaras() {
   const [cargando, setCargando] = useState(true);
   const [layout, setLayout] = useState(4);
   const [config, setConfig] = useState(false);
+  const [maximizada, setMaximizada] = useState<CamaraDTO | null>(null);
 
   function recargar() {
     listarCamaras().then(setCamaras).catch(() => {}).finally(() => setCargando(false));
@@ -65,7 +66,7 @@ export function MonitoreoCamaras() {
         </div>
       ) : (
         <div className="camara-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-          {slots.map(cam => <CamaraTile key={cam.id} camara={cam} />)}
+          {slots.map(cam => <CamaraTile key={cam.id} camara={cam} onMaximizar={() => setMaximizada(cam)} />)}
           {Array.from({ length: Math.max(0, layout - slots.length) }).map((_, i) => (
             <div key={`empty-${i}`} className="camara-tile vacio">
               <span className="muted small">Sin cámara</span>
@@ -73,16 +74,29 @@ export function MonitoreoCamaras() {
           ))}
         </div>
       )}
+
+      {maximizada && (
+        <div className="camara-fullscreen" onDoubleClick={() => setMaximizada(null)}>
+          <div className="camara-fs-header">
+            <span className="camara-nombre">{maximizada.nombre}</span>
+            <button className="ghost mini" onClick={() => setMaximizada(null)}>✕ Cerrar</button>
+          </div>
+          <div className="camara-fs-video">
+            <img src={urlStreamCamara(maximizada.id)} alt={maximizada.nombre} />
+          </div>
+          <span className="camara-fs-hint">Doble clic para volver a la grilla</span>
+        </div>
+      )}
     </div>
   );
 }
 
-function CamaraTile({ camara }: { camara: CamaraDTO }) {
+function CamaraTile({ camara, onMaximizar }: { camara: CamaraDTO; onMaximizar: () => void }) {
   const [error, setError] = useState(false);
   const [cargando, setCargando] = useState(true);
 
   return (
-    <div className="camara-tile">
+    <div className="camara-tile" onDoubleClick={onMaximizar} title="Doble clic para maximizar">
       <div className="camara-tile-header">
         <span className="camara-nombre">{camara.nombre}</span>
         <span className={`camara-dot ${error ? "off" : "on"}`} />
