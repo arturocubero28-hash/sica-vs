@@ -290,6 +290,14 @@ def historial_pagos(usuario_actual):
             if buscar not in blob:
                 continue
         cobrador = p.uploader
+        # Para pagos en ventanilla (efectivo/POS), subido_por es el cajero.
+        # Para transferencias, subido_por es el residente → mostramos "Pago del residente"
+        if p.metodo in ("efectivo", "tarjeta_pos"):
+            cobrado_por = f"{cobrador.nombre} {cobrador.apellido}" if cobrador else "—"
+        elif p.metodo == "transferencia":
+            cobrado_por = "Pago del residente"
+        else:
+            cobrado_por = "En línea"
         filtrados.append({
             "id": str(p.uuid_publico),
             "fecha": p.created_at.isoformat() if p.created_at else None,
@@ -298,7 +306,7 @@ def historial_pagos(usuario_actual):
             "referencia": p.referencia,
             "identificador": identificador or "—",
             "titular": titular_nombre or "—",
-            "cobrado_por": f"{cobrador.nombre} {cobrador.apellido}" if cobrador else "—",
+            "cobrado_por": cobrado_por,
         })
 
     total = len(filtrados)
