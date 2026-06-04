@@ -61,10 +61,12 @@ def token_required(f):
     """Exige un token válido. Inyecta usuario_actual como primer argumento."""
     @wraps(f)
     def wrapper(*args, **kwargs):
+        from flask import g
         usuario = _usuario_desde_request()
         if not usuario:
             return jsonify({"error": {"code": "no_autorizado",
                                       "message": "Token inválido o ausente"}}), 401
+        g.usuario_actual = usuario   # disponible para el hook de auditoría
         return f(usuario, *args, **kwargs)
     return wrapper
 

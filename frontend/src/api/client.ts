@@ -469,16 +469,25 @@ export const resumenCaja = () => request<ResumenCajaDTO>("/caja/resumen");
 
 // ── PANEL DESARROLLADOR ───────────────────────────────────────────────────────
 export interface DevMetricasDTO {
-  estado_sistema: string; db_conectada: boolean; db_error?: string;
-  timestamp: string;
-  conteos: Record<string, number>;
-  usuarios_por_rol: Record<string, number>;
-  actividad_24h: { eventos_acceso: number; pagos: number };
-  cajas_abiertas: number;
+  estado_general: string; timestamp: string;
+  db_conectada: boolean; db_latencia_ms?: number; db_error?: string;
+  redis?: { conectado: boolean; error?: string };
+  sistema?: {
+    disco: { total_gb: number; usado_gb: number; libre_gb: number; porcentaje: number };
+    ram:   { total_gb: number; usado_gb: number; libre_gb: number; porcentaje: number };
+    cpu_porcentaje: number;
+  };
+  errores_recientes?: any[];
 }
-export interface DevLogDTO { tipo: string; descripcion: string; timestamp: string; }
 export const devMetricas = () => request<DevMetricasDTO>("/dev/metricas");
-export const devLogs = () => request<DevLogDTO[]>("/dev/logs");
+export const devLogs = (params?: { email?: string; endpoint?: string; errores?: string; pagina?: number }) => {
+  const q = new URLSearchParams();
+  if (params?.email) q.set("email", params.email);
+  if (params?.endpoint) q.set("endpoint", params.endpoint);
+  if (params?.errores) q.set("errores", params.errores);
+  if (params?.pagina) q.set("pagina", String(params.pagina));
+  return request<any>(`/dev/logs?${q.toString()}`);
+};
 export const crearDesarrollador = (body: { nombre: string; apellido: string; email: string }) =>
   request<UsuarioAdminDTO>("/usuarios/desarrolladores", { method: "POST", body: JSON.stringify(body) });
 

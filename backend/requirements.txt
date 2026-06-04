@@ -17,3 +17,5 @@ marshmallow==3.21.2
 qrcode[pil]==7.4.2
 Pillow==10.3.0
 opencv-python-headless==4.10.0.84
+
+psutil==5.9.8

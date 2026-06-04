@@ -37,7 +37,8 @@ def create_app(config_class=Config):
     from app.models.cuenta import Cuota, Pago  # noqa: F401  cuotas y pagos
     from app.models.camara import Camara  # noqa: F401  cámaras ONVIF/RTSP
     from app.models.comunicado import Comunicado  # noqa: F401  comunicados
-    from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja  # noqa: F401  caja
+    from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja  # noqa: F401
+    from app.models.auditoria import LogAuditoria  # noqa: F401  auditoría forense
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp
@@ -131,5 +132,39 @@ def create_app(config_class=Config):
             except Exception as e:
                 db.session.rollback()
                 app.logger.warning(f"Migración de columna omitida: {e}")
+
+    # ── Hook de auditoría forense ──────────────────────────────────────────────
+    # Registra automáticamente cada request a la API en log_auditoria.
+    # Solo loguea endpoints de la API (no archivos estáticos).
+    @app.after_request
+    def _auditar(response):
+        from flask import request, g
+        from app.models.auditoria import LogAuditoria
+        # Solo rutas de la API, ignorar health checks y estáticos
+        if not request.path.startswith("/api/v1/"):
+            return response
+        # No loguear el endpoint de logs mismo (evitar recursión)
+        if request.path.startswith("/api/v1/dev/"):
+            return response
+        try:
+            usuario = getattr(g, "usuario_actual", None)
+            ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
+            if ip:
+                ip = ip.split(",")[0].strip()[:45]
+            log = LogAuditoria(
+                usuario_id=usuario.id if usuario else None,
+                email=usuario.email if usuario else None,
+                rol=usuario.rol if usuario else None,
+                metodo=request.method,
+                endpoint=request.path[:200],
+                status_code=response.status_code,
+                ip=ip,
+                user_agent=(request.user_agent.string or "")[:300],
+            )
+            db.session.add(log)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()  # nunca romper el response por error de log
+        return response
 
     return app
