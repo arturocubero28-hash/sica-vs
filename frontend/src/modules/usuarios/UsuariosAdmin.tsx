@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  listarUsuarios, crearCajero, resetPasswordUsuario, editarUsuario,
+  listarUsuarios, crearCajero, crearGuardia, resetPasswordUsuario, editarUsuario,
   type UsuarioAdminDTO,
 } from "../../api/client";
 
@@ -14,7 +14,7 @@ export function UsuariosAdmin() {
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [filtroRol, setFiltroRol] = useState("");
-  const [creandoCajero, setCreandoCajero] = useState(false);
+  const [creando, setCreando] = useState<"cajero" | "guardia" | null>(null);
   const [credencial, setCredencial] = useState<{ email: string; pass: string } | null>(null);
 
   function recargar() {
@@ -48,9 +48,14 @@ export function UsuariosAdmin() {
     <div className="usuarios-admin">
       <div className="dash-head">
         <h2>Usuarios registrados</h2>
-        <button className="cuota-btn-pagar" style={{ maxWidth: 170 }} onClick={() => setCreandoCajero(true)}>
-          + Crear cajero
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="cuota-btn-pagar" style={{ maxWidth: 150 }} onClick={() => setCreando("guardia")}>
+            + Crear guardia
+          </button>
+          <button className="cuota-btn-pagar" style={{ maxWidth: 150 }} onClick={() => setCreando("cajero")}>
+            + Crear cajero
+          </button>
+        </div>
       </div>
 
       <div className="casas-filtros">
@@ -90,9 +95,9 @@ export function UsuariosAdmin() {
         </div>
       )}
 
-      {creandoCajero && (
-        <FormCajero onCerrar={() => setCreandoCajero(false)}
-          onCreado={(cred) => { setCreandoCajero(false); setCredencial(cred); recargar(); }} />
+      {creando && (
+        <FormUsuario tipo={creando} onCerrar={() => setCreando(null)}
+          onCreado={(cred) => { setCreando(null); setCredencial(cred); recargar(); }} />
       )}
 
       {credencial && (
@@ -115,7 +120,8 @@ export function UsuariosAdmin() {
   );
 }
 
-function FormCajero({ onCerrar, onCreado }: {
+function FormUsuario({ tipo, onCerrar, onCreado }: {
+  tipo: "cajero" | "guardia";
   onCerrar: () => void; onCreado: (cred: { email: string; pass: string }) => void;
 }) {
   const [nombre, setNombre] = useState("");
@@ -128,17 +134,21 @@ function FormCajero({ onCerrar, onCreado }: {
     if (!nombre.trim() || !apellido.trim() || !email.trim()) { setError("Todos los campos son obligatorios"); return; }
     setError(""); setGuardando(true);
     try {
-      const c = await crearCajero({ nombre, apellido, email });
-      onCreado({ email: c.email, pass: c.password_generica || "" });
+      const fn = tipo === "cajero" ? crearCajero : crearGuardia;
+      const u = await fn({ nombre, apellido, email });
+      onCreado({ email: u.email, pass: u.password_generica || "" });
     } catch (e) { setError((e as Error).message); }
     finally { setGuardando(false); }
   }
+
+  const titulo = tipo === "cajero" ? "Nuevo cajero" : "Nuevo guardia";
+  const ph = tipo === "cajero" ? "cajero@villasdelsol.hn" : "guardia@villasdelsol.hn";
 
   return (
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>Nuevo cajero</h3>
+          <h3>{titulo}</h3>
           <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
         <div className="form-pago">
@@ -147,11 +157,11 @@ function FormCajero({ onCerrar, onCreado }: {
           <div className="form-field"><label>Apellido</label>
             <input value={apellido} onChange={e => setApellido(e.target.value)} placeholder="Ej. López" /></div>
           <div className="form-field"><label>Correo (será su usuario)</label>
-            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="cajero@villasdelsol.hn" /></div>
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder={ph} /></div>
           <p className="muted small">Se creará con contraseña genérica que deberá cambiar en su primer ingreso.</p>
           {error && <div className="error">{error}</div>}
           <button className="cuota-btn-pagar full" onClick={crear} disabled={guardando}>
-            {guardando ? "Creando…" : "Crear cajero"}
+            {guardando ? "Creando…" : titulo.replace("Nuevo", "Crear")}
           </button>
         </div>
       </div>

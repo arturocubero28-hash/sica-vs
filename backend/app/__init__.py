@@ -93,6 +93,22 @@ def create_app(config_class=Config):
         # create_all() NO altera tablas que ya existen, así que las añadimos aquí.
         # Cada ALTER usa IF NOT EXISTS, por lo que es seguro ejecutarlo siempre.
         from sqlalchemy import text
+
+        # Valores nuevos en ENUMs de PostgreSQL (ADD VALUE IF NOT EXISTS es idempotente).
+        # Deben ir en su propia transacción (ALTER TYPE ... ADD VALUE no corre dentro de un bloque con otras).
+        enums = [
+            "ALTER TYPE rol_global ADD VALUE IF NOT EXISTS 'cajero'",
+            "ALTER TYPE metodo_pago ADD VALUE IF NOT EXISTS 'efectivo'",
+            "ALTER TYPE metodo_pago ADD VALUE IF NOT EXISTS 'tarjeta_pos'",
+            "ALTER TYPE metodo_pago ADD VALUE IF NOT EXISTS 'linea'",
+        ]
+        for sql in enums:
+            try:
+                with db.engine.connect() as conn:
+                    conn.execution_options(isolation_level="AUTOCOMMIT").execute(text(sql))
+            except Exception as e:
+                app.logger.warning(f"ALTER TYPE omitido: {e}")
+
         columnas = [
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS activa BOOLEAN NOT NULL DEFAULT TRUE",

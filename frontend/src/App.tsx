@@ -13,7 +13,6 @@ import { PagosAdmin } from "./modules/dashboard/PagosAdmin";
 import { MonitoreoCamaras } from "./modules/camaras/MonitoreoCamaras";
 import { ComunicadosAdmin } from "./modules/comunicados/ComunicadosAdmin";
 import { Reporteria } from "./modules/reportes/Reporteria";
-import { GuardiasAdmin } from "./modules/guardias/GuardiasAdmin";
 import { HistorialAccesos } from "./modules/dashboard/HistorialAccesos";
 import { MiPerfil } from "./modules/perfil/MiPerfil";
 import { CajaPanel } from "./modules/caja/CajaPanel";
@@ -294,7 +293,6 @@ function AdminView({ seccion }: { seccion: string }) {
   if (seccion === "monitoreo") return <MonitoreoCamaras />;
   if (seccion === "comunicados") return <ComunicadosAdmin />;
   if (seccion === "reportes") return <Reporteria />;
-  if (seccion === "guardias") return <GuardiasAdmin />;
   if (seccion === "historial") return <HistorialAccesos />;
   if (seccion === "usuarios") return <UsuariosAdmin />;
   if (seccion === "caja") return <SupervisionCaja />;
@@ -312,7 +310,6 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "monitoreo", label: "Monitoreo", icon: "📹" },
       { id: "casas", label: "Casas y residentes", icon: "🏘️" },
       { id: "usuarios", label: "Usuarios", icon: "👥" },
-      { id: "guardias", label: "Guardias", icon: "🛡️" },
       { id: "historial", label: "Historial", icon: "📜" },
       { id: "pagos", label: "Revisión de pagos", icon: "💳" },
       { id: "caja", label: "Supervisión de caja", icon: "🧾" },
