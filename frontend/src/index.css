@@ -1191,3 +1191,60 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
   .vms-sidebar { width: 100%; max-height: 200px; }
   .vms-grid { min-height: 400px; }
 }
+
+/* ============================================================
+   SALDO DE CAJA (supervisión)
+   ============================================================ */
+.saldo-caja-card {
+  display: flex; gap: 20px; flex-wrap: wrap;
+  background: linear-gradient(135deg, #022E45, #044a6e); border-radius: 16px;
+  padding: 22px 24px; color: #fff;
+}
+.saldo-caja-main { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; }
+.saldo-caja-label { color: rgba(255,255,255,.7); font-size: 13px; }
+.saldo-caja-monto { font-size: 34px; font-weight: 800; color: #fff; line-height: 1.1; }
+.saldo-caja-detalle { color: rgba(255,255,255,.55) !important; margin-top: 4px; }
+.saldo-caja-side { display: flex; flex-direction: column; gap: 12px; justify-content: center; }
+.saldo-side-item { display: flex; flex-direction: column; }
+.saldo-side-item span { color: rgba(255,255,255,.6) !important; }
+.saldo-side-item b { color: var(--marca-amarillo); font-size: 17px; }
+
+/* ============================================================
+   PANEL DESARROLLADOR
+   ============================================================ */
+.dev-panel { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+.dev-estado {
+  display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px;
+  padding: 8px 16px; border-radius: 20px;
+}
+.dev-estado.ok { background: #e6f7ee; color: #1d8a4a; }
+.dev-estado.fail { background: #fdecec; color: #c81e1e; }
+.dev-estado-dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; animation: lector-pulse 1.5s infinite; }
+
+.dev-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.dev-card { background: #0c1f2e; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.dev-card-label { color: #7e96ab; font-size: 12px; }
+.dev-card-valor { color: #fff; font-size: 26px; font-weight: 800; }
+.dev-card-valor.verde { color: #2ecc71; }
+.dev-card-valor.rojo { color: #ff5a5a; }
+
+.dev-conteos { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.dev-conteo { background: #f1f6fc; border-radius: 10px; padding: 12px; text-align: center; }
+.dev-conteo-num { display: block; font-size: 24px; font-weight: 800; color: var(--marca-azul); }
+.dev-conteo-tabla { font-size: 11px; color: var(--gris); text-transform: capitalize; }
+
+.dev-roles { display: flex; flex-wrap: wrap; gap: 8px; }
+.dev-rol-chip { background: #eef4fb; border: 1px solid #d6e3f0; border-radius: 20px; padding: 6px 14px; font-size: 13px; color: var(--marca-azul); }
+.dev-rol-chip b { color: var(--marca-naranja); }
+
+.dev-logs { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.dev-log-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid #eef2f7; font-size: 13px; }
+.dev-log-tag { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; text-transform: uppercase; flex-shrink: 0; }
+.dev-log-tag.acceso { background: #e6f0fa; color: #044a6e; }
+.dev-log-tag.pago { background: #fff3e6; color: #9a6700; }
+.dev-log-desc { flex: 1; color: #2b3440; }
+.dev-log-time { flex-shrink: 0; }
+
+@media (max-width: 860px) {
+  .dev-grid { grid-template-columns: 1fr 1fr; }
+}

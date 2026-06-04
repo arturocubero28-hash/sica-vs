@@ -91,3 +91,34 @@ class SesionCaja(db.Model):
                 "hora": p.created_at.isoformat() if p.created_at else None,
             } for p in self.pagos]
         return d
+
+
+class ConfigCaja(db.Model):
+    """
+    Configuración global de caja (una sola fila, id=1).
+    Mantiene el saldo inicial del sistema (cuando se implementa en una
+    residencial que ya venía operando con otro sistema) y permite ajustes
+    manuales, siempre protegidos por la clave del desarrollador.
+    """
+    __tablename__ = "config_caja"
+
+    id              = db.Column(db.BigInteger, primary_key=True)
+    saldo_inicial   = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    actualizado_en  = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
+    actualizado_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
+
+    @classmethod
+    def get(cls):
+        """Devuelve la fila única de configuración, creándola si no existe."""
+        cfg = cls.query.get(1)
+        if not cfg:
+            cfg = cls(id=1, saldo_inicial=0)
+            db.session.add(cfg)
+            db.session.commit()
+        return cfg
+
+    def to_dict(self):
+        return {
+            "saldo_inicial": float(self.saldo_inicial),
+            "actualizado_en": self.actualizado_en.isoformat() if self.actualizado_en else None,
+        }

@@ -43,7 +43,18 @@ def listar_usuarios(usuario_actual):
 @usuarios_bp.post("/cajeros")
 @roles_required("admin", "super_admin")
 def crear_cajero(usuario_actual):
-    data = request.get_json(silent=True) or {}
+    return _crear_usuario_rol(request, "cajero")
+
+
+# ── Crear desarrollador (solo super_admin o desarrollador) ────────────────────
+@usuarios_bp.post("/desarrolladores")
+@roles_required("super_admin", "desarrollador")
+def crear_desarrollador(usuario_actual):
+    return _crear_usuario_rol(request, "desarrollador")
+
+
+def _crear_usuario_rol(req, rol):
+    data = req.get_json(silent=True) or {}
     nombre = (data.get("nombre") or "").strip()
     apellido = (data.get("apellido") or "").strip()
     email = (data.get("email") or "").strip().lower()
@@ -55,15 +66,15 @@ def crear_cajero(usuario_actual):
         return jsonify({"error": {"code": "email_duplicado",
                                   "message": "Ya existe un usuario con ese correo"}}), 400
 
-    cajero = Usuario(
+    u = Usuario(
         nombre=nombre, apellido=apellido, email=email,
-        rol="cajero", activo=True, debe_cambiar_password=True,
+        rol=rol, activo=True, debe_cambiar_password=True,
     )
-    cajero.set_password(PASSWORD_GENERICA)
-    db.session.add(cajero)
+    u.set_password(PASSWORD_GENERICA)
+    db.session.add(u)
     db.session.commit()
 
-    d = cajero.to_dict()
+    d = u.to_dict()
     d["password_generica"] = PASSWORD_GENERICA
     return jsonify({"data": d}), 201
 

@@ -9,7 +9,7 @@ import datetime as dt
 from flask import Blueprint, request, jsonify
 
 from app.extensions import db
-from app.models.caja import SesionCaja
+from app.models.caja import SesionCaja, ConfigCaja
 from app.models.cuenta import Cuenta, Cuota, Pago
 from app.auth.security import roles_required
 
@@ -167,14 +167,54 @@ def buscar_cuenta(usuario_actual):
 # SUPERVISIÓN (admin)
 # =====================================================================
 @caja_bp.get("/sesiones")
-@roles_required("admin", "super_admin")
+@roles_required("admin", "super_admin", "desarrollador")
 def listar_sesiones(usuario_actual):
     sesiones = SesionCaja.query.order_by(SesionCaja.abierta_en.desc()).limit(100).all()
     return jsonify({"data": [s.to_dict() for s in sesiones]})
 
 
+@caja_bp.get("/resumen")
+@roles_required("admin", "super_admin", "desarrollador")
+def resumen_caja(usuario_actual):
+    """
+    Saldo de caja del sistema = saldo inicial configurado
+      + efectivo recaudado en TODAS las sesiones (pagos en efectivo)
+      + ajustes por descuadres declarados (se sumarán en el punto 4).
+    También informa el efectivo que está en cajas abiertas ahora mismo.
+    """
+    cfg = ConfigCaja.get()
+    saldo_inicial = float(cfg.saldo_inicial)
+
+    sesiones = SesionCaja.query.all()
+    total_efectivo = 0.0
+    total_pos = 0.0
+    efectivo_en_cajas_abiertas = 0.0
+    cajas_abiertas = 0
+
+    for s in sesiones:
+        r = s.resumen()
+        total_efectivo += r["efectivo"]
+        total_pos += r["pos"]
+        if s.estado == "abierta":
+            cajas_abiertas += 1
+            efectivo_en_cajas_abiertas += float(s.monto_inicial) + r["efectivo"]
+
+    # Saldo actual del sistema = base + todo el efectivo cobrado históricamente
+    saldo_actual = saldo_inicial + total_efectivo
+
+    return jsonify({"data": {
+        "saldo_inicial": saldo_inicial,
+        "saldo_actual": round(saldo_actual, 2),
+        "total_efectivo_historico": round(total_efectivo, 2),
+        "total_pos_historico": round(total_pos, 2),
+        "efectivo_en_cajas_abiertas": round(efectivo_en_cajas_abiertas, 2),
+        "cajas_abiertas": cajas_abiertas,
+        "actualizado_en": cfg.actualizado_en.isoformat() if cfg.actualizado_en else None,
+    }})
+
+
 @caja_bp.get("/sesiones/<uuid_sesion>")
-@roles_required("admin", "super_admin")
+@roles_required("admin", "super_admin", "desarrollador")
 def detalle_sesion(usuario_actual, uuid_sesion):
     s = SesionCaja.query.filter_by(uuid_publico=uuid_sesion).first()
     if not s:

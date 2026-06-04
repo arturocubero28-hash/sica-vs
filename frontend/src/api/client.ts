@@ -10,7 +10,7 @@
 const API_URL = "/api/v1";
 
 // ---- Tipos compartidos (cada módulo amplía los suyos en src/api) ----
-export type Rol = "super_admin" | "admin" | "guardia" | "residente" | "cajero";
+export type Rol = "super_admin" | "admin" | "guardia" | "residente" | "cajero" | "desarrollador";
 
 export interface Usuario {
   id: string;
@@ -455,3 +455,27 @@ export const cerrarCaja = (body: { efectivo_contado: number; pos_contado: number
   request<SesionCajaDTO>("/caja/cerrar", { method: "POST", body: JSON.stringify(body) });
 export const listarSesionesCaja = () => request<SesionCajaDTO[]>("/caja/sesiones");
 export const detalleSesionCaja = (uuid: string) => request<SesionCajaDTO>(`/caja/sesiones/${uuid}`);
+
+// ── RESUMEN DE CAJA (saldo del sistema) ───────────────────────────────────────
+export interface ResumenCajaDTO {
+  saldo_inicial: number; saldo_actual: number;
+  total_efectivo_historico: number; total_pos_historico: number;
+  efectivo_en_cajas_abiertas: number; cajas_abiertas: number;
+  actualizado_en?: string;
+}
+export const resumenCaja = () => request<ResumenCajaDTO>("/caja/resumen");
+
+// ── PANEL DESARROLLADOR ───────────────────────────────────────────────────────
+export interface DevMetricasDTO {
+  estado_sistema: string; db_conectada: boolean; db_error?: string;
+  timestamp: string;
+  conteos: Record<string, number>;
+  usuarios_por_rol: Record<string, number>;
+  actividad_24h: { eventos_acceso: number; pagos: number };
+  cajas_abiertas: number;
+}
+export interface DevLogDTO { tipo: string; descripcion: string; timestamp: string; }
+export const devMetricas = () => request<DevMetricasDTO>("/dev/metricas");
+export const devLogs = () => request<DevLogDTO[]>("/dev/logs");
+export const crearDesarrollador = (body: { nombre: string; apellido: string; email: string }) =>
+  request<UsuarioAdminDTO>("/usuarios/desarrolladores", { method: "POST", body: JSON.stringify(body) });

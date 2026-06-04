@@ -18,6 +18,7 @@ import { MiPerfil } from "./modules/perfil/MiPerfil";
 import { CajaPanel } from "./modules/caja/CajaPanel";
 import { SupervisionCaja } from "./modules/caja/SupervisionCaja";
 import { UsuariosAdmin } from "./modules/usuarios/UsuariosAdmin";
+import { PanelDesarrollador } from "./modules/dev/PanelDesarrollador";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -324,6 +325,13 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "perfil", label: "Mi perfil", icon: "⚙️" },
     ];
   }
+  if (rol === "desarrollador") {
+    return [
+      { id: "dev", label: "Sistema", icon: "🖥️" },
+      { id: "caja", label: "Supervisión de caja", icon: "🧾" },
+      { id: "perfil", label: "Mi perfil", icon: "⚙️" },
+    ];
+  }
   if (rol === "residente") {
     return [
       { id: "home", label: "Inicio", icon: "🏠" },
@@ -418,6 +426,11 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
 
         <main className="content">
           {esAdmin && <AdminView seccion={seccion} />}
+          {usuario.rol === "desarrollador" && (
+            seccion === "perfil" ? <div className="card wide"><MiPerfil /></div>
+            : seccion === "caja" ? <SupervisionCaja />
+            : <PanelDesarrollador />
+          )}
           {usuario.rol === "cajero" && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <CajaPanel />)}
           {usuario.rol === "guardia" && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <GuardiaPanel />)}
           {esResidente && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <ResidentePortal seccion={seccion} />)}

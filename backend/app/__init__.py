@@ -31,7 +31,7 @@ def create_app(config_class=Config):
     from app.models.cuenta import Cuota, Pago  # noqa: F401  cuotas y pagos
     from app.models.camara import Camara  # noqa: F401  cámaras ONVIF/RTSP
     from app.models.comunicado import Comunicado  # noqa: F401  comunicados
-    from app.models.caja import SesionCaja  # noqa: F401  caja
+    from app.models.caja import SesionCaja, ConfigCaja  # noqa: F401  caja
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp
@@ -68,6 +68,9 @@ def create_app(config_class=Config):
     from app.api.usuarios import usuarios_bp
     app.register_blueprint(usuarios_bp, url_prefix="/api/v1/usuarios")
 
+    from app.api.desarrollador import dev_bp
+    app.register_blueprint(dev_bp, url_prefix="/api/v1/dev")
+
     # --- Healthcheck y manejo de errores estándar ---
     @app.get("/api/v1/health")
     def health():
@@ -98,6 +101,7 @@ def create_app(config_class=Config):
         # Deben ir en su propia transacción (ALTER TYPE ... ADD VALUE no corre dentro de un bloque con otras).
         enums = [
             "ALTER TYPE rol_global ADD VALUE IF NOT EXISTS 'cajero'",
+            "ALTER TYPE rol_global ADD VALUE IF NOT EXISTS 'desarrollador'",
             "ALTER TYPE metodo_pago ADD VALUE IF NOT EXISTS 'efectivo'",
             "ALTER TYPE metodo_pago ADD VALUE IF NOT EXISTS 'tarjeta_pos'",
             "ALTER TYPE metodo_pago ADD VALUE IF NOT EXISTS 'linea'",

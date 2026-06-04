@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { listarSesionesCaja, detalleSesionCaja, type SesionCajaDTO } from "../../api/client";
+import { listarSesionesCaja, detalleSesionCaja, resumenCaja, type SesionCajaDTO, type ResumenCajaDTO } from "../../api/client";
 
 function L(n: number) {
   return "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -7,11 +7,14 @@ function L(n: number) {
 
 export function SupervisionCaja() {
   const [sesiones, setSesiones] = useState<SesionCajaDTO[]>([]);
+  const [resumen, setResumen] = useState<ResumenCajaDTO | null>(null);
   const [cargando, setCargando] = useState(true);
   const [detalle, setDetalle] = useState<SesionCajaDTO | null>(null);
 
   useEffect(() => {
-    listarSesionesCaja().then(setSesiones).catch(() => {}).finally(() => setCargando(false));
+    Promise.all([listarSesionesCaja(), resumenCaja()])
+      .then(([s, r]) => { setSesiones(s); setResumen(r); })
+      .catch(() => {}).finally(() => setCargando(false));
   }, []);
 
   if (cargando) return <p className="muted">Cargando…</p>;
@@ -26,9 +29,32 @@ export function SupervisionCaja() {
       <div className="dash-header-pro">
         <div>
           <h2 className="dash-titulo">Supervisión de caja</h2>
-          <span className="muted">Sesiones de caja de los cajeros</span>
+          <span className="muted">Saldos y sesiones de los cajeros</span>
         </div>
       </div>
+
+      {/* Saldo del sistema */}
+      {resumen && (
+        <div className="saldo-caja-card">
+          <div className="saldo-caja-main">
+            <span className="saldo-caja-label">Saldo actual de caja</span>
+            <span className="saldo-caja-monto">{L(resumen.saldo_actual)}</span>
+            <span className="saldo-caja-detalle muted small">
+              Saldo inicial {L(resumen.saldo_inicial)} + efectivo recaudado {L(resumen.total_efectivo_historico)}
+            </span>
+          </div>
+          <div className="saldo-caja-side">
+            <div className="saldo-side-item">
+              <span className="muted small">En cajas abiertas ahora</span>
+              <b>{L(resumen.efectivo_en_cajas_abiertas)}</b>
+            </div>
+            <div className="saldo-side-item">
+              <span className="muted small">POS histórico</span>
+              <b>{L(resumen.total_pos_historico)}</b>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="metric-grid">
         <div className="metric-card verde">
