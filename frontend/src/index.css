@@ -1096,3 +1096,98 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .camara-fs-hint {
   text-align: center; color: rgba(255,255,255,.4); font-size: 12px; padding: 8px;
 }
+
+/* ============================================================
+   CENTRO DE MONITOREO — estilo VMS profesional
+   ============================================================ */
+.monitoreo-vms { display: flex; flex-direction: column; gap: 14px; width: 100%; height: 100%; }
+
+.vms-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.vms-header-acciones { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* Selector de layout con iconos de mini-grilla */
+.layout-selector { display: flex; gap: 4px; background: #0e2535; padding: 4px; border-radius: 10px; }
+.layout-btn {
+  width: 34px; height: 34px; border: none; background: transparent; border-radius: 7px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.layout-btn:hover { background: rgba(255,255,255,.08); }
+.layout-btn.on { background: var(--marca-naranja); }
+.layout-icon { display: grid; gap: 2px; width: 18px; height: 18px; }
+.layout-icon i { background: #7e96ab; border-radius: 1px; }
+.layout-btn.on .layout-icon i { background: #fff; }
+
+.vms-config-btn {
+  background: #0e2535; color: #cde0f0; border: 1px solid #1c3a4f;
+  border-radius: 9px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.vms-config-btn:hover { background: #143247; }
+
+/* Cuerpo: sidebar + grilla */
+.vms-body { display: flex; gap: 14px; flex: 1; min-height: 540px; }
+
+/* Sidebar de cámaras */
+.vms-sidebar {
+  width: 230px; flex-shrink: 0; background: #0c1f2e; border-radius: 14px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.vms-sidebar-title {
+  padding: 14px 16px; color: #fff; font-weight: 700; font-size: 14px;
+  border-bottom: 1px solid #16344a; letter-spacing: .3px;
+}
+.vms-cam-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.vms-cam-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px;
+  background: #102b3e; border: 1px solid #173347; border-radius: 10px;
+  cursor: grab; transition: background .15s, transform .1s;
+}
+.vms-cam-item:hover { background: #16384f; }
+.vms-cam-item:active { cursor: grabbing; }
+.vms-cam-item.drag { opacity: .5; transform: scale(.97); }
+.vms-cam-item.en-uso { opacity: .5; }
+.vms-cam-thumb {
+  width: 34px; height: 34px; border-radius: 8px; background: #0a1925;
+  display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+}
+.vms-cam-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.vms-cam-nombre { color: #eaf3fa; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vms-cam-ip { color: #6f8aa0; font-size: 11px; }
+.vms-cam-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; flex-shrink: 0; box-shadow: 0 0 6px #2ecc71; }
+.vms-sidebar-hint { padding: 10px 14px; color: #587590; font-size: 11px; border-top: 1px solid #16344a; }
+.vms-sidebar-vacio { padding: 20px 14px; text-align: center; color: #7e96ab; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+
+/* Grilla de celdas */
+.vms-grid { flex: 1; display: grid; gap: 8px; min-height: 540px; }
+.vms-celda {
+  background: #0a1620; border-radius: 12px; overflow: hidden; position: relative;
+  border: 2px solid transparent; transition: border-color .15s;
+}
+.vms-celda.soltable { border-color: #1c4866; border-style: dashed; }
+.vms-celda.soltable:hover { border-color: var(--marca-naranja); }
+.vms-celda-vacia {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px; min-height: 160px;
+}
+.vms-celda-num {
+  font-size: 26px; font-weight: 800; color: #1c3346;
+}
+.vms-celda .camara-tile {
+  height: 100%; background: transparent; border: none; border-radius: 0; margin: 0;
+  display: flex; flex-direction: column;
+}
+.vms-celda .camara-video { flex: 1; border-radius: 0; }
+.vms-quitar {
+  background: rgba(0,0,0,.4); color: #fff; border: none; width: 22px; height: 22px;
+  border-radius: 6px; cursor: pointer; font-size: 11px; line-height: 1;
+}
+.vms-quitar:hover { background: #c81e1e; }
+
+@media (max-width: 860px) {
+  .vms-body { flex-direction: column; }
+  .vms-sidebar { width: 100%; max-height: 200px; }
+  .vms-grid { min-height: 400px; }
+}

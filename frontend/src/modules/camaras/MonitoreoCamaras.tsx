@@ -19,11 +19,30 @@ export function MonitoreoCamaras() {
   const [layout, setLayout] = useState(4);
   const [config, setConfig] = useState(false);
   const [maximizada, setMaximizada] = useState<CamaraDTO | null>(null);
+  // Asignación de cámaras a celdas: índice de celda -> id de cámara
+  const [asignacion, setAsignacion] = useState<(string | null)[]>([]);
+  const [arrastrando, setArrastrando] = useState<string | null>(null);
 
   function recargar() {
     listarCamaras().then(setCamaras).catch(() => {}).finally(() => setCargando(false));
   }
   useEffect(() => { recargar(); }, []);
+
+  // Inicializar/ajustar la asignación cuando cambia el layout o las cámaras
+  useEffect(() => {
+    setAsignacion(prev => {
+      const nueva = Array.from({ length: layout }, (_, i) => prev[i] ?? null);
+      // Autocompletar celdas vacías con cámaras activas no asignadas
+      const activas = camaras.filter(c => c.activa).map(c => c.id);
+      const yaAsignadas = new Set(nueva.filter(Boolean) as string[]);
+      const disponibles = activas.filter(id => !yaAsignadas.has(id));
+      let d = 0;
+      for (let i = 0; i < nueva.length; i++) {
+        if (!nueva[i] && d < disponibles.length) nueva[i] = disponibles[d++];
+      }
+      return nueva;
+    });
+  }, [layout, camaras]);
 
   if (config) {
     return <ConfigCamaras camaras={camaras} onVolver={() => { setConfig(false); recargar(); }} />;
@@ -31,49 +50,104 @@ export function MonitoreoCamaras() {
 
   const cols = LAYOUTS.find(l => l.n === layout)?.cols || 2;
   const activas = camaras.filter(c => c.activa);
-  const slots = activas.slice(0, layout);
+  const camById = (id: string | null) => activas.find(c => c.id === id) || null;
+
+  function soltarEnCelda(celdaIdx: number) {
+    if (!arrastrando) return;
+    setAsignacion(prev => {
+      const nueva = [...prev];
+      // Si la cámara ya estaba en otra celda, la quitamos de ahí (swap)
+      const idxPrevio = nueva.indexOf(arrastrando);
+      if (idxPrevio !== -1) nueva[idxPrevio] = nueva[celdaIdx];
+      nueva[celdaIdx] = arrastrando;
+      return nueva;
+    });
+    setArrastrando(null);
+  }
+
+  function quitarDeCelda(celdaIdx: number) {
+    setAsignacion(prev => { const n = [...prev]; n[celdaIdx] = null; return n; });
+  }
 
   return (
-    <div className="monitoreo">
-      <div className="dash-head">
-        <h2>Monitoreo de cámaras</h2>
-        <button className="ghost mini" onClick={() => setConfig(true)}>⚙ Configurar cámaras</button>
-      </div>
-
-      <div className="layout-selector">
-        <span className="muted small">Vista:</span>
-        {LAYOUTS.map(l => (
-          <button
-            key={l.n}
-            className={`layout-btn ${layout === l.n ? "on" : ""}`}
-            onClick={() => setLayout(l.n)}
-          >
-            {l.label}
-          </button>
-        ))}
-      </div>
-
-      {cargando ? (
-        <p className="muted">Cargando cámaras…</p>
-      ) : activas.length === 0 ? (
-        <div className="camaras-vacio">
-          <div className="camaras-vacio-icon">📹</div>
-          <p>No hay cámaras configuradas todavía.</p>
-          <button className="cuota-btn-pagar" style={{ maxWidth: 280, margin: "10px auto 0" }}
-            onClick={() => setConfig(true)}>
-            Agregar primera cámara
-          </button>
+    <div className="monitoreo-vms">
+      <div className="vms-header">
+        <div>
+          <h2 className="dash-titulo">Centro de Monitoreo</h2>
+          <span className="muted">{activas.length} cámara{activas.length !== 1 ? "s" : ""} en línea</span>
         </div>
-      ) : (
-        <div className="camara-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-          {slots.map(cam => <CamaraTile key={cam.id} camara={cam} onMaximizar={() => setMaximizada(cam)} />)}
-          {Array.from({ length: Math.max(0, layout - slots.length) }).map((_, i) => (
-            <div key={`empty-${i}`} className="camara-tile vacio">
-              <span className="muted small">Sin cámara</span>
+        <div className="vms-header-acciones">
+          <div className="layout-selector">
+            {LAYOUTS.map(l => (
+              <button key={l.n} className={`layout-btn ${layout === l.n ? "on" : ""}`}
+                onClick={() => setLayout(l.n)} title={`${l.n} cámaras`}>
+                <LayoutIcon n={l.n} />
+              </button>
+            ))}
+          </div>
+          <button className="vms-config-btn" onClick={() => setConfig(true)}>⚙ Configurar</button>
+        </div>
+      </div>
+
+      <div className="vms-body">
+        {/* Lista lateral de cámaras */}
+        <aside className="vms-sidebar">
+          <div className="vms-sidebar-title">Cámaras</div>
+          {cargando ? (
+            <p className="muted small" style={{ padding: 12 }}>Cargando…</p>
+          ) : activas.length === 0 ? (
+            <div className="vms-sidebar-vacio">
+              <span>Sin cámaras</span>
+              <button className="vms-config-btn" onClick={() => setConfig(true)}>Agregar</button>
             </div>
-          ))}
+          ) : (
+            <div className="vms-cam-list">
+              {activas.map(cam => {
+                const enUso = asignacion.includes(cam.id);
+                return (
+                  <div key={cam.id}
+                    className={`vms-cam-item ${enUso ? "en-uso" : ""} ${arrastrando === cam.id ? "drag" : ""}`}
+                    draggable
+                    onDragStart={() => setArrastrando(cam.id)}
+                    onDragEnd={() => setArrastrando(null)}
+                    title="Arrastrá a una celda de la grilla">
+                    <span className="vms-cam-thumb">📹</span>
+                    <div className="vms-cam-meta">
+                      <span className="vms-cam-nombre">{cam.nombre}</span>
+                      <span className="vms-cam-ip">{cam.ip}</span>
+                    </div>
+                    <span className="vms-cam-dot" />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="vms-sidebar-hint">Arrastrá una cámara a la grilla →</div>
+        </aside>
+
+        {/* Grilla de celdas */}
+        <div className="vms-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+          {asignacion.map((camId, idx) => {
+            const cam = camById(camId);
+            return (
+              <div key={idx}
+                className={`vms-celda ${arrastrando ? "soltable" : ""} ${cam ? "ocupada" : "vacia"}`}
+                onDragOver={(e) => { if (arrastrando) e.preventDefault(); }}
+                onDrop={() => soltarEnCelda(idx)}>
+                {cam ? (
+                  <CamaraTile camara={cam} onMaximizar={() => setMaximizada(cam)}
+                    onQuitar={() => quitarDeCelda(idx)} />
+                ) : (
+                  <div className="vms-celda-vacia">
+                    <span className="vms-celda-num">{idx + 1}</span>
+                    <span className="muted small">Arrastrá una cámara aquí</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {maximizada && (
         <div className="camara-fullscreen" onDoubleClick={() => setMaximizada(null)}>
@@ -91,7 +165,23 @@ export function MonitoreoCamaras() {
   );
 }
 
-function CamaraTile({ camara, onMaximizar }: { camara: CamaraDTO; onMaximizar: () => void }) {
+// Iconos de layout (mini-grillas)
+function LayoutIcon({ n }: { n: number }) {
+  const cols = LAYOUTS.find(l => l.n === n)?.cols || 2;
+  const rows = Math.ceil(n / cols);
+  return (
+    <span className="layout-icon" style={{
+      gridTemplateColumns: `repeat(${cols}, 1fr)`,
+      gridTemplateRows: `repeat(${rows}, 1fr)`,
+    }}>
+      {Array.from({ length: n }).map((_, i) => <i key={i} />)}
+    </span>
+  );
+}
+
+function CamaraTile({ camara, onMaximizar, onQuitar }: {
+  camara: CamaraDTO; onMaximizar: () => void; onQuitar?: () => void;
+}) {
   const [error, setError] = useState(false);
   const [cargando, setCargando] = useState(true);
 
@@ -99,7 +189,13 @@ function CamaraTile({ camara, onMaximizar }: { camara: CamaraDTO; onMaximizar: (
     <div className="camara-tile" onDoubleClick={onMaximizar} title="Doble clic para maximizar">
       <div className="camara-tile-header">
         <span className="camara-nombre">{camara.nombre}</span>
-        <span className={`camara-dot ${error ? "off" : "on"}`} />
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span className={`camara-dot ${error ? "off" : "on"}`} />
+          {onQuitar && (
+            <button className="vms-quitar" onClick={(e) => { e.stopPropagation(); onQuitar(); }}
+              title="Quitar de la grilla">✕</button>
+          )}
+        </div>
       </div>
       <div className="camara-video">
         {error ? (
