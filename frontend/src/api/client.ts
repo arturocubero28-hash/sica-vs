@@ -10,7 +10,7 @@
 const API_URL = "/api/v1";
 
 // ---- Tipos compartidos (cada módulo amplía los suyos en src/api) ----
-export type Rol = "super_admin" | "admin" | "guardia" | "residente";
+export type Rol = "super_admin" | "admin" | "guardia" | "residente" | "cajero";
 
 export interface Usuario {
   id: string;
@@ -408,3 +408,50 @@ export const historialAccesos = (params: {
 // ── NOTIFICACIONES ────────────────────────────────────────────────────────────
 export const contarPagosPendientes = () =>
   request<{ pendientes: number }>("/cuotas/pendientes/count");
+
+// ── USUARIOS ──────────────────────────────────────────────────────────────────
+export interface UsuarioAdminDTO {
+  id: string; nombre: string; apellido: string; email: string;
+  rol: string; activo: boolean; debe_cambiar_password?: boolean;
+  password_generica?: string;
+}
+export const listarUsuarios = (params?: { rol?: string; buscar?: string }) => {
+  const q = new URLSearchParams();
+  if (params?.rol) q.set("rol", params.rol);
+  if (params?.buscar) q.set("buscar", params.buscar);
+  const qs = q.toString();
+  return request<UsuarioAdminDTO[]>(`/usuarios${qs ? "?" + qs : ""}`);
+};
+export const crearCajero = (body: { nombre: string; apellido: string; email: string }) =>
+  request<UsuarioAdminDTO>("/usuarios/cajeros", { method: "POST", body: JSON.stringify(body) });
+export const resetPasswordUsuario = (uuid: string) =>
+  request<{ message: string; password_generica: string }>(`/usuarios/${uuid}/reset-password`, { method: "POST" });
+export const editarUsuario = (uuid: string, body: { activo?: boolean }) =>
+  request<UsuarioAdminDTO>(`/usuarios/${uuid}`, { method: "PUT", body: JSON.stringify(body) });
+
+// ── CAJA ──────────────────────────────────────────────────────────────────────
+export interface CuotaPendienteCaja { cuota_id: string; mes_label: string; monto: number; estado: string; }
+export interface CuentaCajaDTO {
+  cuenta_id: string; identificador: string; titular: string;
+  cuotas_pendientes: CuotaPendienteCaja[];
+}
+export interface SesionCajaDTO {
+  id: string; estado: string; cajero: string; monto_inicial: number;
+  total_efectivo: number; total_pos: number; total_otros: number;
+  cantidad_pagos: number; efectivo_esperado: number; pos_esperado: number;
+  abierta_en: string; cerrada_en?: string;
+  efectivo_contado?: number; pos_contado?: number;
+  diferencia_efectivo?: number; diferencia_pos?: number; nota_cierre?: string;
+  pagos?: { id: string; monto: number; metodo: string; referencia?: string; hora: string }[];
+}
+export const estadoCaja = () => request<{ abierta: boolean; sesion?: SesionCajaDTO }>("/caja/estado");
+export const abrirCaja = (montoInicial: number) =>
+  request<SesionCajaDTO>("/caja/abrir", { method: "POST", body: JSON.stringify({ monto_inicial: montoInicial }) });
+export const buscarCuentaCaja = (q: string) =>
+  request<CuentaCajaDTO[]>(`/caja/buscar-cuenta?q=${encodeURIComponent(q)}`);
+export const registrarPagoCaja = (body: { cuota_id: string; metodo: string; referencia?: string }) =>
+  request<{ pago: any; sesion: SesionCajaDTO }>("/caja/pago", { method: "POST", body: JSON.stringify(body) });
+export const cerrarCaja = (body: { efectivo_contado: number; pos_contado: number; nota?: string }) =>
+  request<SesionCajaDTO>("/caja/cerrar", { method: "POST", body: JSON.stringify(body) });
+export const listarSesionesCaja = () => request<SesionCajaDTO[]>("/caja/sesiones");
+export const detalleSesionCaja = (uuid: string) => request<SesionCajaDTO>(`/caja/sesiones/${uuid}`);

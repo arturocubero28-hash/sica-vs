@@ -1,0 +1,276 @@
+import { useState, useEffect } from "react";
+import {
+  estadoCaja, abrirCaja, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
+  type SesionCajaDTO, type CuentaCajaDTO,
+} from "../../api/client";
+
+function L(n: number) {
+  return "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export function CajaPanel() {
+  const [sesion, setSesion] = useState<SesionCajaDTO | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [cerrando, setCerrando] = useState(false);
+
+  function recargar() {
+    estadoCaja().then(r => setSesion(r.abierta ? r.sesion! : null)).catch(() => {}).finally(() => setCargando(false));
+  }
+  useEffect(() => { recargar(); }, []);
+
+  if (cargando) return <p className="muted">Cargando caja…</p>;
+
+  if (!sesion) return <AbrirCaja onAbierta={recargar} />;
+  if (cerrando) return <CerrarCaja sesion={sesion} onCancelar={() => setCerrando(false)} onCerrada={() => { setCerrando(false); recargar(); }} />;
+
+  return (
+    <div className="caja">
+      <div className="dash-header-pro">
+        <div>
+          <h2 className="dash-titulo">Caja abierta</h2>
+          <span className="muted">Cajero: {sesion.cajero}</span>
+        </div>
+        <button className="btn-baja mini" onClick={() => setCerrando(true)}>Cerrar caja</button>
+      </div>
+
+      {/* Arqueo en vivo */}
+      <div className="metric-grid">
+        <div className="metric-card azul">
+          <div className="metric-top"><span className="metric-label">Fondo inicial</span></div>
+          <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.monto_inicial)}</div>
+        </div>
+        <div className="metric-card verde">
+          <div className="metric-top"><span className="metric-label">Efectivo esperado</span></div>
+          <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.efectivo_esperado)}</div>
+        </div>
+        <div className="metric-card naranja">
+          <div className="metric-top"><span className="metric-label">POS (tarjeta)</span></div>
+          <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.total_pos)}</div>
+        </div>
+        <div className="metric-card azul">
+          <div className="metric-top"><span className="metric-label">Pagos registrados</span></div>
+          <div className="metric-valor">{sesion.cantidad_pagos}</div>
+        </div>
+      </div>
+
+      <RegistrarPago onRegistrado={recargar} />
+
+      {/* Pagos de la sesión */}
+      <div className="dash-card">
+        <h3>Pagos de esta sesión</h3>
+        {!sesion.pagos || sesion.pagos.length === 0 ? (
+          <p className="muted">Aún no hay pagos registrados.</p>
+        ) : (
+          <div className="scroll-x">
+            <table className="data">
+              <thead><tr><th>Hora</th><th>Monto</th><th>Método</th><th>Referencia</th></tr></thead>
+              <tbody>
+                {sesion.pagos.map(p => (
+                  <tr key={p.id}>
+                    <td className="small">{new Date(p.hora).toLocaleTimeString("es-HN")}</td>
+                    <td>{L(p.monto)}</td>
+                    <td><span className="pill">{p.metodo === "efectivo" ? "Efectivo" : "Tarjeta POS"}</span></td>
+                    <td>{p.referencia || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AbrirCaja({ onAbierta }: { onAbierta: () => void }) {
+  const [monto, setMonto] = useState("");
+  const [abriendo, setAbriendo] = useState(false);
+  const [error, setError] = useState("");
+
+  async function abrir() {
+    const m = parseFloat(monto || "0");
+    if (isNaN(m) || m < 0) { setError("Ingresá un monto válido"); return; }
+    setAbriendo(true); setError("");
+    try { await abrirCaja(m); onAbierta(); }
+    catch (e) { setError((e as Error).message); setAbriendo(false); }
+  }
+
+  return (
+    <div className="caja-abrir">
+      <div className="dash-card" style={{ maxWidth: 460, margin: "0 auto" }}>
+        <div className="caja-abrir-icon">🔓</div>
+        <h2 style={{ textAlign: "center", color: "var(--marca-azul)" }}>Abrir caja</h2>
+        <p className="muted" style={{ textAlign: "center" }}>Ingresá el monto de efectivo con el que arranca la caja (fondo inicial).</p>
+        <div className="form-field">
+          <label>Fondo inicial (L)</label>
+          <input type="number" value={monto} onChange={e => setMonto(e.target.value)}
+            placeholder="0.00" onKeyDown={e => e.key === "Enter" && abrir()} />
+        </div>
+        {error && <div className="error">{error}</div>}
+        <button className="cuota-btn-pagar full" onClick={abrir} disabled={abriendo}>
+          {abriendo ? "Abriendo…" : "Abrir caja"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
+  const [busqueda, setBusqueda] = useState("");
+  const [resultados, setResultados] = useState<CuentaCajaDTO[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [seleccion, setSeleccion] = useState<{ cuotaId: string; label: string; monto: number } | null>(null);
+  const [metodo, setMetodo] = useState("efectivo");
+  const [referencia, setReferencia] = useState("");
+  const [msg, setMsg] = useState("");
+
+  async function buscar() {
+    if (!busqueda.trim()) return;
+    setBuscando(true);
+    try { setResultados(await buscarCuentaCaja(busqueda)); }
+    finally { setBuscando(false); }
+  }
+
+  async function cobrar() {
+    if (!seleccion) return;
+    setMsg("");
+    try {
+      await registrarPagoCaja({ cuota_id: seleccion.cuotaId, metodo, referencia });
+      setMsg(`✓ Pago de ${L(seleccion.monto)} registrado`);
+      setSeleccion(null); setBusqueda(""); setResultados([]); setReferencia("");
+      onRegistrado();
+      setTimeout(() => setMsg(""), 4000);
+    } catch (e) { setMsg((e as Error).message); }
+  }
+
+  return (
+    <div className="dash-card">
+      <h3>Registrar pago en ventanilla</h3>
+      <div className="caja-buscar-row">
+        <input placeholder="Buscar por casa o titular…" value={busqueda}
+          onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === "Enter" && buscar()} />
+        <button className="cuota-btn-pagar" style={{ maxWidth: 110 }} onClick={buscar} disabled={buscando}>
+          {buscando ? "…" : "Buscar"}
+        </button>
+      </div>
+
+      {resultados.map(c => (
+        <div key={c.cuenta_id} className="caja-resultado">
+          <div className="caja-resultado-head">
+            <b>{c.identificador}</b> · {c.titular}
+          </div>
+          {c.cuotas_pendientes.length === 0 ? (
+            <span className="muted small">Sin cuotas pendientes</span>
+          ) : (
+            <div className="caja-cuotas">
+              {c.cuotas_pendientes.map(q => (
+                <button key={q.cuota_id}
+                  className={`caja-cuota-chip ${seleccion?.cuotaId === q.cuota_id ? "on" : ""}`}
+                  onClick={() => setSeleccion({ cuotaId: q.cuota_id, label: `${c.identificador} · ${q.mes_label}`, monto: q.monto })}>
+                  {q.mes_label} — {L(q.monto)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {seleccion && (
+        <div className="caja-cobro">
+          <div className="caja-cobro-info">
+            Cobrando: <b>{seleccion.label}</b> — <b>{L(seleccion.monto)}</b>
+          </div>
+          <div className="caja-cobro-metodo">
+            <label className={metodo === "efectivo" ? "on" : ""}>
+              <input type="radio" checked={metodo === "efectivo"} onChange={() => setMetodo("efectivo")} /> Efectivo
+            </label>
+            <label className={metodo === "tarjeta_pos" ? "on" : ""}>
+              <input type="radio" checked={metodo === "tarjeta_pos"} onChange={() => setMetodo("tarjeta_pos")} /> Tarjeta (POS)
+            </label>
+          </div>
+          {metodo === "tarjeta_pos" && (
+            <input placeholder="N° de voucher / referencia POS" value={referencia}
+              onChange={e => setReferencia(e.target.value)} />
+          )}
+          <button className="cuota-btn-pagar full" onClick={cobrar}>
+            Confirmar pago {L(seleccion.monto)}
+          </button>
+        </div>
+      )}
+
+      {msg && <div className={msg.startsWith("✓") ? "cuota-ok" : "error"} style={{ marginTop: 10 }}>{msg}</div>}
+    </div>
+  );
+}
+
+function CerrarCaja({ sesion, onCancelar, onCerrada }: {
+  sesion: SesionCajaDTO; onCancelar: () => void; onCerrada: () => void;
+}) {
+  const [efectivo, setEfectivo] = useState("");
+  const [pos, setPos] = useState("");
+  const [nota, setNota] = useState("");
+  const [cerrando, setCerrando] = useState(false);
+  const [error, setError] = useState("");
+
+  const efContado = parseFloat(efectivo || "0");
+  const posContado = parseFloat(pos || "0");
+  const difEf = efContado - sesion.efectivo_esperado;
+  const difPos = posContado - sesion.total_pos;
+
+  async function cerrar() {
+    setCerrando(true); setError("");
+    try {
+      await cerrarCaja({ efectivo_contado: efContado, pos_contado: posContado, nota });
+      onCerrada();
+    } catch (e) { setError((e as Error).message); setCerrando(false); }
+  }
+
+  return (
+    <div className="caja-cerrar">
+      <div className="dash-card" style={{ maxWidth: 520, margin: "0 auto" }}>
+        <h2 style={{ color: "var(--marca-azul)" }}>Cierre de caja (arqueo)</h2>
+        <p className="muted">Contá el efectivo y los vouchers POS reales. El sistema los compara con lo esperado.</p>
+
+        <div className="arqueo-fila">
+          <span>Efectivo esperado</span><b>{L(sesion.efectivo_esperado)}</b>
+        </div>
+        <div className="form-field">
+          <label>Efectivo contado (L)</label>
+          <input type="number" value={efectivo} onChange={e => setEfectivo(e.target.value)} placeholder="0.00" />
+        </div>
+        {efectivo !== "" && (
+          <div className={`arqueo-dif ${Math.abs(difEf) < 0.01 ? "ok" : "alerta"}`}>
+            {Math.abs(difEf) < 0.01 ? "✓ Cuadra" : `Diferencia: ${L(difEf)} ${difEf > 0 ? "(sobra)" : "(falta)"}`}
+          </div>
+        )}
+
+        <div className="arqueo-fila" style={{ marginTop: 14 }}>
+          <span>POS esperado</span><b>{L(sesion.total_pos)}</b>
+        </div>
+        <div className="form-field">
+          <label>POS contado / vouchers (L)</label>
+          <input type="number" value={pos} onChange={e => setPos(e.target.value)} placeholder="0.00" />
+        </div>
+        {pos !== "" && (
+          <div className={`arqueo-dif ${Math.abs(difPos) < 0.01 ? "ok" : "alerta"}`}>
+            {Math.abs(difPos) < 0.01 ? "✓ Cuadra" : `Diferencia: ${L(difPos)} ${difPos > 0 ? "(sobra)" : "(falta)"}`}
+          </div>
+        )}
+
+        <div className="form-field" style={{ marginTop: 14 }}>
+          <label>Nota (opcional)</label>
+          <textarea className="comunicado-textarea" rows={2} value={nota}
+            onChange={e => setNota(e.target.value)} placeholder="Observaciones del cierre…" />
+        </div>
+
+        {error && <div className="error">{error}</div>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="ghost" onClick={onCancelar}>Cancelar</button>
+          <button className="cuota-btn-pagar full" onClick={cerrar} disabled={cerrando}>
+            {cerrando ? "Cerrando…" : "Confirmar cierre"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

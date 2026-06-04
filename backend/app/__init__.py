@@ -31,6 +31,7 @@ def create_app(config_class=Config):
     from app.models.cuenta import Cuota, Pago  # noqa: F401  cuotas y pagos
     from app.models.camara import Camara  # noqa: F401  cámaras ONVIF/RTSP
     from app.models.comunicado import Comunicado  # noqa: F401  comunicados
+    from app.models.caja import SesionCaja  # noqa: F401  caja
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp
@@ -61,6 +62,12 @@ def create_app(config_class=Config):
     from app.api.guardias import guardias_bp
     app.register_blueprint(guardias_bp, url_prefix="/api/v1/guardias")
 
+    from app.api.caja import caja_bp
+    app.register_blueprint(caja_bp, url_prefix="/api/v1/caja")
+
+    from app.api.usuarios import usuarios_bp
+    app.register_blueprint(usuarios_bp, url_prefix="/api/v1/usuarios")
+
     # --- Healthcheck y manejo de errores estándar ---
     @app.get("/api/v1/health")
     def health():
@@ -89,6 +96,7 @@ def create_app(config_class=Config):
         columnas = [
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS activa BOOLEAN NOT NULL DEFAULT TRUE",
+            "ALTER TABLE pagos ADD COLUMN IF NOT EXISTS sesion_caja_id BIGINT",
         ]
         for sql in columnas:
             try:

@@ -16,6 +16,9 @@ import { Reporteria } from "./modules/reportes/Reporteria";
 import { GuardiasAdmin } from "./modules/guardias/GuardiasAdmin";
 import { HistorialAccesos } from "./modules/dashboard/HistorialAccesos";
 import { MiPerfil } from "./modules/perfil/MiPerfil";
+import { CajaPanel } from "./modules/caja/CajaPanel";
+import { SupervisionCaja } from "./modules/caja/SupervisionCaja";
+import { UsuariosAdmin } from "./modules/usuarios/UsuariosAdmin";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -293,6 +296,8 @@ function AdminView({ seccion }: { seccion: string }) {
   if (seccion === "reportes") return <Reporteria />;
   if (seccion === "guardias") return <GuardiasAdmin />;
   if (seccion === "historial") return <HistorialAccesos />;
+  if (seccion === "usuarios") return <UsuariosAdmin />;
+  if (seccion === "caja") return <SupervisionCaja />;
   if (seccion === "perfil") return <MiPerfil />;
   return <DashboardAdmin />;
 }
@@ -306,12 +311,20 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "dashboard", label: "Dashboard", icon: "📊" },
       { id: "monitoreo", label: "Monitoreo", icon: "📹" },
       { id: "casas", label: "Casas y residentes", icon: "🏘️" },
+      { id: "usuarios", label: "Usuarios", icon: "👥" },
       { id: "guardias", label: "Guardias", icon: "🛡️" },
       { id: "historial", label: "Historial", icon: "📜" },
       { id: "pagos", label: "Revisión de pagos", icon: "💳" },
+      { id: "caja", label: "Supervisión de caja", icon: "🧾" },
       { id: "reportes", label: "Reportería", icon: "📈" },
       { id: "comunicados", label: "Comunicados", icon: "📣" },
       { id: "perfil", label: "Mi perfil", icon: "👤" },
+    ];
+  }
+  if (rol === "cajero") {
+    return [
+      { id: "caja", label: "Caja", icon: "🧾" },
+      { id: "perfil", label: "Mi perfil", icon: "⚙️" },
     ];
   }
   if (rol === "residente") {
@@ -408,6 +421,7 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
 
         <main className="content">
           {esAdmin && <AdminView seccion={seccion} />}
+          {usuario.rol === "cajero" && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <CajaPanel />)}
           {usuario.rol === "guardia" && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <GuardiaPanel />)}
           {esResidente && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <ResidentePortal seccion={seccion} />)}
         </main>

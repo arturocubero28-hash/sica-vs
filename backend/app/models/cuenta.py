@@ -259,6 +259,7 @@ class Pago(db.Model):
     revisado_por         = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
     revisado_en          = db.Column(db.DateTime(timezone=True))
     nota_admin           = db.Column(db.String(255))
+    sesion_caja_id       = db.Column(db.BigInteger, db.ForeignKey("sesiones_caja.id"))
     created_at           = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at           = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 

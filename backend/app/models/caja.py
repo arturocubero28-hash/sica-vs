@@ -1,0 +1,93 @@
+"""
+Módulo de Caja — sesiones de caja con apertura, arqueo y cierre.
+
+Flujo:
+  1. El cajero ABRE una sesión con un monto inicial en efectivo (fondo de caja).
+  2. Durante el día registra pagos en ventanilla (efectivo o tarjeta POS).
+     Cada pago queda vinculado a la sesión (Pago.sesion_caja_id).
+  3. Al CERRAR, el cajero cuenta el efectivo real y los vouchers POS.
+     El sistema compara lo esperado vs lo contado y guarda la diferencia.
+"""
+import uuid
+import datetime as dt
+from app.extensions import db
+
+
+def _uuid_col():
+    return db.Column(db.UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
+
+
+def _now():
+    return dt.datetime.now(dt.timezone.utc)
+
+
+class SesionCaja(db.Model):
+    __tablename__ = "sesiones_caja"
+
+    id              = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico    = _uuid_col()
+    cajero_id       = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
+
+    estado          = db.Column(db.String(15), nullable=False, default="abierta")  # abierta | cerrada
+    monto_inicial   = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+
+    # Valores al cierre (los cuenta el cajero)
+    efectivo_contado = db.Column(db.Numeric(10, 2))
+    pos_contado      = db.Column(db.Numeric(10, 2))
+    nota_cierre      = db.Column(db.String(255))
+
+    abierta_en      = db.Column(db.DateTime(timezone=True), default=_now)
+    cerrada_en      = db.Column(db.DateTime(timezone=True))
+
+    cajero = db.relationship("Usuario", foreign_keys=[cajero_id])
+    pagos  = db.relationship("Pago", backref="sesion_caja", lazy="select")
+
+    def resumen(self):
+        """Calcula totales de la sesión a partir de los pagos vinculados."""
+        efectivo = sum(float(p.monto) for p in self.pagos if p.metodo == "efectivo")
+        pos      = sum(float(p.monto) for p in self.pagos if p.metodo == "tarjeta_pos")
+        otros    = sum(float(p.monto) for p in self.pagos if p.metodo not in ("efectivo", "tarjeta_pos"))
+        return {
+            "efectivo": efectivo,
+            "pos": pos,
+            "otros": otros,
+            "cantidad_pagos": len(self.pagos),
+        }
+
+    def to_dict(self, con_pagos=False):
+        r = self.resumen()
+        inicial = float(self.monto_inicial)
+        # Lo que DEBERÍA haber en efectivo = fondo inicial + pagos en efectivo
+        efectivo_esperado = inicial + r["efectivo"]
+
+        d = {
+            "id":             str(self.uuid_publico),
+            "estado":         self.estado,
+            "cajero":         f"{self.cajero.nombre} {self.cajero.apellido}" if self.cajero else "—",
+            "monto_inicial":  inicial,
+            "total_efectivo": r["efectivo"],
+            "total_pos":      r["pos"],
+            "total_otros":    r["otros"],
+            "cantidad_pagos": r["cantidad_pagos"],
+            "efectivo_esperado": efectivo_esperado,
+            "pos_esperado":   r["pos"],
+            "abierta_en":     self.abierta_en.isoformat() if self.abierta_en else None,
+            "cerrada_en":     self.cerrada_en.isoformat() if self.cerrada_en else None,
+        }
+        if self.estado == "cerrada":
+            ef_contado = float(self.efectivo_contado or 0)
+            pos_contado = float(self.pos_contado or 0)
+            d["efectivo_contado"] = ef_contado
+            d["pos_contado"] = pos_contado
+            d["diferencia_efectivo"] = round(ef_contado - efectivo_esperado, 2)
+            d["diferencia_pos"] = round(pos_contado - r["pos"], 2)
+            d["nota_cierre"] = self.nota_cierre
+        if con_pagos:
+            d["pagos"] = [{
+                "id": str(p.uuid_publico),
+                "monto": float(p.monto),
+                "metodo": p.metodo,
+                "referencia": p.referencia,
+                "hora": p.created_at.isoformat() if p.created_at else None,
+            } for p in self.pagos]
+        return d

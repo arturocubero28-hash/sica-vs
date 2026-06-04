@@ -1038,3 +1038,42 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 }
 .lector-leida .ghost { margin-left: auto; }
 .tarjeta-create { align-items: flex-start; }
+
+/* ============================================================
+   CAJA
+   ============================================================ */
+.caja, .supervision, .usuarios-admin { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+.caja-abrir, .caja-cerrar { padding-top: 20px; }
+.caja-abrir-icon { font-size: 44px; text-align: center; margin-bottom: 6px; }
+
+.caja-buscar-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.caja-buscar-row input { flex: 1; border: 1.5px solid #dce4ef; border-radius: 10px; padding: 10px 14px; font-size: 14px; }
+
+.caja-resultado { border: 1px solid #e9eef5; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+.caja-resultado-head { color: var(--marca-azul); margin-bottom: 8px; }
+.caja-cuotas { display: flex; flex-wrap: wrap; gap: 8px; }
+.caja-cuota-chip {
+  background: #f1f6fc; border: 1.5px solid #cddff0; color: var(--marca-azul);
+  border-radius: 20px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.caja-cuota-chip.on { background: var(--marca-naranja); color: #fff; border-color: var(--marca-naranja); }
+
+.caja-cobro { background: #fff7ed; border: 1.5px solid #f5c98a; border-radius: 12px; padding: 14px; margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+.caja-cobro-info { color: #9a6700; }
+.caja-cobro-metodo { display: flex; gap: 10px; }
+.caja-cobro-metodo label {
+  flex: 1; border: 1.5px solid #dce4ef; border-radius: 10px; padding: 10px; text-align: center;
+  cursor: pointer; font-weight: 600; font-size: 14px; background: #fff;
+}
+.caja-cobro-metodo label.on { border-color: var(--marca-naranja); background: #fff3e6; color: var(--marca-naranja); }
+.caja-cobro-metodo input { margin-right: 4px; }
+.caja-cobro input[type="text"], .caja-cobro input:not([type="radio"]) {
+  border: 1.5px solid #dce4ef; border-radius: 10px; padding: 10px 14px; font-size: 14px;
+}
+
+/* Arqueo */
+.arqueo-fila { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eef2f7; }
+.arqueo-fila b { color: var(--marca-azul); }
+.arqueo-dif { border-radius: 8px; padding: 8px 12px; font-weight: 700; font-size: 13.5px; margin-top: 6px; }
+.arqueo-dif.ok { background: #e6f7ee; color: #1d8a4a; }
+.arqueo-dif.alerta { background: #fdecec; color: #c81e1e; }
