@@ -37,7 +37,7 @@ def create_app(config_class=Config):
     from app.models.cuenta import Cuota, Pago  # noqa: F401  cuotas y pagos
     from app.models.camara import Camara  # noqa: F401  cámaras ONVIF/RTSP
     from app.models.comunicado import Comunicado  # noqa: F401  comunicados
-    from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja  # noqa: F401
+    from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja, SalidaCaja  # noqa: F401
     from app.models.auditoria import LogAuditoria  # noqa: F401  auditoría forense
 
     # --- Registrar blueprints (endpoints) ---

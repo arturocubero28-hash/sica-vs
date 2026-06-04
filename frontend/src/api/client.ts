@@ -438,6 +438,7 @@ export interface CuentaCajaDTO {
 export interface SesionCajaDTO {
   id: string; estado: string; cajero: string; monto_inicial: number;
   total_efectivo: number; total_pos: number; total_otros: number;
+  total_salidas?: number;
   cantidad_pagos: number; efectivo_esperado: number; pos_esperado: number;
   abierta_en: string; cerrada_en?: string;
   efectivo_contado?: number; pos_contado?: number;
@@ -460,6 +461,7 @@ export const detalleSesionCaja = (uuid: string) => request<SesionCajaDTO>(`/caja
 export interface ResumenCajaDTO {
   saldo_inicial: number; saldo_actual: number;
   total_efectivo_historico: number; total_pos_historico: number;
+  total_salidas_historico?: number;
   total_ajustes?: number;
   efectivo_en_cajas_abiertas: number; cajas_abiertas: number;
   descuadres_pendientes?: number;
@@ -529,3 +531,18 @@ export const historialPagos = (params: {
   if (params.pagina) q.set("pagina", String(params.pagina));
   return request<HistorialPagosDTO>(`/cuotas/historial-pagos?${q.toString()}`);
 };
+
+// ── SALIDAS DE CAJA ───────────────────────────────────────────────────────────
+export interface SalidaCajaDTO {
+  id: string; sesion_id?: string; monto: number; concepto: string; estado: string;
+  solicitado_por: string; autorizado_por?: string; created_at: string; resuelto_en?: string;
+}
+export const solicitarSalida = (body: { monto: number; concepto: string }) =>
+  request<SalidaCajaDTO>("/caja/salida", { method: "POST", body: JSON.stringify(body) });
+export const listarSalidas = (estado?: string) =>
+  request<SalidaCajaDTO[]>(`/caja/salidas${estado ? "?estado=" + estado : ""}`);
+export const autorizarSalida = (uuid: string, accion: string, clave?: string) =>
+  request<SalidaCajaDTO>(`/caja/salidas/${uuid}/autorizar`, {
+    method: "POST", body: JSON.stringify({ accion, clave }),
+  });
+export const salidasPendientes = () => request<SalidaCajaDTO[]>("/caja/salidas/pendientes");

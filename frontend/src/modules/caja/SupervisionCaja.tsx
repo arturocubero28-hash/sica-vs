@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import {
   listarSesionesCaja, detalleSesionCaja, resumenCaja,
   modificarSaldoInicial, listarDescuadres, resolverDescuadre,
-  type SesionCajaDTO, type ResumenCajaDTO, type DescuadreDTO,
+  salidasPendientes, listarSalidas, autorizarSalida,
+  type SesionCajaDTO, type ResumenCajaDTO, type DescuadreDTO, type SalidaCajaDTO,
 } from "../../api/client";
 
 function L(n: number) {
@@ -13,13 +14,14 @@ export function SupervisionCaja() {
   const [sesiones, setSesiones] = useState<SesionCajaDTO[]>([]);
   const [resumen, setResumen] = useState<ResumenCajaDTO | null>(null);
   const [descuadres, setDescuadres] = useState<DescuadreDTO[]>([]);
+  const [salidas, setSalidas] = useState<SalidaCajaDTO[]>([]);
   const [cargando, setCargando] = useState(true);
   const [detalle, setDetalle] = useState<SesionCajaDTO | null>(null);
   const [editarSaldo, setEditarSaldo] = useState(false);
 
   function recargar() {
-    Promise.all([listarSesionesCaja(), resumenCaja(), listarDescuadres()])
-      .then(([s, r, d]) => { setSesiones(s); setResumen(r); setDescuadres(d); })
+    Promise.all([listarSesionesCaja(), resumenCaja(), listarDescuadres(), listarSalidas()])
+      .then(([s, r, d, sl]) => { setSesiones(s); setResumen(r); setDescuadres(d); setSalidas(sl); })
       .catch(() => {}).finally(() => setCargando(false));
   }
   useEffect(() => { recargar(); }, []);
@@ -31,6 +33,7 @@ export function SupervisionCaja() {
     .filter(s => new Date(s.abierta_en).toDateString() === new Date().toDateString())
     .reduce((acc, s) => acc + s.total_efectivo + s.total_pos, 0);
   const pendientes = descuadres.filter(d => d.estado === "pendiente");
+  const salidasPend = salidas.filter(s => s.estado === "pendiente");
 
   return (
     <div className="supervision">
@@ -65,9 +68,29 @@ export function SupervisionCaja() {
               <span className="muted small">POS histórico</span>
               <b>{L(resumen.total_pos_historico)}</b>
             </div>
+            {typeof resumen.total_salidas_historico === "number" && resumen.total_salidas_historico > 0 && (
+              <div className="saldo-side-item">
+                <span className="muted small">Salidas / depósitos al banco</span>
+                <b style={{ color: "#F48723" }}>- {L(resumen.total_salidas_historico)}</b>
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {/* Salidas de caja pendientes de autorización */}
+      {salidasPend.length > 0 && (
+        <div className="dash-card descuadres-card" style={{ borderColor: "#a9c4e0" }}>
+          <h3>Salidas de caja pendientes de autorización ({salidasPend.length})</h3>
+          <p className="muted small">El cajero solicita retirar efectivo (depósito al banco u otro concepto). Tu contraseña de admin autoriza.</p>
+          <div className="descuadre-lista">
+            {salidasPend.map(s => (
+              <SalidaItem key={s.id} salida={s} onResuelta={recargar} />
+            ))}
+          </div>
+        </div>
+      )}
+
 
       <div className="metric-grid">
         <div className="metric-card verde">
@@ -194,6 +217,29 @@ export function SupervisionCaja() {
         </div>
       )}
 
+      {/* Historial de salidas/depósitos al banco */}
+      {salidas.filter(s => s.estado === "autorizada").length > 0 && (
+        <div className="dash-card">
+          <h3>Historial de salidas / depósitos al banco</h3>
+          <div className="scroll-x">
+            <table className="data">
+              <thead><tr><th>Fecha</th><th>Monto</th><th>Concepto</th><th>Solicitó</th><th>Autorizó</th></tr></thead>
+              <tbody>
+                {salidas.filter(s => s.estado === "autorizada").map(s => (
+                  <tr key={s.id}>
+                    <td className="small">{new Date(s.created_at).toLocaleString("es-HN")}</td>
+                    <td><b>{L(s.monto)}</b></td>
+                    <td>{s.concepto}</td>
+                    <td className="small">{s.solicitado_por}</td>
+                    <td className="small">{s.autorizado_por || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {editarSaldo && resumen && (
         <ModalSaldoInicial saldoActual={resumen.saldo_inicial}
           onCerrar={() => setEditarSaldo(false)}
@@ -288,6 +334,49 @@ function ModalSaldoInicial({ saldoActual, onCerrar, onGuardado }: {
           {guardando ? "Guardando…" : "Confirmar cambio"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function SalidaItem({ salida, onResuelta }: { salida: SalidaCajaDTO; onResuelta: () => void }) {
+  const [autorizando, setAutorizando] = useState(false);
+  const [clave, setClave] = useState("");
+  const [error, setError] = useState("");
+  const [procesando, setProcesando] = useState(false);
+
+  async function autorizar() {
+    if (!clave) { setError("Ingresá tu contraseña de admin"); return; }
+    setProcesando(true); setError("");
+    try { await autorizarSalida(salida.id, "autorizar", clave); onResuelta(); }
+    catch (e) { setError((e as Error).message); setProcesando(false); }
+  }
+  async function rechazar() {
+    setProcesando(true);
+    try { await autorizarSalida(salida.id, "rechazar"); onResuelta(); }
+    catch (e) { setError((e as Error).message); setProcesando(false); }
+  }
+
+  return (
+    <div className="descuadre-item" style={{ borderColor: "#c0d8f0" }}>
+      <div className="descuadre-info">
+        <span className="pill" style={{ background: "#e6f0fa", color: "#022E45" }}>Depósito</span>
+        <b>{"L " + salida.monto.toLocaleString("es-HN", { minimumFractionDigits: 2 })}</b>
+        <span className="muted small">· {salida.concepto} · {salida.solicitado_por}</span>
+      </div>
+      {!autorizando ? (
+        <div className="descuadre-acciones">
+          <button className="mini btn-reactivar" onClick={() => setAutorizando(true)}>Autorizar</button>
+          <button className="mini btn-baja" onClick={rechazar} disabled={procesando}>Rechazar</button>
+        </div>
+      ) : (
+        <div className="descuadre-confirmar">
+          <input type="password" placeholder="Tu contraseña de admin" value={clave}
+            onChange={e => setClave(e.target.value)} onKeyDown={e => e.key === "Enter" && autorizar()} />
+          <button className="mini btn-reactivar" onClick={autorizar} disabled={procesando}>Confirmar</button>
+          <button className="mini" onClick={() => { setAutorizando(false); setClave(""); setError(""); }}>Cancelar</button>
+        </div>
+      )}
+      {error && <div className="error" style={{ marginTop: 6 }}>{error}</div>}
     </div>
   );
 }

@@ -47,18 +47,21 @@ class SesionCaja(db.Model):
         efectivo = sum(float(p.monto) for p in self.pagos if p.metodo == "efectivo")
         pos      = sum(float(p.monto) for p in self.pagos if p.metodo == "tarjeta_pos")
         otros    = sum(float(p.monto) for p in self.pagos if p.metodo not in ("efectivo", "tarjeta_pos"))
+        # Salidas autorizadas (depósitos al banco, etc.) restan del efectivo
+        salidas  = sum(float(s.monto) for s in self.salidas if s.estado == "autorizada")
         return {
             "efectivo": efectivo,
             "pos": pos,
             "otros": otros,
+            "salidas": salidas,
             "cantidad_pagos": len(self.pagos),
         }
 
     def to_dict(self, con_pagos=False):
         r = self.resumen()
         inicial = float(self.monto_inicial)
-        # Lo que DEBERÍA haber en efectivo = fondo inicial + pagos en efectivo
-        efectivo_esperado = inicial + r["efectivo"]
+        # Efectivo esperado = fondo inicial + cobros en efectivo - salidas autorizadas
+        efectivo_esperado = inicial + r["efectivo"] - r["salidas"]
 
         d = {
             "id":             str(self.uuid_publico),
@@ -68,6 +71,7 @@ class SesionCaja(db.Model):
             "total_efectivo": r["efectivo"],
             "total_pos":      r["pos"],
             "total_otros":    r["otros"],
+            "total_salidas":  r["salidas"],
             "cantidad_pagos": r["cantidad_pagos"],
             "efectivo_esperado": efectivo_esperado,
             "pos_esperado":   r["pos"],
@@ -160,4 +164,48 @@ class AjusteCaja(db.Model):
             "aprobado_por": f"{self.aprobador.nombre} {self.aprobador.apellido}" if self.aprobador else None,
             "created_at":   self.created_at.isoformat() if self.created_at else None,
             "resuelto_en":  self.resuelto_en.isoformat() if self.resuelto_en else None,
+        }
+
+
+class SalidaCaja(db.Model):
+    """
+    Salida de efectivo de caja: cuando el cajero manda dinero al banco
+    u otro concepto autorizado. Reduce el efectivo_esperado de la sesión.
+
+    Flujo:
+      1. Cajero solicita salida (queda en estado 'pendiente').
+      2. Admin la autoriza con su contraseña (estado → 'autorizada').
+      3. Al autorizar, el monto se descuenta del efectivo esperado de la sesión.
+      4. Si se rechaza, no afecta nada.
+    """
+    __tablename__ = "salidas_caja"
+
+    id            = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico  = _uuid_col()
+    sesion_id     = db.Column(db.BigInteger, db.ForeignKey("sesiones_caja.id"), nullable=False)
+    monto         = db.Column(db.Numeric(12, 2), nullable=False)
+    concepto      = db.Column(db.String(255), nullable=False)   # "Depósito banco Ficohsa", etc.
+    estado        = db.Column(db.String(15), nullable=False, default="pendiente")
+    # pendiente | autorizada | rechazada
+
+    solicitado_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
+    autorizado_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
+    created_at     = db.Column(db.DateTime(timezone=True), default=_now)
+    resuelto_en    = db.Column(db.DateTime(timezone=True))
+
+    sesion      = db.relationship("SesionCaja", backref="salidas")
+    solicitador = db.relationship("Usuario", foreign_keys=[solicitado_por])
+    autorizador = db.relationship("Usuario", foreign_keys=[autorizado_por])
+
+    def to_dict(self):
+        return {
+            "id":             str(self.uuid_publico),
+            "sesion_id":      str(self.sesion.uuid_publico) if self.sesion else None,
+            "monto":          float(self.monto),
+            "concepto":       self.concepto,
+            "estado":         self.estado,
+            "solicitado_por": f"{self.solicitador.nombre} {self.solicitador.apellido}" if self.solicitador else "—",
+            "autorizado_por": f"{self.autorizador.nombre} {self.autorizador.apellido}" if self.autorizador else None,
+            "created_at":     self.created_at.isoformat() if self.created_at else None,
+            "resuelto_en":    self.resuelto_en.isoformat() if self.resuelto_en else None,
         }

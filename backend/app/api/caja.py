@@ -9,7 +9,7 @@ import datetime as dt
 from flask import Blueprint, request, jsonify
 
 from app.extensions import db
-from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja
+from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja, SalidaCaja
 from app.models.cuenta import Cuenta, Cuota, Pago
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
@@ -189,6 +189,7 @@ def resumen_caja(usuario_actual):
     sesiones = SesionCaja.query.all()
     total_efectivo = 0.0
     total_pos = 0.0
+    total_salidas = 0.0
     efectivo_en_cajas_abiertas = 0.0
     cajas_abiertas = 0
 
@@ -196,14 +197,15 @@ def resumen_caja(usuario_actual):
         r = s.resumen()
         total_efectivo += r["efectivo"]
         total_pos += r["pos"]
+        total_salidas += r["salidas"]
         if s.estado == "abierta":
             cajas_abiertas += 1
-            efectivo_en_cajas_abiertas += float(s.monto_inicial) + r["efectivo"]
+            efectivo_en_cajas_abiertas += float(s.monto_inicial) + r["efectivo"] - r["salidas"]
 
-    # Saldo actual del sistema = base + efectivo cobrado + ajustes aprobados (descuadres)
+    # Saldo actual = base + efectivo - salidas + ajustes aprobados
     ajustes_aprobados = AjusteCaja.query.filter_by(estado="aprobado").all()
     total_ajustes = sum(float(a.monto) for a in ajustes_aprobados if a.tipo in ("sobrante", "faltante"))
-    saldo_actual = saldo_inicial + total_efectivo + total_ajustes
+    saldo_actual = saldo_inicial + total_efectivo - total_salidas + total_ajustes
 
     descuadres_pendientes = AjusteCaja.query.filter(
         AjusteCaja.tipo.in_(["sobrante", "faltante"]), AjusteCaja.estado == "pendiente"
@@ -214,6 +216,7 @@ def resumen_caja(usuario_actual):
         "saldo_actual": round(saldo_actual, 2),
         "total_efectivo_historico": round(total_efectivo, 2),
         "total_pos_historico": round(total_pos, 2),
+        "total_salidas_historico": round(total_salidas, 2),
         "total_ajustes": round(total_ajustes, 2),
         "efectivo_en_cajas_abiertas": round(efectivo_en_cajas_abiertas, 2),
         "cajas_abiertas": cajas_abiertas,
@@ -356,3 +359,87 @@ def resolver_descuadre(usuario_actual, uuid_ajuste):
     ajuste.resuelto_en = dt.datetime.now(dt.timezone.utc)
     db.session.commit()
     return jsonify({"data": ajuste.to_dict()})
+
+
+# =====================================================================
+# SALIDAS DE CAJA (depósitos al banco u otros conceptos)
+# =====================================================================
+@caja_bp.post("/salida")
+@roles_required("cajero", "admin", "super_admin")
+def solicitar_salida(usuario_actual):
+    """El cajero solicita una salida de efectivo (ej. depósito al banco)."""
+    sesion = _sesion_abierta_de(usuario_actual)
+    if not sesion:
+        return jsonify({"error": {"code": "sin_caja",
+                                  "message": "No tenés una caja abierta"}}), 400
+    data = request.get_json(silent=True) or {}
+    concepto = (data.get("concepto") or "").strip()
+    if not concepto:
+        return jsonify({"error": {"code": "concepto_requerido",
+                                  "message": "Indicá el concepto (ej. Depósito banco Ficohsa)"}}), 400
+    try:
+        monto = float(data.get("monto"))
+        if monto <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": {"code": "monto_invalido", "message": "Monto inválido"}}), 400
+
+    salida = SalidaCaja(
+        sesion_id=sesion.id, monto=monto, concepto=concepto,
+        estado="pendiente", solicitado_por=usuario_actual.id,
+    )
+    db.session.add(salida)
+    db.session.commit()
+    return jsonify({"data": salida.to_dict()}), 201
+
+
+@caja_bp.get("/salidas")
+@roles_required("admin", "super_admin", "desarrollador")
+def listar_salidas(usuario_actual):
+    """Lista todas las salidas. El admin ve los depósitos al banco históricos."""
+    estado = request.args.get("estado")
+    q = SalidaCaja.query
+    if estado:
+        q = q.filter_by(estado=estado)
+    salidas = q.order_by(SalidaCaja.created_at.desc()).limit(200).all()
+    return jsonify({"data": [s.to_dict() for s in salidas]})
+
+
+@caja_bp.post("/salidas/<uuid_salida>/autorizar")
+@roles_required("admin", "super_admin")
+def autorizar_salida(usuario_actual, uuid_salida):
+    """Admin autoriza o rechaza una salida. Autorizar requiere su contraseña."""
+    data = request.get_json(silent=True) or {}
+    accion = data.get("accion")  # autorizar | rechazar
+    clave = data.get("clave")
+
+    salida = SalidaCaja.query.filter_by(uuid_publico=uuid_salida).first()
+    if not salida:
+        return jsonify({"error": {"code": "no_encontrada", "message": "Salida no encontrada"}}), 404
+    if salida.estado != "pendiente":
+        return jsonify({"error": {"code": "ya_resuelta", "message": "Esa salida ya fue resuelta"}}), 400
+
+    if accion == "autorizar":
+        if not usuario_actual.check_password(clave or ""):
+            return jsonify({"error": {"code": "clave_invalida",
+                                      "message": "Contraseña incorrecta"}}), 403
+        salida.estado = "autorizada"
+        salida.autorizado_por = usuario_actual.id
+    elif accion == "rechazar":
+        salida.estado = "rechazada"
+        salida.autorizado_por = usuario_actual.id
+    else:
+        return jsonify({"error": {"code": "accion_invalida", "message": "Acción inválida"}}), 400
+
+    salida.resuelto_en = dt.datetime.now(dt.timezone.utc)
+    db.session.commit()
+    return jsonify({"data": salida.to_dict()})
+
+
+@caja_bp.get("/salidas/pendientes")
+@roles_required("admin", "super_admin")
+def salidas_pendientes(usuario_actual):
+    """Salidas que están esperando autorización."""
+    salidas = SalidaCaja.query.filter_by(estado="pendiente")\
+                .order_by(SalidaCaja.created_at.asc()).all()
+    return jsonify({"data": [s.to_dict() for s in salidas]})

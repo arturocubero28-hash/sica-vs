@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import {
-  estadoCaja, abrirCaja, buscarCuentaCaja, registrarPagoCaja, cerrarCaja, reportarDescuadre,
+  estadoCaja, abrirCaja, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
+  reportarDescuadre, solicitarSalida,
   type SesionCajaDTO, type CuentaCajaDTO,
 } from "../../api/client";
 
@@ -48,13 +49,17 @@ export function CajaPanel() {
           <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.total_pos)}</div>
         </div>
         <div className="metric-card azul">
+          <div className="metric-top"><span className="metric-label">Salidas autorizadas</span></div>
+          <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.total_salidas || 0)}</div>
+        </div>
+        <div className="metric-card azul">
           <div className="metric-top"><span className="metric-label">Pagos registrados</span></div>
           <div className="metric-valor">{sesion.cantidad_pagos}</div>
         </div>
       </div>
 
       <RegistrarPago onRegistrado={recargar} />
-
+      <SolicitarSalida onRegistrada={recargar} />
       <ReportarDescuadre />
 
       {/* Pagos de la sesión */}
@@ -322,6 +327,65 @@ function ReportarDescuadre() {
             <button className="ghost" onClick={() => setAbierto(false)}>Cancelar</button>
             <button className="cuota-btn-pagar full" onClick={reportar} disabled={enviando}>
               {enviando ? "Enviando…" : "Reportar"}
+            </button>
+          </div>
+        </div>
+      )}
+      {msg && <div className={msg.startsWith("✓") ? "cuota-ok" : "error"} style={{ marginTop: 10 }}>{msg}</div>}
+    </div>
+  );
+}
+
+function SolicitarSalida({ onRegistrada }: { onRegistrada: () => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [monto, setMonto] = useState("");
+  const [concepto, setConcepto] = useState("");
+  const [msg, setMsg] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  async function solicitar() {
+    const m = parseFloat(monto);
+    if (isNaN(m) || m <= 0) { setMsg("Ingresá un monto válido"); return; }
+    if (!concepto.trim()) { setMsg("Indicá el concepto (ej. Depósito banco Ficohsa)"); return; }
+    setEnviando(true); setMsg("");
+    try {
+      await solicitarSalida({ monto: m, concepto });
+      setMsg("✓ Salida solicitada. Esperando autorización del administrador.");
+      setMonto(""); setConcepto(""); setAbierto(false);
+      onRegistrada();
+      setTimeout(() => setMsg(""), 5000);
+    } catch (e) { setMsg((e as Error).message); }
+    finally { setEnviando(false); }
+  }
+
+  return (
+    <div className="dash-card">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 style={{ margin: 0 }}>Salida de caja</h3>
+        {!abierto && (
+          <button className="mini" onClick={() => setAbierto(true)}>
+            Solicitar depósito / salida
+          </button>
+        )}
+      </div>
+      <p className="muted small" style={{ marginTop: 6 }}>
+        Para registrar cuando se saca efectivo de la caja (depósito al banco, etc.). Requiere autorización del admin.
+      </p>
+      {abierto && (
+        <div className="form-pago" style={{ marginTop: 12 }}>
+          <div className="form-field">
+            <label>Monto a retirar (L)</label>
+            <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0.00" />
+          </div>
+          <div className="form-field">
+            <label>Concepto</label>
+            <input value={concepto} onChange={e => setConcepto(e.target.value)}
+              placeholder="Ej. Depósito banco Ficohsa, cheque #12345…" />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="ghost" onClick={() => { setAbierto(false); setMsg(""); }}>Cancelar</button>
+            <button className="cuota-btn-pagar full" onClick={solicitar} disabled={enviando}>
+              {enviando ? "Enviando…" : "Solicitar salida"}
             </button>
           </div>
         </div>
