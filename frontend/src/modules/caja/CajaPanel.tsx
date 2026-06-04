@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  estadoCaja, abrirCaja, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
+  estadoCaja, abrirCaja, buscarCuentaCaja, registrarPagoCaja, cerrarCaja, reportarDescuadre,
   type SesionCajaDTO, type CuentaCajaDTO,
 } from "../../api/client";
 
@@ -54,6 +54,8 @@ export function CajaPanel() {
       </div>
 
       <RegistrarPago onRegistrado={recargar} />
+
+      <ReportarDescuadre />
 
       {/* Pagos de la sesión */}
       <div className="dash-card">
@@ -271,6 +273,60 @@ function CerrarCaja({ sesion, onCancelar, onCerrada }: {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ReportarDescuadre() {
+  const [abierto, setAbierto] = useState(false);
+  const [tipo, setTipo] = useState("faltante");
+  const [monto, setMonto] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [msg, setMsg] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  async function reportar() {
+    const m = parseFloat(monto);
+    if (isNaN(m) || m <= 0) { setMsg("Ingresá un monto válido"); return; }
+    setEnviando(true); setMsg("");
+    try {
+      await reportarDescuadre({ tipo, monto: m, motivo });
+      setMsg("✓ Descuadre reportado. Queda pendiente de aprobación por administración.");
+      setMonto(""); setMotivo(""); setAbierto(false);
+      setTimeout(() => setMsg(""), 5000);
+    } catch (e) { setMsg((e as Error).message); }
+    finally { setEnviando(false); }
+  }
+
+  return (
+    <div className="dash-card">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 style={{ margin: 0 }}>Reportar descuadre</h3>
+        {!abierto && <button className="mini" onClick={() => setAbierto(true)}>Reportar sobrante / faltante</button>}
+      </div>
+      {abierto && (
+        <div className="form-pago" style={{ marginTop: 12 }}>
+          <div className="caja-cobro-metodo">
+            <label className={tipo === "faltante" ? "on" : ""}>
+              <input type="radio" checked={tipo === "faltante"} onChange={() => setTipo("faltante")} /> Faltante
+            </label>
+            <label className={tipo === "sobrante" ? "on" : ""}>
+              <input type="radio" checked={tipo === "sobrante"} onChange={() => setTipo("sobrante")} /> Sobrante
+            </label>
+          </div>
+          <div className="form-field"><label>Monto (L)</label>
+            <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0.00" /></div>
+          <div className="form-field"><label>Motivo</label>
+            <input value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej. faltó vuelto, error de conteo…" /></div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="ghost" onClick={() => setAbierto(false)}>Cancelar</button>
+            <button className="cuota-btn-pagar full" onClick={reportar} disabled={enviando}>
+              {enviando ? "Enviando…" : "Reportar"}
+            </button>
+          </div>
+        </div>
+      )}
+      {msg && <div className={msg.startsWith("✓") ? "cuota-ok" : "error"} style={{ marginTop: 10 }}>{msg}</div>}
     </div>
   );
 }

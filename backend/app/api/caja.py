@@ -9,8 +9,9 @@ import datetime as dt
 from flask import Blueprint, request, jsonify
 
 from app.extensions import db
-from app.models.caja import SesionCaja, ConfigCaja
+from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja
 from app.models.cuenta import Cuenta, Cuota, Pago
+from app.models.usuario import Usuario
 from app.auth.security import roles_required
 
 caja_bp = Blueprint("caja", __name__)
@@ -199,16 +200,24 @@ def resumen_caja(usuario_actual):
             cajas_abiertas += 1
             efectivo_en_cajas_abiertas += float(s.monto_inicial) + r["efectivo"]
 
-    # Saldo actual del sistema = base + todo el efectivo cobrado históricamente
-    saldo_actual = saldo_inicial + total_efectivo
+    # Saldo actual del sistema = base + efectivo cobrado + ajustes aprobados (descuadres)
+    ajustes_aprobados = AjusteCaja.query.filter_by(estado="aprobado").all()
+    total_ajustes = sum(float(a.monto) for a in ajustes_aprobados if a.tipo in ("sobrante", "faltante"))
+    saldo_actual = saldo_inicial + total_efectivo + total_ajustes
+
+    descuadres_pendientes = AjusteCaja.query.filter(
+        AjusteCaja.tipo.in_(["sobrante", "faltante"]), AjusteCaja.estado == "pendiente"
+    ).count()
 
     return jsonify({"data": {
         "saldo_inicial": saldo_inicial,
         "saldo_actual": round(saldo_actual, 2),
         "total_efectivo_historico": round(total_efectivo, 2),
         "total_pos_historico": round(total_pos, 2),
+        "total_ajustes": round(total_ajustes, 2),
         "efectivo_en_cajas_abiertas": round(efectivo_en_cajas_abiertas, 2),
         "cajas_abiertas": cajas_abiertas,
+        "descuadres_pendientes": descuadres_pendientes,
         "actualizado_en": cfg.actualizado_en.isoformat() if cfg.actualizado_en else None,
     }})
 
@@ -220,3 +229,130 @@ def detalle_sesion(usuario_actual, uuid_sesion):
     if not s:
         return jsonify({"error": {"code": "no_encontrada", "message": "Sesión no encontrada"}}), 404
     return jsonify({"data": s.to_dict(con_pagos=True)})
+
+
+# =====================================================================
+# AUTORIZACIÓN CON CLAVE DE DESARROLLADOR
+# =====================================================================
+def _validar_clave_dev(clave):
+    """
+    Verifica que la clave corresponda a la contraseña de un usuario
+    con rol 'desarrollador' activo. Devuelve el usuario dev o None.
+    """
+    if not clave:
+        return None
+    devs = Usuario.query.filter_by(rol="desarrollador", activo=True).all()
+    for dev in devs:
+        if dev.check_password(clave):
+            return dev
+    return None
+
+
+# =====================================================================
+# PUNTO 3 — SALDO INICIAL (protegido con clave de desarrollador)
+# =====================================================================
+@caja_bp.post("/saldo-inicial")
+@roles_required("admin", "super_admin", "desarrollador")
+def modificar_saldo_inicial(usuario_actual):
+    data = request.get_json(silent=True) or {}
+    clave = data.get("clave_dev")
+    try:
+        nuevo = float(data.get("saldo_inicial"))
+    except (TypeError, ValueError):
+        return jsonify({"error": {"code": "monto_invalido", "message": "Saldo inicial inválido"}}), 400
+
+    dev = _validar_clave_dev(clave)
+    if not dev:
+        return jsonify({"error": {"code": "clave_invalida",
+                                  "message": "Clave de desarrollador incorrecta"}}), 403
+
+    cfg = ConfigCaja.get()
+    anterior = float(cfg.saldo_inicial)
+    cfg.saldo_inicial = nuevo
+    cfg.actualizado_por = usuario_actual.id
+
+    # Registrar el cambio como ajuste (trazabilidad)
+    ajuste = AjusteCaja(
+        tipo="saldo_inicial", monto=(nuevo - anterior),
+        motivo=f"Saldo inicial cambiado de L{anterior:.2f} a L{nuevo:.2f}",
+        estado="aprobado", reportado_por=usuario_actual.id, aprobado_por=dev.id,
+        resuelto_en=dt.datetime.now(dt.timezone.utc),
+    )
+    db.session.add(ajuste)
+    db.session.commit()
+    return jsonify({"data": {"saldo_inicial": nuevo}})
+
+
+# =====================================================================
+# PUNTO 4 — DESCUADRES (cajero reporta, admin/dev aprueba)
+# =====================================================================
+@caja_bp.post("/descuadre")
+@roles_required("cajero", "admin", "super_admin", "desarrollador")
+def reportar_descuadre(usuario_actual):
+    """El cajero reporta un sobrante o faltante. Queda pendiente de aprobación."""
+    data = request.get_json(silent=True) or {}
+    tipo = data.get("tipo")  # sobrante | faltante
+    motivo = (data.get("motivo") or "")[:255]
+    try:
+        monto = abs(float(data.get("monto")))
+    except (TypeError, ValueError):
+        return jsonify({"error": {"code": "monto_invalido", "message": "Monto inválido"}}), 400
+
+    if tipo not in ("sobrante", "faltante"):
+        return jsonify({"error": {"code": "tipo_invalido", "message": "Tipo debe ser sobrante o faltante"}}), 400
+
+    # Sobrante suma al saldo (+), faltante resta (-)
+    monto_con_signo = monto if tipo == "sobrante" else -monto
+    sesion = _sesion_abierta_de(usuario_actual)
+
+    ajuste = AjusteCaja(
+        tipo=tipo, monto=monto_con_signo, motivo=motivo,
+        estado="pendiente", reportado_por=usuario_actual.id,
+        sesion_caja_id=sesion.id if sesion else None,
+    )
+    db.session.add(ajuste)
+    db.session.commit()
+    return jsonify({"data": ajuste.to_dict()}), 201
+
+
+@caja_bp.get("/descuadres")
+@roles_required("admin", "super_admin", "desarrollador")
+def listar_descuadres(usuario_actual):
+    estado = request.args.get("estado")  # filtro opcional
+    q = AjusteCaja.query.filter(AjusteCaja.tipo.in_(["sobrante", "faltante"]))
+    if estado:
+        q = q.filter_by(estado=estado)
+    ajustes = q.order_by(AjusteCaja.created_at.desc()).limit(100).all()
+    return jsonify({"data": [a.to_dict() for a in ajustes]})
+
+
+@caja_bp.post("/descuadres/<uuid_ajuste>/resolver")
+@roles_required("admin", "super_admin", "desarrollador")
+def resolver_descuadre(usuario_actual, uuid_ajuste):
+    """Admin/dev aprueba o rechaza un descuadre. Aprobar requiere clave de dev."""
+    data = request.get_json(silent=True) or {}
+    accion = data.get("accion")  # aprobar | rechazar
+    clave = data.get("clave_dev")
+
+    ajuste = AjusteCaja.query.filter_by(uuid_publico=uuid_ajuste).first()
+    if not ajuste:
+        return jsonify({"error": {"code": "no_encontrado", "message": "Descuadre no encontrado"}}), 404
+    if ajuste.estado != "pendiente":
+        return jsonify({"error": {"code": "ya_resuelto", "message": "Ese descuadre ya fue resuelto"}}), 400
+
+    if accion == "aprobar":
+        dev = _validar_clave_dev(clave)
+        if not dev:
+            return jsonify({"error": {"code": "clave_invalida",
+                                      "message": "Clave de desarrollador incorrecta"}}), 403
+        ajuste.estado = "aprobado"
+        ajuste.aprobado_por = dev.id
+    elif accion == "rechazar":
+        ajuste.estado = "rechazado"
+        ajuste.aprobado_por = usuario_actual.id
+    else:
+        return jsonify({"error": {"code": "accion_invalida", "message": "Acción inválida"}}), 400
+
+    ajuste.resuelto_en = dt.datetime.now(dt.timezone.utc)
+    db.session.commit()
+    return jsonify({"data": ajuste.to_dict()})

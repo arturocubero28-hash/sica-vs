@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
-import { listarSesionesCaja, detalleSesionCaja, resumenCaja, type SesionCajaDTO, type ResumenCajaDTO } from "../../api/client";
+import {
+  listarSesionesCaja, detalleSesionCaja, resumenCaja,
+  modificarSaldoInicial, listarDescuadres, resolverDescuadre,
+  type SesionCajaDTO, type ResumenCajaDTO, type DescuadreDTO,
+} from "../../api/client";
 
 function L(n: number) {
   return "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -8,14 +12,17 @@ function L(n: number) {
 export function SupervisionCaja() {
   const [sesiones, setSesiones] = useState<SesionCajaDTO[]>([]);
   const [resumen, setResumen] = useState<ResumenCajaDTO | null>(null);
+  const [descuadres, setDescuadres] = useState<DescuadreDTO[]>([]);
   const [cargando, setCargando] = useState(true);
   const [detalle, setDetalle] = useState<SesionCajaDTO | null>(null);
+  const [editarSaldo, setEditarSaldo] = useState(false);
 
-  useEffect(() => {
-    Promise.all([listarSesionesCaja(), resumenCaja()])
-      .then(([s, r]) => { setSesiones(s); setResumen(r); })
+  function recargar() {
+    Promise.all([listarSesionesCaja(), resumenCaja(), listarDescuadres()])
+      .then(([s, r, d]) => { setSesiones(s); setResumen(r); setDescuadres(d); })
       .catch(() => {}).finally(() => setCargando(false));
-  }, []);
+  }
+  useEffect(() => { recargar(); }, []);
 
   if (cargando) return <p className="muted">Cargando…</p>;
 
@@ -23,6 +30,7 @@ export function SupervisionCaja() {
   const totalRecaudadoHoy = sesiones
     .filter(s => new Date(s.abierta_en).toDateString() === new Date().toDateString())
     .reduce((acc, s) => acc + s.total_efectivo + s.total_pos, 0);
+  const pendientes = descuadres.filter(d => d.estado === "pendiente");
 
   return (
     <div className="supervision">
@@ -41,7 +49,12 @@ export function SupervisionCaja() {
             <span className="saldo-caja-monto">{L(resumen.saldo_actual)}</span>
             <span className="saldo-caja-detalle muted small">
               Saldo inicial {L(resumen.saldo_inicial)} + efectivo recaudado {L(resumen.total_efectivo_historico)}
+              {typeof resumen.total_ajustes === "number" && resumen.total_ajustes !== 0 &&
+                ` + ajustes ${L(resumen.total_ajustes)}`}
             </span>
+            <button className="saldo-editar-btn" onClick={() => setEditarSaldo(true)}>
+              Modificar saldo inicial
+            </button>
           </div>
           <div className="saldo-caja-side">
             <div className="saldo-side-item">
@@ -70,6 +83,43 @@ export function SupervisionCaja() {
           <div className="metric-valor">{sesiones.length}</div>
         </div>
       </div>
+
+      {/* Descuadres pendientes de aprobación */}
+      {pendientes.length > 0 && (
+        <div className="dash-card descuadres-card">
+          <h3>Descuadres pendientes de aprobación ({pendientes.length})</h3>
+          <p className="muted small">Reportados por cajeros. Aprobar requiere la clave del desarrollador y afecta el saldo de caja.</p>
+          <div className="descuadre-lista">
+            {pendientes.map(d => (
+              <DescuadreItem key={d.id} descuadre={d} onResuelto={recargar} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Historial de descuadres resueltos */}
+      {descuadres.some(d => d.estado !== "pendiente") && (
+        <div className="dash-card">
+          <h3>Historial de descuadres</h3>
+          <div className="scroll-x">
+            <table className="data">
+              <thead><tr><th>Tipo</th><th>Monto</th><th>Motivo</th><th>Reportó</th><th>Estado</th><th>Resuelto</th></tr></thead>
+              <tbody>
+                {descuadres.filter(d => d.estado !== "pendiente").map(d => (
+                  <tr key={d.id}>
+                    <td><span className={`pill ${d.tipo === "sobrante" ? "green" : "red"}`}>{d.tipo}</span></td>
+                    <td>{L(Math.abs(d.monto))}</td>
+                    <td className="small">{d.motivo || "—"}</td>
+                    <td className="small">{d.reportado_por}</td>
+                    <td><span className="pill">{d.estado}</span></td>
+                    <td className="small">{d.resuelto_en ? new Date(d.resuelto_en).toLocaleDateString("es-HN") : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="dash-card">
         <h3>Historial de sesiones</h3>
@@ -143,6 +193,101 @@ export function SupervisionCaja() {
           </div>
         </div>
       )}
+
+      {editarSaldo && resumen && (
+        <ModalSaldoInicial saldoActual={resumen.saldo_inicial}
+          onCerrar={() => setEditarSaldo(false)}
+          onGuardado={() => { setEditarSaldo(false); recargar(); }} />
+      )}
+    </div>
+  );
+}
+
+function DescuadreItem({ descuadre, onResuelto }: { descuadre: DescuadreDTO; onResuelto: () => void }) {
+  const [aprobando, setAprobando] = useState(false);
+  const [clave, setClave] = useState("");
+  const [error, setError] = useState("");
+  const [procesando, setProcesando] = useState(false);
+
+  async function aprobar() {
+    if (!clave) { setError("Ingresá la clave del desarrollador"); return; }
+    setProcesando(true); setError("");
+    try { await resolverDescuadre(descuadre.id, "aprobar", clave); onResuelto(); }
+    catch (e) { setError((e as Error).message); setProcesando(false); }
+  }
+  async function rechazar() {
+    setProcesando(true);
+    try { await resolverDescuadre(descuadre.id, "rechazar"); onResuelto(); }
+    catch (e) { setError((e as Error).message); setProcesando(false); }
+  }
+
+  return (
+    <div className="descuadre-item">
+      <div className="descuadre-info">
+        <span className={`pill ${descuadre.tipo === "sobrante" ? "green" : "red"}`}>{descuadre.tipo}</span>
+        <b>{"L " + Math.abs(descuadre.monto).toLocaleString("es-HN", { minimumFractionDigits: 2 })}</b>
+        <span className="muted small">· {descuadre.motivo || "Sin motivo"} · {descuadre.reportado_por}</span>
+      </div>
+      {!aprobando ? (
+        <div className="descuadre-acciones">
+          <button className="mini btn-reactivar" onClick={() => setAprobando(true)}>Aprobar</button>
+          <button className="mini btn-baja" onClick={rechazar} disabled={procesando}>Rechazar</button>
+        </div>
+      ) : (
+        <div className="descuadre-confirmar">
+          <input type="password" placeholder="Clave del desarrollador" value={clave}
+            onChange={e => setClave(e.target.value)} onKeyDown={e => e.key === "Enter" && aprobar()} />
+          <button className="mini btn-reactivar" onClick={aprobar} disabled={procesando}>Confirmar</button>
+          <button className="mini" onClick={() => { setAprobando(false); setClave(""); setError(""); }}>Cancelar</button>
+        </div>
+      )}
+      {error && <div className="error" style={{ marginTop: 6 }}>{error}</div>}
+    </div>
+  );
+}
+
+function ModalSaldoInicial({ saldoActual, onCerrar, onGuardado }: {
+  saldoActual: number; onCerrar: () => void; onGuardado: () => void;
+}) {
+  const [monto, setMonto] = useState(String(saldoActual));
+  const [clave, setClave] = useState("");
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  async function guardar() {
+    const m = parseFloat(monto);
+    if (isNaN(m) || m < 0) { setError("Monto inválido"); return; }
+    if (!clave) { setError("Ingresá la clave del desarrollador"); return; }
+    setGuardando(true); setError("");
+    try { await modificarSaldoInicial(m, clave); onGuardado(); }
+    catch (e) { setError((e as Error).message); setGuardando(false); }
+  }
+
+  return (
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>Modificar saldo inicial</h3>
+          <button className="ghost mini" onClick={onCerrar}>✕</button>
+        </div>
+        <p className="muted small">
+          El saldo inicial es el monto base de caja del sistema. Modificarlo requiere
+          la clave del desarrollador y queda registrado.
+        </p>
+        <div className="form-field">
+          <label>Nuevo saldo inicial (L)</label>
+          <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0.00" />
+        </div>
+        <div className="form-field">
+          <label>Clave del desarrollador</label>
+          <input type="password" value={clave} onChange={e => setClave(e.target.value)}
+            placeholder="••••••••" onKeyDown={e => e.key === "Enter" && guardar()} />
+        </div>
+        {error && <div className="error">{error}</div>}
+        <button className="cuota-btn-pagar full" onClick={guardar} disabled={guardando}>
+          {guardando ? "Guardando…" : "Confirmar cambio"}
+        </button>
+      </div>
     </div>
   );
 }

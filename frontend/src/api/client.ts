@@ -460,7 +460,9 @@ export const detalleSesionCaja = (uuid: string) => request<SesionCajaDTO>(`/caja
 export interface ResumenCajaDTO {
   saldo_inicial: number; saldo_actual: number;
   total_efectivo_historico: number; total_pos_historico: number;
+  total_ajustes?: number;
   efectivo_en_cajas_abiertas: number; cajas_abiertas: number;
+  descuadres_pendientes?: number;
   actualizado_en?: string;
 }
 export const resumenCaja = () => request<ResumenCajaDTO>("/caja/resumen");
@@ -479,3 +481,22 @@ export const devMetricas = () => request<DevMetricasDTO>("/dev/metricas");
 export const devLogs = () => request<DevLogDTO[]>("/dev/logs");
 export const crearDesarrollador = (body: { nombre: string; apellido: string; email: string }) =>
   request<UsuarioAdminDTO>("/usuarios/desarrolladores", { method: "POST", body: JSON.stringify(body) });
+
+// ── SALDO INICIAL Y DESCUADRES ────────────────────────────────────────────────
+export const modificarSaldoInicial = (saldoInicial: number, claveDev: string) =>
+  request<{ saldo_inicial: number }>("/caja/saldo-inicial", {
+    method: "POST", body: JSON.stringify({ saldo_inicial: saldoInicial, clave_dev: claveDev }),
+  });
+
+export interface DescuadreDTO {
+  id: string; tipo: string; monto: number; motivo?: string; estado: string;
+  reportado_por: string; aprobado_por?: string; created_at: string; resuelto_en?: string;
+}
+export const reportarDescuadre = (body: { tipo: string; monto: number; motivo?: string }) =>
+  request<DescuadreDTO>("/caja/descuadre", { method: "POST", body: JSON.stringify(body) });
+export const listarDescuadres = (estado?: string) =>
+  request<DescuadreDTO[]>(`/caja/descuadres${estado ? "?estado=" + estado : ""}`);
+export const resolverDescuadre = (uuid: string, accion: string, claveDev?: string) =>
+  request<DescuadreDTO>(`/caja/descuadres/${uuid}/resolver`, {
+    method: "POST", body: JSON.stringify({ accion, clave_dev: claveDev }),
+  });

@@ -122,3 +122,42 @@ class ConfigCaja(db.Model):
             "saldo_inicial": float(self.saldo_inicial),
             "actualizado_en": self.actualizado_en.isoformat() if self.actualizado_en else None,
         }
+
+
+class AjusteCaja(db.Model):
+    """
+    Ajustes al saldo de caja: descuadres (sobrante/faltante) reportados por
+    el cajero y aprobados por admin/desarrollador, y cambios de saldo inicial.
+    Cada ajuste afecta el saldo de caja del sistema una vez aprobado.
+    """
+    __tablename__ = "ajustes_caja"
+
+    id            = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico  = _uuid_col()
+    tipo          = db.Column(db.String(20), nullable=False)   # sobrante | faltante | saldo_inicial
+    monto         = db.Column(db.Numeric(12, 2), nullable=False)  # positivo suma, negativo resta
+    motivo        = db.Column(db.String(255))
+    estado        = db.Column(db.String(15), nullable=False, default="pendiente")  # pendiente | aprobado | rechazado
+
+    sesion_caja_id = db.Column(db.BigInteger, db.ForeignKey("sesiones_caja.id"))
+    reportado_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
+    aprobado_por  = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
+
+    created_at    = db.Column(db.DateTime(timezone=True), default=_now)
+    resuelto_en   = db.Column(db.DateTime(timezone=True))
+
+    reportador = db.relationship("Usuario", foreign_keys=[reportado_por])
+    aprobador  = db.relationship("Usuario", foreign_keys=[aprobado_por])
+
+    def to_dict(self):
+        return {
+            "id":           str(self.uuid_publico),
+            "tipo":         self.tipo,
+            "monto":        float(self.monto),
+            "motivo":       self.motivo,
+            "estado":       self.estado,
+            "reportado_por": f"{self.reportador.nombre} {self.reportador.apellido}" if self.reportador else "—",
+            "aprobado_por": f"{self.aprobador.nombre} {self.aprobador.apellido}" if self.aprobador else None,
+            "created_at":   self.created_at.isoformat() if self.created_at else None,
+            "resuelto_en":  self.resuelto_en.isoformat() if self.resuelto_en else None,
+        }
