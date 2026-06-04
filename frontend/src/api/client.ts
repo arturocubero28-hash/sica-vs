@@ -500,3 +500,23 @@ export const resolverDescuadre = (uuid: string, accion: string, claveDev?: strin
   request<DescuadreDTO>(`/caja/descuadres/${uuid}/resolver`, {
     method: "POST", body: JSON.stringify({ accion, clave_dev: claveDev }),
   });
+
+// ── HISTORIAL DE PAGOS (auditoría admin) ──────────────────────────────────────
+export interface PagoHistorialItem {
+  id: string; fecha: string; monto: number; metodo: string; referencia?: string;
+  identificador: string; titular: string; cobrado_por: string;
+}
+export interface HistorialPagosDTO {
+  pagos: PagoHistorialItem[]; pagina: number; total_paginas: number; total: number;
+}
+export const historialPagos = (params: {
+  desde?: string; hasta?: string; metodo?: string; buscar?: string; pagina?: number;
+}) => {
+  const q = new URLSearchParams();
+  if (params.desde) q.set("desde", params.desde);
+  if (params.hasta) q.set("hasta", params.hasta);
+  if (params.metodo) q.set("metodo", params.metodo);
+  if (params.buscar) q.set("buscar", params.buscar);
+  if (params.pagina) q.set("pagina", String(params.pagina));
+  return request<HistorialPagosDTO>(`/cuotas/historial-pagos?${q.toString()}`);
+};

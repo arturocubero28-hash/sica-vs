@@ -238,3 +238,77 @@ def generar_cuotas_manual(usuario_actual):
 
     db.session.commit()
     return jsonify({"data": {"generadas": creadas, "total_cuentas": len(cuentas)}})
+
+
+@cuotas_bp.get("/historial-pagos")
+@roles_required("admin", "super_admin", "desarrollador")
+def historial_pagos(usuario_actual):
+    """
+    Historial de pagos para auditoría (admin): cuándo se pagó, cuánto,
+    método, quién cobró/registró, y a qué casa corresponde.
+    Filtros: rango de fechas, método, búsqueda por casa o titular.
+    """
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    metodo = request.args.get("metodo")
+    buscar = (request.args.get("buscar") or "").strip().lower()
+    pagina = max(1, int(request.args.get("pagina", 1)))
+    por_pagina = 30
+
+    q = Pago.query.filter(Pago.estado == "aprobado")
+
+    if desde:
+        try:
+            q = q.filter(Pago.created_at >= dt.datetime.fromisoformat(desde))
+        except ValueError:
+            pass
+    if hasta:
+        try:
+            fin = dt.datetime.fromisoformat(hasta) + dt.timedelta(days=1)
+            q = q.filter(Pago.created_at < fin)
+        except ValueError:
+            pass
+    if metodo:
+        q = q.filter(Pago.metodo == metodo)
+
+    q = q.order_by(Pago.created_at.desc())
+    todos = q.all()
+
+    # Filtro por casa/titular (en memoria, porque cruza relaciones)
+    filtrados = []
+    for p in todos:
+        cuenta = p.cuenta
+        identificador = ""
+        titular_nombre = ""
+        if cuenta:
+            identificador = cuenta.unidad.identificador if cuenta.unidad else ""
+            t = cuenta.titular()
+            if t and t.usuario:
+                titular_nombre = f"{t.usuario.nombre} {t.usuario.apellido}"
+        if buscar:
+            blob = f"{identificador} {titular_nombre}".lower()
+            if buscar not in blob:
+                continue
+        cobrador = p.uploader
+        filtrados.append({
+            "id": str(p.uuid_publico),
+            "fecha": p.created_at.isoformat() if p.created_at else None,
+            "monto": float(p.monto),
+            "metodo": p.metodo,
+            "referencia": p.referencia,
+            "identificador": identificador or "—",
+            "titular": titular_nombre or "—",
+            "cobrado_por": f"{cobrador.nombre} {cobrador.apellido}" if cobrador else "—",
+        })
+
+    total = len(filtrados)
+    total_paginas = max(1, (total + por_pagina - 1) // por_pagina)
+    ini = (pagina - 1) * por_pagina
+    pagina_items = filtrados[ini:ini + por_pagina]
+
+    return jsonify({"data": {
+        "pagos": pagina_items,
+        "pagina": pagina,
+        "total_paginas": total_paginas,
+        "total": total,
+    }})
