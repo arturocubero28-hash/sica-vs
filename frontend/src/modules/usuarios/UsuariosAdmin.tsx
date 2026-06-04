@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
-  listarUsuarios, crearCajero, crearGuardia, crearDesarrollador,
-  resetPasswordUsuario, editarUsuario, getMe,
+  listarUsuarios, crearCajero, crearGuardia,
+  resetPasswordUsuario, editarUsuario,
   type UsuarioAdminDTO,
 } from "../../api/client";
 
@@ -15,15 +15,14 @@ export function UsuariosAdmin() {
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [filtroRol, setFiltroRol] = useState("");
-  const [creando, setCreando] = useState<"cajero" | "guardia" | "desarrollador" | null>(null);
+  const [creando, setCreando] = useState<"cajero" | "guardia" | null>(null);
   const [credencial, setCredencial] = useState<{ email: string; pass: string } | null>(null);
-  const [miRol, setMiRol] = useState<string>("");
 
   function recargar() {
     setCargando(true);
     listarUsuarios().then(setUsuarios).catch(() => {}).finally(() => setCargando(false));
   }
-  useEffect(() => { recargar(); getMe().then(u => setMiRol(u.rol)).catch(() => {}); }, []);
+  useEffect(() => { recargar(); }, []);
 
   async function reset(u: UsuarioAdminDTO) {
     if (!confirm(`¿Resetear la contraseña de ${u.nombre} ${u.apellido} a la genérica?`)) return;
@@ -57,11 +56,6 @@ export function UsuariosAdmin() {
           <button className="cuota-btn-pagar" style={{ maxWidth: 150 }} onClick={() => setCreando("cajero")}>
             + Crear cajero
           </button>
-          {(miRol === "super_admin" || miRol === "desarrollador") && (
-            <button className="cuota-btn-pagar" style={{ maxWidth: 170, background: "#0e2535" }} onClick={() => setCreando("desarrollador")}>
-              + Crear desarrollador
-            </button>
-          )}
         </div>
       </div>
 
@@ -128,7 +122,7 @@ export function UsuariosAdmin() {
 }
 
 function FormUsuario({ tipo, onCerrar, onCreado }: {
-  tipo: "cajero" | "guardia" | "desarrollador";
+  tipo: "cajero" | "guardia";
   onCerrar: () => void; onCreado: (cred: { email: string; pass: string }) => void;
 }) {
   const [nombre, setNombre] = useState("");
@@ -141,15 +135,15 @@ function FormUsuario({ tipo, onCerrar, onCreado }: {
     if (!nombre.trim() || !apellido.trim() || !email.trim()) { setError("Todos los campos son obligatorios"); return; }
     setError(""); setGuardando(true);
     try {
-      const fn = tipo === "cajero" ? crearCajero : tipo === "guardia" ? crearGuardia : crearDesarrollador;
+      const fn = tipo === "cajero" ? crearCajero : crearGuardia;
       const u = await fn({ nombre, apellido, email });
       onCreado({ email: u.email, pass: u.password_generica || "" });
     } catch (e) { setError((e as Error).message); }
     finally { setGuardando(false); }
   }
 
-  const titulo = tipo === "cajero" ? "Nuevo cajero" : tipo === "guardia" ? "Nuevo guardia" : "Nuevo desarrollador";
-  const ph = tipo === "cajero" ? "cajero@villasdelsol.hn" : tipo === "guardia" ? "guardia@villasdelsol.hn" : "dev@villasdelsol.hn";
+  const titulo = tipo === "cajero" ? "Nuevo cajero" : "Nuevo guardia";
+  const ph = tipo === "cajero" ? "cajero@villasdelsol.hn" : "guardia@villasdelsol.hn";
 
   return (
     <div className="modal" onClick={onCerrar}>

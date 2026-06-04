@@ -1,4 +1,10 @@
 """
+SICA-VS — Sistema Integral de Control de Accesos
+Copyright (c) 2026 Arturo Cubero. Todos los derechos reservados.
+
+Software propietario. Prohibida su copia, distribución o uso comercial
+sin autorización escrita del Autor. Ver archivo LICENSE.
+
 Application Factory de SICA-VS.
 
 Patrón a seguir por todo el equipo:
