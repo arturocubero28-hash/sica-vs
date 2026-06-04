@@ -7,7 +7,7 @@ Módulo de Dashboard administrativo — estadísticas reales desde la base de da
 import datetime as dt
 import os
 
-from flask import Blueprint, jsonify, send_file, current_app
+from flask import Blueprint, jsonify, send_file, current_app, request
 from sqlalchemy import func
 
 from app.extensions import db
