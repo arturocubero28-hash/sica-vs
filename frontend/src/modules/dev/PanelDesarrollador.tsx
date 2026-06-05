@@ -56,7 +56,7 @@ export function PanelDesarrollador() {
           <span className="muted">Salud del sistema y auditoría forense</span>
         </div>
         {m && (
-          <div className={`dev-estado ${m.db_conectada && m.redis?.conectado ? "ok" : "fail"}`}>
+          <div className={`dev-estado ${m.db_conectada ? "ok" : "fail"}`}>
             <span className="dev-estado-dot" />
             {m.estado_general === "operativo" ? "Sistema operativo" : "Sistema degradado"}
           </div>
@@ -104,7 +104,12 @@ export function PanelDesarrollador() {
             </div>
 
             {/* Disco y RAM */}
-            {m.sistema?.disco && (
+            {m.sistema?.error ? (
+              <div className="dash-card">
+                <h3>Recursos del servidor</h3>
+                <p className="muted small">⚠️ {m.sistema.error}</p>
+              </div>
+            ) : m.sistema?.disco && (
               <div className="dash-card">
                 <h3>Recursos del servidor</h3>
                 <div className="dev-recurso">
@@ -115,6 +120,7 @@ export function PanelDesarrollador() {
                   <Barra pct={m.sistema.disco.porcentaje} color="#2ecc71" />
                   <span className="muted small">Libre: {m.sistema.disco.libre_gb} GB</span>
                 </div>
+                {m.sistema.ram && (
                 <div className="dev-recurso" style={{ marginTop: 14 }}>
                   <div className="dev-recurso-header">
                     <span>RAM</span>
@@ -123,6 +129,7 @@ export function PanelDesarrollador() {
                   <Barra pct={m.sistema.ram.porcentaje} color="#3498db" />
                   <span className="muted small">Disponible: {m.sistema.ram.libre_gb} GB</span>
                 </div>
+                )}
               </div>
             )}
 
@@ -184,16 +191,24 @@ export function PanelDesarrollador() {
                 <div className="scroll-x">
                   <table className="data">
                     <thead>
-                      <tr><th>Fecha / Hora</th><th>Usuario</th><th>Rol</th><th>Método</th><th>Endpoint</th><th>Status</th><th>IP</th></tr>
+                      <tr><th>Fecha / Hora</th><th>Usuario</th><th>Acción</th><th>Status</th><th>IP</th></tr>
                     </thead>
                     <tbody>
                       {logs.map((l: any, i: number) => (
                         <tr key={i} className={l.status_code >= 500 ? "fila-error" : l.status_code >= 400 ? "fila-warn" : ""}>
                           <td className="small">{l.created_at ? new Date(l.created_at).toLocaleString("es-HN") : "—"}</td>
-                          <td className="small">{l.email}</td>
-                          <td><span className="pill">{l.rol}</span></td>
-                          <td><span className="dev-method">{l.metodo}</span></td>
-                          <td className="small" style={{ fontFamily: "monospace", fontSize: 11 }}>{l.endpoint}</td>
+                          <td>
+                            <div style={{ lineHeight: 1.3 }}>
+                              <span style={{ fontSize: 13, fontWeight: 600 }}>{l.email}</span>
+                              <br/><span className="pill" style={{ fontSize: 10 }}>{l.rol}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ lineHeight: 1.4 }}>
+                              <span style={{ fontSize: 13 }}>{l.descripcion}</span>
+                              <br/><span style={{ fontFamily: "monospace", fontSize: 10, color: "#6b7280" }}>{l.metodo} {l.endpoint}</span>
+                            </div>
+                          </td>
                           <td><span className={`pill ${l.status_code < 300 ? "green" : l.status_code < 500 ? "" : "red"}`}>{l.status_code}</span></td>
                           <td className="small">{l.ip}</td>
                         </tr>

@@ -190,6 +190,7 @@ def resumen_caja(usuario_actual):
     total_efectivo = 0.0
     total_pos = 0.0
     total_salidas = 0.0
+    total_ingresos = 0.0
     efectivo_en_cajas_abiertas = 0.0
     cajas_abiertas = 0
 
@@ -198,14 +199,15 @@ def resumen_caja(usuario_actual):
         total_efectivo += r["efectivo"]
         total_pos += r["pos"]
         total_salidas += r["salidas"]
+        total_ingresos += r["ingresos"]
         if s.estado == "abierta":
             cajas_abiertas += 1
-            efectivo_en_cajas_abiertas += float(s.monto_inicial) + r["efectivo"] - r["salidas"]
+            efectivo_en_cajas_abiertas += float(s.monto_inicial) + r["efectivo"] - r["salidas"] + r["ingresos"]
 
-    # Saldo actual = base + efectivo - salidas + ajustes aprobados
+    # Saldo actual = base + efectivo - salidas + ingresos + ajustes aprobados
     ajustes_aprobados = AjusteCaja.query.filter_by(estado="aprobado").all()
     total_ajustes = sum(float(a.monto) for a in ajustes_aprobados if a.tipo in ("sobrante", "faltante"))
-    saldo_actual = saldo_inicial + total_efectivo - total_salidas + total_ajustes
+    saldo_actual = saldo_inicial + total_efectivo - total_salidas + total_ingresos + total_ajustes
 
     descuadres_pendientes = AjusteCaja.query.filter(
         AjusteCaja.tipo.in_(["sobrante", "faltante"]), AjusteCaja.estado == "pendiente"
@@ -217,6 +219,7 @@ def resumen_caja(usuario_actual):
         "total_efectivo_historico": round(total_efectivo, 2),
         "total_pos_historico": round(total_pos, 2),
         "total_salidas_historico": round(total_salidas, 2),
+        "total_ingresos_historico": round(total_ingresos, 2),
         "total_ajustes": round(total_ajustes, 2),
         "efectivo_en_cajas_abiertas": round(efectivo_en_cajas_abiertas, 2),
         "cajas_abiertas": cajas_abiertas,
@@ -443,3 +446,38 @@ def salidas_pendientes(usuario_actual):
     salidas = SalidaCaja.query.filter_by(estado="pendiente")\
                 .order_by(SalidaCaja.created_at.asc()).all()
     return jsonify({"data": [s.to_dict() for s in salidas]})
+
+
+# =====================================================================
+# INGRESOS EXTRAORDINARIOS (traer dinero del banco a la caja)
+# =====================================================================
+@caja_bp.post("/ingreso")
+@roles_required("cajero", "admin", "super_admin")
+def solicitar_ingreso(usuario_actual):
+    """El cajero registra un ingreso extraordinario (ej. traer efectivo del banco)."""
+    sesion = _sesion_abierta_de(usuario_actual)
+    if not sesion:
+        return jsonify({"error": {"code": "sin_caja",
+                                  "message": "No tenés una caja abierta"}}), 400
+    data = request.get_json(silent=True) or {}
+    concepto = (data.get("concepto") or "").strip()
+    if not concepto:
+        return jsonify({"error": {"code": "concepto_requerido",
+                                  "message": "Indicá el concepto (ej. Retiro banco Ficohsa)"}}), 400
+    try:
+        monto = float(data.get("monto"))
+        if monto <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": {"code": "monto_invalido", "message": "Monto inválido"}}), 400
+
+    # Reutilizamos SalidaCaja con tipo negativo para ingresos (pendiente autorización del admin)
+    # El concepto lleva prefijo [INGRESO] para distinguirlo
+    ingreso = SalidaCaja(
+        sesion_id=sesion.id, monto=-monto,  # negativo indica INGRESO (suma al efectivo esperado)
+        concepto=f"[INGRESO] {concepto}",
+        estado="pendiente", solicitado_por=usuario_actual.id,
+    )
+    db.session.add(ingreso)
+    db.session.commit()
+    return jsonify({"data": ingreso.to_dict()}), 201

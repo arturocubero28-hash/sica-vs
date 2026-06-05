@@ -47,21 +47,23 @@ class SesionCaja(db.Model):
         efectivo = sum(float(p.monto) for p in self.pagos if p.metodo == "efectivo")
         pos      = sum(float(p.monto) for p in self.pagos if p.metodo == "tarjeta_pos")
         otros    = sum(float(p.monto) for p in self.pagos if p.metodo not in ("efectivo", "tarjeta_pos"))
-        # Salidas autorizadas (depósitos al banco, etc.) restan del efectivo
-        salidas  = sum(float(s.monto) for s in self.salidas if s.estado == "autorizada")
+        # Salidas: monto positivo = sale dinero, monto negativo = entra dinero (ingreso)
+        salidas  = sum(float(s.monto) for s in self.salidas if s.estado == "autorizada" and float(s.monto) > 0)
+        ingresos = sum(-float(s.monto) for s in self.salidas if s.estado == "autorizada" and float(s.monto) < 0)
         return {
             "efectivo": efectivo,
             "pos": pos,
             "otros": otros,
             "salidas": salidas,
+            "ingresos": ingresos,
             "cantidad_pagos": len(self.pagos),
         }
 
     def to_dict(self, con_pagos=False):
         r = self.resumen()
         inicial = float(self.monto_inicial)
-        # Efectivo esperado = fondo inicial + cobros en efectivo - salidas autorizadas
-        efectivo_esperado = inicial + r["efectivo"] - r["salidas"]
+        # efectivo_esperado = fondo + cobros - salidas + ingresos
+        efectivo_esperado = inicial + r["efectivo"] - r["salidas"] + r["ingresos"]
 
         d = {
             "id":             str(self.uuid_publico),
@@ -72,6 +74,7 @@ class SesionCaja(db.Model):
             "total_pos":      r["pos"],
             "total_otros":    r["otros"],
             "total_salidas":  r["salidas"],
+            "total_ingresos": r["ingresos"],
             "cantidad_pagos": r["cantidad_pagos"],
             "efectivo_esperado": efectivo_esperado,
             "pos_esperado":   r["pos"],

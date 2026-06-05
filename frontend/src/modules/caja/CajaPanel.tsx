@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   estadoCaja, abrirCaja, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
-  reportarDescuadre, solicitarSalida,
+  reportarDescuadre, solicitarSalida, solicitarIngreso,
   type SesionCajaDTO, type CuentaCajaDTO,
 } from "../../api/client";
 
@@ -48,6 +48,10 @@ export function CajaPanel() {
           <div className="metric-top"><span className="metric-label">POS (tarjeta)</span></div>
           <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.total_pos)}</div>
         </div>
+        <div className="metric-card verde">
+          <div className="metric-top"><span className="metric-label">Ingresos autorizados</span></div>
+          <div className="metric-valor" style={{ fontSize: 20 }}>{L((sesion as any).total_ingresos || 0)}</div>
+        </div>
         <div className="metric-card azul">
           <div className="metric-top"><span className="metric-label">Salidas autorizadas</span></div>
           <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.total_salidas || 0)}</div>
@@ -60,6 +64,7 @@ export function CajaPanel() {
 
       <RegistrarPago onRegistrado={recargar} />
       <SolicitarSalida onRegistrada={recargar} />
+      <SolicitarIngreso onRegistrado={recargar} />
       <ReportarDescuadre />
 
       {/* Pagos de la sesión */}
@@ -386,6 +391,65 @@ function SolicitarSalida({ onRegistrada }: { onRegistrada: () => void }) {
             <button className="ghost" onClick={() => { setAbierto(false); setMsg(""); }}>Cancelar</button>
             <button className="cuota-btn-pagar full" onClick={solicitar} disabled={enviando}>
               {enviando ? "Enviando…" : "Solicitar salida"}
+            </button>
+          </div>
+        </div>
+      )}
+      {msg && <div className={msg.startsWith("✓") ? "cuota-ok" : "error"} style={{ marginTop: 10 }}>{msg}</div>}
+    </div>
+  );
+}
+
+function SolicitarIngreso({ onRegistrado }: { onRegistrado: () => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const [monto, setMonto] = useState("");
+  const [concepto, setConcepto] = useState("");
+  const [msg, setMsg] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  async function solicitar() {
+    const m = parseFloat(monto);
+    if (isNaN(m) || m <= 0) { setMsg("Ingresá un monto válido"); return; }
+    if (!concepto.trim()) { setMsg("Indicá el concepto (ej. Retiro banco Ficohsa)"); return; }
+    setEnviando(true); setMsg("");
+    try {
+      await solicitarIngreso({ monto: m, concepto });
+      setMsg("✓ Ingreso solicitado. Esperando autorización del administrador.");
+      setMonto(""); setConcepto(""); setAbierto(false);
+      onRegistrado();
+      setTimeout(() => setMsg(""), 5000);
+    } catch (e) { setMsg((e as Error).message); }
+    finally { setEnviando(false); }
+  }
+
+  return (
+    <div className="dash-card">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 style={{ margin: 0 }}>Ingreso extraordinario</h3>
+        {!abierto && (
+          <button className="mini btn-reactivar" onClick={() => setAbierto(true)}>
+            Solicitar ingreso de efectivo
+          </button>
+        )}
+      </div>
+      <p className="muted small" style={{ marginTop: 6 }}>
+        Para registrar cuando se trae efectivo del banco u otra fuente. Requiere autorización del admin.
+      </p>
+      {abierto && (
+        <div className="form-pago" style={{ marginTop: 12 }}>
+          <div className="form-field">
+            <label>Monto a ingresar (L)</label>
+            <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0.00" />
+          </div>
+          <div className="form-field">
+            <label>Concepto</label>
+            <input value={concepto} onChange={e => setConcepto(e.target.value)}
+              placeholder="Ej. Retiro banco Ficohsa, fondo de caja…" />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="ghost" onClick={() => { setAbierto(false); setMsg(""); }}>Cancelar</button>
+            <button className="cuota-btn-pagar full" onClick={solicitar} disabled={enviando}>
+              {enviando ? "Enviando…" : "Solicitar ingreso"}
             </button>
           </div>
         </div>

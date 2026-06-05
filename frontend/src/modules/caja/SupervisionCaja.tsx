@@ -359,9 +359,12 @@ function SalidaItem({ salida, onResuelta }: { salida: SalidaCajaDTO; onResuelta:
   return (
     <div className="descuadre-item" style={{ borderColor: "#c0d8f0" }}>
       <div className="descuadre-info">
-        <span className="pill" style={{ background: "#e6f0fa", color: "#022E45" }}>Depósito</span>
-        <b>{"L " + salida.monto.toLocaleString("es-HN", { minimumFractionDigits: 2 })}</b>
-        <span className="muted small">· {salida.concepto} · {salida.solicitado_por}</span>
+        {salida.monto < 0
+          ? <span className="pill green">Ingreso</span>
+          : <span className="pill" style={{ background: "#e6f0fa", color: "#022E45" }}>Depósito</span>
+        }
+        <b>{"L " + Math.abs(salida.monto).toLocaleString("es-HN", { minimumFractionDigits: 2 })}</b>
+        <span className="muted small">· {salida.concepto.replace("[INGRESO] ", "")} · {salida.solicitado_por}</span>
       </div>
       {!autorizando ? (
         <div className="descuadre-acciones">

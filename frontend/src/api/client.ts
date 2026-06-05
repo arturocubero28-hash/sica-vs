@@ -475,9 +475,10 @@ export interface DevMetricasDTO {
   db_conectada: boolean; db_latencia_ms?: number; db_error?: string;
   redis?: { conectado: boolean; error?: string };
   sistema?: {
-    disco: { total_gb: number; usado_gb: number; libre_gb: number; porcentaje: number };
-    ram:   { total_gb: number; usado_gb: number; libre_gb: number; porcentaje: number };
-    cpu_porcentaje: number;
+    error?: string;
+    disco?: { total_gb: number; usado_gb: number; libre_gb: number; porcentaje: number };
+    ram?:   { total_gb: number; usado_gb: number; libre_gb: number; porcentaje: number };
+    cpu_porcentaje?: number;
   };
   errores_recientes?: any[];
 }
@@ -546,3 +547,6 @@ export const autorizarSalida = (uuid: string, accion: string, clave?: string) =>
     method: "POST", body: JSON.stringify({ accion, clave }),
   });
 export const salidasPendientes = () => request<SalidaCajaDTO[]>("/caja/salidas/pendientes");
+
+export const solicitarIngreso = (body: { monto: number; concepto: string }) =>
+  request<SalidaCajaDTO>("/caja/ingreso", { method: "POST", body: JSON.stringify(body) });

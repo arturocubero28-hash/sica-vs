@@ -24,7 +24,7 @@ def metricas(usuario_actual):
     # Recursos del sistema con psutil
     sistema = {}
     try:
-        import psutil, os
+        import psutil
 
         disco = psutil.disk_usage("/")
         ram   = psutil.virtual_memory()
@@ -45,6 +45,8 @@ def metricas(usuario_actual):
             },
             "cpu_porcentaje": cpu,
         }
+    except ImportError:
+        sistema = {"error": "psutil no instalado — corré docker compose up --build"}
     except Exception as e:
         sistema = {"error": str(e)}
 
@@ -81,18 +83,16 @@ def metricas(usuario_actual):
 
     return jsonify({"data": {
         "timestamp": ahora.isoformat(),
-        "estado_general": "operativo" if (db_ok and redis_ok) else "degradado",
-        "sistema": sistema,
-        "base_de_datos": {
-            "conectada": db_ok,
-            "latencia_ms": db_latencia_ms,
-            "error": db_error,
-        },
+        "estado_general": "operativo" if db_ok else "degradado",
+        "db_conectada": db_ok,
+        "db_latencia_ms": db_latencia_ms,
+        "db_error": db_error,
         "redis": {
             "conectado": redis_ok,
             "error": redis_error,
         },
-        "errores_recientes_500": [e.to_dict() for e in errores_recientes],
+        "sistema": sistema,
+        "errores_recientes": [e.to_dict() for e in errores_recientes],
     }})
 
 
