@@ -1289,3 +1289,14 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .dev-method { font-family: monospace; font-size: 12px; font-weight: 700; color: var(--marca-azul); }
 .fila-error { background: #fff5f5 !important; }
 .fila-warn  { background: #fffbf0 !important; }
+
+/* Fondo de apertura fijo (no editable) */
+.caja-fondo-fijo {
+  background: linear-gradient(135deg, #f1f6fc, #e6f0fa); border: 1.5px solid #c0d8f0;
+  border-radius: 12px; padding: 18px; text-align: center; display: flex;
+  flex-direction: column; gap: 4px; margin: 8px 0;
+}
+.caja-fondo-monto { font-size: 30px; font-weight: 800; color: var(--marca-azul); }
+.caja-confirmar-forzar {
+  background: #fff7ed; border: 1.5px solid #f5c98a; border-radius: 10px; padding: 14px;
+}

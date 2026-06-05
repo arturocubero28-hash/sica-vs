@@ -124,6 +124,22 @@ class ConfigCaja(db.Model):
             db.session.commit()
         return cfg
 
+    @classmethod
+    def saldo_apertura_sugerido(cls):
+        """
+        Calcula el fondo con el que DEBE abrir la próxima sesión de caja.
+        Es el efectivo real contado en el último cierre. Si nunca hubo
+        un cierre, usa el saldo inicial configurado del sistema.
+        Este valor NO es editable por el cajero: garantiza la continuidad.
+        """
+        ultima_cerrada = (SesionCaja.query
+                          .filter_by(estado="cerrada")
+                          .order_by(SesionCaja.cerrada_en.desc())
+                          .first())
+        if ultima_cerrada and ultima_cerrada.efectivo_contado is not None:
+            return float(ultima_cerrada.efectivo_contado)
+        return float(cls.get().saldo_inicial)
+
     def to_dict(self):
         return {
             "saldo_inicial": float(self.saldo_inicial),

@@ -30,7 +30,27 @@ def estado_caja(usuario_actual):
     sesion = _sesion_abierta_de(usuario_actual)
     if not sesion:
         return jsonify({"data": {"abierta": False}})
-    return jsonify({"data": {"abierta": True, "sesion": sesion.to_dict(con_pagos=True)}})
+    d = sesion.to_dict(con_pagos=True)
+    # Salidas/ingresos pendientes de autorización de esta sesión
+    d["salidas_pendientes"] = SalidaCaja.query.filter_by(
+        sesion_id=sesion.id, estado="pendiente").count()
+    return jsonify({"data": {"abierta": True, "sesion": d}})
+
+
+# ── Saldo de apertura sugerido (no editable) ──────────────────────────────────
+@caja_bp.get("/saldo-apertura")
+@roles_required("cajero", "admin", "super_admin")
+def saldo_apertura(usuario_actual):
+    """Devuelve el fondo con que debe abrir la próxima caja (del cierre anterior)."""
+    from app.models.caja import ConfigCaja
+    sugerido = ConfigCaja.saldo_apertura_sugerido()
+    ultima = (SesionCaja.query.filter_by(estado="cerrada")
+              .order_by(SesionCaja.cerrada_en.desc()).first())
+    return jsonify({"data": {
+        "saldo_apertura": round(sugerido, 2),
+        "tiene_cierre_anterior": ultima is not None and ultima.efectivo_contado is not None,
+        "cerrada_en": ultima.cerrada_en.isoformat() if ultima and ultima.cerrada_en else None,
+    }})
 
 
 # ── Abrir caja ────────────────────────────────────────────────────────────────
@@ -40,13 +60,17 @@ def abrir_caja(usuario_actual):
     if _sesion_abierta_de(usuario_actual):
         return jsonify({"error": {"code": "ya_abierta",
                                   "message": "Ya tenés una caja abierta. Cerrala antes de abrir otra."}}), 400
-    data = request.get_json(silent=True) or {}
-    try:
-        monto_inicial = float(data.get("monto_inicial", 0))
-        if monto_inicial < 0:
-            raise ValueError
-    except ValueError:
-        return jsonify({"error": {"code": "monto_invalido", "message": "Monto inicial inválido"}}), 400
+
+    # Regla de integridad: no puede haber OTRA caja abierta en el sistema.
+    otra_abierta = SesionCaja.query.filter_by(estado="abierta").first()
+    if otra_abierta:
+        return jsonify({"error": {"code": "otra_caja_abierta",
+                                  "message": f"Ya hay una caja abierta por {otra_abierta.cajero.nombre if otra_abierta.cajero else 'otro usuario'}. Debe cerrarse antes de abrir otra."}}), 400
+
+    # El fondo de apertura NO lo decide el cajero: viene del cierre anterior
+    # (o del saldo inicial del sistema si es la primera vez).
+    from app.models.caja import ConfigCaja
+    monto_inicial = ConfigCaja.saldo_apertura_sugerido()
 
     sesion = SesionCaja(cajero_id=usuario_actual.id, monto_inicial=monto_inicial, estado="abierta")
     db.session.add(sesion)
@@ -112,6 +136,18 @@ def cerrar_caja(usuario_actual):
         return jsonify({"error": {"code": "sin_caja", "message": "No tenés una caja abierta"}}), 400
 
     data = request.get_json(silent=True) or {}
+
+    # Verificar que no haya salidas/ingresos pendientes de autorización en esta sesión.
+    # Si los hay, el arqueo no sería confiable. Se requiere forzar explícitamente.
+    pendientes = SalidaCaja.query.filter_by(sesion_id=sesion.id, estado="pendiente").count()
+    if pendientes > 0 and not data.get("forzar"):
+        return jsonify({"error": {
+            "code": "salidas_pendientes",
+            "message": f"Tenés {pendientes} salida(s)/ingreso(s) pendiente(s) de autorización. "
+                       "Esperá que el admin las resuelva antes de cerrar, o confirmá el cierre de todos modos.",
+            "pendientes": pendientes,
+        }}), 409
+
     try:
         efectivo_contado = float(data.get("efectivo_contado", 0))
         pos_contado = float(data.get("pos_contado", 0))
@@ -178,10 +214,17 @@ def listar_sesiones(usuario_actual):
 @roles_required("admin", "super_admin", "desarrollador")
 def resumen_caja(usuario_actual):
     """
-    Saldo de caja del sistema = saldo inicial configurado
-      + efectivo recaudado en TODAS las sesiones (pagos en efectivo)
-      + ajustes por descuadres declarados (se sumarán en el punto 4).
-    También informa el efectivo que está en cajas abiertas ahora mismo.
+    Saldo de caja del sistema. Fórmula:
+
+      saldo_actual = saldo_inicial_configurado
+                   + efectivo cobrado (todos los pagos en efectivo, histórico)
+                   - salidas autorizadas (depósitos al banco)
+                   + ingresos autorizados (efectivo traído del banco)
+                   + ajustes aprobados (descuadres sobrante/faltante)
+
+    NOTA: el monto_inicial de cada sesión NO se suma aquí, porque el fondo de
+    apertura proviene del cierre anterior (es dinero ya contado en el saldo
+    base). Sumarlo duplicaría el efectivo.
     """
     cfg = ConfigCaja.get()
     saldo_inicial = float(cfg.saldo_inicial)
@@ -202,16 +245,20 @@ def resumen_caja(usuario_actual):
         total_ingresos += r["ingresos"]
         if s.estado == "abierta":
             cajas_abiertas += 1
+            # Efectivo físico en la caja abierta = fondo + cobros - salidas + ingresos
             efectivo_en_cajas_abiertas += float(s.monto_inicial) + r["efectivo"] - r["salidas"] + r["ingresos"]
 
-    # Saldo actual = base + efectivo - salidas + ingresos + ajustes aprobados
+    # Ajustes aprobados (descuadres)
     ajustes_aprobados = AjusteCaja.query.filter_by(estado="aprobado").all()
     total_ajustes = sum(float(a.monto) for a in ajustes_aprobados if a.tipo in ("sobrante", "faltante"))
+
+    # Saldo global del sistema (no incluye monto_inicial de sesiones — ver nota)
     saldo_actual = saldo_inicial + total_efectivo - total_salidas + total_ingresos + total_ajustes
 
     descuadres_pendientes = AjusteCaja.query.filter(
         AjusteCaja.tipo.in_(["sobrante", "faltante"]), AjusteCaja.estado == "pendiente"
     ).count()
+    salidas_pend = SalidaCaja.query.filter_by(estado="pendiente").count()
 
     return jsonify({"data": {
         "saldo_inicial": saldo_inicial,
@@ -224,6 +271,7 @@ def resumen_caja(usuario_actual):
         "efectivo_en_cajas_abiertas": round(efectivo_en_cajas_abiertas, 2),
         "cajas_abiertas": cajas_abiertas,
         "descuadres_pendientes": descuadres_pendientes,
+        "salidas_pendientes": salidas_pend,
         "actualizado_en": cfg.actualizado_en.isoformat() if cfg.actualizado_en else None,
     }})
 

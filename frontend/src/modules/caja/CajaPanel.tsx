@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  estadoCaja, abrirCaja, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
+  estadoCaja, abrirCaja, saldoApertura, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
   reportarDescuadre, solicitarSalida, solicitarIngreso,
   type SesionCajaDTO, type CuentaCajaDTO,
 } from "../../api/client";
@@ -95,33 +95,53 @@ export function CajaPanel() {
 }
 
 function AbrirCaja({ onAbierta }: { onAbierta: () => void }) {
-  const [monto, setMonto] = useState("");
   const [abriendo, setAbriendo] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState<{ saldo_apertura: number; tiene_cierre_anterior: boolean; cerrada_en?: string } | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    saldoApertura().then(setInfo).catch(() => {}).finally(() => setCargando(false));
+  }, []);
 
   async function abrir() {
-    const m = parseFloat(monto || "0");
-    if (isNaN(m) || m < 0) { setError("Ingresá un monto válido"); return; }
     setAbriendo(true); setError("");
-    try { await abrirCaja(m); onAbierta(); }
+    try { await abrirCaja(); onAbierta(); }
     catch (e) { setError((e as Error).message); setAbriendo(false); }
   }
+
+  const L = (n: number) => "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="caja-abrir">
       <div className="dash-card" style={{ maxWidth: 460, margin: "0 auto" }}>
         <div className="caja-abrir-icon">🔓</div>
         <h2 style={{ textAlign: "center", color: "var(--marca-azul)" }}>Abrir caja</h2>
-        <p className="muted" style={{ textAlign: "center" }}>Ingresá el monto de efectivo con el que arranca la caja (fondo inicial).</p>
-        <div className="form-field">
-          <label>Fondo inicial (L)</label>
-          <input type="number" value={monto} onChange={e => setMonto(e.target.value)}
-            placeholder="0.00" onKeyDown={e => e.key === "Enter" && abrir()} />
-        </div>
-        {error && <div className="error">{error}</div>}
-        <button className="cuota-btn-pagar full" onClick={abrir} disabled={abriendo}>
-          {abriendo ? "Abriendo…" : "Abrir caja"}
-        </button>
+        {cargando ? (
+          <p className="muted" style={{ textAlign: "center" }}>Calculando fondo de apertura…</p>
+        ) : (
+          <>
+            <p className="muted" style={{ textAlign: "center" }}>
+              {info?.tiene_cierre_anterior
+                ? "El fondo de apertura es el efectivo con que cerró la caja anterior. No es editable."
+                : "Primera apertura: el fondo es el saldo inicial configurado del sistema."}
+            </p>
+            <div className="caja-fondo-fijo">
+              <span className="muted small">Fondo de apertura</span>
+              <span className="caja-fondo-monto">{L(info?.saldo_apertura ?? 0)}</span>
+              {info?.tiene_cierre_anterior && info.cerrada_en && (
+                <span className="muted small">Cierre anterior: {new Date(info.cerrada_en).toLocaleString("es-HN")}</span>
+              )}
+            </div>
+            <p className="muted small" style={{ textAlign: "center", marginTop: 8 }}>
+              Verificá que el efectivo físico en caja coincida con este monto antes de abrir.
+            </p>
+            {error && <div className="error">{error}</div>}
+            <button className="cuota-btn-pagar full" onClick={abrir} disabled={abriendo}>
+              {abriendo ? "Abriendo…" : `Abrir caja con ${L(info?.saldo_apertura ?? 0)}`}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -223,18 +243,28 @@ function CerrarCaja({ sesion, onCancelar, onCerrada }: {
   const [nota, setNota] = useState("");
   const [cerrando, setCerrando] = useState(false);
   const [error, setError] = useState("");
+  const [confirmarForzar, setConfirmarForzar] = useState(false);
 
   const efContado = parseFloat(efectivo || "0");
   const posContado = parseFloat(pos || "0");
   const difEf = efContado - sesion.efectivo_esperado;
   const difPos = posContado - sesion.total_pos;
 
-  async function cerrar() {
+  async function cerrar(forzar = false) {
     setCerrando(true); setError("");
     try {
-      await cerrarCaja({ efectivo_contado: efContado, pos_contado: posContado, nota });
+      await cerrarCaja({ efectivo_contado: efContado, pos_contado: posContado, nota, forzar });
       onCerrada();
-    } catch (e) { setError((e as Error).message); setCerrando(false); }
+    } catch (e: any) {
+      // Si el backend pide confirmación por salidas pendientes (409)
+      const msg = (e as Error).message || "";
+      if (msg.includes("pendiente")) {
+        setConfirmarForzar(true);
+      } else {
+        setError(msg);
+      }
+      setCerrando(false);
+    }
   }
 
   return (
@@ -276,12 +306,34 @@ function CerrarCaja({ sesion, onCancelar, onCerrada }: {
         </div>
 
         {error && <div className="error">{error}</div>}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="ghost" onClick={onCancelar}>Cancelar</button>
-          <button className="cuota-btn-pagar full" onClick={cerrar} disabled={cerrando}>
-            {cerrando ? "Cerrando…" : "Confirmar cierre"}
-          </button>
-        </div>
+
+        {sesion.salidas_pendientes && sesion.salidas_pendientes > 0 && (
+          <div className="arqueo-dif alerta" style={{ marginBottom: 10 }}>
+            ⚠️ Tenés {sesion.salidas_pendientes} salida(s)/ingreso(s) sin autorizar. El arqueo puede no cuadrar.
+          </div>
+        )}
+
+        {confirmarForzar ? (
+          <div className="caja-confirmar-forzar">
+            <p className="muted small">
+              Hay salidas o ingresos pendientes de autorización. Si cerrás ahora, el arqueo podría
+              mostrar una diferencia. ¿Cerrar de todos modos?
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="ghost" onClick={() => setConfirmarForzar(false)}>Volver</button>
+              <button className="cuota-btn-pagar full" onClick={() => cerrar(true)} disabled={cerrando}>
+                {cerrando ? "Cerrando…" : "Cerrar de todos modos"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="ghost" onClick={onCancelar}>Cancelar</button>
+            <button className="cuota-btn-pagar full" onClick={() => cerrar(false)} disabled={cerrando}>
+              {cerrando ? "Cerrando…" : "Confirmar cierre"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

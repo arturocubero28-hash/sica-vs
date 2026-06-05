@@ -439,6 +439,8 @@ export interface SesionCajaDTO {
   id: string; estado: string; cajero: string; monto_inicial: number;
   total_efectivo: number; total_pos: number; total_otros: number;
   total_salidas?: number;
+  total_ingresos?: number;
+  salidas_pendientes?: number;
   cantidad_pagos: number; efectivo_esperado: number; pos_esperado: number;
   abierta_en: string; cerrada_en?: string;
   efectivo_contado?: number; pos_contado?: number;
@@ -446,13 +448,14 @@ export interface SesionCajaDTO {
   pagos?: { id: string; monto: number; metodo: string; referencia?: string; hora: string }[];
 }
 export const estadoCaja = () => request<{ abierta: boolean; sesion?: SesionCajaDTO }>("/caja/estado");
-export const abrirCaja = (montoInicial: number) =>
-  request<SesionCajaDTO>("/caja/abrir", { method: "POST", body: JSON.stringify({ monto_inicial: montoInicial }) });
+export const saldoApertura = () => request<{ saldo_apertura: number; tiene_cierre_anterior: boolean; cerrada_en?: string }>("/caja/saldo-apertura");
+export const abrirCaja = () =>
+  request<SesionCajaDTO>("/caja/abrir", { method: "POST", body: JSON.stringify({}) });
 export const buscarCuentaCaja = (q: string) =>
   request<CuentaCajaDTO[]>(`/caja/buscar-cuenta?q=${encodeURIComponent(q)}`);
 export const registrarPagoCaja = (body: { cuota_id: string; metodo: string; referencia?: string }) =>
   request<{ pago: any; sesion: SesionCajaDTO }>("/caja/pago", { method: "POST", body: JSON.stringify(body) });
-export const cerrarCaja = (body: { efectivo_contado: number; pos_contado: number; nota?: string }) =>
+export const cerrarCaja = (body: { efectivo_contado: number; pos_contado: number; nota?: string; forzar?: boolean }) =>
   request<SesionCajaDTO>("/caja/cerrar", { method: "POST", body: JSON.stringify(body) });
 export const listarSesionesCaja = () => request<SesionCajaDTO[]>("/caja/sesiones");
 export const detalleSesionCaja = (uuid: string) => request<SesionCajaDTO>(`/caja/sesiones/${uuid}`);
@@ -462,9 +465,11 @@ export interface ResumenCajaDTO {
   saldo_inicial: number; saldo_actual: number;
   total_efectivo_historico: number; total_pos_historico: number;
   total_salidas_historico?: number;
+  total_ingresos_historico?: number;
   total_ajustes?: number;
   efectivo_en_cajas_abiertas: number; cajas_abiertas: number;
   descuadres_pendientes?: number;
+  salidas_pendientes?: number;
   actualizado_en?: string;
 }
 export const resumenCaja = () => request<ResumenCajaDTO>("/caja/resumen");
