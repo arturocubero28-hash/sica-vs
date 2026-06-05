@@ -153,6 +153,44 @@ export function Reporteria() {
         </div>
       </div>
 
+      {/* Desglose de lo recaudado por método de pago */}
+      {data.recaudado_por_metodo && (
+        <div className="dash-card">
+          <h3>Recaudado por método de pago</h3>
+          <p className="muted small">Desglose de los {L(data.total_recaudado)} recaudados en {data.mes_label}.</p>
+          <div className="metodo-grid">
+            <div className="metodo-item">
+              <span className="metodo-icon" style={{ background: "#e6f7ee", color: "#1d8a4a" }}>💵</span>
+              <div className="metodo-info">
+                <span className="muted small">Efectivo (ventanilla)</span>
+                <b>{L(data.recaudado_por_metodo.efectivo)}</b>
+              </div>
+            </div>
+            <div className="metodo-item">
+              <span className="metodo-icon" style={{ background: "#fff3e6", color: "#9a6700" }}>💳</span>
+              <div className="metodo-info">
+                <span className="muted small">Tarjeta POS</span>
+                <b>{L(data.recaudado_por_metodo.tarjeta_pos)}</b>
+              </div>
+            </div>
+            <div className="metodo-item">
+              <span className="metodo-icon" style={{ background: "#e6f0fa", color: "#044a6e" }}>🏦</span>
+              <div className="metodo-info">
+                <span className="muted small">Transferencia (aprobada)</span>
+                <b>{L(data.recaudado_por_metodo.transferencia)}</b>
+              </div>
+            </div>
+            <div className="metodo-item">
+              <span className="metodo-icon" style={{ background: "#f3e8fc", color: "#7c3aed" }}>🌐</span>
+              <div className="metodo-info">
+                <span className="muted small">Pago en línea (plataforma)</span>
+                <b>{L(data.recaudado_por_metodo.linea)}</b>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tendencia */}
       <div className="dash-card">
         <h3>Recaudación últimos 6 meses</h3>

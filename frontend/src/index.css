@@ -1300,3 +1300,18 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .caja-confirmar-forzar {
   background: #fff7ed; border: 1.5px solid #f5c98a; border-radius: 10px; padding: 14px;
 }
+
+/* Desglose por método de pago (reportería) */
+.metodo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 10px; }
+.metodo-item { display: flex; align-items: center; gap: 12px; background: #f9fbfd; border: 1px solid #eef2f7; border-radius: 12px; padding: 14px; }
+.metodo-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.metodo-info { display: flex; flex-direction: column; gap: 2px; }
+.metodo-info b { color: var(--marca-azul); font-size: 18px; }
+
+/* Cajas activas por cajero (supervisión) */
+.cajas-activas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 10px; }
+.caja-activa-item { background: linear-gradient(135deg, #f9fbfd, #eef4fb); border: 1.5px solid #d6e3f0; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.caja-activa-cajero { display: flex; align-items: center; gap: 8px; color: var(--marca-azul); }
+.caja-activa-dot { width: 9px; height: 9px; border-radius: 50%; background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
+.caja-activa-efectivo { font-size: 26px; font-weight: 800; color: var(--marca-azul); }
+.caja-activa-item .mini { align-self: flex-start; margin-top: 4px; }

@@ -353,6 +353,7 @@ export interface ReporteFinancieroDTO {
   periodo: string; mes_label: string;
   total_esperado: number; total_recaudado: number; total_pendiente: number;
   pct_cobranza: number; cuentas_al_dia: number; cuentas_morosas: number;
+  recaudado_por_metodo?: { efectivo: number; tarjeta_pos: number; transferencia: number; linea: number };
   al_dia: AlDiaDTO[]; morosos: MorosoDTO[]; tendencia: TendenciaDTO[];
 }
 export const reporteFinanciero = (anio?: number, mes?: number) => {

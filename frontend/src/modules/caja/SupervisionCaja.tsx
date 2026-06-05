@@ -107,6 +107,32 @@ export function SupervisionCaja() {
         </div>
       </div>
 
+      {/* Cajas activas: cuánto tiene cada cajero ahora mismo */}
+      {abiertas.length > 0 && (
+        <div className="dash-card">
+          <h3>Cajas activas ahora</h3>
+          <p className="muted small">Efectivo que cada cajero tiene en su caja en este momento.</p>
+          <div className="cajas-activas-grid">
+            {abiertas.map(s => (
+              <div key={s.id} className="caja-activa-item">
+                <div className="caja-activa-cajero">
+                  <span className="caja-activa-dot" />
+                  <b>{s.cajero}</b>
+                </div>
+                <div className="caja-activa-efectivo">{L(s.efectivo_esperado)}</div>
+                <div className="caja-activa-detalle muted small">
+                  Fondo {L(s.monto_inicial)} · {s.cantidad_pagos} pago{s.cantidad_pagos !== 1 ? "s" : ""}
+                  {(s.total_pos || 0) > 0 && ` · POS ${L(s.total_pos)}`}
+                </div>
+                <button className="mini" onClick={async () => setDetalle(await detalleSesionCaja(s.id))}>
+                  Ver detalle
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Descuadres pendientes de aprobación */}
       {pendientes.length > 0 && (
         <div className="dash-card descuadres-card">

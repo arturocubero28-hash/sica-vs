@@ -64,6 +64,22 @@ def reporte_financiero(usuario_actual):
     # Ordenar morosos por días de atraso (más atrasados primero)
     morosos.sort(key=lambda m: m["dias_atraso"], reverse=True)
 
+    # ── Desglose de lo recaudado por método de pago ──────────────────────────
+    # Tomamos los pagos APROBADOS de las cuotas de este período y los agrupamos.
+    cuota_ids = [c.id for c in cuotas]
+    por_metodo = {"efectivo": 0.0, "tarjeta_pos": 0.0, "transferencia": 0.0, "linea": 0.0, "pasarela": 0.0}
+    if cuota_ids:
+        pagos = Pago.query.filter(
+            Pago.cuota_id.in_(cuota_ids), Pago.estado == "aprobado"
+        ).all()
+        for p in pagos:
+            m = p.metodo or "transferencia"
+            if m not in por_metodo:
+                por_metodo[m] = 0.0
+            por_metodo[m] += float(p.monto)
+    # Unificar pasarela dentro de linea (pago en línea de la plataforma)
+    por_metodo["linea"] += por_metodo.pop("pasarela", 0.0)
+
     # Tendencia: recaudación de los últimos 6 meses
     tendencia = []
     for i in range(5, -1, -1):
@@ -89,6 +105,12 @@ def reporte_financiero(usuario_actual):
         "total_recaudado": total_recaudado,
         "total_pendiente": total_pendiente,
         "pct_cobranza": round(pct_cobranza, 1),
+        "recaudado_por_metodo": {
+            "efectivo": round(por_metodo.get("efectivo", 0.0), 2),
+            "tarjeta_pos": round(por_metodo.get("tarjeta_pos", 0.0), 2),
+            "transferencia": round(por_metodo.get("transferencia", 0.0), 2),
+            "linea": round(por_metodo.get("linea", 0.0), 2),
+        },
         "cuentas_al_dia": len(al_dia),
         "cuentas_morosas": len(morosos),
         "al_dia": al_dia,
