@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   listarSesionesCaja, detalleSesionCaja, resumenCaja,
-  modificarSaldoInicial, listarDescuadres, resolverDescuadre,
+  modificarSaldoInicial, ajustarSaldoConteo, listarDescuadres, resolverDescuadre,
   salidasPendientes, listarSalidas, autorizarSalida,
   type SesionCajaDTO, type ResumenCajaDTO, type DescuadreDTO, type SalidaCajaDTO,
 } from "../../api/client";
@@ -18,6 +18,7 @@ export function SupervisionCaja() {
   const [cargando, setCargando] = useState(true);
   const [detalle, setDetalle] = useState<SesionCajaDTO | null>(null);
   const [editarSaldo, setEditarSaldo] = useState(false);
+  const [ajusteConteo, setAjusteConteo] = useState(false);
 
   function recargar() {
     Promise.all([listarSesionesCaja(), resumenCaja(), listarDescuadres(), listarSalidas()])
@@ -55,9 +56,14 @@ export function SupervisionCaja() {
               {typeof resumen.total_ajustes === "number" && resumen.total_ajustes !== 0 &&
                 ` + ajustes ${L(resumen.total_ajustes)}`}
             </span>
-            <button className="saldo-editar-btn" onClick={() => setEditarSaldo(true)}>
-              Modificar saldo inicial
-            </button>
+            <div className="saldo-botones">
+              <button className="saldo-editar-btn" onClick={() => setAjusteConteo(true)}>
+                Ajustar saldo de caja
+              </button>
+              <button className="saldo-editar-btn secundario" onClick={() => setEditarSaldo(true)}>
+                Saldo inicial del sistema
+              </button>
+            </div>
           </div>
           <div className="saldo-caja-side">
             <div className="saldo-side-item">
@@ -271,6 +277,12 @@ export function SupervisionCaja() {
           onCerrar={() => setEditarSaldo(false)}
           onGuardado={() => { setEditarSaldo(false); recargar(); }} />
       )}
+
+      {ajusteConteo && resumen && (
+        <ModalAjusteConteo saldoSistema={resumen.saldo_actual}
+          onCerrar={() => setAjusteConteo(false)}
+          onGuardado={() => { setAjusteConteo(false); recargar(); }} />
+      )}
     </div>
   );
 }
@@ -339,15 +351,16 @@ function ModalSaldoInicial({ saldoActual, onCerrar, onGuardado }: {
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>Modificar saldo inicial</h3>
+          <h3>Saldo inicial del sistema</h3>
           <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
         <p className="muted small">
-          El saldo inicial es el monto base de caja del sistema. Modificarlo requiere
-          la clave del desarrollador y queda registrado.
+          <b>Solo para la implementación inicial.</b> Es el dinero que había en caja el día que
+          se empezó a usar SICA-VS. En operación normal no se modifica — para corregir el saldo
+          por un conteo físico usá "Ajustar saldo de caja". Requiere clave del desarrollador.
         </p>
         <div className="form-field">
-          <label>Nuevo saldo inicial (L)</label>
+          <label>Saldo inicial del sistema (L)</label>
           <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0.00" />
         </div>
         <div className="form-field">
@@ -358,6 +371,79 @@ function ModalSaldoInicial({ saldoActual, onCerrar, onGuardado }: {
         {error && <div className="error">{error}</div>}
         <button className="cuota-btn-pagar full" onClick={guardar} disabled={guardando}>
           {guardando ? "Guardando…" : "Confirmar cambio"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ModalAjusteConteo({ saldoSistema, onCerrar, onGuardado }: {
+  saldoSistema: number; onCerrar: () => void; onGuardado: () => void;
+}) {
+  const [monto, setMonto] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [clave, setClave] = useState("");
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const L = (n: number) => "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const saldoReal = parseFloat(monto || "");
+  const diferencia = !isNaN(saldoReal) ? saldoReal - saldoSistema : null;
+
+  async function guardar() {
+    const m = parseFloat(monto);
+    if (isNaN(m) || m < 0) { setError("Ingresá el saldo real contado"); return; }
+    if (!clave) { setError("Ingresá la clave del desarrollador"); return; }
+    setGuardando(true); setError("");
+    try { await ajustarSaldoConteo(m, clave, motivo); onGuardado(); }
+    catch (e) { setError((e as Error).message); setGuardando(false); }
+  }
+
+  return (
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>Ajustar saldo de caja (conteo físico)</h3>
+          <button className="ghost mini" onClick={onCerrar}>✕</button>
+        </div>
+        <p className="muted small">
+          Contá el efectivo real total en caja e ingresá el monto. El sistema calculará la
+          diferencia con lo registrado y dejará el saldo igual al conteo real. Queda registrado
+          con la clave del desarrollador.
+        </p>
+
+        <div className="conteo-comparativo">
+          <div className="conteo-fila">
+            <span className="muted small">Saldo registrado por el sistema</span>
+            <b>{L(saldoSistema)}</b>
+          </div>
+          {diferencia !== null && (
+            <div className="conteo-fila">
+              <span className="muted small">Diferencia que se ajustará</span>
+              <b style={{ color: Math.abs(diferencia) < 0.01 ? "#1d8a4a" : diferencia > 0 ? "#1d8a4a" : "#c81e1e" }}>
+                {diferencia > 0 ? "+" : ""}{L(diferencia)} {Math.abs(diferencia) < 0.01 ? "(cuadra)" : diferencia > 0 ? "(sobrante)" : "(faltante)"}
+              </b>
+            </div>
+          )}
+        </div>
+
+        <div className="form-field">
+          <label>Saldo real contado (L)</label>
+          <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0.00" autoFocus />
+        </div>
+        <div className="form-field">
+          <label>Motivo (opcional)</label>
+          <input value={motivo} onChange={e => setMotivo(e.target.value)}
+            placeholder="Ej. Arqueo mensual, corrección por error acumulado…" />
+        </div>
+        <div className="form-field">
+          <label>Clave del desarrollador</label>
+          <input type="password" value={clave} onChange={e => setClave(e.target.value)}
+            placeholder="••••••••" onKeyDown={e => e.key === "Enter" && guardar()} />
+        </div>
+        {error && <div className="error">{error}</div>}
+        <button className="cuota-btn-pagar full" onClick={guardar} disabled={guardando}>
+          {guardando ? "Ajustando…" : "Confirmar ajuste"}
         </button>
       </div>
     </div>

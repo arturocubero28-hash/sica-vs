@@ -505,6 +505,11 @@ export const modificarSaldoInicial = (saldoInicial: number, claveDev: string) =>
   request<{ saldo_inicial: number }>("/caja/saldo-inicial", {
     method: "POST", body: JSON.stringify({ saldo_inicial: saldoInicial, clave_dev: claveDev }),
   });
+export const ajustarSaldoConteo = (saldoReal: number, claveDev: string, motivo?: string) =>
+  request<{ saldo_anterior?: number; saldo_nuevo?: number; diferencia?: number; sin_cambios?: boolean }>(
+    "/caja/ajuste-conteo", {
+      method: "POST", body: JSON.stringify({ saldo_real: saldoReal, clave_dev: claveDev, motivo }),
+    });
 
 export interface DescuadreDTO {
   id: string; tipo: string; monto: number; motivo?: string; estado: string;

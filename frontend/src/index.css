@@ -1315,3 +1315,13 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .caja-activa-dot { width: 9px; height: 9px; border-radius: 50%; background: #2ecc71; box-shadow: 0 0 6px #2ecc71; }
 .caja-activa-efectivo { font-size: 26px; font-weight: 800; color: var(--marca-azul); }
 .caja-activa-item .mini { align-self: flex-start; margin-top: 4px; }
+
+/* Dos botones de saldo en supervisión */
+.saldo-botones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.saldo-editar-btn.secundario { background: transparent; color: var(--marca-azul); border: 1px solid #c0d8f0; opacity: 0.85; }
+.saldo-editar-btn.secundario:hover { opacity: 1; background: #f1f6fc; }
+
+/* Comparativo en el modal de ajuste por conteo */
+.conteo-comparativo { background: #f9fbfd; border: 1px solid #eef2f7; border-radius: 10px; padding: 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+.conteo-fila { display: flex; justify-content: space-between; align-items: center; }
+.conteo-fila b { font-size: 16px; color: var(--marca-azul); }

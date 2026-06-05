@@ -248,9 +248,9 @@ def resumen_caja(usuario_actual):
             # Efectivo físico en la caja abierta = fondo + cobros - salidas + ingresos
             efectivo_en_cajas_abiertas += float(s.monto_inicial) + r["efectivo"] - r["salidas"] + r["ingresos"]
 
-    # Ajustes aprobados (descuadres)
+    # Ajustes aprobados (descuadres + conteos físicos)
     ajustes_aprobados = AjusteCaja.query.filter_by(estado="aprobado").all()
-    total_ajustes = sum(float(a.monto) for a in ajustes_aprobados if a.tipo in ("sobrante", "faltante"))
+    total_ajustes = sum(float(a.monto) for a in ajustes_aprobados if a.tipo in ("sobrante", "faltante", "conteo"))
 
     # Saldo global del sistema (no incluye monto_inicial de sesiones — ver nota)
     saldo_actual = saldo_inicial + total_efectivo - total_salidas + total_ingresos + total_ajustes
@@ -308,6 +308,11 @@ def _validar_clave_dev(clave):
 @caja_bp.post("/saldo-inicial")
 @roles_required("admin", "super_admin", "desarrollador")
 def modificar_saldo_inicial(usuario_actual):
+    """
+    CONFIGURACIÓN INICIAL del sistema (se usa una sola vez al implementar).
+    Define el dinero base que había en caja cuando arrancó SICA-VS.
+    Para correcciones de operación usar /caja/ajuste-conteo en su lugar.
+    """
     data = request.get_json(silent=True) or {}
     clave = data.get("clave_dev")
     try:
@@ -325,16 +330,69 @@ def modificar_saldo_inicial(usuario_actual):
     cfg.saldo_inicial = nuevo
     cfg.actualizado_por = usuario_actual.id
 
-    # Registrar el cambio como ajuste (trazabilidad)
     ajuste = AjusteCaja(
         tipo="saldo_inicial", monto=(nuevo - anterior),
-        motivo=f"Saldo inicial cambiado de L{anterior:.2f} a L{nuevo:.2f}",
+        motivo=f"Saldo inicial del sistema: L{anterior:.2f} -> L{nuevo:.2f}",
         estado="aprobado", reportado_por=usuario_actual.id, aprobado_por=dev.id,
         resuelto_en=dt.datetime.now(dt.timezone.utc),
     )
     db.session.add(ajuste)
     db.session.commit()
     return jsonify({"data": {"saldo_inicial": nuevo}})
+
+
+@caja_bp.post("/ajuste-conteo")
+@roles_required("admin", "super_admin", "desarrollador")
+def ajuste_conteo(usuario_actual):
+    """
+    AJUSTE POR CONTEO FÍSICO (operación normal).
+    El responsable cuenta el efectivo real total en caja y declara ese monto.
+    El sistema calcula la diferencia con el saldo registrado y crea un ajuste
+    contable para que el saldo del sistema quede igual al conteo real.
+    Requiere clave del desarrollador. Queda registrado con trazabilidad.
+    """
+    data = request.get_json(silent=True) or {}
+    clave = data.get("clave_dev")
+    motivo = (data.get("motivo") or "").strip()[:255]
+    try:
+        saldo_real = float(data.get("saldo_real"))
+    except (TypeError, ValueError):
+        return jsonify({"error": {"code": "monto_invalido", "message": "Saldo real inválido"}}), 400
+
+    dev = _validar_clave_dev(clave)
+    if not dev:
+        return jsonify({"error": {"code": "clave_invalida",
+                                  "message": "Clave de desarrollador incorrecta"}}), 403
+
+    # Calcular el saldo actual que el sistema tiene registrado
+    cfg = ConfigCaja.get()
+    saldo_inicial = float(cfg.saldo_inicial)
+    sesiones = SesionCaja.query.all()
+    total_efectivo = total_salidas = total_ingresos = 0.0
+    for s in sesiones:
+        r = s.resumen()
+        total_efectivo += r["efectivo"]; total_salidas += r["salidas"]; total_ingresos += r["ingresos"]
+    ajustes_aprobados = AjusteCaja.query.filter_by(estado="aprobado").all()
+    total_ajustes = sum(float(a.monto) for a in ajustes_aprobados if a.tipo in ("sobrante", "faltante", "conteo"))
+    saldo_sistema = saldo_inicial + total_efectivo - total_salidas + total_ingresos + total_ajustes
+
+    diferencia = round(saldo_real - saldo_sistema, 2)
+    if abs(diferencia) < 0.01:
+        return jsonify({"data": {"sin_cambios": True, "saldo_sistema": round(saldo_sistema, 2)}})
+
+    ajuste = AjusteCaja(
+        tipo="conteo", monto=diferencia,
+        motivo=motivo or f"Ajuste por conteo físico: sistema L{saldo_sistema:.2f} -> real L{saldo_real:.2f}",
+        estado="aprobado", reportado_por=usuario_actual.id, aprobado_por=dev.id,
+        resuelto_en=dt.datetime.now(dt.timezone.utc),
+    )
+    db.session.add(ajuste)
+    db.session.commit()
+    return jsonify({"data": {
+        "saldo_anterior": round(saldo_sistema, 2),
+        "saldo_nuevo": saldo_real,
+        "diferencia": diferencia,
+    }})
 
 
 # =====================================================================
