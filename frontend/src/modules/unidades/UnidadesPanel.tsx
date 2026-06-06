@@ -380,7 +380,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           <button className="ghost mini" onClick={onCerrar}>Cerrar</button>
         </div>
 
-        <div className="sub">Residentes</div>
+        <div className="sub">Residentes de la casa</div>
         <div className="residentes-lista">
           {(cuenta.residentes || []).map((r) => (
             <FilaResidente key={r.id} residente={r} onActualizado={onCambio} />
@@ -397,16 +397,46 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           </div>
         )}
 
-        <div className="inline-create">
-          <input placeholder="Nombre del miembro" value={mNombre} onChange={(e) => setMNombre(e.target.value)} />
-          <input placeholder="Apellido" value={mApellido} onChange={(e) => setMApellido(e.target.value)} />
-          <input placeholder="Correo" value={mEmail} onChange={(e) => setMEmail(e.target.value)} />
-          <input placeholder="Teléfono" value={mTelefono} onChange={(e) => setMTelefono(e.target.value)} />
-          <input placeholder="Identidad / DNI" value={mDni} onChange={(e) => setMDni(e.target.value)} />
-          <input placeholder="Profesión" value={mProfesion} onChange={(e) => setMProfesion(e.target.value)} />
-          <input placeholder="Contacto emergencia (nombre)" value={mEmergNombre} onChange={(e) => setMEmergNombre(e.target.value)} />
-          <input placeholder="Contacto emergencia (teléfono)" value={mEmergTel} onChange={(e) => setMEmergTel(e.target.value)} />
-          <button className="mini" onClick={addMiembro}>+ Agregar miembro</button>
+        <div className="agregar-miembro-card">
+          <div className="agregar-miembro-head">
+            <span className="agregar-miembro-icon">👤</span>
+            <div>
+              <h4>Agregar nuevo miembro</h4>
+              <span className="muted small">Registrá un familiar o dependiente de esta casa. Solo el nombre y el correo son obligatorios.</span>
+            </div>
+          </div>
+
+          <div className="agregar-miembro-campos">
+            <div className="campo-grupo">
+              <label className="campo-label">Datos básicos</label>
+              <div className="row">
+                <input placeholder="Nombre *" value={mNombre} onChange={(e) => setMNombre(e.target.value)} />
+                <input placeholder="Apellido" value={mApellido} onChange={(e) => setMApellido(e.target.value)} />
+              </div>
+              <div className="row">
+                <input placeholder="Correo electrónico *" value={mEmail} onChange={(e) => setMEmail(e.target.value)} />
+                <input placeholder="Teléfono" value={mTelefono} onChange={(e) => setMTelefono(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="campo-grupo">
+              <label className="campo-label">Información adicional</label>
+              <div className="row">
+                <input placeholder="Identidad / DNI" value={mDni} onChange={(e) => setMDni(e.target.value)} />
+                <input placeholder="Profesión" value={mProfesion} onChange={(e) => setMProfesion(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="campo-grupo">
+              <label className="campo-label">Contacto de emergencia</label>
+              <div className="row">
+                <input placeholder="Nombre del contacto" value={mEmergNombre} onChange={(e) => setMEmergNombre(e.target.value)} />
+                <input placeholder="Teléfono del contacto" value={mEmergTel} onChange={(e) => setMEmergTel(e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          <button className="agregar-miembro-btn" onClick={addMiembro}>+ Agregar miembro</button>
         </div>
 
         <div className="sub">Tarjetas de proximidad</div>
