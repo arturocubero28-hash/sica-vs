@@ -135,6 +135,10 @@ def ver_comprobante(usuario_actual, nombre_archivo):
 def contar_pendientes(usuario_actual):
     n = Pago.query.filter_by(estado="en_revision").count()
     return jsonify({"data": {"pendientes": n}})
+
+
+# ── ADMIN: lista de pagos en revisión (comprobantes subidos) ──────────────────
+@cuotas_bp.get("/pendientes")
 @roles_required("admin")
 def pagos_pendientes(usuario_actual):
     pagos = (
