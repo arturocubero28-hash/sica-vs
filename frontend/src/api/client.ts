@@ -162,7 +162,7 @@ export interface VisitaDTO {
   nombre_visitante: string; documento_id?: string; telefono?: string;
   empresa?: string; placa_vehiculo?: string; en_vehiculo: boolean;
   valido_desde?: string; valido_hasta?: string; modo_recurrencia?: string;
-  estado: string; qr_token?: string; codigo_numerico?: string; generada_por?: string; created_at?: string;
+  estado: string; estado_real?: string; qr_token?: string; codigo_numerico?: string; generada_por?: string; created_at?: string;
 }
 
 export interface MiCuentaDTO { cuenta: Cuenta; residente: ResidenteDTO; }

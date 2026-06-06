@@ -251,16 +251,25 @@ function Historial() {
   }
 
   const tipos: Record<string, string> = { unica: "Única", recurrente: "Recurrente", repartidor: "Delivery" };
-  const estadoLabel: Record<string, string> = {
-    activa: "Activa", usada: "Ingresó", expirada: "Expirada", revocada: "Cancelada",
-  };
-  const estadoColor: Record<string, string> = {
-    activa: "green", usada: "amber", expirada: "", revocada: "red",
-  };
+  // El estado mostrado prioriza el estado real (adentro/salió por eventos)
+  function estadoMostrado(v: VisitaDTO): { label: string; color: string } {
+    const real = v.estado_real;
+    if (real === "adentro") return { label: "Adentro", color: "green" };
+    if (real === "salio") return { label: "Salió", color: "amber" };
+    // sin eventos aún: usar el estado base
+    const map: Record<string, { label: string; color: string }> = {
+      activa: { label: "Activa", color: "green" },
+      usada: { label: "Ingresó", color: "amber" },
+      expirada: { label: "Expirada", color: "" },
+      revocada: { label: "Cancelada", color: "red" },
+    };
+    return map[v.estado] || { label: v.estado, color: "" };
+  }
 
-  // Activas = estado "activa"; Histórico = todo lo demás
-  const activas = visitas.filter(v => v.estado === "activa");
-  const historico = visitas.filter(v => v.estado !== "activa");
+  // Activas = código vigente o visita actualmente adentro
+  // Histórico = salió, expiró, se canceló
+  const activas = visitas.filter(v => v.estado === "activa" || v.estado_real === "adentro");
+  const historico = visitas.filter(v => !(v.estado === "activa" || v.estado_real === "adentro"));
   const lista = tab === "activas" ? activas : historico;
 
   function tarjeta(v: VisitaDTO) {
@@ -272,8 +281,8 @@ function Historial() {
             {v.nombre_visitante}
             {v.empresa ? <span className="muted small"> · {v.empresa}</span> : ""}
           </div>
-          <span className={`pill ${estadoColor[v.estado] || ""}`}>
-            {estadoLabel[v.estado] || v.estado}
+          <span className={`pill ${estadoMostrado(v).color}`}>
+            {estadoMostrado(v).label}
           </span>
         </div>
         <div className="visita-meta">
@@ -284,18 +293,20 @@ function Historial() {
         <div className="visita-fecha muted small">
           {v.created_at ? new Date(v.created_at).toLocaleString() : "—"}
         </div>
-        {v.estado === "activa" && (
+        {(v.estado === "activa" || v.estado_real === "adentro") && (
           <div className="visita-acciones">
             <button className="mini" onClick={() => setVerCodigo(v)}>
               {esDelivery ? "Ver / compartir código" : "Ver / compartir QR"}
             </button>
-            <button
-              className="ghost mini visita-cancelar"
-              onClick={() => cancelar(v)}
-              disabled={cancelando === v.id}
-            >
-              {cancelando === v.id ? "Cancelando…" : "Cancelar"}
-            </button>
+            {v.estado === "activa" && v.estado_real !== "adentro" && (
+              <button
+                className="ghost mini visita-cancelar"
+                onClick={() => cancelar(v)}
+                disabled={cancelando === v.id}
+              >
+                {cancelando === v.id ? "Cancelando…" : "Cancelar"}
+              </button>
+            )}
           </div>
         )}
       </div>

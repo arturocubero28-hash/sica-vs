@@ -53,6 +53,17 @@ class Visita(db.Model):
     eventos = db.relationship("EventoAcceso", backref="visita", lazy="select")
     residente = db.relationship("Residente", foreign_keys=[generada_por], lazy="joined")
 
+    def estado_efectivo(self):
+        """Estado real considerando los eventos de acceso.
+        Distingue 'adentro' (último evento fue entrada) y 'salio' (último fue salida),
+        que el campo 'estado' por sí solo no refleja."""
+        ultimo = None
+        if self.eventos:
+            ultimo = max(self.eventos, key=lambda e: e.ocurrido_en or dt.datetime.min)
+        if ultimo:
+            return "adentro" if ultimo.direccion == "entrada" else "salio"
+        return self.estado  # activa, expirada, revocada (aún sin eventos)
+
     def to_dict(self):
         return {
             "id": str(self.uuid_publico),
@@ -67,6 +78,7 @@ class Visita(db.Model):
             "valido_hasta": self.valido_hasta.isoformat() if self.valido_hasta else None,
             "modo_recurrencia": self.modo_recurrencia,
             "estado": self.estado,
+            "estado_real": self.estado_efectivo(),
             "qr_token": str(self.qr.token) if self.qr else None,
             "codigo_numerico": self.qr.codigo_numerico if self.qr else None,
             "generada_por": (
