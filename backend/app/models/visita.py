@@ -68,6 +68,7 @@ class Visita(db.Model):
             "modo_recurrencia": self.modo_recurrencia,
             "estado": self.estado,
             "qr_token": str(self.qr.token) if self.qr else None,
+            "codigo_numerico": self.qr.codigo_numerico if self.qr else None,
             "generada_por": (
                 f"{self.residente.usuario.nombre} {self.residente.usuario.apellido}"
                 if self.residente and self.residente.usuario else None
@@ -83,6 +84,7 @@ class CodigoQR(db.Model):
     uuid_publico = _uuid()
     visita_id = db.Column(db.BigInteger, db.ForeignKey("visitas.id", ondelete="CASCADE"), nullable=False)
     token = db.Column(PG_UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
+    codigo_numerico = db.Column(db.String(8), unique=True)  # para delivery: código corto dictable
     usos = db.Column(db.Integer, nullable=False, default=0)
     revocado = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
@@ -104,6 +106,7 @@ class EventoAcceso(db.Model):
     guardia_id = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
     foto_identidad = db.Column(db.String(255))
     foto_placa = db.Column(db.String(255))
+    foto_numero_asignado = db.Column(db.String(255))  # foto extra: número asignado a la visita
 
     en_vehiculo = db.Column(db.Boolean, nullable=False, default=False)
     placa_vehiculo = db.Column(db.String(20))
@@ -125,5 +128,6 @@ class EventoAcceso(db.Model):
             ),
             "foto_identidad": self.foto_identidad,
             "foto_placa": self.foto_placa,
+            "foto_numero_asignado": self.foto_numero_asignado,
             "ocurrido_en": self.ocurrido_en.isoformat() if self.ocurrido_en else None,
         }

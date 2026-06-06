@@ -30,6 +30,18 @@ async function compartirWhatsApp(visita: VisitaDTO) {
   window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, "_blank");
 }
 
+// Comparte el código numérico de delivery por WhatsApp (texto, sin imagen)
+async function compartirCodigoWhatsApp(visita: VisitaDTO) {
+  const vigencia = visita.valido_hasta
+    ? new Date(visita.valido_hasta).toLocaleString()
+    : "";
+  const mensaje =
+    `Hola ${visita.nombre_visitante}, tu código de acceso para Residencial Villas del Sol es: ` +
+    `*${visita.codigo_numerico}*. Dáselo al guardia en la entrada.` +
+    (vigencia ? ` Válido hasta: ${vigencia}.` : "");
+  window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, "_blank");
+}
+
 // Descarga la imagen del QR
 async function descargarQR(visita: VisitaDTO) {
   try {
@@ -131,23 +143,44 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
   }
 
   if (resultado) {
+    const esDelivery = resultado.tipo === "repartidor" && resultado.codigo_numerico;
     return (
       <div className="qr-resultado">
-        <h3>¡QR generado!</h3>
-        <img
-          className="qr-imagen"
-          src={urlImagenQR(resultado.id)}
-          alt="Código QR de la visita"
-        />
-        <p>Compartí esta imagen con <b>{resultado.nombre_visitante}</b> para que la presente al guardia.</p>
-        <div className="row-btns">
-          <button onClick={() => compartirWhatsApp(resultado)}>
-            Compartir por WhatsApp
-          </button>
-          <button onClick={() => descargarQR(resultado)}>
-            Descargar imagen
-          </button>
-        </div>
+        <h3>¡{esDelivery ? "Código generado" : "QR generado"}!</h3>
+
+        {esDelivery ? (
+          <>
+            <div className="codigo-delivery">
+              <span className="codigo-delivery-label">Código de acceso</span>
+              <span className="codigo-delivery-numero">{resultado.codigo_numerico}</span>
+              <span className="muted small">Válido por 6 horas</span>
+            </div>
+            <p>Dale este código a <b>{resultado.nombre_visitante}</b>. El guardia lo ingresará manualmente en la caseta. No necesita escanear nada.</p>
+            <div className="row-btns">
+              <button onClick={() => compartirCodigoWhatsApp(resultado)}>
+                Compartir por WhatsApp
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <img
+              className="qr-imagen"
+              src={urlImagenQR(resultado.id)}
+              alt="Código QR de la visita"
+            />
+            <p>Compartí esta imagen con <b>{resultado.nombre_visitante}</b> para que la presente al guardia.</p>
+            <div className="row-btns">
+              <button onClick={() => compartirWhatsApp(resultado)}>
+                Compartir por WhatsApp
+              </button>
+              <button onClick={() => descargarQR(resultado)}>
+                Descargar imagen
+              </button>
+            </div>
+          </>
+        )}
+
         <button className="ghost" style={{ marginTop: 10 }} onClick={onVolver}>
           Generar otro
         </button>

@@ -9,10 +9,11 @@ export function GuardiaPanel() {
   const [error, setError] = useState("");
   const [fotoId, setFotoId] = useState("");
   const [fotoPlaca, setFotoPlaca] = useState("");
+  const [fotoNumero, setFotoNumero] = useState("");
   const [procesando, setProcesando] = useState(false);
   const [resultado, setResultado] = useState("");
   const [escaneando, setEscaneando] = useState(false);
-  const [tomandoFoto, setTomandoFoto] = useState<null | "id" | "placa">(null);
+  const [tomandoFoto, setTomandoFoto] = useState<null | "id" | "placa" | "numero">(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const fotoVideoRef = useRef<HTMLVideoElement>(null);
@@ -71,7 +72,7 @@ export function GuardiaPanel() {
   }
 
   // ─── Tomar foto INLINE (sin salir de la app) ───
-  async function abrirCamaraFoto(cual: "id" | "placa") {
+  async function abrirCamaraFoto(cual: "id" | "placa" | "numero") {
     setError(""); setTomandoFoto(cual);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -98,6 +99,7 @@ export function GuardiaPanel() {
     const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
     if (tomandoFoto === "id") setFotoId(dataUrl);
     else if (tomandoFoto === "placa") setFotoPlaca(dataUrl);
+    else if (tomandoFoto === "numero") setFotoNumero(dataUrl);
     cerrarCamaraFoto();
   }
 
@@ -116,6 +118,7 @@ export function GuardiaPanel() {
         visita_id: visita.id, direccion, acceso_id: 1,
         foto_identidad: direccion === "entrada" ? (fotoId || undefined) : undefined,
         foto_placa: direccion === "entrada" ? (fotoPlaca || undefined) : undefined,
+        foto_numero_asignado: direccion === "entrada" ? (fotoNumero || undefined) : undefined,
       });
       setResultado(r.mensaje);
       setStep("done");
@@ -125,14 +128,14 @@ export function GuardiaPanel() {
 
   function reiniciar() {
     setStep("scan"); setQrInput(""); setVisita(null); setDireccion("entrada");
-    setError(""); setFotoId(""); setFotoPlaca(""); setResultado("");
+    setError(""); setFotoId(""); setFotoPlaca(""); setFotoNumero(""); setResultado("");
   }
 
   // ─── Pantalla de tomar foto inline ───
   if (tomandoFoto) {
     return (
       <div className="card wide guardia-panel">
-        <h2>{tomandoFoto === "id" ? "Foto de identidad" : "Foto de placa"}</h2>
+        <h2>{tomandoFoto === "id" ? "Foto de identidad" : (tomandoFoto === "placa" ? "Foto de placa" : "Foto del número asignado")}</h2>
         <div className="foto-camara">
           <video ref={fotoVideoRef} autoPlay playsInline muted className="qr-video" />
           <div className="row-btns" style={{ marginTop: 12 }}>
@@ -154,11 +157,11 @@ export function GuardiaPanel() {
           {!escaneando ? (
             <>
               <button className="guardia-btn scan-cam" onClick={iniciarCamara}>Escanear con camara</button>
-              <p className="muted" style={{ margin: "14px 0 6px" }}>o ingresa el codigo manualmente:</p>
-              <input className="guardia-input" placeholder="Codigo QR de la visita"
+              <p className="muted" style={{ margin: "14px 0 6px" }}>o ingresa el código manualmente (QR o código de delivery):</p>
+              <input className="guardia-input" placeholder="Código QR o código numérico de delivery"
                 value={qrInput} onChange={e => setQrInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && validar(qrInput)} />
-              <button className="ghost" onClick={() => validar(qrInput)}>Validar codigo manual</button>
+              <button className="ghost" onClick={() => validar(qrInput)}>Validar código manual</button>
             </>
           ) : (
             <>
@@ -198,6 +201,9 @@ export function GuardiaPanel() {
               </div>
               <div className="foto-slot" onClick={() => abrirCamaraFoto("placa")}>
                 {fotoPlaca ? <img src={fotoPlaca} alt="Placa" /> : <span className="foto-icon">Foto placa</span>}
+              </div>
+              <div className="foto-slot" onClick={() => abrirCamaraFoto("numero")}>
+                {fotoNumero ? <img src={fotoNumero} alt="Número" /> : <span className="foto-icon">Foto número asignado</span>}
               </div>
             </div>
           )}

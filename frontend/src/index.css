@@ -1366,3 +1366,16 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
   border: none; border-radius: 9px; font-weight: 600; font-size: 14px; cursor: pointer;
 }
 .agregar-miembro-btn:hover { background: #d9740f; }
+
+/* Código numérico de delivery (portal residente) */
+.codigo-delivery {
+  background: linear-gradient(135deg, #022E45, #044a6e); border-radius: 16px;
+  padding: 28px 20px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  margin: 8px 0 16px;
+}
+.codigo-delivery-label { color: #aacbe4; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px; }
+.codigo-delivery-numero {
+  font-size: 52px; font-weight: 800; color: #fff; letter-spacing: 8px;
+  font-family: 'Courier New', monospace; line-height: 1.1;
+}
+.codigo-delivery .muted { color: #88aac8 !important; }

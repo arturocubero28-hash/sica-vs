@@ -131,6 +131,10 @@ def create_app(config_class=Config):
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS profesion VARCHAR(120)",
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contacto_emergencia_nombre VARCHAR(120)",
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contacto_emergencia_telefono VARCHAR(30)",
+            # Foto extra del guardia: número asignado (Día 6)
+            "ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS foto_numero_asignado VARCHAR(255)",
+            # Código numérico para delivery (Día 6)
+            "ALTER TABLE codigos_qr ADD COLUMN IF NOT EXISTS codigo_numerico VARCHAR(8)",
         ]
         for sql in columnas:
             try:

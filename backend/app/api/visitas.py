@@ -54,6 +54,19 @@ def _guardar_foto_base64(b64_data, prefijo):
         return None
 
 
+def _generar_codigo_numerico():
+    """Genera un código numérico único de 6 dígitos para delivery.
+    Fácil de dictar por teléfono. Reintenta si colisiona."""
+    import secrets
+    for _ in range(20):
+        codigo = f"{secrets.randbelow(900000) + 100000}"  # 6 dígitos, 100000-999999
+        existe = CodigoQR.query.filter_by(codigo_numerico=codigo, revocado=False).first()
+        if not existe:
+            return codigo
+    # fallback extremadamente improbable: usar 7 dígitos
+    return f"{secrets.randbelow(9000000) + 1000000}"
+
+
 # =====================================================================
 # RESIDENTE: crear visita con QR
 # =====================================================================
@@ -127,6 +140,9 @@ def crear_visita(usuario_actual):
     db.session.flush()
 
     qr = CodigoQR(visita_id=visita.id)
+    # Para repartidores/delivery: generar un código numérico corto y dictable
+    if tipo == "repartidor":
+        qr.codigo_numerico = _generar_codigo_numerico()
     db.session.add(qr)
     db.session.commit()
 
@@ -209,12 +225,16 @@ def validar_qr(usuario_actual):
 
     if not token_str:
         return jsonify({"error": {"code": "token_vacio",
-                                  "message": "Escanea un código QR"}}), 400
+                                  "message": "Escanea un código QR o ingresa el código de delivery"}}), 400
 
-    qr = CodigoQR.query.filter_by(token=token_str).first()
+    # Si es solo dígitos, buscar por código numérico (delivery). Si no, por token UUID.
+    if token_str.isdigit():
+        qr = CodigoQR.query.filter_by(codigo_numerico=token_str).first()
+    else:
+        qr = CodigoQR.query.filter_by(token=token_str).first()
     if not qr:
         return jsonify({"error": {"code": "qr_invalido",
-                                  "message": "Código QR no encontrado"}}), 404
+                                  "message": "Código no encontrado"}}), 404
 
     if qr.revocado:
         return jsonify({"error": {"code": "qr_revocado",
@@ -305,6 +325,7 @@ def registrar_acceso_visita(usuario_actual):
     # Guardar fotos
     foto_id = _guardar_foto_base64(data.get("foto_identidad"), "id")
     foto_pl = _guardar_foto_base64(data.get("foto_placa"), "placa")
+    foto_num = _guardar_foto_base64(data.get("foto_numero_asignado"), "numero")
 
     evento = EventoAcceso(
         origen="visita",
@@ -314,6 +335,7 @@ def registrar_acceso_visita(usuario_actual):
         guardia_id=usuario_actual.id,
         foto_identidad=foto_id,
         foto_placa=foto_pl,
+        foto_numero_asignado=foto_num,
         en_vehiculo=visita.en_vehiculo,
         placa_vehiculo=visita.placa_vehiculo,
     )

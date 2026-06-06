@@ -162,7 +162,7 @@ export interface VisitaDTO {
   nombre_visitante: string; documento_id?: string; telefono?: string;
   empresa?: string; placa_vehiculo?: string; en_vehiculo: boolean;
   valido_desde?: string; valido_hasta?: string; modo_recurrencia?: string;
-  estado: string; qr_token?: string; generada_por?: string; created_at?: string;
+  estado: string; qr_token?: string; codigo_numerico?: string; generada_por?: string; created_at?: string;
 }
 
 export interface MiCuentaDTO { cuenta: Cuenta; residente: ResidenteDTO; }
@@ -188,7 +188,7 @@ export const validarQR = (token: string) =>
 
 export const registrarAcceso = (body: {
   visita_id: string; direccion: string; acceso_id?: number;
-  foto_identidad?: string; foto_placa?: string;
+  foto_identidad?: string; foto_placa?: string; foto_numero_asignado?: string;
 }) => request<{ evento: object; mensaje: string }>(
     "/visitas/accesos/visita", { method: "POST", body: JSON.stringify(body) });
 
