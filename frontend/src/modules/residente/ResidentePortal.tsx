@@ -235,7 +235,13 @@ function Historial() {
   const [verCodigo, setVerCodigo] = useState<VisitaDTO | null>(null);
 
   function recargar() { misVisitas().then(setVisitas).catch(() => {}); }
-  useEffect(() => { recargar(); }, []);
+  useEffect(() => {
+    recargar();
+    // Recargar cuando el residente vuelve a la pestaña (ve cambios de estado al instante)
+    const onFocus = () => recargar();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   async function cancelar(v: VisitaDTO) {
     if (!confirm(`¿Cancelar la visita de ${v.nombre_visitante}? El código dejará de funcionar.`)) return;
@@ -266,10 +272,15 @@ function Historial() {
     return map[v.estado] || { label: v.estado, color: "" };
   }
 
-  // Activas = código vigente o visita actualmente adentro
-  // Histórico = salió, expiró, se canceló
-  const activas = visitas.filter(v => v.estado === "activa" || v.estado_real === "adentro");
-  const historico = visitas.filter(v => !(v.estado === "activa" || v.estado_real === "adentro"));
+  // Activas = aún no ha salido y el código sigue vigente
+  // Histórico = ya salió, expiró o se canceló
+  function esActiva(v: VisitaDTO): boolean {
+    if (v.estado_real === "adentro") return true;       // está dentro ahora
+    if (v.estado_real === "salio") return false;        // ya salió → histórico
+    return v.estado === "activa";                        // sin eventos: estado base
+  }
+  const activas = visitas.filter(esActiva);
+  const historico = visitas.filter(v => !esActiva(v));
   const lista = tab === "activas" ? activas : historico;
 
   function tarjeta(v: VisitaDTO) {
@@ -293,12 +304,12 @@ function Historial() {
         <div className="visita-fecha muted small">
           {v.created_at ? new Date(v.created_at).toLocaleString() : "—"}
         </div>
-        {(v.estado === "activa" || v.estado_real === "adentro") && (
+        {esActiva(v) && (
           <div className="visita-acciones">
             <button className="mini" onClick={() => setVerCodigo(v)}>
               {esDelivery ? "Ver / compartir código" : "Ver / compartir QR"}
             </button>
-            {v.estado === "activa" && v.estado_real !== "adentro" && (
+            {v.estado === "activa" && v.estado_real !== "adentro" && v.estado_real !== "salio" && (
               <button
                 className="ghost mini visita-cancelar"
                 onClick={() => cancelar(v)}
