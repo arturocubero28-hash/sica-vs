@@ -229,7 +229,7 @@ export interface VisitaActivaDTO {
   residente: string; unidad: string;
   guardia_autorizo?: string;
   hora_creacion?: string; hora_entrada?: string; hora_salida?: string;
-  foto_identidad?: string; foto_placa?: string;
+  foto_identidad?: string; foto_placa?: string; foto_numero_asignado?: string;
 }
 export const dashboardMetricas = () => request<MetricasDTO>("/dashboard/metricas");
 export const dashboardVisitas = () => request<VisitaTablaDTO[]>("/dashboard/visitas-tabla");
@@ -394,18 +394,21 @@ export const resetPasswordGuardia = (uuid: string) =>
 export interface EventoHistorialDTO {
   id: string; direccion: string; visitante: string;
   unidad: string; guardia: string; placa?: string; ocurrido_en: string;
+  esta_adentro?: boolean;
+  foto_identidad?: string; foto_placa?: string; foto_numero_asignado?: string;
 }
 export interface HistorialDTO {
   eventos: EventoHistorialDTO[];
   pagina: number; por_pagina: number; total: number; total_paginas: number;
 }
 export const historialAccesos = (params: {
-  desde?: string; hasta?: string; direccion?: string; buscar?: string; pagina?: number;
+  desde?: string; hasta?: string; direccion?: string; estado?: string; buscar?: string; pagina?: number;
 }) => {
   const q = new URLSearchParams();
   if (params.desde) q.set("desde", params.desde);
   if (params.hasta) q.set("hasta", params.hasta);
   if (params.direccion) q.set("direccion", params.direccion);
+  if (params.estado) q.set("estado", params.estado);
   if (params.buscar) q.set("buscar", params.buscar);
   if (params.pagina) q.set("pagina", String(params.pagina));
   const qs = q.toString();

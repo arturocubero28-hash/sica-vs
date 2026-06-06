@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { historialAccesos, historialPagos, type HistorialDTO, type HistorialPagosDTO } from "../../api/client";
+import { historialAccesos, historialPagos, urlFotoGuardia, type HistorialDTO, type HistorialPagosDTO, type EventoHistorialDTO } from "../../api/client";
 
 export function HistorialAccesos() {
   const [tab, setTab] = useState<"accesos" | "pagos">("accesos");
@@ -28,12 +28,14 @@ function TabAccesos() {
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
   const [direccion, setDireccion] = useState("");
+  const [estado, setEstado] = useState("");
   const [buscar, setBuscar] = useState("");
   const [pagina, setPagina] = useState(1);
+  const [fotosVer, setFotosVer] = useState<EventoHistorialDTO | null>(null);
 
   function cargar() {
     setCargando(true);
-    historialAccesos({ desde, hasta, direccion, buscar, pagina })
+    historialAccesos({ desde, hasta, direccion, estado, buscar, pagina })
       .then(setData).catch(() => {}).finally(() => setCargando(false));
   }
   useEffect(() => { cargar(); }, [pagina]);
@@ -43,8 +45,12 @@ function TabAccesos() {
     cargar();
   }
   function limpiar() {
-    setDesde(""); setHasta(""); setDireccion(""); setBuscar(""); setPagina(1);
+    setDesde(""); setHasta(""); setDireccion(""); setEstado(""); setBuscar(""); setPagina(1);
     setTimeout(cargar, 0);
+  }
+
+  function tieneFotos(e: EventoHistorialDTO) {
+    return !!(e.foto_identidad || e.foto_placa || e.foto_numero_asignado);
   }
 
   return (
@@ -65,6 +71,13 @@ function TabAccesos() {
             <option value="">Todas</option>
             <option value="entrada">Entradas</option>
             <option value="salida">Salidas</option>
+          </select>
+        </div>
+        <div className="filtro-campo">
+          <label>Estado</label>
+          <select value={estado} onChange={e => setEstado(e.target.value)}>
+            <option value="">Todos</option>
+            <option value="adentro">Dentro de la residencial</option>
           </select>
         </div>
         <div className="filtro-campo flex1">
@@ -91,7 +104,7 @@ function TabAccesos() {
             <div className="scroll-x">
               <table className="data">
                 <thead>
-                  <tr><th>Fecha / Hora</th><th>Dirección</th><th>Visitante</th><th>Unidad</th><th>Placa</th><th>Guardia</th></tr>
+                  <tr><th>Fecha / Hora</th><th>Dirección</th><th>Visitante</th><th>Unidad</th><th>Placa</th><th>Guardia</th><th>Fotos</th></tr>
                 </thead>
                 <tbody>
                   {data.eventos.map(e => (
@@ -101,11 +114,17 @@ function TabAccesos() {
                         <span className={`pill ${e.direccion === "entrada" ? "green" : ""}`}>
                           {e.direccion === "entrada" ? "Entrada" : "Salida"}
                         </span>
+                        {e.esta_adentro && <span className="pill green" style={{ marginLeft: 4 }}>Adentro</span>}
                       </td>
                       <td>{e.visitante}</td>
                       <td>{e.unidad}</td>
                       <td>{e.placa || "—"}</td>
                       <td className="small">{e.guardia}</td>
+                      <td>
+                        {tieneFotos(e)
+                          ? <button className="mini" onClick={() => setFotosVer(e)}>📷 Ver</button>
+                          : <span className="muted small">—</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -121,7 +140,39 @@ function TabAccesos() {
           </div>
         </>
       )}
+
+      {fotosVer && (
+        <ModalFotos evento={fotosVer} onCerrar={() => setFotosVer(null)} />
+      )}
     </>
+  );
+}
+
+function ModalFotos({ evento, onCerrar }: { evento: EventoHistorialDTO; onCerrar: () => void }) {
+  const fotos = [
+    { label: "Identidad", archivo: evento.foto_identidad },
+    { label: "Placa", archivo: evento.foto_placa },
+    { label: "Número asignado", archivo: evento.foto_numero_asignado },
+  ].filter(f => f.archivo);
+
+  return (
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+        <div className="modal-head">
+          <h3>Fotos del ingreso — {evento.visitante}</h3>
+          <button className="ghost mini" onClick={onCerrar}>✕</button>
+        </div>
+        <div className="fotos-ingreso-grid">
+          {fotos.map((f, i) => (
+            <div key={i} className="foto-ingreso-item">
+              <span className="muted small">{f.label}</span>
+              <img src={urlFotoGuardia(f.archivo!)} alt={f.label}
+                onClick={() => window.open(urlFotoGuardia(f.archivo!), "_blank")} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

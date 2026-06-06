@@ -162,6 +162,7 @@ def visitas_activas(usuario_actual):
         guardia_nombre = None
         foto_identidad = None
         foto_placa = None
+        foto_numero = None
         if entrada:
             guardia_nombre = (
                 f"{entrada.guardia.nombre} {entrada.guardia.apellido}"
@@ -169,6 +170,7 @@ def visitas_activas(usuario_actual):
             )
             foto_identidad = entrada.foto_identidad
             foto_placa = entrada.foto_placa
+            foto_numero = entrada.foto_numero_asignado
 
         filas.append({
             "id": str(v.uuid_publico),
@@ -187,6 +189,7 @@ def visitas_activas(usuario_actual):
             "hora_salida": salida.ocurrido_en.isoformat() if salida and salida.ocurrido_en else None,
             "foto_identidad": foto_identidad,
             "foto_placa": foto_placa,
+            "foto_numero_asignado": foto_numero,
         })
 
     # Ordenar por hora de entrada (más reciente primero)
@@ -222,6 +225,11 @@ def historial_accesos(usuario_actual):
     hasta = request.args.get("hasta")
     direccion = request.args.get("direccion")
     buscar = (request.args.get("buscar") or "").strip().lower()
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    direccion = request.args.get("direccion")
+    estado_filtro = request.args.get("estado")  # 'adentro' para solo los que están dentro
+    buscar = (request.args.get("buscar") or "").strip().lower()
     pagina = max(1, int(request.args.get("pagina", 1)))
     por_pagina = 30
 
@@ -241,6 +249,13 @@ def historial_accesos(usuario_actual):
         q = q.filter(EventoAcceso.direccion == direccion)
 
     q = q.order_by(EventoAcceso.ocurrido_en.desc())
+
+    # Para el filtro "adentro" necesitamos saber qué visitas están dentro ahora
+    ids_adentro = set()
+    if estado_filtro == "adentro":
+        for v, _ev in _visitas_adentro():
+            ids_adentro.add(v.id)
+
     total = q.count()
     eventos = q.offset((pagina - 1) * por_pagina).limit(por_pagina).all()
 
@@ -256,6 +271,13 @@ def historial_accesos(usuario_actual):
         guardia = f"{e.guardia.nombre} {e.guardia.apellido}" if e.guardia else "—"
         placa = e.placa_vehiculo or (visita.placa_vehiculo if visita else None)
 
+        # ¿Esta visita está adentro ahora mismo?
+        esta_adentro = visita.id in ids_adentro if visita else False
+
+        # Si se filtra por "adentro", saltar los eventos de visitas que no están dentro
+        if estado_filtro == "adentro" and not esta_adentro:
+            continue
+
         fila = {
             "id": str(e.uuid_publico),
             "direccion": e.direccion,
@@ -264,6 +286,10 @@ def historial_accesos(usuario_actual):
             "guardia": guardia,
             "placa": placa,
             "ocurrido_en": e.ocurrido_en.isoformat() if e.ocurrido_en else None,
+            "esta_adentro": esta_adentro,
+            "foto_identidad": e.foto_identidad,
+            "foto_placa": e.foto_placa,
+            "foto_numero_asignado": e.foto_numero_asignado,
         }
         # Filtro de texto en memoria (placa/visitante/unidad)
         if buscar:

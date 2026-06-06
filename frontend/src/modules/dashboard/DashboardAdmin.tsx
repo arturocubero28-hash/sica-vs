@@ -247,7 +247,7 @@ function DetalleVisita({ visita, onCerrar }: { visita: VisitaActivaDTO; onCerrar
           </div>
         </div>
 
-        {(visita.foto_identidad || visita.foto_placa) && (
+        {(visita.foto_identidad || visita.foto_placa || visita.foto_numero_asignado) && (
           <>
             <div className="sub">Fotos del ingreso</div>
             <div className="detalle-fotos">
@@ -261,6 +261,12 @@ function DetalleVisita({ visita, onCerrar }: { visita: VisitaActivaDTO; onCerrar
                 <div className="foto-detalle">
                   <span className="muted small">Placa / Vehículo</span>
                   <img src={urlFotoGuardia(visita.foto_placa)} alt="Placa" />
+                </div>
+              )}
+              {visita.foto_numero_asignado && (
+                <div className="foto-detalle">
+                  <span className="muted small">Número asignado</span>
+                  <img src={urlFotoGuardia(visita.foto_numero_asignado)} alt="Número asignado" />
                 </div>
               )}
             </div>
