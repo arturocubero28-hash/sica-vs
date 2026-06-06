@@ -243,6 +243,27 @@ def validar_qr(usuario_actual):
     visita = qr.visita
     ahora = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc)
 
+    # ¿La visita está adentro? (último evento fue una entrada sin salida posterior)
+    ultimo_evento = (
+        EventoAcceso.query
+        .filter_by(visita_id=visita.id)
+        .order_by(EventoAcceso.ocurrido_en.desc())
+        .first()
+    )
+    esta_adentro = bool(ultimo_evento and ultimo_evento.direccion == "entrada")
+
+    # Si está adentro, SIEMPRE se permite registrar la salida, aunque el código
+    # haya vencido o la visita esté marcada como usada/expirada. Físicamente la
+    # persona está dentro y hay que poder registrar que salió.
+    if esta_adentro:
+        return jsonify({"data": {
+            "visita": visita.to_dict(),
+            "valido": True,
+            "adentro": True,
+            "direccion_sugerida": "salida",
+            "mensaje": "Esta visita está adentro. Puede registrar su SALIDA.",
+        }})
+
     if visita.estado == "expirada":
         return jsonify({"error": {"code": "qr_expirado", "message": "Este código expiró"}}), 400
 
@@ -257,22 +278,7 @@ def validar_qr(usuario_actual):
                                       "message": "Este código expiró"}}), 400
 
     if visita.tipo == "unica" and visita.estado == "usada":
-        # Una visita única YA usada puede estar adentro esperando su salida.
-        # Revisar el último evento: si entró y no ha salido, permitir registrar salida.
-        ultimo_evento = (
-            EventoAcceso.query
-            .filter_by(visita_id=visita.id)
-            .order_by(EventoAcceso.ocurrido_en.desc())
-            .first()
-        )
-        if ultimo_evento and ultimo_evento.direccion == "entrada":
-            return jsonify({"data": {
-                "visita": visita.to_dict(),
-                "valido": True,
-                "adentro": True,
-                "direccion_sugerida": "salida",
-                "mensaje": "Esta visita está adentro. Puede registrar su SALIDA.",
-            }})
+        # Visita única ya usada y NO adentro (ya salió): no se puede reutilizar
         return jsonify({"error": {"code": "qr_usado",
                                   "message": "Este código de visita única ya fue utilizado"}}), 400
 
@@ -282,22 +288,14 @@ def validar_qr(usuario_actual):
         return jsonify({"error": {"code": "cuenta_bloqueada",
                                   "message": "La cuenta del residente está bloqueada por mora"}}), 400
 
-    # Para visitas recurrentes/repartidor: detectar si ya está adentro
-    ultimo_evento = (
-        EventoAcceso.query
-        .filter_by(visita_id=visita.id)
-        .order_by(EventoAcceso.ocurrido_en.desc())
-        .first()
-    )
-    adentro = bool(ultimo_evento and ultimo_evento.direccion == "entrada")
-
+    # Si llegamos aquí, la visita NO está adentro (eso se manejó al inicio).
+    # Es una entrada válida nueva.
     return jsonify({"data": {
         "visita": visita.to_dict(),
         "valido": True,
-        "adentro": adentro,
-        "direccion_sugerida": "salida" if adentro else "entrada",
-        "mensaje": ("Esta visita está adentro. Puede registrar su SALIDA."
-                    if adentro else "QR válido. Puede proceder con la validación."),
+        "adentro": False,
+        "direccion_sugerida": "entrada",
+        "mensaje": "QR válido. Puede proceder con la validación.",
     }})
 
 

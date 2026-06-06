@@ -59,7 +59,14 @@ class Visita(db.Model):
         que el campo 'estado' por sí solo no refleja."""
         ultimo = None
         if self.eventos:
-            ultimo = max(self.eventos, key=lambda e: e.ocurrido_en or dt.datetime.min)
+            def _key(e):
+                t = e.ocurrido_en
+                if t is None:
+                    return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+                if t.tzinfo is None:
+                    t = t.replace(tzinfo=dt.timezone.utc)
+                return t
+            ultimo = max(self.eventos, key=_key)
         if ultimo:
             return "adentro" if ultimo.direccion == "entrada" else "salio"
         return self.estado  # activa, expirada, revocada (aún sin eventos)
