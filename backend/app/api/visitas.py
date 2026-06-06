@@ -322,6 +322,17 @@ def registrar_acceso_visita(usuario_actual):
     if direccion not in ("entrada", "salida"):
         direccion = "entrada"
 
+    # La foto de identidad es OBLIGATORIA para registrar una entrada.
+    # En las salidas no se piden fotos (ya se tomaron al entrar).
+    if direccion == "entrada" and not data.get("foto_identidad"):
+        return jsonify({"error": {"code": "foto_requerida",
+                                  "message": "La foto de identidad es obligatoria para dar acceso"}}), 400
+
+    # Si la visita es en vehículo, la foto de la placa también es obligatoria.
+    if direccion == "entrada" and visita.en_vehiculo and not data.get("foto_placa"):
+        return jsonify({"error": {"code": "foto_placa_requerida",
+                                  "message": "La foto de la placa es obligatoria para vehículos"}}), 400
+
     # Guardar fotos
     foto_id = _guardar_foto_base64(data.get("foto_identidad"), "id")
     foto_pl = _guardar_foto_base64(data.get("foto_placa"), "placa")

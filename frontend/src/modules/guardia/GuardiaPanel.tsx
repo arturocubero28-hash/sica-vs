@@ -209,11 +209,21 @@ export function GuardiaPanel() {
           )}
 
           {error && <div className="error">{error}</div>}
+          {direccion === "entrada" && !fotoId && (
+            <div className="nota" style={{ background: "#fff7ed", borderColor: "#f5c98a" }}>
+              📷 La foto de identidad es obligatoria para dar acceso.
+            </div>
+          )}
+          {direccion === "entrada" && visita.en_vehiculo && !fotoPlaca && (
+            <div className="nota" style={{ background: "#fff7ed", borderColor: "#f5c98a" }}>
+              📷 La foto de la placa es obligatoria para vehículos.
+            </div>
+          )}
           <div className="row-btns">
             <button
               className={`guardia-btn ${direccion === "salida" ? "salida" : "access"}`}
               onClick={darAcceso}
-              disabled={procesando}
+              disabled={procesando || (direccion === "entrada" && (!fotoId || (visita.en_vehiculo && !fotoPlaca)))}
             >
               {procesando ? "Procesando..." : direccion === "salida" ? "Dar salida" : "Dar acceso"}
             </button>

@@ -227,15 +227,18 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
   );
 }
 
-// ─── Historial ───────────────────────────────────────────────
+// ─── Mis Visitas (Activas / Histórico) ───────────────────────
 function Historial() {
   const [visitas, setVisitas] = useState<VisitaDTO[]>([]);
   const [cancelando, setCancelando] = useState<string | null>(null);
+  const [tab, setTab] = useState<"activas" | "historico">("activas");
+  const [verCodigo, setVerCodigo] = useState<VisitaDTO | null>(null);
 
-  useEffect(() => { misVisitas().then(setVisitas).catch(() => {}); }, []);
+  function recargar() { misVisitas().then(setVisitas).catch(() => {}); }
+  useEffect(() => { recargar(); }, []);
 
   async function cancelar(v: VisitaDTO) {
-    if (!confirm(`¿Cancelar la visita de ${v.nombre_visitante}? El código QR dejará de funcionar.`)) return;
+    if (!confirm(`¿Cancelar la visita de ${v.nombre_visitante}? El código dejará de funcionar.`)) return;
     setCancelando(v.id);
     try {
       const actualizada = await cancelarVisita(v.id);
@@ -247,54 +250,116 @@ function Historial() {
     }
   }
 
-  if (visitas.length === 0) return <p className="muted">No tienes visitas registradas.</p>;
-
   const tipos: Record<string, string> = { unica: "Única", recurrente: "Recurrente", repartidor: "Delivery" };
   const estadoLabel: Record<string, string> = {
-    activa: "Activa",
-    usada: "Ingresó",
-    expirada: "Expirada",
-    revocada: "Cancelada",
+    activa: "Activa", usada: "Ingresó", expirada: "Expirada", revocada: "Cancelada",
   };
   const estadoColor: Record<string, string> = {
-    activa: "green",
-    usada: "amber",
-    expirada: "",
-    revocada: "red",
+    activa: "green", usada: "amber", expirada: "", revocada: "red",
   };
 
-  return (
-    <div className="visita-list">
-      {visitas.map(v => (
-        <div key={v.id} className="visita-item">
-          <div className="visita-item-top">
-            <div className="visita-nombre">
-              {v.nombre_visitante}
-              {v.empresa ? <span className="muted small"> · {v.empresa}</span> : ""}
-            </div>
-            <span className={`pill ${estadoColor[v.estado] || ""}`}>
-              {estadoLabel[v.estado] || v.estado}
-            </span>
+  // Activas = estado "activa"; Histórico = todo lo demás
+  const activas = visitas.filter(v => v.estado === "activa");
+  const historico = visitas.filter(v => v.estado !== "activa");
+  const lista = tab === "activas" ? activas : historico;
+
+  function tarjeta(v: VisitaDTO) {
+    const esDelivery = v.tipo === "repartidor" && v.codigo_numerico;
+    return (
+      <div key={v.id} className="visita-item">
+        <div className="visita-item-top">
+          <div className="visita-nombre">
+            {v.nombre_visitante}
+            {v.empresa ? <span className="muted small"> · {v.empresa}</span> : ""}
           </div>
-          <div className="visita-meta">
-            <span className="visita-tag">{tipos[v.tipo] || v.tipo}</span>
-            {v.documento_id && <span className="muted small">ID: {v.documento_id}</span>}
-            {v.en_vehiculo && v.placa_vehiculo && <span className="muted small">🚗 {v.placa_vehiculo}</span>}
-          </div>
-          <div className="visita-fecha muted small">
-            {v.created_at ? new Date(v.created_at).toLocaleString() : "—"}
-          </div>
-          {v.estado === "activa" && (
+          <span className={`pill ${estadoColor[v.estado] || ""}`}>
+            {estadoLabel[v.estado] || v.estado}
+          </span>
+        </div>
+        <div className="visita-meta">
+          <span className="visita-tag">{tipos[v.tipo] || v.tipo}</span>
+          {v.documento_id && <span className="muted small">ID: {v.documento_id}</span>}
+          {v.en_vehiculo && v.placa_vehiculo && <span className="muted small">🚗 {v.placa_vehiculo}</span>}
+        </div>
+        <div className="visita-fecha muted small">
+          {v.created_at ? new Date(v.created_at).toLocaleString() : "—"}
+        </div>
+        {v.estado === "activa" && (
+          <div className="visita-acciones">
+            <button className="mini" onClick={() => setVerCodigo(v)}>
+              {esDelivery ? "Ver / compartir código" : "Ver / compartir QR"}
+            </button>
             <button
               className="ghost mini visita-cancelar"
               onClick={() => cancelar(v)}
               disabled={cancelando === v.id}
             >
-              {cancelando === v.id ? "Cancelando…" : "Cancelar visita"}
+              {cancelando === v.id ? "Cancelando…" : "Cancelar"}
             </button>
-          )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="hist-tabs">
+        <button className={`hist-tab ${tab === "activas" ? "on" : ""}`} onClick={() => setTab("activas")}>
+          Activas ({activas.length})
+        </button>
+        <button className={`hist-tab ${tab === "historico" ? "on" : ""}`} onClick={() => setTab("historico")}>
+          Histórico ({historico.length})
+        </button>
+      </div>
+
+      {lista.length === 0 ? (
+        <p className="muted" style={{ marginTop: 16 }}>
+          {tab === "activas" ? "No tenés visitas activas en este momento." : "No hay visitas en el histórico."}
+        </p>
+      ) : (
+        <div className="visita-list">{lista.map(tarjeta)}</div>
+      )}
+
+      {verCodigo && (
+        <ModalCompartirCodigo visita={verCodigo} onCerrar={() => setVerCodigo(null)} />
+      )}
+    </div>
+  );
+}
+
+// ─── Modal para volver a ver/compartir un código ya generado ──
+function ModalCompartirCodigo({ visita, onCerrar }: { visita: VisitaDTO; onCerrar: () => void }) {
+  const esDelivery = visita.tipo === "repartidor" && visita.codigo_numerico;
+  return (
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <div className="modal-head">
+          <h3>{esDelivery ? "Código de acceso" : "Código QR"}</h3>
+          <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
-      ))}
+        {esDelivery ? (
+          <>
+            <div className="codigo-delivery">
+              <span className="codigo-delivery-label">Código de acceso</span>
+              <span className="codigo-delivery-numero">{visita.codigo_numerico}</span>
+            </div>
+            <p className="muted small">Dale este código a {visita.nombre_visitante}. El guardia lo ingresa manualmente.</p>
+            <button className="cuota-btn-pagar full" onClick={() => compartirCodigoWhatsApp(visita)}>
+              Compartir por WhatsApp
+            </button>
+          </>
+        ) : (
+          <>
+            <img className="qr-imagen" src={urlImagenQR(visita.id)} alt="Código QR" />
+            <p className="muted small">Compartí esta imagen con {visita.nombre_visitante}.</p>
+            <div className="row-btns">
+              <button onClick={() => compartirWhatsApp(visita)}>Compartir por WhatsApp</button>
+              <button className="ghost" onClick={() => descargarQR(visita)}>Descargar</button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
