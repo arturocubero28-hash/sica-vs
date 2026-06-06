@@ -124,6 +124,13 @@ def create_app(config_class=Config):
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS activa BOOLEAN NOT NULL DEFAULT TRUE",
             "ALTER TABLE pagos ADD COLUMN IF NOT EXISTS sesion_caja_id BIGINT",
+            # Información extendida de residentes (Día 6)
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS dni VARCHAR(20)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS rtn VARCHAR(20)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS direccion_exacta VARCHAR(255)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS profesion VARCHAR(120)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contacto_emergencia_nombre VARCHAR(120)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contacto_emergencia_telefono VARCHAR(30)",
         ]
         for sql in columnas:
             try:

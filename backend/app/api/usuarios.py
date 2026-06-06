@@ -103,6 +103,16 @@ def editar_usuario(usuario_actual, uuid_usuario):
         return jsonify({"error": {"code": "no_encontrado", "message": "Usuario no encontrado"}}), 404
 
     data = request.get_json(silent=True) or {}
+
+    # Datos de información extendida (la administración los gestiona)
+    campos_texto = ["nombre", "apellido", "telefono", "dni", "rtn",
+                    "direccion_exacta", "profesion",
+                    "contacto_emergencia_nombre", "contacto_emergencia_telefono"]
+    for campo in campos_texto:
+        if campo in data:
+            valor = (data[campo] or "").strip() or None
+            setattr(u, campo, valor)
+
     if "activo" in data:
         # No permitir desactivarse a sí mismo
         if u.id == usuario_actual.id and not data["activo"]:

@@ -151,6 +151,12 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
   const [apellido, setApellido] = useState("");
   const [email, setEmail] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [dni, setDni] = useState("");
+  const [rtn, setRtn] = useState("");
+  const [direccionExacta, setDireccionExacta] = useState("");
+  const [profesion, setProfesion] = useState("");
+  const [emergNombre, setEmergNombre] = useState("");
+  const [emergTel, setEmergTel] = useState("");
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
   const [enlace, setEnlace] = useState<{ email: string; url: string } | null>(null);
   const [nuevaUnidadTipo, setNuevaUnidadTipo] = useState<"casa" | "edificio">("casa");
@@ -198,7 +204,12 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
       const res = await crearCuenta({
         unidad_id: unidadId, apartamento: esEdificio ? apartamento : undefined,
         tarifa_id: tarifaId, dia_pago: diaPago,
-        titular: { nombre, apellido, email, telefono, relacion: "propietario" },
+        titular: {
+          nombre, apellido, email, telefono, relacion: "propietario",
+          dni, rtn, direccion_exacta: direccionExacta, profesion,
+          contacto_emergencia_nombre: emergNombre,
+          contacto_emergencia_telefono: emergTel,
+        },
       });
       const url = `${window.location.origin}/?activar=${res.activacion.token_activacion}`;
       setEnlace({ email: res.activacion.usuario_email, url });
@@ -294,6 +305,18 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
             <input placeholder="Correo electrónico" value={email} onChange={(e) => setEmail(e.target.value)} />
             <input placeholder="Teléfono (opcional)" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
           </div>
+          <div className="row">
+            <input placeholder="Identidad / DNI" value={dni} onChange={(e) => setDni(e.target.value)} />
+            <input placeholder="RTN (opcional)" value={rtn} onChange={(e) => setRtn(e.target.value)} />
+          </div>
+          <div className="row">
+            <input placeholder="Dirección exacta" value={direccionExacta} onChange={(e) => setDireccionExacta(e.target.value)} />
+            <input placeholder="Profesión" value={profesion} onChange={(e) => setProfesion(e.target.value)} />
+          </div>
+          <div className="row">
+            <input placeholder="Contacto de emergencia (nombre)" value={emergNombre} onChange={(e) => setEmergNombre(e.target.value)} />
+            <input placeholder="Contacto de emergencia (teléfono)" value={emergTel} onChange={(e) => setEmergTel(e.target.value)} />
+          </div>
           <div className="nota">
             Se creará el acceso del titular en estado <b>pendiente</b>. Recibirá un enlace
             para definir su propia contraseña (la administración nunca conoce las contraseñas).
@@ -313,6 +336,12 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   const [etiqueta, setEtiqueta] = useState("");
   const [mNombre, setMNombre] = useState("");
   const [mEmail, setMEmail] = useState("");
+  const [mApellido, setMApellido] = useState("");
+  const [mTelefono, setMTelefono] = useState("");
+  const [mDni, setMDni] = useState("");
+  const [mProfesion, setMProfesion] = useState("");
+  const [mEmergNombre, setMEmergNombre] = useState("");
+  const [mEmergTel, setMEmergTel] = useState("");
   const [msg, setMsg] = useState("");
   const [miembroEnlace, setMiembroEnlace] = useState<{ email: string; url: string } | null>(null);
 
@@ -327,13 +356,19 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   async function addMiembro() {
     if (!mNombre.trim() || !mEmail.trim()) return;
     try {
-      const res = await agregarMiembro(cuenta.id, { nombre: mNombre, email: mEmail, relacion: "familiar" });
+      const res = await agregarMiembro(cuenta.id, {
+        nombre: mNombre, apellido: mApellido, email: mEmail, telefono: mTelefono,
+        relacion: "familiar", dni: mDni, profesion: mProfesion,
+        contacto_emergencia_nombre: mEmergNombre, contacto_emergencia_telefono: mEmergTel,
+      });
       const token = (res as any).activacion?.token_activacion;
       if (token) {
         const url = `${window.location.origin}/?activar=${token}`;
         setMiembroEnlace({ email: mEmail, url });
       }
-      setMNombre(""); setMEmail(""); setMsg(""); onCambio();
+      setMNombre(""); setMEmail(""); setMApellido(""); setMTelefono("");
+      setMDni(""); setMProfesion(""); setMEmergNombre(""); setMEmergTel("");
+      setMsg(""); onCambio();
     } catch (e) { setMsg((e as Error).message); }
   }
 
@@ -371,7 +406,13 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
 
         <div className="inline-create">
           <input placeholder="Nombre del miembro" value={mNombre} onChange={(e) => setMNombre(e.target.value)} />
+          <input placeholder="Apellido" value={mApellido} onChange={(e) => setMApellido(e.target.value)} />
           <input placeholder="Correo" value={mEmail} onChange={(e) => setMEmail(e.target.value)} />
+          <input placeholder="Teléfono" value={mTelefono} onChange={(e) => setMTelefono(e.target.value)} />
+          <input placeholder="Identidad / DNI" value={mDni} onChange={(e) => setMDni(e.target.value)} />
+          <input placeholder="Profesión" value={mProfesion} onChange={(e) => setMProfesion(e.target.value)} />
+          <input placeholder="Contacto emergencia (nombre)" value={mEmergNombre} onChange={(e) => setMEmergNombre(e.target.value)} />
+          <input placeholder="Contacto emergencia (teléfono)" value={mEmergTel} onChange={(e) => setMEmergTel(e.target.value)} />
           <button className="mini" onClick={addMiembro}>+ Agregar miembro</button>
         </div>
 

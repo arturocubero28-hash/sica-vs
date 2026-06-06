@@ -117,9 +117,12 @@ export const reactivarCuenta = (id: string) =>
 export const crearUnidad = (body: { tipo: string; identificador: string; direccion_ref?: string }) =>
   request<Unidad>("/unidades", { method: "POST", body: JSON.stringify(body) });
 
+
 export interface NuevaCuenta {
   unidad_id: string; apartamento?: string; tarifa_id: number; dia_pago: number;
-  titular: { nombre: string; apellido: string; email: string; telefono?: string; relacion?: string };
+  titular: { nombre: string; apellido: string; email: string; telefono?: string; relacion?: string;
+    dni?: string; rtn?: string; direccion_exacta?: string; profesion?: string;
+    contacto_emergencia_nombre?: string; contacto_emergencia_telefono?: string };
 }
 export const crearCuenta = (body: NuevaCuenta) =>
   request<{ cuenta: Cuenta; activacion: { usuario_email: string; token_activacion: string } }>(

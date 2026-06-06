@@ -36,7 +36,7 @@ def _err(code, msg, status):
     return jsonify({"error": {"code": code, "message": msg}}), status
 
 
-def _crear_usuario_pendiente(nombre, apellido, email, telefono=None):
+def _crear_usuario_pendiente(nombre, apellido, email, telefono=None, extra=None):
     """Crea un Usuario residente en estado pendiente de activación.
     Devuelve (usuario, token_activacion) o (None, mensaje_error)."""
     email = (email or "").strip().lower()
@@ -45,11 +45,18 @@ def _crear_usuario_pendiente(nombre, apellido, email, telefono=None):
     if Usuario.query.filter_by(email=email).first():
         return None, f"Ya existe un usuario con el email {email}"
 
+    extra = extra or {}
     u = Usuario(
         nombre=nombre.strip(),
         apellido=(apellido or "").strip(),
         email=email,
         telefono=telefono,
+        dni=(extra.get("dni") or None),
+        rtn=(extra.get("rtn") or None),
+        direccion_exacta=(extra.get("direccion_exacta") or None),
+        profesion=(extra.get("profesion") or None),
+        contacto_emergencia_nombre=(extra.get("contacto_emergencia_nombre") or None),
+        contacto_emergencia_telefono=(extra.get("contacto_emergencia_telefono") or None),
         rol="residente",
         activo=False,            # pendiente hasta que defina contraseña
     )
@@ -151,6 +158,7 @@ def crear_cuenta(usuario_actual):
     usuario, token_o_error = _crear_usuario_pendiente(
         titular_data.get("nombre"), titular_data.get("apellido"),
         titular_data.get("email"), titular_data.get("telefono"),
+        extra=titular_data,
     )
     if usuario is None:
         return _err("titular_invalido", token_o_error, 400)
@@ -239,6 +247,7 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
     usuario, token_o_error = _crear_usuario_pendiente(
         data.get("nombre"), data.get("apellido"),
         data.get("email"), data.get("telefono"),
+        extra=data,
     )
     if usuario is None:
         return _err("miembro_invalido", token_o_error, 400)
