@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import {
   listarCuentas, listarUnidades, listarTarifas, crearUnidad, crearCuenta,
-  detalleCuenta, agregarMiembro, asignarTarjeta, darBajaCuenta, reactivarCuenta,
-  type Cuenta, type Unidad, type Tarifa,
+  detalleCuenta, agregarMiembro, asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
+  type Cuenta, type Unidad, type Tarifa, type ResidenteDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
 
@@ -381,18 +381,11 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         </div>
 
         <div className="sub">Residentes</div>
-        <div className="scroll-x"><table className="data">
-          <tbody>
-            {(cuenta.residentes || []).map((r) => (
-              <tr key={r.id}>
-                <td>{r.nombre}</td>
-                <td><span className="pill">{r.rol_cuenta}</span></td>
-                <td>{r.relacion}</td>
-                <td><span className={r.estado_acceso === "activo" ? "pill green" : "pill amber"}>{r.estado_acceso}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table></div>
+        <div className="residentes-lista">
+          {(cuenta.residentes || []).map((r) => (
+            <FilaResidente key={r.id} residente={r} onActualizado={onCambio} />
+          ))}
+        </div>
 
         {miembroEnlace && (
           <div className="activacion-box">
@@ -441,6 +434,111 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
 
         {msg && <div className="error">{msg}</div>}
       </div>
+    </div>
+  );
+}
+
+function FilaResidente({ residente, onActualizado }: {
+  residente: ResidenteDTO; onActualizado: () => void;
+}) {
+  const [expandido, setExpandido] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  // Campos editables (precargados con lo actual)
+  const [f, setF] = useState({
+    nombre: residente.nombre_solo || "",
+    apellido: residente.apellido || "",
+    telefono: residente.telefono || "",
+    dni: residente.dni || "",
+    rtn: residente.rtn || "",
+    direccion_exacta: residente.direccion_exacta || "",
+    profesion: residente.profesion || "",
+    contacto_emergencia_nombre: residente.contacto_emergencia_nombre || "",
+    contacto_emergencia_telefono: residente.contacto_emergencia_telefono || "",
+  });
+
+  function set(campo: string, valor: string) { setF(prev => ({ ...prev, [campo]: valor })); }
+
+  async function guardar() {
+    if (!residente.usuario_id) { setMsg("No se puede editar este residente"); return; }
+    setGuardando(true); setMsg("");
+    try {
+      await editarUsuario(residente.usuario_id, f);
+      setEditando(false);
+      onActualizado();
+    } catch (e) { setMsg((e as Error).message); }
+    finally { setGuardando(false); }
+  }
+
+  const Dato = ({ label, valor }: { label: string; valor?: string }) => (
+    <div className="dato-item">
+      <span className="muted small">{label}</span>
+      <span>{valor || <span className="muted">—</span>}</span>
+    </div>
+  );
+
+  return (
+    <div className="residente-fila">
+      <div className="residente-cabecera">
+        <span className="residente-nombre">{residente.nombre}</span>
+        <span className="pill">{residente.rol_cuenta}</span>
+        <span className="muted small">{residente.relacion}</span>
+        <span className={residente.estado_acceso === "activo" ? "pill green" : "pill amber"}>
+          {residente.estado_acceso}
+        </span>
+        <button className="mini" onClick={() => setExpandido(e => !e)}>
+          {expandido ? "Ocultar" : "Ver"}
+        </button>
+      </div>
+
+      {expandido && (
+        <div className="residente-detalle">
+          {!editando ? (
+            <>
+              <div className="datos-grid">
+                <Dato label="Correo" valor={residente.email} />
+                <Dato label="Teléfono" valor={residente.telefono} />
+                <Dato label="Identidad / DNI" valor={residente.dni} />
+                <Dato label="RTN" valor={residente.rtn} />
+                <Dato label="Profesión" valor={residente.profesion} />
+                <Dato label="Dirección exacta" valor={residente.direccion_exacta} />
+                <Dato label="Contacto emergencia" valor={residente.contacto_emergencia_nombre} />
+                <Dato label="Tel. emergencia" valor={residente.contacto_emergencia_telefono} />
+              </div>
+              <button className="mini" onClick={() => setEditando(true)}>✏️ Editar información</button>
+            </>
+          ) : (
+            <div className="datos-editar">
+              <div className="row">
+                <input placeholder="Nombre" value={f.nombre} onChange={e => set("nombre", e.target.value)} />
+                <input placeholder="Apellido" value={f.apellido} onChange={e => set("apellido", e.target.value)} />
+              </div>
+              <div className="row">
+                <input placeholder="Teléfono" value={f.telefono} onChange={e => set("telefono", e.target.value)} />
+                <input placeholder="Identidad / DNI" value={f.dni} onChange={e => set("dni", e.target.value)} />
+              </div>
+              <div className="row">
+                <input placeholder="RTN" value={f.rtn} onChange={e => set("rtn", e.target.value)} />
+                <input placeholder="Profesión" value={f.profesion} onChange={e => set("profesion", e.target.value)} />
+              </div>
+              <input placeholder="Dirección exacta" value={f.direccion_exacta} onChange={e => set("direccion_exacta", e.target.value)} />
+              <div className="row">
+                <input placeholder="Contacto emergencia (nombre)" value={f.contacto_emergencia_nombre} onChange={e => set("contacto_emergencia_nombre", e.target.value)} />
+                <input placeholder="Contacto emergencia (teléfono)" value={f.contacto_emergencia_telefono} onChange={e => set("contacto_emergencia_telefono", e.target.value)} />
+              </div>
+              {msg && <div className="error">{msg}</div>}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="mini ghost" onClick={() => { setEditando(false); setMsg(""); }}>Cancelar</button>
+                <button className="mini" onClick={guardar} disabled={guardando}>
+                  {guardando ? "Guardando…" : "Guardar cambios"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

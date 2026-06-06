@@ -92,8 +92,11 @@ export interface Unidad {
   direccion_ref?: string; activa: boolean; total_cuentas: number;
 }
 export interface ResidenteDTO {
-  id: string; rol_cuenta: "titular" | "miembro"; relacion?: string;
-  nombre: string; email: string; estado_acceso: "activo" | "pendiente";
+  id: string; usuario_id?: string; rol_cuenta: "titular" | "miembro"; relacion?: string;
+  nombre: string; nombre_solo?: string; apellido?: string; email: string;
+  telefono?: string; dni?: string; rtn?: string; direccion_exacta?: string; profesion?: string;
+  contacto_emergencia_nombre?: string; contacto_emergencia_telefono?: string;
+  estado_acceso: "activo" | "pendiente";
 }
 export interface TarjetaDTO {
   id: string; card_uid: string; etiqueta?: string; estado: string; asignada_a: string;
@@ -430,7 +433,11 @@ export const crearCajero = (body: { nombre: string; apellido: string; email: str
   request<UsuarioAdminDTO>("/usuarios/cajeros", { method: "POST", body: JSON.stringify(body) });
 export const resetPasswordUsuario = (uuid: string) =>
   request<{ message: string; password_generica: string }>(`/usuarios/${uuid}/reset-password`, { method: "POST" });
-export const editarUsuario = (uuid: string, body: { activo?: boolean }) =>
+export const editarUsuario = (uuid: string, body: {
+  activo?: boolean; nombre?: string; apellido?: string; telefono?: string;
+  dni?: string; rtn?: string; direccion_exacta?: string; profesion?: string;
+  contacto_emergencia_nombre?: string; contacto_emergencia_telefono?: string;
+}) =>
   request<UsuarioAdminDTO>(`/usuarios/${uuid}`, { method: "PUT", body: JSON.stringify(body) });
 
 // ── CAJA ──────────────────────────────────────────────────────────────────────

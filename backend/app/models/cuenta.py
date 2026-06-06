@@ -158,11 +158,21 @@ class Residente(db.Model):
         u = self.usuario
         return {
             "id": str(self.uuid_publico),
+            "usuario_id": str(u.uuid_publico) if u else None,
             "rol_cuenta": self.rol_cuenta,
             "relacion": self.relacion,
             "activo": self.activo,
             "nombre": f"{u.nombre} {u.apellido}" if u else None,
+            "nombre_solo": u.nombre if u else None,
+            "apellido": u.apellido if u else None,
             "email": u.email if u else None,
+            "telefono": u.telefono if u else None,
+            "dni": u.dni if u else None,
+            "rtn": u.rtn if u else None,
+            "direccion_exacta": u.direccion_exacta if u else None,
+            "profesion": u.profesion if u else None,
+            "contacto_emergencia_nombre": u.contacto_emergencia_nombre if u else None,
+            "contacto_emergencia_telefono": u.contacto_emergencia_telefono if u else None,
             # estado de activación de la cuenta de acceso del residente
             "estado_acceso": "activo" if (u and u.activo and u.password_hash) else "pendiente",
         }

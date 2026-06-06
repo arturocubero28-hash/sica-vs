@@ -1325,3 +1325,17 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .conteo-comparativo { background: #f9fbfd; border: 1px solid #eef2f7; border-radius: 10px; padding: 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 8px; }
 .conteo-fila { display: flex; justify-content: space-between; align-items: center; }
 .conteo-fila b { font-size: 16px; color: var(--marca-azul); }
+
+/* Lista de residentes expandible (detalle de casa) */
+.residentes-lista { display: flex; flex-direction: column; gap: 6px; }
+.residente-fila { border: 1px solid #eef2f7; border-radius: 10px; overflow: hidden; }
+.residente-cabecera { display: flex; align-items: center; gap: 10px; padding: 10px 12px; flex-wrap: wrap; }
+.residente-nombre { font-weight: 600; color: var(--marca-azul); flex: 1; min-width: 120px; }
+.residente-cabecera .mini { margin-left: auto; }
+.residente-detalle { padding: 12px; background: #f9fbfd; border-top: 1px solid #eef2f7; }
+.datos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.dato-item { display: flex; flex-direction: column; gap: 2px; }
+.datos-editar { display: flex; flex-direction: column; gap: 8px; }
+.datos-editar .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.datos-editar .row input { flex: 1; min-width: 140px; }
+.datos-editar input { padding: 8px 10px; border: 1px solid #d6e0ea; border-radius: 8px; }
