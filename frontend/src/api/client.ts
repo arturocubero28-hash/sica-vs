@@ -634,3 +634,19 @@ export const cobrarAbono = (arregloUuid: string, abonoUuid: string, metodo: stri
 
 export const cancelarArreglo = (uuid: string, motivo?: string) =>
   request<ArregloDTO>(`/arreglos/${uuid}/cancelar`, { method: "POST", body: JSON.stringify({ motivo }) });
+
+// ── RECIBOS (SAR Fase 1) ──────────────────────────────────────────────────────
+export interface ConfigReciboDTO {
+  nombre_emisor?: string; rtn_emisor?: string; direccion_emisor?: string;
+  telefono_emisor?: string; ultimo_correlativo?: number; prefijo?: string;
+  cai?: string; fase_sar_activa?: boolean;
+}
+export const verConfigRecibo = () => request<ConfigReciboDTO>("/recibos/config");
+export const editarConfigRecibo = (body: Partial<ConfigReciboDTO>) =>
+  request<ConfigReciboDTO>("/recibos/config", { method: "PUT", body: JSON.stringify(body) });
+
+// URL del PDF del recibo (con token de auth)
+export function urlReciboPDF(pagoUuid: string): string {
+  const token = getToken();
+  return `${API_URL}/recibos/${pagoUuid}/pdf?_auth=${token}`;
+}

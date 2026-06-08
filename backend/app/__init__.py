@@ -75,6 +75,9 @@ def create_app(config_class=Config):
     from app.api.arreglos import arreglos_bp
     app.register_blueprint(arreglos_bp, url_prefix="/api/v1/arreglos")
 
+    from app.api.recibos import recibos_bp
+    app.register_blueprint(recibos_bp, url_prefix="/api/v1/recibos")
+
     from app.api.usuarios import usuarios_bp
     app.register_blueprint(usuarios_bp, url_prefix="/api/v1/usuarios")
 
@@ -143,6 +146,8 @@ def create_app(config_class=Config):
             "ALTER TABLE abonos_arreglo ADD COLUMN IF NOT EXISTS pago_id BIGINT",
             # Los pagos de abonos no tienen cuota directa: cuota_id puede ser null
             "ALTER TABLE pagos ALTER COLUMN cuota_id DROP NOT NULL",
+            # Recibos SAR Fase 1 (Día 7): correlativo de recibo
+            "ALTER TABLE pagos ADD COLUMN IF NOT EXISTS numero_recibo INTEGER",
         ]
         for sql in columnas:
             try:

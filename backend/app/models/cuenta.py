@@ -270,6 +270,7 @@ class Pago(db.Model):
     revisado_por         = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
     revisado_en          = db.Column(db.DateTime(timezone=True))
     nota_admin           = db.Column(db.String(255))
+    numero_recibo        = db.Column(db.Integer)   # correlativo de recibo (se asigna al aprobar)
     sesion_caja_id       = db.Column(db.BigInteger, db.ForeignKey("sesiones_caja.id"))
     created_at           = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at           = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
@@ -409,4 +410,75 @@ class AbonoArreglo(db.Model):
             "fecha_pactada": self.fecha_pactada.isoformat(),
             "estado":        self.estado,
             "pagado_en":     self.pagado_en.isoformat() if self.pagado_en else None,
+        }
+
+
+class ConfigRecibo(db.Model):
+    """
+    Configuración de recibos (una sola fila, id=1).
+    FASE 1: datos del emisor + correlativo interno.
+    FASE 2 (preparado): CAI, rango autorizado y fecha límite de la SAR.
+    """
+    __tablename__ = "config_recibo"
+
+    id                 = db.Column(db.BigInteger, primary_key=True)
+    # Datos del emisor (Fase 1)
+    nombre_emisor      = db.Column(db.String(160), default="Residencial Villas del Sol")
+    rtn_emisor         = db.Column(db.String(20))
+    direccion_emisor   = db.Column(db.String(255), default="San Pedro Sula, Honduras")
+    telefono_emisor    = db.Column(db.String(40))
+    # Correlativo interno (Fase 1)
+    ultimo_correlativo = db.Column(db.Integer, nullable=False, default=0)
+    prefijo            = db.Column(db.String(20), default="REC")
+    # Datos fiscales SAR (Fase 2 — preparado, aún no se usa para validez legal)
+    cai                = db.Column(db.String(40))
+    rango_desde        = db.Column(db.Integer)
+    rango_hasta        = db.Column(db.Integer)
+    fecha_limite_emision = db.Column(db.Date)
+    punto_emision      = db.Column(db.String(10), default="001")
+    establecimiento    = db.Column(db.String(10), default="001")
+    tipo_documento     = db.Column(db.String(10), default="01")
+    fase_sar_activa    = db.Column(db.Boolean, nullable=False, default=False)  # True = Fase 2 activa
+    actualizado_en     = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
+
+    @classmethod
+    def get(cls):
+        cfg = cls.query.get(1)
+        if not cfg:
+            cfg = cls(id=1)
+            db.session.add(cfg)
+            db.session.commit()
+        return cfg
+
+    def siguiente_correlativo(self):
+        """Reserva y devuelve el siguiente número de recibo."""
+        self.ultimo_correlativo = (self.ultimo_correlativo or 0) + 1
+        return self.ultimo_correlativo
+
+    def numero_formateado(self, correlativo):
+        """
+        Formato del número de recibo.
+        Fase 1: REC-000123
+        Fase 2 (SAR): 001-001-01-00000123 (establecimiento-punto-tipo-correlativo)
+        """
+        if self.fase_sar_activa and self.cai:
+            return f"{self.establecimiento}-{self.punto_emision}-{self.tipo_documento}-{correlativo:08d}"
+        return f"{self.prefijo}-{correlativo:06d}"
+
+    def to_dict(self):
+        return {
+            "nombre_emisor": self.nombre_emisor,
+            "rtn_emisor": self.rtn_emisor,
+            "direccion_emisor": self.direccion_emisor,
+            "telefono_emisor": self.telefono_emisor,
+            "ultimo_correlativo": self.ultimo_correlativo,
+            "prefijo": self.prefijo,
+            "cai": self.cai,
+            "rango_desde": self.rango_desde,
+            "rango_hasta": self.rango_hasta,
+            "fecha_limite_emision": self.fecha_limite_emision.isoformat() if self.fecha_limite_emision else None,
+            "punto_emision": self.punto_emision,
+            "establecimiento": self.establecimiento,
+            "tipo_documento": self.tipo_documento,
+            "fase_sar_activa": self.fase_sar_activa,
         }

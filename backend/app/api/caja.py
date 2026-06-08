@@ -123,6 +123,11 @@ def registrar_pago(usuario_actual):
         cuenta.estado = "al_dia"
         cuenta.bloqueada = False
 
+    # Asignar número de recibo
+    from app.api.recibos import asignar_recibo
+    db.session.flush()
+    asignar_recibo(pago)
+
     db.session.commit()
     return jsonify({"data": {"pago": pago.to_dict(), "sesion": sesion.to_dict()}}), 201
 

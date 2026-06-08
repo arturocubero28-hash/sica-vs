@@ -202,6 +202,9 @@ def revisar_pago(usuario_actual, uuid_pago):
         cuenta = pago.cuenta
         cuenta.estado = "al_dia"
         cuenta.bloqueada = False
+        # Asignar número de recibo
+        from app.api.recibos import asignar_recibo
+        asignar_recibo(pago)
     else:
         # Rechazado: la cuota vuelve a pendiente para que el residente reintente
         pago.cuota.estado = "pendiente"

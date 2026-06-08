@@ -260,6 +260,10 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
     db.session.add(pago)
     db.session.flush()
 
+    # Asignar número de recibo al abono cobrado
+    from app.api.recibos import asignar_recibo
+    asignar_recibo(pago)
+
     abono.estado = "pagado"
     abono.pagado_en = dt.datetime.now(dt.timezone.utc)
     abono.pago_id = pago.id

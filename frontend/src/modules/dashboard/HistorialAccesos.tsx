@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { historialAccesos, historialPagos, urlFotoGuardia, type HistorialDTO, type HistorialPagosDTO, type EventoHistorialDTO } from "../../api/client";
+import { historialAccesos, historialPagos, urlFotoGuardia, urlReciboPDF, type HistorialDTO, type HistorialPagosDTO, type EventoHistorialDTO } from "../../api/client";
 
 export function HistorialAccesos() {
   const [tab, setTab] = useState<"accesos" | "pagos">("accesos");
@@ -251,7 +251,7 @@ function TabPagos() {
             <div className="scroll-x">
               <table className="data">
                 <thead>
-                  <tr><th>Fecha / Hora</th><th>Casa</th><th>Titular</th><th>Monto</th><th>Método</th><th>Cobrado por</th></tr>
+                  <tr><th>Fecha / Hora</th><th>Casa</th><th>Titular</th><th>Monto</th><th>Método</th><th>Cobrado por</th><th>Recibo</th></tr>
                 </thead>
                 <tbody>
                   {data.pagos.map(p => (
@@ -262,6 +262,10 @@ function TabPagos() {
                       <td><b>{L(p.monto)}</b></td>
                       <td><span className="pill">{METODO_LABEL[p.metodo] || p.metodo}</span></td>
                       <td className="small">{p.cobrado_por}</td>
+                      <td>
+                        <a className="mini" href={urlReciboPDF(p.id)} target="_blank" rel="noreferrer"
+                          style={{ textDecoration: "none" }}>🧾 Recibo</a>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
