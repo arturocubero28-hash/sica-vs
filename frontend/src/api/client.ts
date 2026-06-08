@@ -362,8 +362,13 @@ export interface ReporteFinancieroDTO {
   recaudado_por_metodo?: { efectivo: number; tarjeta_pos: number; transferencia: number; linea: number };
   al_dia: AlDiaDTO[]; morosos: MorosoDTO[]; tendencia: TendenciaDTO[];
 }
-export const reporteFinanciero = (anio?: number, mes?: number) => {
-  const q = anio && mes ? `?anio=${anio}&mes=${mes}` : "";
+export const reporteFinanciero = (anio?: number, mes?: number, desde?: string, hasta?: string) => {
+  let q = "";
+  if (desde && hasta) {
+    q = `?desde=${desde}&hasta=${hasta}`;
+  } else if (anio && mes) {
+    q = `?anio=${anio}&mes=${mes}`;
+  }
   return request<ReporteFinancieroDTO>(`/reportes/financiero${q}`);
 };
 

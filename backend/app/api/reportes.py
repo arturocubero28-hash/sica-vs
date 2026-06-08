@@ -24,11 +24,39 @@ def reporte_financiero(usuario_actual):
     Devuelve: totales, cobranza, lista de al día y morosos, tendencia.
     """
     hoy = dt.date.today()
-    anio = int(request.args.get("anio", hoy.year))
-    mes = int(request.args.get("mes", hoy.month))
-    periodo = dt.date(anio, mes, 1)
+    desde_str = request.args.get("desde")
+    hasta_str = request.args.get("hasta")
 
-    cuotas = Cuota.query.filter_by(periodo=periodo).all()
+    # Modo RANGO: si vienen desde y hasta, se filtran las cuotas cuyo período
+    # caiga dentro del rango. Si no, se usa el modo mes/año (un solo mes).
+    modo_rango = bool(desde_str and hasta_str)
+    if modo_rango:
+        try:
+            desde = dt.date.fromisoformat(desde_str)
+            hasta = dt.date.fromisoformat(hasta_str)
+        except ValueError:
+            return jsonify({"error": {"code": "fecha_invalida",
+                                      "message": "Formato de fecha inválido (use YYYY-MM-DD)"}}), 400
+        if desde > hasta:
+            desde, hasta = hasta, desde
+        # Normalizar al primer día del mes para comparar con periodo
+        desde_p = desde.replace(day=1)
+        hasta_p = hasta.replace(day=1)
+        cuotas = Cuota.query.filter(
+            Cuota.periodo >= desde_p, Cuota.periodo <= hasta_p
+        ).all()
+        periodo = desde_p
+        if desde.strftime("%B %Y") == hasta.strftime("%B %Y"):
+            label = desde.strftime("%B %Y")
+        else:
+            label = f"{desde.strftime('%b %Y')} – {hasta.strftime('%b %Y')}"
+        anio, mes = hasta.year, hasta.month
+    else:
+        anio = int(request.args.get("anio", hoy.year))
+        mes = int(request.args.get("mes", hoy.month))
+        periodo = dt.date(anio, mes, 1)
+        label = periodo.strftime("%B %Y")
+        cuotas = Cuota.query.filter_by(periodo=periodo).all()
 
     total_esperado = 0.0
     total_recaudado = 0.0
@@ -100,7 +128,7 @@ def reporte_financiero(usuario_actual):
 
     return jsonify({"data": {
         "periodo": periodo.isoformat(),
-        "mes_label": periodo.strftime("%B %Y"),
+        "mes_label": label,
         "total_esperado": total_esperado,
         "total_recaudado": total_recaudado,
         "total_pendiente": total_pendiente,

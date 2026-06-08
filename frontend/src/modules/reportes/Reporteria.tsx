@@ -7,14 +7,22 @@ function L(n: number) {
 
 export function Reporteria() {
   const hoy = new Date();
+  const [modo, setModo] = useState<"mes" | "rango">("mes");
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mes, setMes] = useState(hoy.getMonth() + 1);
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
   const [data, setData] = useState<ReporteFinancieroDTO | null>(null);
   const [cargando, setCargando] = useState(true);
 
   function cargar(a = anio, m = mes) {
     setCargando(true);
-    reporteFinanciero(a, m).then(setData).catch(() => {}).finally(() => setCargando(false));
+    if (modo === "rango" && desde && hasta) {
+      reporteFinanciero(undefined, undefined, desde, hasta)
+        .then(setData).catch(() => {}).finally(() => setCargando(false));
+    } else {
+      reporteFinanciero(a, m).then(setData).catch(() => {}).finally(() => setCargando(false));
+    }
   }
 
   useEffect(() => { cargar(); }, []);
@@ -108,12 +116,30 @@ export function Reporteria() {
           <span className="muted">{data.mes_label}</span>
         </div>
         <div className="reporte-controles">
-          <select className="periodo-select" value={mes} onChange={e => setMes(Number(e.target.value))}>
-            {meses.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          <select className="periodo-select" value={modo}
+            onChange={e => setModo(e.target.value as "mes" | "rango")}>
+            <option value="mes">Por mes</option>
+            <option value="rango">Por rango de fechas</option>
           </select>
-          <select className="periodo-select" value={anio} onChange={e => setAnio(Number(e.target.value))}>
-            {anios.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
+
+          {modo === "mes" ? (
+            <>
+              <select className="periodo-select" value={mes} onChange={e => setMes(Number(e.target.value))}>
+                {meses.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+              </select>
+              <select className="periodo-select" value={anio} onChange={e => setAnio(Number(e.target.value))}>
+                {anios.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </>
+          ) : (
+            <>
+              <input className="periodo-select" type="date" value={desde}
+                onChange={e => setDesde(e.target.value)} title="Desde" />
+              <input className="periodo-select" type="date" value={hasta}
+                onChange={e => setHasta(e.target.value)} title="Hasta" />
+            </>
+          )}
+
           <button className="ghost mini" onClick={() => cargar()}>Ver →</button>
           <div className="reporte-export">
             <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
