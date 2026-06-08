@@ -27,8 +27,10 @@ def reporte_financiero(usuario_actual):
     desde_str = request.args.get("desde")
     hasta_str = request.args.get("hasta")
 
-    # Modo RANGO: si vienen desde y hasta, se filtran las cuotas cuyo período
-    # caiga dentro del rango. Si no, se usa el modo mes/año (un solo mes).
+    # ── MODO RANGO ──────────────────────────────────────────────────────────
+    # Si vienen desde y hasta, el reporte se basa en la FECHA EN QUE SE PAGÓ
+    # (cuánto dinero entró en ese período), no en el período de la cuota.
+    # Esto responde "¿cuánto recaudamos entre estas fechas?".
     modo_rango = bool(desde_str and hasta_str)
     if modo_rango:
         try:
@@ -39,24 +41,73 @@ def reporte_financiero(usuario_actual):
                                       "message": "Formato de fecha inválido (use YYYY-MM-DD)"}}), 400
         if desde > hasta:
             desde, hasta = hasta, desde
-        # Normalizar al primer día del mes para comparar con periodo
-        desde_p = desde.replace(day=1)
-        hasta_p = hasta.replace(day=1)
-        cuotas = Cuota.query.filter(
-            Cuota.periodo >= desde_p, Cuota.periodo <= hasta_p
-        ).all()
-        periodo = desde_p
-        if desde.strftime("%B %Y") == hasta.strftime("%B %Y"):
-            label = desde.strftime("%B %Y")
-        else:
-            label = f"{desde.strftime('%b %Y')} – {hasta.strftime('%b %Y')}"
-        anio, mes = hasta.year, hasta.month
-    else:
-        anio = int(request.args.get("anio", hoy.year))
-        mes = int(request.args.get("mes", hoy.month))
-        periodo = dt.date(anio, mes, 1)
-        label = periodo.strftime("%B %Y")
-        cuotas = Cuota.query.filter_by(periodo=periodo).all()
+        # Rango de datetime para comparar (incluye todo el día 'hasta')
+        ini = dt.datetime.combine(desde, dt.time.min).replace(tzinfo=dt.timezone.utc)
+        fin = dt.datetime.combine(hasta, dt.time.max).replace(tzinfo=dt.timezone.utc)
+        label = (desde.strftime("%d/%m/%Y") if desde == hasta
+                 else f"{desde.strftime('%d/%m/%Y')} – {hasta.strftime('%d/%m/%Y')}")
+
+        # Pagos aprobados cuya fecha efectiva (revisado_en, o created_at si null)
+        # caiga dentro del rango.
+        pagos = Pago.query.filter(Pago.estado == "aprobado").all()
+        def fecha_efectiva(p):
+            f = p.revisado_en or p.created_at
+            if f and f.tzinfo is None:
+                f = f.replace(tzinfo=dt.timezone.utc)
+            return f
+        pagos_rango = [p for p in pagos if (fe := fecha_efectiva(p)) and ini <= fe <= fin]
+
+        total_recaudado = sum(float(p.monto) for p in pagos_rango)
+        por_metodo = {"efectivo": 0.0, "tarjeta_pos": 0.0, "transferencia": 0.0, "linea": 0.0}
+        detalle_pagos = []
+        for p in pagos_rango:
+            m = p.metodo or "transferencia"
+            if m == "pasarela":
+                m = "linea"
+            if m not in por_metodo:
+                por_metodo[m] = 0.0
+            por_metodo[m] += float(p.monto)
+            cuenta = p.cuenta
+            unidad = cuenta.unidad.identificador if cuenta and cuenta.unidad else "—"
+            titular = "—"
+            if cuenta:
+                tit = next((r for r in cuenta.residentes if r.rol_cuenta == "titular"), None)
+                if tit and tit.usuario:
+                    titular = f"{tit.usuario.nombre} {tit.usuario.apellido}"
+            fe = fecha_efectiva(p)
+            detalle_pagos.append({
+                "unidad": unidad, "titular": titular, "monto": float(p.monto),
+                "metodo": m, "fecha": fe.isoformat() if fe else None,
+            })
+        detalle_pagos.sort(key=lambda x: x["fecha"] or "", reverse=True)
+
+        return jsonify({"data": {
+            "modo": "rango",
+            "periodo": desde.isoformat(),
+            "mes_label": label,
+            "total_esperado": 0.0,
+            "total_recaudado": round(total_recaudado, 2),
+            "total_pendiente": 0.0,
+            "pct_cobranza": 0.0,
+            "recaudado_por_metodo": {
+                "efectivo": round(por_metodo.get("efectivo", 0.0), 2),
+                "tarjeta_pos": round(por_metodo.get("tarjeta_pos", 0.0), 2),
+                "transferencia": round(por_metodo.get("transferencia", 0.0), 2),
+                "linea": round(por_metodo.get("linea", 0.0), 2),
+            },
+            "al_dia": [],
+            "morosos": [],
+            "tendencia": [],
+            "detalle_pagos": detalle_pagos,
+            "total_pagos": len(pagos_rango),
+        }})
+
+    # ── MODO MES (un solo período de cuota) ─────────────────────────────────
+    anio = int(request.args.get("anio", hoy.year))
+    mes = int(request.args.get("mes", hoy.month))
+    periodo = dt.date(anio, mes, 1)
+    label = periodo.strftime("%B %Y")
+    cuotas = Cuota.query.filter_by(periodo=periodo).all()
 
     total_esperado = 0.0
     total_recaudado = 0.0
@@ -129,6 +180,7 @@ def reporte_financiero(usuario_actual):
     return jsonify({"data": {
         "periodo": periodo.isoformat(),
         "mes_label": label,
+        "modo": "mes",
         "total_esperado": total_esperado,
         "total_recaudado": total_recaudado,
         "total_pendiente": total_pendiente,

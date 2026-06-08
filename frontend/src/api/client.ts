@@ -355,12 +355,16 @@ export interface MorosoDTO {
 }
 export interface AlDiaDTO { unidad: string; titular: string; monto: number; }
 export interface TendenciaDTO { mes_label: string; esperado: number; recaudado: number; }
+export interface PagoDetalleDTO {
+  unidad: string; titular: string; monto: number; metodo: string; fecha: string | null;
+}
 export interface ReporteFinancieroDTO {
-  periodo: string; mes_label: string;
+  periodo: string; mes_label: string; modo?: "mes" | "rango";
   total_esperado: number; total_recaudado: number; total_pendiente: number;
   pct_cobranza: number; cuentas_al_dia: number; cuentas_morosas: number;
   recaudado_por_metodo?: { efectivo: number; tarjeta_pos: number; transferencia: number; linea: number };
   al_dia: AlDiaDTO[]; morosos: MorosoDTO[]; tendencia: TendenciaDTO[];
+  detalle_pagos?: PagoDetalleDTO[]; total_pagos?: number;
 }
 export const reporteFinanciero = (anio?: number, mes?: number, desde?: string, hasta?: string) => {
   let q = "";

@@ -107,6 +107,7 @@ export function Reporteria() {
   }
 
   const maxTend = Math.max(...data.tendencia.map(t => t.esperado), 1);
+  const esRango = data.modo === "rango";
 
   return (
     <div className="reporteria">
@@ -148,7 +149,20 @@ export function Reporteria() {
         </div>
       </div>
 
+
       {/* Tarjetas de resumen */}
+      {esRango ? (
+        <div className="metric-grid">
+          <div className="metric-card verde">
+            <div className="metric-top"><span className="metric-label">Recaudado en el período</span><span className="metric-icon">✓</span></div>
+            <div className="metric-valor" style={{ fontSize: 22 }}>{L(data.total_recaudado)}</div>
+          </div>
+          <div className="metric-card azul">
+            <div className="metric-top"><span className="metric-label">Cantidad de pagos</span><span className="metric-icon">#</span></div>
+            <div className="metric-valor" style={{ fontSize: 22 }}>{data.total_pagos ?? 0}</div>
+          </div>
+        </div>
+      ) : (
       <div className="metric-grid">
         <div className="metric-card azul">
           <div className="metric-top"><span className="metric-label">Esperado</span><span className="metric-icon">L</span></div>
@@ -167,8 +181,10 @@ export function Reporteria() {
           <div className="metric-valor">{data.pct_cobranza}%</div>
         </div>
       </div>
+      )}
 
-      {/* Barra de progreso de cobranza */}
+      {/* Barra de progreso de cobranza (solo modo mes) */}
+      {!esRango && (
       <div className="cobranza-bar-wrap">
         <div className="cobranza-bar-label">
           <span>{data.cuentas_al_dia} al día</span>
@@ -178,6 +194,7 @@ export function Reporteria() {
           <div className="cobranza-fill" style={{ width: `${data.pct_cobranza}%` }} />
         </div>
       </div>
+      )}
 
       {/* Desglose de lo recaudado por método de pago */}
       {data.recaudado_por_metodo && (
@@ -217,7 +234,8 @@ export function Reporteria() {
         </div>
       )}
 
-      {/* Tendencia */}
+      {/* Tendencia (solo modo mes) */}
+      {!esRango && (
       <div className="dash-card">
         <h3>Recaudación últimos 6 meses</h3>
         <div className="tendencia-chart">
@@ -236,8 +254,38 @@ export function Reporteria() {
           <span><i className="leg recaudado" /> Recaudado</span>
         </div>
       </div>
+      )}
 
-      {/* Morosos */}
+      {/* Detalle de pagos (solo modo rango) */}
+      {esRango && (
+      <div className="dash-card">
+        <h3>Detalle de pagos del período ({data.total_pagos ?? 0})</h3>
+        <p className="muted small">Pagos recibidos entre las fechas seleccionadas, ordenados por fecha.</p>
+        {(data.detalle_pagos?.length ?? 0) === 0 ? (
+          <p className="muted">No hubo pagos en este período.</p>
+        ) : (
+          <div className="scroll-x">
+            <table className="data">
+              <thead><tr><th>Fecha</th><th>Unidad</th><th>Titular</th><th>Método</th><th>Monto</th></tr></thead>
+              <tbody>
+                {data.detalle_pagos!.map((p, i) => (
+                  <tr key={i}>
+                    <td className="small">{p.fecha ? new Date(p.fecha).toLocaleDateString("es-HN") : "—"}</td>
+                    <td>{p.unidad}</td>
+                    <td>{p.titular}</td>
+                    <td><span className="pill">{p.metodo}</span></td>
+                    <td>{L(p.monto)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* Morosos (solo modo mes) */}
+      {!esRango && (
       <div className="dash-card">
         <h3 style={{ color: "#c81e1e" }}>Cuentas en mora ({data.morosos.length})</h3>
         {data.morosos.length === 0 ? (
@@ -260,8 +308,10 @@ export function Reporteria() {
           </div>
         )}
       </div>
+      )}
 
-      {/* Al día */}
+      {/* Al día (solo modo mes) */}
+      {!esRango && (
       <div className="dash-card">
         <h3 style={{ color: "#1d8a4a" }}>Cuentas al día ({data.al_dia.length})</h3>
         {data.al_dia.length === 0 ? (
@@ -279,6 +329,7 @@ export function Reporteria() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
