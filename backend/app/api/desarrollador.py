@@ -172,7 +172,10 @@ def metricas_codigo(usuario_actual):
         return total, archivos
 
     be_loc, be_files = contar_lineas(backend_app, [".py"])
-    fe_dir = os.path.join(proyecto, "frontend", "src")
+    fe_dir = "/frontend/src"
+    if not os.path.isdir(fe_dir):
+        # fallback para desarrollo local fuera de Docker
+        fe_dir = os.path.join(proyecto, "frontend", "src")
     fe_loc, fe_files = contar_lineas(fe_dir, [".ts", ".tsx"])
     css_loc, _ = contar_lineas(fe_dir, [".css"])
     resultado["loc"] = {
@@ -292,9 +295,13 @@ def metricas_seguridad(usuario_actual):
         L.status_code == 429, L.created_at >= hace_7d))
 
     # ── Errores de autorización (401/403 fuera del login) ──
+    # Solo cuenta los que tienen usuario_id o email registrado — es decir, los que
+    # llegaron con un token (inválido, revocado o sin permiso). Excluye los 401
+    # por ausencia de token (operación normal del frontend al cargar).
     authz_24h = contar(db.session.query(func.count(L.id)).filter(
         L.status_code.in_([401, 403]),
         ~L.endpoint.like("%/auth/login"),
+        ~L.endpoint.like("%/auth/me"),       # /me devuelve 401 normal al cargar
         L.created_at >= hace_24h))
 
     # ── Top IPs con más logins fallidos (7 días) ──
