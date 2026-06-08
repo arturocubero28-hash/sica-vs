@@ -197,3 +197,72 @@ def reporte_financiero(usuario_actual):
         "morosos": morosos,
         "tendencia": tendencia,
     }})
+
+
+@reportes_bp.get("/mora-por-casa")
+@roles_required("admin", "super_admin")
+def mora_por_casa(usuario_actual):
+    """
+    Reporte de mora detallado por casa: lista cada cuenta con cuotas pendientes
+    y QUÉ MESES específicos debe, con el total adeudado.
+    Útil para gestión de cobro de la administración.
+    """
+    hoy = dt.date.today()
+
+    # Todas las cuotas no pagadas (pendiente, vencida, en_arreglo, etc.)
+    cuotas = Cuota.query.filter(Cuota.estado != "pagada").order_by(Cuota.periodo.asc()).all()
+
+    # Agrupar por cuenta
+    por_cuenta = defaultdict(list)
+    for c in cuotas:
+        por_cuenta[c.cuenta_id].append(c)
+
+    casas = []
+    total_general = 0.0
+    for cuenta_id, lista in por_cuenta.items():
+        cuenta = lista[0].cuenta
+        if not cuenta:
+            continue
+        unidad = cuenta.unidad.identificador if cuenta.unidad else "—"
+        titular = "—"
+        telefono = None
+        if cuenta:
+            tit = next((r for r in cuenta.residentes if r.rol_cuenta == "titular"), None)
+            if tit and tit.usuario:
+                titular = f"{tit.usuario.nombre} {tit.usuario.apellido}"
+                telefono = tit.usuario.telefono
+
+        meses = []
+        total_casa = 0.0
+        for c in sorted(lista, key=lambda x: x.periodo):
+            monto = float(c.monto)
+            total_casa += monto
+            dias = (hoy - c.fecha_vencimiento).days
+            meses.append({
+                "periodo": c.periodo.isoformat(),
+                "mes_label": c.periodo.strftime("%B %Y"),
+                "monto": monto,
+                "estado": c.estado,
+                "vencimiento": c.fecha_vencimiento.isoformat(),
+                "dias_atraso": dias if dias > 0 else 0,
+            })
+        total_general += total_casa
+        casas.append({
+            "unidad": unidad,
+            "titular": titular,
+            "telefono": telefono,
+            "cantidad_meses": len(meses),
+            "total_adeudado": round(total_casa, 2),
+            "meses": meses,
+            "max_dias_atraso": max((m["dias_atraso"] for m in meses), default=0),
+        })
+
+    # Ordenar: las más atrasadas primero
+    casas.sort(key=lambda c: (c["cantidad_meses"], c["max_dias_atraso"]), reverse=True)
+
+    return jsonify({"data": {
+        "casas": casas,
+        "total_casas_mora": len(casas),
+        "total_general_adeudado": round(total_general, 2),
+        "generado": hoy.isoformat(),
+    }})

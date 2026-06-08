@@ -1,11 +1,29 @@
 import { useState, useEffect } from "react";
-import { reporteFinanciero, type ReporteFinancieroDTO } from "../../api/client";
+import { reporteFinanciero, reporteMoraPorCasa,
+  type ReporteFinancieroDTO, type MoraPorCasaDTO, type CasaMoraDTO } from "../../api/client";
 
 function L(n: number) {
   return "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function Reporteria() {
+  const [tab, setTab] = useState<"financiero" | "mora">("financiero");
+  return (
+    <div className="reporteria">
+      <div className="historial-tabs" style={{ marginBottom: 14 }}>
+        <button className={`htab ${tab === "financiero" ? "activo" : ""}`} onClick={() => setTab("financiero")}>
+          Financiero
+        </button>
+        <button className={`htab ${tab === "mora" ? "activo" : ""}`} onClick={() => setTab("mora")}>
+          Mora por casa
+        </button>
+      </div>
+      {tab === "financiero" ? <ReporteFinancieroVista /> : <ReporteMoraPorCasa />}
+    </div>
+  );
+}
+
+function ReporteFinancieroVista() {
   const hoy = new Date();
   const [modo, setModo] = useState<"mes" | "rango">("mes");
   const [anio, setAnio] = useState(hoy.getFullYear());
@@ -110,7 +128,7 @@ export function Reporteria() {
   const esRango = data.modo === "rango";
 
   return (
-    <div className="reporteria">
+    <>
       <div className="dash-header-pro">
         <div>
           <h2 className="dash-titulo">Reportería financiera</h2>
@@ -330,6 +348,120 @@ export function Reporteria() {
         )}
       </div>
       )}
-    </div>
+    </>
+  );
+}
+
+function ReporteMoraPorCasa() {
+  const [data, setData] = useState<MoraPorCasaDTO | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [expandida, setExpandida] = useState<string | null>(null);
+  const [buscar, setBuscar] = useState("");
+
+  useEffect(() => {
+    reporteMoraPorCasa().then(setData).catch(() => {}).finally(() => setCargando(false));
+  }, []);
+
+  async function exportarPDF() {
+    if (!data) return;
+    const { jsPDF } = await import("jspdf");
+    const autoTable = (await import("jspdf-autotable")).default;
+    const doc = new jsPDF();
+    doc.setFontSize(16); doc.setTextColor("#022E45");
+    doc.text("Reporte de Mora por Casa", 14, 20);
+    doc.setFontSize(10); doc.setTextColor("#6b7280");
+    doc.text("Residencial Villas del Sol", 14, 27);
+    doc.text(`Generado: ${new Date(data.generado).toLocaleDateString("es-HN")}`, 14, 33);
+    doc.text(`Total adeudado: ${L(data.total_general_adeudado)}  ·  ${data.total_casas_mora} casas en mora`, 14, 39);
+    const filas: string[][] = [];
+    data.casas.forEach(c => {
+      const meses = c.meses.map(m => m.mes_label).join(", ");
+      filas.push([c.unidad, c.titular, c.telefono || "—", String(c.cantidad_meses), meses, L(c.total_adeudado)]);
+    });
+    autoTable(doc, {
+      startY: 45,
+      head: [["Casa", "Titular", "Teléfono", "Meses", "Períodos que debe", "Total"]],
+      body: filas,
+      styles: { fontSize: 7 },
+      headStyles: { fillColor: [244, 135, 35] },
+      columnStyles: { 4: { cellWidth: 55 } },
+    });
+    doc.save(`mora-por-casa-${data.generado}.pdf`);
+  }
+
+  if (cargando) return <p className="muted">Cargando reporte de mora…</p>;
+  if (!data) return <p className="muted">No se pudo cargar el reporte.</p>;
+
+  const casasFiltradas = data.casas.filter((c: CasaMoraDTO) => {
+    if (!buscar) return true;
+    const b = buscar.toLowerCase();
+    return c.unidad.toLowerCase().includes(b) || c.titular.toLowerCase().includes(b);
+  });
+
+  return (
+    <>
+      <div className="dash-header-pro">
+        <div>
+          <h2 className="dash-titulo">Mora por casa</h2>
+          <span className="muted">{data.total_casas_mora} casas deben · {L(data.total_general_adeudado)} en total</span>
+        </div>
+        <div className="reporte-controles">
+          <input className="periodo-select" placeholder="Buscar casa o titular"
+            value={buscar} onChange={e => setBuscar(e.target.value)} style={{ minWidth: 160 }} />
+          <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
+        </div>
+      </div>
+
+      {casasFiltradas.length === 0 ? (
+        <div className="dash-card">
+          <p className="muted">{data.casas.length === 0
+            ? "🎉 Ninguna casa tiene cuotas pendientes."
+            : "No hay casas que coincidan con la búsqueda."}</p>
+        </div>
+      ) : (
+        <div className="mora-lista">
+          {casasFiltradas.map((c, i) => {
+            const abierta = expandida === c.unidad + i;
+            return (
+              <div key={i} className="mora-casa">
+                <div className="mora-casa-head" onClick={() => setExpandida(abierta ? null : c.unidad + i)}>
+                  <div className="mora-casa-info">
+                    <span className="mora-unidad">{c.unidad}</span>
+                    <span className="muted small">{c.titular}{c.telefono ? ` · ${c.telefono}` : ""}</span>
+                  </div>
+                  <div className="mora-casa-resumen">
+                    <span className={`pill ${c.max_dias_atraso > 60 ? "red" : "amber"}`}>
+                      {c.cantidad_meses} {c.cantidad_meses === 1 ? "mes" : "meses"}
+                    </span>
+                    <span className="mora-total">{L(c.total_adeudado)}</span>
+                    <button className="mini ghost">{abierta ? "▲" : "▼"}</button>
+                  </div>
+                </div>
+                {abierta && (
+                  <div className="mora-meses">
+                    <table className="data">
+                      <thead><tr><th>Mes que debe</th><th>Venció</th><th>Días atraso</th><th>Estado</th><th>Monto</th></tr></thead>
+                      <tbody>
+                        {c.meses.map((m, j) => (
+                          <tr key={j}>
+                            <td><b>{m.mes_label}</b></td>
+                            <td className="small">{new Date(m.vencimiento).toLocaleDateString("es-HN")}</td>
+                            <td>{m.dias_atraso > 0
+                              ? <span className="pill red">{m.dias_atraso} días</span>
+                              : <span className="pill amber">Por vencer</span>}</td>
+                            <td><span className="pill">{m.estado}</span></td>
+                            <td>{L(m.monto)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }

@@ -366,6 +366,20 @@ export interface ReporteFinancieroDTO {
   al_dia: AlDiaDTO[]; morosos: MorosoDTO[]; tendencia: TendenciaDTO[];
   detalle_pagos?: PagoDetalleDTO[]; total_pagos?: number;
 }
+export interface MesMoraDTO {
+  periodo: string; mes_label: string; monto: number; estado: string;
+  vencimiento: string; dias_atraso: number;
+}
+export interface CasaMoraDTO {
+  unidad: string; titular: string; telefono?: string | null;
+  cantidad_meses: number; total_adeudado: number; meses: MesMoraDTO[]; max_dias_atraso: number;
+}
+export interface MoraPorCasaDTO {
+  casas: CasaMoraDTO[]; total_casas_mora: number; total_general_adeudado: number; generado: string;
+}
+export const reporteMoraPorCasa = () =>
+  request<MoraPorCasaDTO>("/reportes/mora-por-casa");
+
 export const reporteFinanciero = (anio?: number, mes?: number, desde?: string, hasta?: string) => {
   let q = "";
   if (desde && hasta) {
