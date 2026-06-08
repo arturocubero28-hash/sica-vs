@@ -12,7 +12,7 @@ import datetime as dt
 import jwt
 from flask import Blueprint, request, jsonify, current_app
 
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models.usuario import Usuario
 from app.auth.security import generar_token, token_required
 
@@ -60,6 +60,7 @@ def _verificar_token_temporal(token_str, proposito_esperado):
 
 # ── Login ──────────────────────────────────────────────────────
 @auth_bp.post("/login")
+@limiter.limit("5 per 15 minutes")
 def login():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
@@ -135,6 +136,7 @@ def actualizar_perfil(usuario_actual):
 
 # ── Activación de cuenta ───────────────────────────────────────
 @auth_bp.post("/activar")
+@limiter.limit("10 per hour")
 def activar_cuenta():
     """El residente recibe un link con un token. Aquí define su contraseña."""
     data = request.get_json(silent=True) or {}
@@ -172,6 +174,7 @@ def activar_cuenta():
 
 # ── Solicitar recuperación de contraseña ───────────────────────
 @auth_bp.post("/recuperar")
+@limiter.limit("3 per hour")
 def solicitar_recuperacion():
     """Genera un token de recuperación. En producción se envía por correo con Resend."""
     data = request.get_json(silent=True) or {}
@@ -206,6 +209,7 @@ def solicitar_recuperacion():
 
 # ── Restablecer contraseña ─────────────────────────────────────
 @auth_bp.post("/reset")
+@limiter.limit("10 per hour")
 def restablecer_password():
     data = request.get_json(silent=True) or {}
     token_str = data.get("token") or ""

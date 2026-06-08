@@ -16,7 +16,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from app.config import Config
-from app.extensions import db, migrate, socketio
+from app.extensions import db, migrate, socketio, limiter
 
 
 def create_app(config_class=Config):
@@ -28,6 +28,10 @@ def create_app(config_class=Config):
     migrate.init_app(app, db)
     socketio.init_app(app)
     CORS(app, origins=app.config["CORS_ORIGINS"], supports_credentials=True)
+
+    # Rate limiter con Redis como almacenamiento (consistente entre workers)
+    limiter.storage_uri = app.config["REDIS_URL"]
+    limiter.init_app(app)
 
     # --- Importar modelos (para que SQLAlchemy / Migrate los conozca) ---
     # Cada dueño de módulo agrega aquí su import cuando cree sus modelos.
@@ -96,6 +100,13 @@ def create_app(config_class=Config):
     @app.errorhandler(500)
     def server_error(_):
         return jsonify({"error": {"code": "server_error", "message": "Error interno"}}), 500
+
+    @app.errorhandler(429)
+    def rate_limit_excedido(e):
+        return jsonify({"error": {
+            "code": "demasiados_intentos",
+            "message": "Demasiados intentos. Espera unos minutos antes de volver a intentar.",
+        }}), 429
 
     # Crear tablas que no existan (seguro: no toca tablas ni datos existentes).
     # Útil para la tabla 'camaras' que se añadió después del schema inicial.
