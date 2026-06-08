@@ -212,12 +212,13 @@ def create_app(config_class=Config):
             return response
         try:
             usuario = getattr(g, "usuario_actual", None)
+            email_log = usuario.email if usuario else getattr(g, "email_intento", None)
             ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
             if ip:
                 ip = ip.split(",")[0].strip()[:45]
             log = LogAuditoria(
                 usuario_id=usuario.id if usuario else None,
-                email=usuario.email if usuario else None,
+                email=email_log,
                 rol=usuario.rol if usuario else None,
                 metodo=request.method,
                 endpoint=request.path[:200],

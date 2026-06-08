@@ -550,6 +550,17 @@ export interface MetricasCodigoDTO {
   radon_disponible: boolean;
 }
 export const devMetricasCodigo = () => request<MetricasCodigoDTO>("/dev/metricas-codigo");
+
+export interface SeguridadDTO {
+  nivel_alerta: "bajo" | "medio" | "alto";
+  login_fallidos_24h: number; login_fallidos_7d: number;
+  bloqueos_saturacion_24h: number; bloqueos_saturacion_7d: number;
+  errores_autorizacion_24h: number;
+  top_ips: { ip: string; intentos: number }[];
+  ataques_privilegiados: { email: string; intentos: number }[];
+  timeline_7d: { dia: string; fallidos: number }[];
+}
+export const devSeguridad = () => request<SeguridadDTO>("/dev/seguridad");
 export const devLogs = (params?: { email?: string; endpoint?: string; errores?: string; pagina?: number }) => {
   const q = new URLSearchParams();
   if (params?.email) q.set("email", params.email);

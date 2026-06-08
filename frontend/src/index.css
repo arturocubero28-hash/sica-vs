@@ -1443,3 +1443,10 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
   font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .cc-bar-track { flex: 1; height: 18px; background: #eef2f7; border-radius: 9px; overflow: hidden; }
 .cc-bar-fill { height: 100%; border-radius: 9px; transition: width 0.3s; min-width: 2px; }
+
+/* Panel de seguridad (intentos de ataque) */
+.seg-timeline { display: flex; align-items: flex-end; gap: 10px; height: 160px; margin-top: 14px; padding: 0 4px; }
+.seg-tl-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+.seg-tl-bar-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.seg-tl-bar { width: 100%; border-radius: 5px 5px 0 0; min-height: 3px; transition: height 0.3s; }
+.seg-tl-num { font-size: 12px; font-weight: 700; color: #022E45; }

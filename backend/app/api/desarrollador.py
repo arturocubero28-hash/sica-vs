@@ -253,3 +253,93 @@ def _rank_cc(valor):
     elif valor <= 40:
         return "E"
     return "F"
+
+
+@dev_bp.get("/seguridad")
+@roles_required("desarrollador")
+def metricas_seguridad(usuario_actual):
+    """
+    Métricas de intentos de ataque, analizando el log de auditoría:
+    - Logins fallidos (401 en /auth/login)
+    - Bloqueos por rate limit (429) = intentos de saturación frenados
+    - Errores de autorización (401/403 en otras rutas)
+    - Top de IPs sospechosas
+    - Intentos contra cuentas privilegiadas (admin/desarrollador)
+    """
+    from sqlalchemy import func
+    from app.models.usuario import Usuario
+
+    ahora = dt.datetime.now(dt.timezone.utc)
+    hace_24h = ahora - dt.timedelta(hours=24)
+    hace_7d = ahora - dt.timedelta(days=7)
+
+    L = LogAuditoria
+
+    def contar(query):
+        return query.scalar() or 0
+
+    # ── Logins fallidos ──
+    base_login_fail = L.query.filter(L.endpoint.like("%/auth/login"), L.status_code == 401)
+    login_fail_24h = contar(db.session.query(func.count(L.id)).filter(
+        L.endpoint.like("%/auth/login"), L.status_code == 401, L.created_at >= hace_24h))
+    login_fail_7d = contar(db.session.query(func.count(L.id)).filter(
+        L.endpoint.like("%/auth/login"), L.status_code == 401, L.created_at >= hace_7d))
+
+    # ── Bloqueos por rate limit (saturación) ──
+    rate_429_24h = contar(db.session.query(func.count(L.id)).filter(
+        L.status_code == 429, L.created_at >= hace_24h))
+    rate_429_7d = contar(db.session.query(func.count(L.id)).filter(
+        L.status_code == 429, L.created_at >= hace_7d))
+
+    # ── Errores de autorización (401/403 fuera del login) ──
+    authz_24h = contar(db.session.query(func.count(L.id)).filter(
+        L.status_code.in_([401, 403]),
+        ~L.endpoint.like("%/auth/login"),
+        L.created_at >= hace_24h))
+
+    # ── Top IPs con más logins fallidos (7 días) ──
+    top_ips = (db.session.query(L.ip, func.count(L.id).label("intentos"))
+               .filter(L.endpoint.like("%/auth/login"), L.status_code == 401,
+                       L.created_at >= hace_7d, L.ip.isnot(None))
+               .group_by(L.ip).order_by(func.count(L.id).desc()).limit(8).all())
+
+    # ── Cuentas privilegiadas con intentos de login fallidos ──
+    # emails de admins/desarrolladores
+    privilegiados = {u.email for u in Usuario.query.filter(
+        Usuario.rol.in_(["admin", "super_admin", "desarrollador"])).all() if u.email}
+    intentos_priv = (db.session.query(L.email, func.count(L.id).label("intentos"))
+                     .filter(L.endpoint.like("%/auth/login"), L.status_code == 401,
+                             L.created_at >= hace_7d, L.email.isnot(None))
+                     .group_by(L.email).order_by(func.count(L.id).desc()).limit(20).all())
+    ataques_priv = [{"email": e, "intentos": n} for e, n in intentos_priv if e in privilegiados]
+
+    # ── Línea de tiempo: logins fallidos por día (7 días) ──
+    timeline = []
+    for i in range(6, -1, -1):
+        dia = (ahora - dt.timedelta(days=i)).date()
+        ini = dt.datetime.combine(dia, dt.time.min).replace(tzinfo=dt.timezone.utc)
+        fin = dt.datetime.combine(dia, dt.time.max).replace(tzinfo=dt.timezone.utc)
+        n = contar(db.session.query(func.count(L.id)).filter(
+            L.endpoint.like("%/auth/login"), L.status_code == 401,
+            L.created_at >= ini, L.created_at <= fin))
+        timeline.append({"dia": dia.strftime("%d/%m"), "fallidos": n})
+
+    # ── Nivel de alerta general ──
+    if login_fail_24h > 50 or rate_429_24h > 20 or len(ataques_priv) > 0:
+        nivel = "alto"
+    elif login_fail_24h > 15 or rate_429_24h > 5:
+        nivel = "medio"
+    else:
+        nivel = "bajo"
+
+    return jsonify({"data": {
+        "nivel_alerta": nivel,
+        "login_fallidos_24h": login_fail_24h,
+        "login_fallidos_7d": login_fail_7d,
+        "bloqueos_saturacion_24h": rate_429_24h,
+        "bloqueos_saturacion_7d": rate_429_7d,
+        "errores_autorizacion_24h": authz_24h,
+        "top_ips": [{"ip": ip, "intentos": n} for ip, n in top_ips],
+        "ataques_privilegiados": ataques_priv,
+        "timeline_7d": timeline,
+    }})

@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, type DevMetricasDTO, type MetricasCodigoDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO } from "../../api/client";
 
 export function PanelDesarrollador() {
   const [m, setM] = useState<DevMetricasDTO | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [tab, setTab] = useState<"salud" | "logs" | "codigo">("salud");
+  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad">("salud");
   // Filtros de logs
   const [email, setEmail] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -67,6 +67,7 @@ export function PanelDesarrollador() {
         <button className={`hist-tab ${tab === "salud" ? "on" : ""}`} onClick={() => setTab("salud")}>🖥️ Salud del sistema</button>
         <button className={`hist-tab ${tab === "logs" ? "on" : ""}`} onClick={() => setTab("logs")}>🔍 Logs de auditoría</button>
         <button className={`hist-tab ${tab === "codigo" ? "on" : ""}`} onClick={() => setTab("codigo")}>📊 Métricas de código</button>
+        <button className={`hist-tab ${tab === "seguridad" ? "on" : ""}`} onClick={() => setTab("seguridad")}>🛡️ Seguridad</button>
       </div>
 
       {tab === "salud" && (
@@ -229,6 +230,7 @@ export function PanelDesarrollador() {
       )}
 
       {tab === "codigo" && <MetricasCodigo />}
+      {tab === "seguridad" && <PanelSeguridad />}
     </div>
   );
 }
@@ -359,6 +361,131 @@ function MetricasCodigo() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function PanelSeguridad() {
+  const [s, setS] = useState<SeguridadDTO | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    devSeguridad().then(setS).catch(() => {}).finally(() => setCargando(false));
+  }, []);
+
+  if (cargando) return <p className="muted">Analizando intentos de ataque…</p>;
+  if (!s) return <p className="muted">No se pudieron cargar las métricas de seguridad.</p>;
+
+  const alerta = {
+    bajo: { color: "#1d8a4a", txt: "Bajo", desc: "Sin actividad sospechosa relevante" },
+    medio: { color: "#d89000", txt: "Medio", desc: "Actividad inusual detectada — vigilar" },
+    alto: { color: "#c81e1e", txt: "Alto", desc: "Posible ataque en curso — revisar" },
+  }[s.nivel_alerta];
+
+  const maxTl = Math.max(...s.timeline_7d.map(t => t.fallidos), 1);
+
+  return (
+    <div className="dev-codigo">
+      {/* Nivel de alerta */}
+      <div className="dash-card" style={{ borderLeft: `5px solid ${alerta.color}` }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 28 }}>🛡️</span>
+          <div>
+            <div style={{ fontSize: 13, color: "#6b7280" }}>Nivel de alerta de seguridad</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: alerta.color }}>{alerta.txt}</div>
+            <div className="muted small">{alerta.desc}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tarjetas resumen */}
+      <div className="metric-grid">
+        <div className="metric-card rojo">
+          <div className="metric-top"><span className="metric-label">Logins fallidos (24h)</span><span className="metric-icon">⚠</span></div>
+          <div className="metric-valor" style={{ fontSize: 24 }}>{s.login_fallidos_24h}</div>
+          <span className="muted small">{s.login_fallidos_7d} en 7 días</span>
+        </div>
+        <div className="metric-card naranja">
+          <div className="metric-top"><span className="metric-label">Bloqueos por saturación (24h)</span><span className="metric-icon">🚦</span></div>
+          <div className="metric-valor" style={{ fontSize: 24 }}>{s.bloqueos_saturacion_24h}</div>
+          <span className="muted small">{s.bloqueos_saturacion_7d} en 7 días</span>
+        </div>
+        <div className="metric-card azul">
+          <div className="metric-top"><span className="metric-label">Accesos no autorizados (24h)</span><span className="metric-icon">🔒</span></div>
+          <div className="metric-valor" style={{ fontSize: 24 }}>{s.errores_autorizacion_24h}</div>
+          <span className="muted small">tokens inválidos / sin permiso</span>
+        </div>
+      </div>
+
+      {/* Timeline de logins fallidos */}
+      <div className="dash-card">
+        <h3>Logins fallidos — últimos 7 días</h3>
+        <div className="seg-timeline">
+          {s.timeline_7d.map((t, i) => (
+            <div key={i} className="seg-tl-col">
+              <div className="seg-tl-bar-track">
+                <div className="seg-tl-bar" style={{
+                  height: `${(t.fallidos / maxTl) * 100}%`,
+                  background: t.fallidos > 15 ? "#c81e1e" : t.fallidos > 5 ? "#d89000" : "#5b9e3f",
+                }} title={`${t.fallidos} intentos`} />
+              </div>
+              <span className="muted small">{t.dia}</span>
+              <span className="seg-tl-num">{t.fallidos}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Ataques a cuentas privilegiadas */}
+      {s.ataques_privilegiados.length > 0 && (
+        <div className="dash-card" style={{ borderLeft: "5px solid #c81e1e" }}>
+          <h3 style={{ color: "#c81e1e" }}>⚠ Intentos contra cuentas privilegiadas</h3>
+          <p className="muted small">Logins fallidos contra cuentas admin/desarrollador en los últimos 7 días. Prestar atención.</p>
+          <div className="scroll-x">
+            <table className="data">
+              <thead><tr><th>Cuenta</th><th>Intentos fallidos</th></tr></thead>
+              <tbody>
+                {s.ataques_privilegiados.map((a, i) => (
+                  <tr key={i}><td><b>{a.email}</b></td>
+                    <td><span className="pill red">{a.intentos}</span></td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Top IPs sospechosas */}
+      <div className="dash-card">
+        <h3>IPs con más logins fallidos (7 días)</h3>
+        {s.top_ips.length === 0 ? (
+          <p className="muted">No hay logins fallidos registrados. 👍</p>
+        ) : (
+          <div className="scroll-x">
+            <table className="data">
+              <thead><tr><th>IP</th><th>Intentos fallidos</th></tr></thead>
+              <tbody>
+                {s.top_ips.map((ip, i) => (
+                  <tr key={i}>
+                    <td><code>{ip.ip}</code></td>
+                    <td>
+                      <span className={`pill ${ip.intentos > 10 ? "red" : ip.intentos > 5 ? "amber" : ""}`}>
+                        {ip.intentos}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <p className="muted small">
+        Nota: estas métricas son a nivel de la aplicación (intentos de login, saturación frenada por
+        rate-limit, accesos sin permiso). Los intentos a nivel del servidor (SSH/root) se monitorean
+        aparte con herramientas del sistema operativo al desplegar.
+      </p>
     </div>
   );
 }

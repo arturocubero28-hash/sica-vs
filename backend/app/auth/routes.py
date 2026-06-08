@@ -72,6 +72,8 @@ def login():
 
     usuario = Usuario.query.filter_by(email=email).first()
     if not usuario or not usuario.check_password(password):
+        from flask import g
+        g.email_intento = email[:120] if email else None
         return jsonify({"error": {"code": "credenciales_invalidas",
                                   "message": "Email o contraseña incorrectos"}}), 401
 
