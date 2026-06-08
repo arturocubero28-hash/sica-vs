@@ -173,6 +173,33 @@ def create_app(config_class=Config):
     # Registra automáticamente cada request a la API en log_auditoria.
     # Solo loguea endpoints de la API (no archivos estáticos).
     @app.after_request
+    def _headers_seguridad(response):
+        """Headers de seguridad HTTP aplicados a todas las respuestas."""
+        # Evita que el navegador adivine el tipo MIME (anti MIME-sniffing)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # Impide que la app se embeba en iframes de otros sitios (anti clickjacking)
+        response.headers["X-Frame-Options"] = "DENY"
+        # Controla qué información de referer se envía
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        # Limita el acceso a APIs sensibles del navegador
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), payment=()"
+        # HSTS: fuerza HTTPS (solo tiene efecto sobre https; inofensivo en http local)
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # Content-Security-Policy: restringe orígenes de scripts/estilos/imágenes.
+        # 'unsafe-inline' se mantiene porque el frontend usa estilos inline y el SW;
+        # se puede endurecer más en una fase posterior.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "img-src 'self' data: blob:; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "connect-src 'self' ws: wss:; "
+            "media-src 'self' blob:; "
+            "frame-ancestors 'none'"
+        )
+        return response
+
+    @app.after_request
     def _auditar(response):
         from flask import request, g
         from app.models.auditoria import LogAuditoria
