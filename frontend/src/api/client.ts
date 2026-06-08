@@ -597,3 +597,40 @@ export const salidasPendientes = () => request<SalidaCajaDTO[]>("/caja/salidas/p
 
 export const solicitarIngreso = (body: { monto: number; concepto: string }) =>
   request<SalidaCajaDTO>("/caja/ingreso", { method: "POST", body: JSON.stringify(body) });
+
+// ── ARREGLOS DE PAGO ──────────────────────────────────────────────────────────
+export interface AbonoDTO {
+  id: string; numero: number; monto: number; fecha_pactada: string;
+  estado: "pendiente" | "pagado" | "vencido"; pagado_en: string | null;
+}
+export interface ArregloDTO {
+  id: string; estado: "activo" | "completado" | "incumplido" | "cancelado";
+  deuda_total: number; abono_inicial: number; saldo_financiado: number;
+  num_abonos: number; monto_por_abono: number; dias_gracia: number;
+  total_abonado: number; saldo_pendiente: number; abonos_pagados: number;
+  nota?: string; motivo_cierre?: string; created_at?: string; completado_en?: string;
+  unidad?: string; titular?: string;
+  abonos?: AbonoDTO[];
+  meses_incluidos?: { mes_label: string; monto: number }[];
+}
+
+export const listarArreglos = (estado?: string) =>
+  request<ArregloDTO[]>(`/arreglos${estado ? `?estado=${estado}` : ""}`);
+
+export const detalleArreglo = (uuid: string) =>
+  request<ArregloDTO>(`/arreglos/${uuid}`);
+
+export const cuotasPendientesCuenta = (cuentaUuid: string) =>
+  request<CuotaDTO[]>(`/arreglos/cuenta/${cuentaUuid}/cuotas-pendientes`);
+
+export const crearArreglo = (body: {
+  cuenta_id: string; cuotas: string[]; abono_inicial: number;
+  num_abonos: number; dias_gracia: number; primer_vencimiento?: string; nota?: string;
+}) => request<ArregloDTO>("/arreglos", { method: "POST", body: JSON.stringify(body) });
+
+export const cobrarAbono = (arregloUuid: string, abonoUuid: string, metodo: string, referencia?: string) =>
+  request<ArregloDTO>(`/arreglos/${arregloUuid}/abonos/${abonoUuid}/cobrar`,
+    { method: "POST", body: JSON.stringify({ metodo, referencia }) });
+
+export const cancelarArreglo = (uuid: string, motivo?: string) =>
+  request<ArregloDTO>(`/arreglos/${uuid}/cancelar`, { method: "POST", body: JSON.stringify({ motivo }) });

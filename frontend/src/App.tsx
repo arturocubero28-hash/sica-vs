@@ -17,6 +17,7 @@ import { HistorialAccesos } from "./modules/dashboard/HistorialAccesos";
 import { MiPerfil } from "./modules/perfil/MiPerfil";
 import { CajaPanel } from "./modules/caja/CajaPanel";
 import { SupervisionCaja } from "./modules/caja/SupervisionCaja";
+import { ArreglosPanel } from "./modules/arreglos/ArreglosPanel";
 import { UsuariosAdmin } from "./modules/usuarios/UsuariosAdmin";
 import { PanelDesarrollador } from "./modules/dev/PanelDesarrollador";
 
@@ -294,6 +295,7 @@ function AdminView({ seccion }: { seccion: string }) {
   if (seccion === "monitoreo") return <MonitoreoCamaras />;
   if (seccion === "comunicados") return <ComunicadosAdmin />;
   if (seccion === "reportes") return <Reporteria />;
+  if (seccion === "arreglos") return <ArreglosPanel />;
   if (seccion === "historial") return <HistorialAccesos />;
   if (seccion === "usuarios") return <UsuariosAdmin />;
   if (seccion === "caja") return <SupervisionCaja />;
@@ -314,6 +316,7 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "historial", label: "Historial", icon: "📜" },
       { id: "pagos", label: "Revisión de pagos", icon: "💳" },
       { id: "caja", label: "Supervisión de caja", icon: "🧾" },
+      { id: "arreglos", label: "Arreglos de pago", icon: "🤝" },
       { id: "reportes", label: "Reportería", icon: "📈" },
       { id: "comunicados", label: "Comunicados", icon: "📣" },
       { id: "perfil", label: "Mi perfil", icon: "👤" },
@@ -322,6 +325,7 @@ function navParaRol(rol: Rol): NavItem[] {
   if (rol === "cajero") {
     return [
       { id: "caja", label: "Caja", icon: "🧾" },
+      { id: "arreglos", label: "Arreglos de pago", icon: "🤝" },
       { id: "perfil", label: "Mi perfil", icon: "⚙️" },
     ];
   }
@@ -431,7 +435,11 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
             : seccion === "caja" ? <SupervisionCaja />
             : <PanelDesarrollador />
           )}
-          {usuario.rol === "cajero" && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <CajaPanel />)}
+          {usuario.rol === "cajero" && (
+            seccion === "perfil" ? <div className="card wide"><MiPerfil /></div>
+            : seccion === "arreglos" ? <ArreglosPanel />
+            : <CajaPanel />
+          )}
           {usuario.rol === "guardia" && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <GuardiaPanel />)}
           {esResidente && (seccion === "perfil" ? <div className="card wide"><MiPerfil /></div> : <ResidentePortal seccion={seccion} />)}
         </main>
