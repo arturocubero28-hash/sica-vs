@@ -129,3 +129,127 @@ def logs(usuario_actual):
         "total_paginas": total_paginas,
         "total": total,
     }})
+
+
+@dev_bp.get("/metricas-codigo")
+@roles_required("desarrollador")
+def metricas_codigo(usuario_actual):
+    """
+    Métricas de software del proyecto, calculadas en vivo:
+    - Líneas de código (backend, frontend, CSS)
+    - Complejidad ciclomática (McCabe) promedio y distribución
+    - Índice de mantenibilidad por módulo
+    Usa radon para el análisis del backend Python.
+    """
+    import os
+    import subprocess
+
+    base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    proyecto = os.path.dirname(base)  # raíz del repo
+    backend_app = os.path.join(base, "app")
+
+    resultado = {
+        "loc": {},
+        "complejidad": {},
+        "mantenibilidad": [],
+        "resumen": {},
+    }
+
+    # ── Líneas de código (conteo simple por extensión) ──
+    def contar_lineas(carpeta, exts):
+        total, archivos = 0, 0
+        for root, _, files in os.walk(carpeta):
+            if "node_modules" in root or "__pycache__" in root or ".git" in root:
+                continue
+            for f in files:
+                if any(f.endswith(e) for e in exts):
+                    try:
+                        with open(os.path.join(root, f), encoding="utf-8", errors="ignore") as fh:
+                            total += sum(1 for _ in fh)
+                        archivos += 1
+                    except Exception:
+                        pass
+        return total, archivos
+
+    be_loc, be_files = contar_lineas(backend_app, [".py"])
+    fe_dir = os.path.join(proyecto, "frontend", "src")
+    fe_loc, fe_files = contar_lineas(fe_dir, [".ts", ".tsx"])
+    css_loc, _ = contar_lineas(fe_dir, [".css"])
+    resultado["loc"] = {
+        "backend_python": be_loc, "backend_archivos": be_files,
+        "frontend_ts": fe_loc, "frontend_archivos": fe_files,
+        "css": css_loc, "total": be_loc + fe_loc + css_loc,
+    }
+
+    # ── Complejidad ciclomática + mantenibilidad con radon ──
+    radon_disponible = True
+    try:
+        import json as _json
+        # Complejidad ciclomática (JSON)
+        cc = subprocess.run(
+            ["radon", "cc", backend_app, "-j", "-s"],
+            capture_output=True, text=True, timeout=30
+        )
+        cc_data = _json.loads(cc.stdout) if cc.stdout else {}
+
+        total_bloques, suma_cc = 0, 0
+        dist = {"A": 0, "B": 0, "C": 0, "D": 0, "E": 0, "F": 0}
+        mas_complejos = []
+        for archivo, bloques in cc_data.items():
+            rel = archivo.replace(base + "/", "")
+            for b in bloques:
+                total_bloques += 1
+                suma_cc += b.get("complexity", 0)
+                rank = b.get("rank", "A")
+                dist[rank] = dist.get(rank, 0) + 1
+                mas_complejos.append({
+                    "nombre": b.get("name"), "archivo": rel,
+                    "complejidad": b.get("complexity"), "rank": rank,
+                })
+        mas_complejos.sort(key=lambda x: x["complejidad"], reverse=True)
+        prom = round(suma_cc / total_bloques, 2) if total_bloques else 0
+        resultado["complejidad"] = {
+            "promedio": prom,
+            "rank_promedio": _rank_cc(prom),
+            "total_bloques": total_bloques,
+            "distribucion": dist,
+            "mas_complejos": mas_complejos[:8],
+        }
+
+        # Índice de mantenibilidad (JSON)
+        mi = subprocess.run(
+            ["radon", "mi", backend_app, "-j"],
+            capture_output=True, text=True, timeout=30
+        )
+        mi_data = _json.loads(mi.stdout) if mi.stdout else {}
+        mant = []
+        suma_mi = 0
+        for archivo, info in mi_data.items():
+            rel = archivo.replace(base + "/", "")
+            val = info.get("mi", 0) if isinstance(info, dict) else 0
+            suma_mi += val
+            mant.append({"archivo": rel, "mi": round(val, 1),
+                         "rank": info.get("rank", "A") if isinstance(info, dict) else "A"})
+        mant.sort(key=lambda x: x["mi"])
+        resultado["mantenibilidad"] = mant
+        resultado["resumen"]["mi_promedio"] = round(suma_mi / len(mant), 1) if mant else 0
+    except (FileNotFoundError, Exception):
+        radon_disponible = False
+
+    resultado["radon_disponible"] = radon_disponible
+    return jsonify({"data": resultado})
+
+
+def _rank_cc(valor):
+    """Rango de complejidad ciclomática según escala de radon."""
+    if valor <= 5:
+        return "A"
+    elif valor <= 10:
+        return "B"
+    elif valor <= 20:
+        return "C"
+    elif valor <= 30:
+        return "D"
+    elif valor <= 40:
+        return "E"
+    return "F"

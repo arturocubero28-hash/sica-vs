@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, type DevMetricasDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, type DevMetricasDTO, type MetricasCodigoDTO } from "../../api/client";
 
 export function PanelDesarrollador() {
   const [m, setM] = useState<DevMetricasDTO | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [tab, setTab] = useState<"salud" | "logs">("salud");
+  const [tab, setTab] = useState<"salud" | "logs" | "codigo">("salud");
   // Filtros de logs
   const [email, setEmail] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -66,6 +66,7 @@ export function PanelDesarrollador() {
       <div className="hist-tabs">
         <button className={`hist-tab ${tab === "salud" ? "on" : ""}`} onClick={() => setTab("salud")}>🖥️ Salud del sistema</button>
         <button className={`hist-tab ${tab === "logs" ? "on" : ""}`} onClick={() => setTab("logs")}>🔍 Logs de auditoría</button>
+        <button className={`hist-tab ${tab === "codigo" ? "on" : ""}`} onClick={() => setTab("codigo")}>📊 Métricas de código</button>
       </div>
 
       {tab === "salud" && (
@@ -225,6 +226,138 @@ export function PanelDesarrollador() {
             </>
           )}
         </div>
+      )}
+
+      {tab === "codigo" && <MetricasCodigo />}
+    </div>
+  );
+}
+
+function MetricasCodigo() {
+  const [m, setM] = useState<MetricasCodigoDTO | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    devMetricasCodigo().then(setM).catch(() => {}).finally(() => setCargando(false));
+  }, []);
+
+  if (cargando) return <p className="muted">Analizando el código…</p>;
+  if (!m) return <p className="muted">No se pudieron cargar las métricas.</p>;
+
+  const rankColor: Record<string, string> = {
+    A: "#1d8a4a", B: "#5b9e3f", C: "#d89000", D: "#e06a00", E: "#d83a00", F: "#c81e1e",
+  };
+
+  return (
+    <div className="dev-codigo">
+      {/* Líneas de código */}
+      <div className="dash-card">
+        <h3>Líneas de código</h3>
+        <div className="metric-grid">
+          <div className="metric-card azul">
+            <div className="metric-top"><span className="metric-label">Total</span></div>
+            <div className="metric-valor" style={{ fontSize: 22 }}>{m.loc.total.toLocaleString()}</div>
+          </div>
+          <div className="metric-card verde">
+            <div className="metric-top"><span className="metric-label">Backend Python</span></div>
+            <div className="metric-valor" style={{ fontSize: 20 }}>{m.loc.backend_python.toLocaleString()}</div>
+            <span className="muted small">{m.loc.backend_archivos} archivos</span>
+          </div>
+          <div className="metric-card naranja">
+            <div className="metric-top"><span className="metric-label">Frontend TS/TSX</span></div>
+            <div className="metric-valor" style={{ fontSize: 20 }}>{m.loc.frontend_ts.toLocaleString()}</div>
+            <span className="muted small">{m.loc.frontend_archivos} archivos</span>
+          </div>
+          <div className="metric-card">
+            <div className="metric-top"><span className="metric-label">CSS</span></div>
+            <div className="metric-valor" style={{ fontSize: 20 }}>{m.loc.css.toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
+
+      {!m.radon_disponible ? (
+        <div className="dash-card"><p className="muted">El análisis de complejidad (radon) no está disponible en este entorno.</p></div>
+      ) : (
+        <>
+          {/* Complejidad ciclomática */}
+          <div className="dash-card">
+            <h3>Complejidad ciclomática (McCabe)</h3>
+            <p className="muted small">Mide los caminos independientes del código. Más bajo = más simple de probar y mantener.</p>
+            <div className="metric-grid">
+              <div className="metric-card" style={{ borderTop: `3px solid ${rankColor[m.complejidad.rank_promedio]}` }}>
+                <div className="metric-top"><span className="metric-label">Promedio</span></div>
+                <div className="metric-valor" style={{ color: rankColor[m.complejidad.rank_promedio] }}>
+                  {m.complejidad.promedio} <span style={{ fontSize: 14 }}>({m.complejidad.rank_promedio})</span>
+                </div>
+              </div>
+              <div className="metric-card azul">
+                <div className="metric-top"><span className="metric-label">Bloques analizados</span></div>
+                <div className="metric-valor" style={{ fontSize: 22 }}>{m.complejidad.total_bloques}</div>
+              </div>
+            </div>
+
+            {/* Distribución por rango */}
+            <div className="cc-dist">
+              {["A","B","C","D","E","F"].map(r => {
+                const cant = m.complejidad.distribucion[r] || 0;
+                const pct = m.complejidad.total_bloques ? (cant / m.complejidad.total_bloques * 100) : 0;
+                return (
+                  <div key={r} className="cc-dist-row">
+                    <span className="cc-rank" style={{ background: rankColor[r] }}>{r}</span>
+                    <div className="cc-bar-track">
+                      <div className="cc-bar-fill" style={{ width: `${pct}%`, background: rankColor[r] }} />
+                    </div>
+                    <span className="muted small">{cant}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="muted small" style={{ marginTop: 8 }}>
+              A (1-5): simple · B (6-10): bien · C (11-20): moderado · D+ : revisar
+            </p>
+          </div>
+
+          {/* Funciones más complejas */}
+          <div className="dash-card">
+            <h3>Funciones más complejas</h3>
+            <div className="scroll-x">
+              <table className="data">
+                <thead><tr><th>Función</th><th>Archivo</th><th>Complejidad</th></tr></thead>
+                <tbody>
+                  {m.complejidad.mas_complejos.map((f, i) => (
+                    <tr key={i}>
+                      <td><b>{f.nombre}</b></td>
+                      <td className="small">{f.archivo}</td>
+                      <td><span className="pill" style={{ background: rankColor[f.rank], color: "#fff" }}>
+                        {f.complejidad} ({f.rank})</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Índice de mantenibilidad */}
+          <div className="dash-card">
+            <h3>Índice de mantenibilidad</h3>
+            <p className="muted small">Escala 0-100 (más alto = más mantenible). Promedio del proyecto: <b>{m.resumen.mi_promedio}</b></p>
+            <div className="scroll-x">
+              <table className="data">
+                <thead><tr><th>Archivo</th><th>Índice</th><th>Rango</th></tr></thead>
+                <tbody>
+                  {m.mantenibilidad.slice(0, 12).map((a, i) => (
+                    <tr key={i}>
+                      <td className="small">{a.archivo}</td>
+                      <td>{a.mi}</td>
+                      <td><span className="pill" style={{ background: rankColor[a.rank], color: "#fff" }}>{a.rank}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="muted small" style={{ marginTop: 6 }}>Mostrando los 12 archivos con menor índice (los que más conviene vigilar).</p>
+          </div>
+        </>
       )}
     </div>
   );

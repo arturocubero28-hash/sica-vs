@@ -536,6 +536,20 @@ export interface DevMetricasDTO {
   errores_recientes?: any[];
 }
 export const devMetricas = () => request<DevMetricasDTO>("/dev/metricas");
+
+export interface MetricasCodigoDTO {
+  loc: { backend_python: number; backend_archivos: number; frontend_ts: number;
+    frontend_archivos: number; css: number; total: number };
+  complejidad: {
+    promedio: number; rank_promedio: string; total_bloques: number;
+    distribucion: Record<string, number>;
+    mas_complejos: { nombre: string; archivo: string; complejidad: number; rank: string }[];
+  };
+  mantenibilidad: { archivo: string; mi: number; rank: string }[];
+  resumen: { mi_promedio?: number };
+  radon_disponible: boolean;
+}
+export const devMetricasCodigo = () => request<MetricasCodigoDTO>("/dev/metricas-codigo");
 export const devLogs = (params?: { email?: string; endpoint?: string; errores?: string; pagina?: number }) => {
   const q = new URLSearchParams();
   if (params?.email) q.set("email", params.email);
