@@ -146,3 +146,23 @@ def revisar_arreglos():
 
         db.session.commit()
         return {"arreglos_incumplidos": incumplidos, "abonos_vencidos": vencidos_marcados}
+
+
+# ── Limpieza de tokens revocados expirados ────────────────────────────────────
+@celery.task(name="tasks.limpiar_tokens_revocados")
+def limpiar_tokens_revocados():
+    """
+    Elimina de la blacklist los tokens cuya fecha de expiración ya pasó.
+    Una vez expirados, el JWT ya no es válido por sí mismo, así que no
+    hace falta seguir guardándolos. Mantiene la tabla pequeña.
+    """
+    from app import create_app
+    from app.extensions import db
+    from app.models.token_revocado import TokenRevocado
+
+    app = create_app()
+    with app.app_context():
+        ahora = dt.datetime.now(dt.timezone.utc)
+        borrados = TokenRevocado.query.filter(TokenRevocado.expira_en < ahora).delete()
+        db.session.commit()
+        return {"tokens_eliminados": borrados}

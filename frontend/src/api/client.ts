@@ -70,7 +70,18 @@ export async function getMe() {
   return data.usuario;
 }
 
-export function logout() {
+export async function logout() {
+  // Avisar al backend para revocar el token (blacklist). Tolerante a fallos:
+  // si no responde, igual se borra la sesión local.
+  try {
+    const token = getToken();
+    if (token) {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+      });
+    }
+  } catch { /* ignorar: igual cerramos sesión localmente */ }
   clearToken();
 }
 

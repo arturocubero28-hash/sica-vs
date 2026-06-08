@@ -38,4 +38,8 @@ celery.conf.beat_schedule = {
         "task": "tasks.revisar_arreglos",
         "schedule": crontab(hour=1, minute=30),
     },
+    "limpiar-tokens-diaria": {
+        "task": "tasks.limpiar_tokens_revocados",
+        "schedule": crontab(hour=2, minute=0),
+    },
 }

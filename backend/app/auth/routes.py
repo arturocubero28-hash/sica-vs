@@ -14,7 +14,7 @@ from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db, limiter
 from app.models.usuario import Usuario
-from app.auth.security import generar_token, token_required
+from app.auth.security import generar_token, token_required, revocar_token
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -238,3 +238,19 @@ def restablecer_password():
     db.session.commit()
 
     return jsonify({"data": {"message": "Contraseña restablecida correctamente. Ya puedes iniciar sesión."}})
+
+
+# ── Cerrar sesión (revoca el token actual) ─────────────────────
+@auth_bp.post("/logout")
+@token_required
+def logout(usuario_actual):
+    """
+    Revoca el token con el que se hizo la petición, añadiéndolo a la
+    blacklist. A partir de aquí ese token deja de ser válido aunque
+    no haya expirado.
+    """
+    auth = request.headers.get("Authorization", "")
+    token = auth.split(" ", 1)[1] if auth.startswith("Bearer ") else ""
+    if token:
+        revocar_token(token, usuario_id=usuario_actual.id)
+    return jsonify({"data": {"message": "Sesión cerrada"}})

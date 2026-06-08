@@ -43,6 +43,7 @@ def create_app(config_class=Config):
     from app.models.comunicado import Comunicado  # noqa: F401  comunicados
     from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja, SalidaCaja  # noqa: F401
     from app.models.auditoria import LogAuditoria  # noqa: F401  auditoría forense
+    from app.models.token_revocado import TokenRevocado  # noqa: F401  blacklist JWT
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp

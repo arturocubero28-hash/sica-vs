@@ -17,6 +17,7 @@ El equipo usa estos decoradores así:
         ...
 """
 import datetime as dt
+import uuid as uuid_lib
 from functools import wraps
 
 import jwt
@@ -30,12 +31,39 @@ def generar_token(usuario: Usuario) -> str:
     payload = {
         "sub": str(usuario.uuid_publico),
         "rol": usuario.rol,
+        "jti": str(uuid_lib.uuid4()),   # identificador único del token (para revocación)
         "exp": dt.datetime.utcnow() + dt.timedelta(
             hours=current_app.config["JWT_EXPIRES_HOURS"]
         ),
         "iat": dt.datetime.utcnow(),
     }
     return jwt.encode(payload, current_app.config["JWT_SECRET"], algorithm="HS256")
+
+
+def revocar_token(token, usuario_id=None):
+    """
+    Revoca un token: guarda su jti en la blacklist hasta que expire.
+    Devuelve True si se revocó, False si el token era inválido.
+    """
+    from app.extensions import db
+    from app.models.token_revocado import TokenRevocado
+    try:
+        payload = jwt.decode(
+            token, current_app.config["JWT_SECRET"], algorithms=["HS256"]
+        )
+    except jwt.PyJWTError:
+        return False
+    jti = payload.get("jti")
+    if not jti:
+        return False
+    if TokenRevocado.esta_revocado(jti):
+        return True  # ya estaba revocado
+    exp_ts = payload.get("exp")
+    expira = (dt.datetime.fromtimestamp(exp_ts, tz=dt.timezone.utc)
+              if exp_ts else dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=24))
+    db.session.add(TokenRevocado(jti=jti, usuario_id=usuario_id, expira_en=expira))
+    db.session.commit()
+    return True
 
 
 def _usuario_desde_request():
@@ -53,6 +81,10 @@ def _usuario_desde_request():
             token, current_app.config["JWT_SECRET"], algorithms=["HS256"]
         )
     except jwt.PyJWTError:
+        return None
+    # Verificar que el token no haya sido revocado (logout / blacklist)
+    from app.models.token_revocado import TokenRevocado
+    if TokenRevocado.esta_revocado(payload.get("jti")):
         return None
     return Usuario.query.filter_by(uuid_publico=payload["sub"], activo=True).first()
 
