@@ -1420,3 +1420,10 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .arreglo-resumen-row.total { border-top: 1px solid #d6e0ea; margin-top: 4px; padding-top: 8px; font-weight: 600; color: #022E45; }
 .arreglo-resumen-row.destacado { background: #fff3e6; margin: 6px -14px -4px; padding: 10px 14px; border-radius: 0 0 10px 10px; color: #F48723; font-size: 16px; }
 .arreglo-resumen-row.destacado b { color: #F48723; }
+
+/* Requisitos de contraseña */
+.req-password { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 8px; padding: 8px 10px;
+  background: #f9fbfd; border-radius: 8px; border: 1px solid #eef2f7; }
+.req-item { font-size: 12px; color: #6b7280; display: flex; align-items: center; gap: 6px; }
+.req-item span { font-weight: 700; width: 14px; display: inline-block; text-align: center; }
+.req-item.ok { color: #1d8a4a; }

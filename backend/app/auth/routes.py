@@ -19,6 +19,24 @@ from app.auth.security import generar_token, token_required
 auth_bp = Blueprint("auth", __name__)
 
 
+def validar_password(password):
+    """
+    Valida la política mínima de contraseñas:
+    - Al menos 8 caracteres
+    - Al menos una letra mayúscula
+    - Al menos un signo (carácter no alfanumérico)
+    Devuelve None si es válida, o un mensaje de error si no.
+    """
+    import re
+    if not password or len(password) < 8:
+        return "La contraseña debe tener al menos 8 caracteres"
+    if not re.search(r"[A-Z]", password):
+        return "La contraseña debe incluir al menos una letra mayúscula"
+    if not re.search(r"[^A-Za-z0-9]", password):
+        return "La contraseña debe incluir al menos un signo (ej: ! @ # $ % & *)"
+    return None
+
+
 def _generar_token_temporal(email, proposito, horas=48):
     """Genera un JWT de corta vida para activación o recuperación."""
     payload = {
@@ -88,9 +106,9 @@ def cambiar_password(usuario_actual):
             return jsonify({"error": {"code": "password_incorrecta",
                                       "message": "La contraseña actual es incorrecta"}}), 400
 
-    if len(nueva) < 6:
-        return jsonify({"error": {"code": "password_debil",
-                                  "message": "La nueva contraseña debe tener al menos 6 caracteres"}}), 400
+    error = validar_password(nueva)
+    if error:
+        return jsonify({"error": {"code": "password_debil", "message": error}}), 400
 
     usuario_actual.set_password(nueva)
     usuario_actual.debe_cambiar_password = False
@@ -126,9 +144,9 @@ def activar_cuenta():
     if not token_str or not password:
         return jsonify({"error": {"code": "datos_incompletos",
                                   "message": "Token y contraseña son obligatorios"}}), 400
-    if len(password) < 6:
-        return jsonify({"error": {"code": "password_debil",
-                                  "message": "La contraseña debe tener al menos 6 caracteres"}}), 400
+    error = validar_password(password)
+    if error:
+        return jsonify({"error": {"code": "password_debil", "message": error}}), 400
 
     email = _verificar_token_temporal(token_str, "activacion")
     if not email:
@@ -196,9 +214,9 @@ def restablecer_password():
     if not token_str or not password:
         return jsonify({"error": {"code": "datos_incompletos",
                                   "message": "Token y nueva contraseña son obligatorios"}}), 400
-    if len(password) < 6:
-        return jsonify({"error": {"code": "password_debil",
-                                  "message": "La contraseña debe tener al menos 6 caracteres"}}), 400
+    error = validar_password(password)
+    if error:
+        return jsonify({"error": {"code": "password_debil", "message": error}}), 400
 
     email = _verificar_token_temporal(token_str, "reset")
     if not email:

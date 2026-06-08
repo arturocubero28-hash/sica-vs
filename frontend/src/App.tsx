@@ -20,6 +20,7 @@ import { SupervisionCaja } from "./modules/caja/SupervisionCaja";
 import { ArreglosPanel } from "./modules/arreglos/ArreglosPanel";
 import { UsuariosAdmin } from "./modules/usuarios/UsuariosAdmin";
 import { PanelDesarrollador } from "./modules/dev/PanelDesarrollador";
+import { passwordValida, RequisitosPassword } from "./utils/password";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -152,7 +153,7 @@ function CambioObligatorio({ usuario, onListo }: { usuario: Usuario; onListo: (u
   const [enviando, setEnviando] = useState(false);
 
   async function guardar() {
-    if (pass.length < 6) { setError("La contraseña debe tener al menos 6 caracteres"); return; }
+    if (!passwordValida(pass)) { setError("La contraseña no cumple los requisitos mínimos"); return; }
     if (pass !== pass2) { setError("Las contraseñas no coinciden"); return; }
     setError(""); setEnviando(true);
     try {
@@ -173,6 +174,7 @@ function CambioObligatorio({ usuario, onListo }: { usuario: Usuario; onListo: (u
         <p className="muted">Por seguridad, definí una nueva contraseña antes de continuar.</p>
         <input type="password" placeholder="Nueva contraseña" value={pass}
           onChange={e => setPass(e.target.value)} />
+        {pass && <RequisitosPassword password={pass} />}
         <input type="password" placeholder="Repetir contraseña" value={pass2}
           onChange={e => setPass2(e.target.value)} onKeyDown={e => e.key === "Enter" && guardar()} />
         {error && <div className="error">{error}</div>}
@@ -190,7 +192,7 @@ function ActivarCuenta({ token, onActivado }: { token: string; onActivado: (u: U
   const [enviando, setEnviando] = useState(false);
 
   async function activar() {
-    if (password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres"); return; }
+    if (!passwordValida(password)) { setError("La contraseña no cumple los requisitos mínimos"); return; }
     if (password !== password2) { setError("Las contraseñas no coinciden"); return; }
     setError(""); setEnviando(true);
     try {
@@ -208,6 +210,7 @@ function ActivarCuenta({ token, onActivado }: { token: string; onActivado: (u: U
         <h1>Activar tu cuenta</h1>
         <p className="muted">Define tu contraseña para acceder al sistema</p>
         <input type="password" placeholder="Nueva contraseña" value={password} onChange={e => setPassword(e.target.value)} />
+        {password && <RequisitosPassword password={password} />}
         <input type="password" placeholder="Confirmar contraseña" value={password2}
           onChange={e => setPassword2(e.target.value)} onKeyDown={e => e.key === "Enter" && activar()} />
         {error && <div className="error">{error}</div>}
@@ -262,7 +265,7 @@ function ResetPassword({ token, onOk }: { token: string; onOk: () => void }) {
   const [error, setError] = useState("");
 
   async function reset() {
-    if (password.length < 6) { setError("Mínimo 6 caracteres"); return; }
+    if (!passwordValida(password)) { setError("La contraseña no cumple los requisitos mínimos"); return; }
     if (password !== password2) { setError("Las contraseñas no coinciden"); return; }
     setError("");
     try {
@@ -278,6 +281,7 @@ function ResetPassword({ token, onOk }: { token: string; onOk: () => void }) {
       <div className="card">
         <h2>Nueva contraseña</h2>
         <input type="password" placeholder="Nueva contraseña" value={password} onChange={e => setPassword(e.target.value)} />
+        {password && <RequisitosPassword password={password} />}
         <input type="password" placeholder="Confirmar" value={password2}
           onChange={e => setPassword2(e.target.value)} onKeyDown={e => e.key === "Enter" && reset()} />
         {error && <div className="error">{error}</div>}

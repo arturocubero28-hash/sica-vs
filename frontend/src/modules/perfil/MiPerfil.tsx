@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { getMe, cambiarPassword, type Usuario } from "../../api/client";
+import { passwordValida, RequisitosPassword } from "../../utils/password";
 
 export function MiPerfil() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -69,7 +70,7 @@ function PasswordForm() {
   const [guardando, setGuardando] = useState(false);
 
   async function cambiar() {
-    if (nueva.length < 6) { setMsg("La nueva contraseña debe tener al menos 6 caracteres"); return; }
+    if (!passwordValida(nueva)) { setMsg("La contraseña no cumple los requisitos mínimos"); return; }
     if (nueva !== nueva2) { setMsg("Las contraseñas no coinciden"); return; }
     setGuardando(true); setMsg("");
     try {
@@ -89,6 +90,7 @@ function PasswordForm() {
           <input type="password" value={actual} onChange={e => setActual(e.target.value)} /></div>
         <div className="form-field"><label>Nueva contraseña</label>
           <input type="password" value={nueva} onChange={e => setNueva(e.target.value)} /></div>
+        {nueva && <RequisitosPassword password={nueva} />}
         <div className="form-field"><label>Repetir nueva contraseña</label>
           <input type="password" value={nueva2} onChange={e => setNueva2(e.target.value)} /></div>
         {msg && <div className={msg.startsWith("✓") ? "cuota-ok" : "error"}>{msg}</div>}
