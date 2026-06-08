@@ -80,9 +80,21 @@ def login():
                                   "message": "Tu usuario está inactivo. Revisá tu correo para activar tu cuenta."}}), 403
 
     usuario.ultimo_acceso = dt.datetime.utcnow()
+
+    # Generar token y registrar la sesión activa (dispositivo)
+    token, jti, expira = generar_token(usuario, devolver_jti=True)
+    from app.models.sesion_activa import SesionActiva, describir_dispositivo
+    ua = (request.user_agent.string or "")[:300]
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
+    if ip:
+        ip = ip.split(",")[0].strip()[:45]
+    db.session.add(SesionActiva(
+        usuario_id=usuario.id, jti=jti,
+        dispositivo=describir_dispositivo(ua), user_agent=ua, ip=ip,
+        expira_en=expira,
+    ))
     db.session.commit()
 
-    token = generar_token(usuario)
     return jsonify({"data": {"token": token, "usuario": usuario.to_dict()}})
 
 
@@ -253,4 +265,65 @@ def logout(usuario_actual):
     token = auth.split(" ", 1)[1] if auth.startswith("Bearer ") else ""
     if token:
         revocar_token(token, usuario_id=usuario_actual.id)
+        # Eliminar el registro de sesión activa de este token
+        from flask import g
+        from app.models.sesion_activa import SesionActiva
+        jti = getattr(g, "jti_actual", None)
+        if jti:
+            SesionActiva.query.filter_by(jti=jti).delete()
+            db.session.commit()
     return jsonify({"data": {"message": "Sesión cerrada"}})
+
+
+# ── Listar mis sesiones activas (dispositivos conectados) ──────
+@auth_bp.get("/sesiones")
+@token_required
+def listar_sesiones(usuario_actual):
+    from flask import g
+    from app.models.sesion_activa import SesionActiva
+    jti_actual = getattr(g, "jti_actual", None)
+    sesiones = (SesionActiva.query
+                .filter_by(usuario_id=usuario_actual.id)
+                .order_by(SesionActiva.ultimo_uso.desc())
+                .all())
+    return jsonify({"data": [s.to_dict(jti_actual) for s in sesiones]})
+
+
+# ── Cerrar una sesión específica ───────────────────────────────
+@auth_bp.post("/sesiones/<int:sesion_id>/cerrar")
+@token_required
+def cerrar_sesion(usuario_actual, sesion_id):
+    from app.models.sesion_activa import SesionActiva
+    from app.models.token_revocado import TokenRevocado
+    sesion = SesionActiva.query.filter_by(id=sesion_id, usuario_id=usuario_actual.id).first()
+    if not sesion:
+        return jsonify({"error": {"code": "no_encontrada",
+                                  "message": "Sesión no encontrada"}}), 404
+    # Revocar el token de esa sesión (blacklist) y borrar el registro
+    if not TokenRevocado.esta_revocado(sesion.jti):
+        db.session.add(TokenRevocado(jti=sesion.jti, usuario_id=usuario_actual.id,
+                                     expira_en=sesion.expira_en))
+    db.session.delete(sesion)
+    db.session.commit()
+    return jsonify({"data": {"message": "Sesión cerrada en ese dispositivo"}})
+
+
+# ── Cerrar todas las otras sesiones (menos la actual) ──────────
+@auth_bp.post("/sesiones/cerrar-otras")
+@token_required
+def cerrar_otras_sesiones(usuario_actual):
+    from flask import g
+    from app.models.sesion_activa import SesionActiva
+    from app.models.token_revocado import TokenRevocado
+    jti_actual = getattr(g, "jti_actual", None)
+    otras = SesionActiva.query.filter(
+        SesionActiva.usuario_id == usuario_actual.id,
+        SesionActiva.jti != jti_actual,
+    ).all()
+    for s in otras:
+        if not TokenRevocado.esta_revocado(s.jti):
+            db.session.add(TokenRevocado(jti=s.jti, usuario_id=usuario_actual.id,
+                                         expira_en=s.expira_en))
+        db.session.delete(s)
+    db.session.commit()
+    return jsonify({"data": {"message": f"Se cerraron {len(otras)} sesiones", "cerradas": len(otras)}})

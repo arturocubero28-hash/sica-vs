@@ -159,10 +159,12 @@ def limpiar_tokens_revocados():
     from app import create_app
     from app.extensions import db
     from app.models.token_revocado import TokenRevocado
+    from app.models.sesion_activa import SesionActiva
 
     app = create_app()
     with app.app_context():
         ahora = dt.datetime.now(dt.timezone.utc)
         borrados = TokenRevocado.query.filter(TokenRevocado.expira_en < ahora).delete()
+        sesiones = SesionActiva.query.filter(SesionActiva.expira_en < ahora).delete()
         db.session.commit()
-        return {"tokens_eliminados": borrados}
+        return {"tokens_eliminados": borrados, "sesiones_eliminadas": sesiones}

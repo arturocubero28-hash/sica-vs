@@ -661,3 +661,14 @@ export function urlReciboPDF(pagoUuid: string): string {
   const token = getToken();
   return `${API_URL}/recibos/${pagoUuid}/pdf?_auth=${token}`;
 }
+
+// ── SESIONES / DISPOSITIVOS ───────────────────────────────────────────────────
+export interface SesionDTO {
+  id: number; dispositivo: string; ip?: string;
+  creada_en?: string; ultimo_uso?: string; es_actual: boolean;
+}
+export const listarSesiones = () => request<SesionDTO[]>("/auth/sesiones");
+export const cerrarSesion = (sesionId: number) =>
+  request<{ message: string }>(`/auth/sesiones/${sesionId}/cerrar`, { method: "POST" });
+export const cerrarOtrasSesiones = () =>
+  request<{ message: string; cerradas: number }>("/auth/sesiones/cerrar-otras", { method: "POST" });

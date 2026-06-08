@@ -26,18 +26,23 @@ from flask import current_app, request, jsonify
 from app.models.usuario import Usuario
 
 
-def generar_token(usuario: Usuario) -> str:
+def generar_token(usuario: Usuario, devolver_jti: bool = False):
     """Genera un JWT firmado con el id público y el rol del usuario."""
+    jti = str(uuid_lib.uuid4())
     payload = {
         "sub": str(usuario.uuid_publico),
         "rol": usuario.rol,
-        "jti": str(uuid_lib.uuid4()),   # identificador único del token (para revocación)
+        "jti": jti,   # identificador único del token (para revocación)
         "exp": dt.datetime.utcnow() + dt.timedelta(
             hours=current_app.config["JWT_EXPIRES_HOURS"]
         ),
         "iat": dt.datetime.utcnow(),
     }
-    return jwt.encode(payload, current_app.config["JWT_SECRET"], algorithm="HS256")
+    token = jwt.encode(payload, current_app.config["JWT_SECRET"], algorithm="HS256")
+    if devolver_jti:
+        exp = payload["exp"].replace(tzinfo=dt.timezone.utc)
+        return token, jti, exp
+    return token
 
 
 def revocar_token(token, usuario_id=None):
@@ -86,6 +91,9 @@ def _usuario_desde_request():
     from app.models.token_revocado import TokenRevocado
     if TokenRevocado.esta_revocado(payload.get("jti")):
         return None
+    # Guardar el jti actual para identificar "esta sesión" en el listado
+    from flask import g
+    g.jti_actual = payload.get("jti")
     return Usuario.query.filter_by(uuid_publico=payload["sub"], activo=True).first()
 
 

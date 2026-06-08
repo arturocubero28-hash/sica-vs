@@ -1427,3 +1427,10 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .req-item { font-size: 12px; color: #6b7280; display: flex; align-items: center; gap: 6px; }
 .req-item span { font-weight: 700; width: 14px; display: inline-block; text-align: center; }
 .req-item.ok { color: #1d8a4a; }
+
+/* Dispositivos conectados / sesiones */
+.sesiones-lista { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.sesion-item { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 14px; border: 1px solid #e3e9f2; border-radius: 10px; background: #fff; }
+.sesion-item.actual { border-color: #1d8a4a; background: #f4fbf6; }
+.sesion-disp { font-weight: 600; color: #022E45; font-size: 14px; }

@@ -44,6 +44,7 @@ def create_app(config_class=Config):
     from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja, SalidaCaja  # noqa: F401
     from app.models.auditoria import LogAuditoria  # noqa: F401  auditoría forense
     from app.models.token_revocado import TokenRevocado  # noqa: F401  blacklist JWT
+    from app.models.sesion_activa import SesionActiva  # noqa: F401  sesiones/dispositivos
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { getMe, cambiarPassword, type Usuario } from "../../api/client";
+import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesiones,
+  type Usuario, type SesionDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
 
 export function MiPerfil() {
@@ -31,6 +32,7 @@ export function MiPerfil() {
 
       <DatosForm usuario={usuario} />
       <PasswordForm />
+      <SesionesForm />
     </div>
   );
 }
@@ -98,6 +100,86 @@ function PasswordForm() {
           {guardando ? "Guardando…" : "Cambiar contraseña"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function SesionesForm() {
+  const [sesiones, setSesiones] = useState<SesionDTO[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [msg, setMsg] = useState("");
+
+  function cargar() {
+    setCargando(true);
+    listarSesiones().then(setSesiones).catch(() => {}).finally(() => setCargando(false));
+  }
+  useEffect(() => { cargar(); }, []);
+
+  async function cerrar(id: number) {
+    try { await cerrarSesion(id); cargar(); }
+    catch (e) { setMsg((e as Error).message); }
+  }
+
+  async function cerrarOtras() {
+    if (!confirm("¿Cerrar sesión en todos los demás dispositivos?")) return;
+    try {
+      const r = await cerrarOtrasSesiones();
+      setMsg(`✓ ${r.message}`);
+      cargar();
+      setTimeout(() => setMsg(""), 3000);
+    } catch (e) { setMsg((e as Error).message); }
+  }
+
+  function tiempoRelativo(iso?: string) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return "hace un momento";
+    if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
+    if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
+    return d.toLocaleDateString("es-HN");
+  }
+
+  const hayOtras = sesiones.some(s => !s.es_actual);
+
+  return (
+    <div className="dash-card">
+      <h3>Dispositivos conectados</h3>
+      <p className="muted small">Estos son los dispositivos donde tu cuenta tiene sesión abierta.
+        Si no reconocés alguno, cerralo.</p>
+
+      {cargando ? <p className="muted">Cargando…</p>
+        : sesiones.length === 0 ? <p className="muted">No hay sesiones activas registradas.</p>
+        : (
+          <div className="sesiones-lista">
+            {sesiones.map(s => (
+              <div key={s.id} className={`sesion-item ${s.es_actual ? "actual" : ""}`}>
+                <div className="sesion-info">
+                  <div className="sesion-disp">
+                    {s.dispositivo}
+                    {s.es_actual && <span className="pill green" style={{ marginLeft: 8 }}>Este dispositivo</span>}
+                  </div>
+                  <div className="muted small">
+                    {s.ip || "IP desconocida"} · activo {tiempoRelativo(s.ultimo_uso)}
+                  </div>
+                </div>
+                {!s.es_actual && (
+                  <button className="mini" style={{ color: "#c81e1e" }} onClick={() => cerrar(s.id)}>
+                    Cerrar
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+      {msg && <div className={msg.startsWith("✓") ? "cuota-ok" : "error"} style={{ marginTop: 10 }}>{msg}</div>}
+
+      {hayOtras && (
+        <button className="ghost mini" style={{ marginTop: 12, color: "#c81e1e" }} onClick={cerrarOtras}>
+          Cerrar todas las otras sesiones
+        </button>
+      )}
     </div>
   );
 }
