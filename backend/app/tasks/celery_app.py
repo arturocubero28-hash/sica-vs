@@ -34,4 +34,8 @@ celery.conf.beat_schedule = {
         "task": "tasks.revisar_mora",
         "schedule": crontab(hour=1, minute=0),
     },
+    "revisar-arreglos-diaria": {
+        "task": "tasks.revisar_arreglos",
+        "schedule": crontab(hour=1, minute=30),
+    },
 }

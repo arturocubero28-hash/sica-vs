@@ -99,3 +99,50 @@ def revisar_mora():
 
         db.session.commit()
         return {"procesadas": procesadas, "cuentas_bloqueadas": bloqueadas}
+
+
+# ── Vigilancia de arreglos de pago ────────────────────────────────────────────
+@celery.task(name="tasks.revisar_arreglos")
+def revisar_arreglos():
+    """
+    Revisa los abonos de arreglos activos. Si un abono pendiente supera su
+    fecha pactada + los días de gracia del arreglo, el arreglo se marca
+    INCUMPLIDO: las cuotas se descongelan (vuelven a vencidas) y la cuenta
+    se bloquea de nuevo. Lo ya abonado NO se pierde.
+    """
+    from app import create_app
+    from app.extensions import db
+    from app.models.cuenta import ArregloPago
+    from app.api.arreglos import _descongelar_y_bloquear
+
+    app = create_app()
+    with app.app_context():
+        hoy = dt.date.today()
+        incumplidos = 0
+        vencidos_marcados = 0
+
+        arreglos = ArregloPago.query.filter_by(estado="activo").all()
+        for arreglo in arreglos:
+            incumplio = False
+            for abono in arreglo.abonos:
+                if abono.estado != "pendiente":
+                    continue
+                dias_atraso = (hoy - abono.fecha_pactada).days
+                if dias_atraso > 0:
+                    # Marcar el abono como vencido (visual)
+                    if abono.estado != "vencido":
+                        abono.estado = "vencido"
+                        vencidos_marcados += 1
+                # ¿Supera los días de gracia? → incumplimiento del arreglo
+                if dias_atraso > arreglo.dias_gracia:
+                    incumplio = True
+
+            if incumplio:
+                _descongelar_y_bloquear(
+                    arreglo, "incumplido",
+                    f"Incumplimiento: abono vencido más de {arreglo.dias_gracia} días de gracia"
+                )
+                incumplidos += 1
+
+        db.session.commit()
+        return {"arreglos_incumplidos": incumplidos, "abonos_vencidos": vencidos_marcados}

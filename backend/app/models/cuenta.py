@@ -258,7 +258,7 @@ class Pago(db.Model):
 
     id                   = db.Column(db.BigInteger, primary_key=True)
     uuid_publico         = _uuid_col()
-    cuota_id             = db.Column(db.BigInteger, db.ForeignKey("cuotas.id"), nullable=False)
+    cuota_id             = db.Column(db.BigInteger, db.ForeignKey("cuotas.id"), nullable=True)
     cuenta_id            = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
     subido_por           = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
     metodo               = db.Column(db.String(20), nullable=False, default="transferencia")
@@ -289,4 +289,123 @@ class Pago(db.Model):
             "nota_admin":          self.nota_admin,
             "revisado_en":         self.revisado_en.isoformat() if self.revisado_en else None,
             "created_at":          self.created_at.isoformat(),
+        }
+
+
+class ArregloPago(db.Model):
+    """
+    Plan de pago negociado para una cuenta morosa.
+    Congela un conjunto de cuotas vencidas y permite pagarlas en abonos.
+    Sin recargo: solo difiere la deuda.
+    """
+    __tablename__ = "arreglos_pago"
+
+    id                  = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico        = _uuid_col()
+    cuenta_id           = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
+
+    # Montos (congelados al crear el arreglo)
+    deuda_total         = db.Column(db.Numeric(10, 2), nullable=False)   # suma de cuotas incluidas
+    abono_inicial       = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    saldo_financiado    = db.Column(db.Numeric(10, 2), nullable=False)   # deuda - abono_inicial
+    num_abonos          = db.Column(db.Integer, nullable=False)
+    monto_por_abono     = db.Column(db.Numeric(10, 2), nullable=False)
+
+    # Política de incumplimiento
+    dias_gracia         = db.Column(db.Integer, nullable=False, default=15)
+
+    # Estado del arreglo: activo | completado | incumplido | cancelado
+    estado              = db.Column(db.String(20), nullable=False, default="activo")
+
+    # Trazabilidad
+    creado_por          = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
+    nota                = db.Column(db.String(500))
+    motivo_cierre       = db.Column(db.String(255))
+    created_at          = db.Column(db.DateTime(timezone=True), default=_now)
+    completado_en       = db.Column(db.DateTime(timezone=True))
+
+    cuenta  = db.relationship("Cuenta", backref="arreglos")
+    creador = db.relationship("Usuario", foreign_keys=[creado_por])
+    abonos  = db.relationship("AbonoArreglo", backref="arreglo",
+                              lazy="select", cascade="all, delete-orphan")
+    # Cuotas congeladas por este arreglo
+    cuotas  = db.relationship("Cuota", backref="arreglo", lazy="select")
+
+    def total_abonado(self):
+        """Suma del abono inicial + todos los abonos pagados."""
+        pagados = sum(float(a.monto) for a in self.abonos if a.estado == "pagado")
+        return float(self.abono_inicial) + pagados
+
+    def saldo_pendiente(self):
+        """Lo que falta por pagar de la deuda total."""
+        return round(float(self.deuda_total) - self.total_abonado(), 2)
+
+    def abonos_pagados(self):
+        return sum(1 for a in self.abonos if a.estado == "pagado")
+
+    def proximo_abono(self):
+        """El siguiente abono pendiente (por fecha), o None si no hay."""
+        pendientes = [a for a in self.abonos if a.estado == "pendiente"]
+        if not pendientes:
+            return None
+        return min(pendientes, key=lambda a: a.fecha_pactada)
+
+    def to_dict(self, con_detalle=False):
+        d = {
+            "id":               str(self.uuid_publico),
+            "estado":           self.estado,
+            "deuda_total":      float(self.deuda_total),
+            "abono_inicial":    float(self.abono_inicial),
+            "saldo_financiado": float(self.saldo_financiado),
+            "num_abonos":       self.num_abonos,
+            "monto_por_abono":  float(self.monto_por_abono),
+            "dias_gracia":      self.dias_gracia,
+            "total_abonado":    round(self.total_abonado(), 2),
+            "saldo_pendiente":  self.saldo_pendiente(),
+            "abonos_pagados":   self.abonos_pagados(),
+            "nota":             self.nota,
+            "motivo_cierre":    self.motivo_cierre,
+            "created_at":       self.created_at.isoformat() if self.created_at else None,
+            "completado_en":    self.completado_en.isoformat() if self.completado_en else None,
+        }
+        # Datos de la cuenta para mostrar en el panel
+        cuenta = self.cuenta
+        if cuenta:
+            d["unidad"] = cuenta.unidad.identificador if cuenta.unidad else "—"
+            tit = next((r for r in cuenta.residentes if r.rol_cuenta == "titular"), None)
+            d["titular"] = (f"{tit.usuario.nombre} {tit.usuario.apellido}"
+                            if tit and tit.usuario else "—")
+        if con_detalle:
+            d["abonos"] = [a.to_dict() for a in sorted(self.abonos, key=lambda x: x.numero)]
+            d["meses_incluidos"] = [
+                {"mes_label": c.periodo.strftime("%B %Y"), "monto": float(c.monto)}
+                for c in sorted(self.cuotas, key=lambda x: x.periodo)
+            ]
+        return d
+
+
+class AbonoArreglo(db.Model):
+    """Cada cuota/abono del calendario de un arreglo de pago."""
+    __tablename__ = "abonos_arreglo"
+
+    id            = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico  = _uuid_col()
+    arreglo_id    = db.Column(db.BigInteger, db.ForeignKey("arreglos_pago.id"), nullable=False)
+    numero        = db.Column(db.Integer, nullable=False)              # 1, 2, 3...
+    monto         = db.Column(db.Numeric(10, 2), nullable=False)
+    fecha_pactada = db.Column(db.Date, nullable=False)
+    # Estado: pendiente | pagado | vencido
+    estado        = db.Column(db.String(20), nullable=False, default="pendiente")
+    pagado_en     = db.Column(db.DateTime(timezone=True))
+    pago_id       = db.Column(db.BigInteger, db.ForeignKey("pagos.id"))  # pago que lo cubrió
+    created_at    = db.Column(db.DateTime(timezone=True), default=_now)
+
+    def to_dict(self):
+        return {
+            "id":            str(self.uuid_publico),
+            "numero":        self.numero,
+            "monto":         float(self.monto),
+            "fecha_pactada": self.fecha_pactada.isoformat(),
+            "estado":        self.estado,
+            "pagado_en":     self.pagado_en.isoformat() if self.pagado_en else None,
         }

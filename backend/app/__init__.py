@@ -72,6 +72,9 @@ def create_app(config_class=Config):
     from app.api.caja import caja_bp
     app.register_blueprint(caja_bp, url_prefix="/api/v1/caja")
 
+    from app.api.arreglos import arreglos_bp
+    app.register_blueprint(arreglos_bp, url_prefix="/api/v1/arreglos")
+
     from app.api.usuarios import usuarios_bp
     app.register_blueprint(usuarios_bp, url_prefix="/api/v1/usuarios")
 
@@ -135,6 +138,11 @@ def create_app(config_class=Config):
             "ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS foto_numero_asignado VARCHAR(255)",
             # Código numérico para delivery (Día 6)
             "ALTER TABLE codigos_qr ADD COLUMN IF NOT EXISTS codigo_numerico VARCHAR(8)",
+            # Arreglos de pago (Día 7): vincular cuota a su arreglo
+            "ALTER TABLE cuotas ADD COLUMN IF NOT EXISTS arreglo_id BIGINT",
+            "ALTER TABLE abonos_arreglo ADD COLUMN IF NOT EXISTS pago_id BIGINT",
+            # Los pagos de abonos no tienen cuota directa: cuota_id puede ser null
+            "ALTER TABLE pagos ALTER COLUMN cuota_id DROP NOT NULL",
         ]
         for sql in columnas:
             try:
