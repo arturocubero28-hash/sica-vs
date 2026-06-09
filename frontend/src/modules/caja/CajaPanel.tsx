@@ -474,26 +474,27 @@ function SolicitarSalida({ onRegistrada }: { onRegistrada: () => void }) {
   return (
     <div className="dash-card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ margin: 0 }}>Salida de caja</h3>
+        <h3 style={{ margin: 0 }}>↑ Sacar efectivo de la caja</h3>
         {!abierto && (
           <button className="mini" onClick={() => setAbierto(true)}>
-            Solicitar depósito / salida
+            Registrar salida
           </button>
         )}
       </div>
       <p className="muted small" style={{ marginTop: 6 }}>
-        Para registrar cuando se saca efectivo de la caja (depósito al banco, etc.). Requiere autorización del admin.
+        El dinero <b>sale</b> de la caja: depósito al banco, entrega de efectivo, etc.
+        Resta del efectivo esperado. Requiere autorización del admin.
       </p>
       {abierto && (
         <div className="form-pago" style={{ marginTop: 12 }}>
           <div className="form-field">
-            <label>Monto a retirar (L)</label>
+            <label>Monto que sale (L)</label>
             <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0.00" />
           </div>
           <div className="form-field">
             <label>Concepto</label>
             <input value={concepto} onChange={e => setConcepto(e.target.value)}
-              placeholder="Ej. Depósito banco Ficohsa, cheque #12345…" />
+              placeholder="Ej. Depósito al banco Ficohsa, cheque #12345…" />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="ghost" onClick={() => { setAbierto(false); setMsg(""); }}>Cancelar</button>
@@ -533,26 +534,27 @@ function SolicitarIngreso({ onRegistrado }: { onRegistrado: () => void }) {
   return (
     <div className="dash-card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ margin: 0 }}>Ingreso extraordinario</h3>
+        <h3 style={{ margin: 0 }}>↓ Meter efectivo a la caja</h3>
         {!abierto && (
           <button className="mini btn-reactivar" onClick={() => setAbierto(true)}>
-            Solicitar ingreso de efectivo
+            Registrar ingreso
           </button>
         )}
       </div>
       <p className="muted small" style={{ marginTop: 6 }}>
-        Para registrar cuando se trae efectivo del banco u otra fuente. Requiere autorización del admin.
+        El dinero <b>entra</b> a la caja: se trae efectivo del banco para dar cambio, refuerzo de fondo, etc.
+        Suma al efectivo esperado. Requiere autorización del admin.
       </p>
       {abierto && (
         <div className="form-pago" style={{ marginTop: 12 }}>
           <div className="form-field">
-            <label>Monto a ingresar (L)</label>
+            <label>Monto que entra (L)</label>
             <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0.00" />
           </div>
           <div className="form-field">
             <label>Concepto</label>
             <input value={concepto} onChange={e => setConcepto(e.target.value)}
-              placeholder="Ej. Retiro banco Ficohsa, fondo de caja…" />
+              placeholder="Ej. Efectivo traído del banco para cambio…" />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="ghost" onClick={() => { setAbierto(false); setMsg(""); }}>Cancelar</button>

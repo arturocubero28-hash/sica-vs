@@ -794,7 +794,7 @@ def solicitar_ingreso(usuario_actual):
     concepto = (data.get("concepto") or "").strip()
     if not concepto:
         return jsonify({"error": {"code": "concepto_requerido",
-                                  "message": "Indicá el concepto (ej. Retiro banco Ficohsa)"}}), 400
+                                  "message": "Indicá el concepto (ej. Efectivo traído del banco)"}}), 400
     try:
         monto = float(data.get("monto"))
         if monto <= 0:
