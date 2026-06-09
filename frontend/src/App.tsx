@@ -367,11 +367,17 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
   // Polling de pagos pendientes cada 30 segundos (solo admin)
   useEffect(() => {
     if (!esAdmin) return;
+    let id: ReturnType<typeof setInterval>;
     function poll() {
-      contarPagosPendientes().then(r => setPagosBadge(r.pendientes)).catch(() => {});
+      contarPagosPendientes()
+        .then(r => setPagosBadge(r.pendientes))
+        .catch(() => {
+          // Si falla (token expirado), detenemos el polling
+          clearInterval(id);
+        });
     }
     poll();
-    const id = setInterval(poll, 30_000);
+    id = setInterval(poll, 30_000);
     return () => clearInterval(id);
   }, [esAdmin]);
 

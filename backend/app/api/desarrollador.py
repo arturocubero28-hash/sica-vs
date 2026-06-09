@@ -294,14 +294,17 @@ def metricas_seguridad(usuario_actual):
     rate_429_7d = contar(db.session.query(func.count(L.id)).filter(
         L.status_code == 429, L.created_at >= hace_7d))
 
-    # ── Errores de autorización (401/403 fuera del login) ──
-    # Solo cuenta los que tienen usuario_id o email registrado — es decir, los que
-    # llegaron con un token (inválido, revocado o sin permiso). Excluye los 401
-    # por ausencia de token (operación normal del frontend al cargar).
+    # ── Errores de autorización reales (401/403 fuera del login) ──
+    # Excluye endpoints que el frontend llama automáticamente (polling, carga inicial)
+    # cuyos 401 son por sesión expirada, no ataques.
+    ENDPOINTS_POLLING = ["%/auth/me", "%/cuotas/pendientes/count",
+                         "%/auth/logout", "%/auth/logout%"]
+    filtro_polling = [~L.endpoint.like(ep) for ep in ENDPOINTS_POLLING]
+    from sqlalchemy import and_
     authz_24h = contar(db.session.query(func.count(L.id)).filter(
         L.status_code.in_([401, 403]),
         ~L.endpoint.like("%/auth/login"),
-        ~L.endpoint.like("%/auth/me"),       # /me devuelve 401 normal al cargar
+        *filtro_polling,
         L.created_at >= hace_24h))
 
     # ── Top IPs con más logins fallidos (7 días) ──
@@ -350,29 +353,3 @@ def metricas_seguridad(usuario_actual):
         "ataques_privilegiados": ataques_priv,
         "timeline_7d": timeline,
     }})
-
-
-@dev_bp.get("/debug-401")
-@roles_required("desarrollador")
-def debug_401(usuario_actual):
-    """
-    Endpoint temporal de diagnóstico: desglosa los 401/403
-    por endpoint para identificar si son normales o ataques.
-    """
-    from sqlalchemy import func, text
-    L = LogAuditoria
-    rows = (db.session.query(
-                L.endpoint,
-                L.status_code,
-                func.count(L.id).label("cantidad"),
-                func.count(func.distinct(L.ip)).label("ips_distintas"),
-            )
-            .filter(L.status_code.in_([401, 403]))
-            .group_by(L.endpoint, L.status_code)
-            .order_by(func.count(L.id).desc())
-            .limit(25).all())
-    return jsonify({"data": [
-        {"endpoint": r.endpoint, "status": r.status_code,
-         "cantidad": r.cantidad, "ips_distintas": r.ips_distintas}
-        for r in rows
-    ]})
