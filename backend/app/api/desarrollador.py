@@ -350,3 +350,29 @@ def metricas_seguridad(usuario_actual):
         "ataques_privilegiados": ataques_priv,
         "timeline_7d": timeline,
     }})
+
+
+@dev_bp.get("/debug-401")
+@roles_required("desarrollador")
+def debug_401(usuario_actual):
+    """
+    Endpoint temporal de diagnóstico: desglosa los 401/403
+    por endpoint para identificar si son normales o ataques.
+    """
+    from sqlalchemy import func, text
+    L = LogAuditoria
+    rows = (db.session.query(
+                L.endpoint,
+                L.status_code,
+                func.count(L.id).label("cantidad"),
+                func.count(func.distinct(L.ip)).label("ips_distintas"),
+            )
+            .filter(L.status_code.in_([401, 403]))
+            .group_by(L.endpoint, L.status_code)
+            .order_by(func.count(L.id).desc())
+            .limit(25).all())
+    return jsonify({"data": [
+        {"endpoint": r.endpoint, "status": r.status_code,
+         "cantidad": r.cantidad, "ips_distintas": r.ips_distintas}
+        for r in rows
+    ]})
