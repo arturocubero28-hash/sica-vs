@@ -161,6 +161,8 @@ def create_app(config_class=Config):
             "ALTER TABLE pagos ALTER COLUMN cuota_id DROP NOT NULL",
             # Recibos SAR Fase 1 (Día 7): correlativo de recibo
             "ALTER TABLE pagos ADD COLUMN IF NOT EXISTS numero_recibo INTEGER",
+            # Control de billetes al cierre (Día 9)
+            "ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS desglose_billetes TEXT",
         ]
         for sql in columnas:
             try:

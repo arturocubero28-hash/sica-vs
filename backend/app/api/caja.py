@@ -159,6 +159,19 @@ def cerrar_caja(usuario_actual):
     except ValueError:
         return jsonify({"error": {"code": "monto_invalido", "message": "Montos contados inválidos"}}), 400
 
+    # Desglose de billetes (opcional pero recomendado). Si viene, se valida que
+    # el total de billetes coincida con el efectivo contado.
+    import json as _json
+    desglose = data.get("desglose_billetes")
+    if desglose and isinstance(desglose, dict):
+        DENOMINACIONES = [500, 200, 100, 50, 20, 10, 5, 2, 1]
+        total_billetes = sum(int(desglose.get(str(d), 0) or 0) * d for d in DENOMINACIONES)
+        # Si el cajero contó billetes, el efectivo contado se toma del desglose
+        if total_billetes > 0:
+            efectivo_contado = float(total_billetes)
+        sesion.desglose_billetes = _json.dumps({str(d): int(desglose.get(str(d), 0) or 0)
+                                                for d in DENOMINACIONES})
+
     sesion.efectivo_contado = efectivo_contado
     sesion.pos_contado = pos_contado
     sesion.nota_cierre = (data.get("nota") or "")[:255]
@@ -385,7 +398,70 @@ def constancia_pdf(usuario_actual, uuid_sesion):
         tb.drawOn(cv, 15*mm, y - tb._height)
         y -= tb._height + 8*mm
 
-    # Resumen del arqueo
+    # Salidas e ingresos extraordinarios (autorizados) del turno
+    salidas = SalidaCaja.query.filter_by(sesion_id=s.id).order_by(SalidaCaja.created_at).all()
+    if salidas:
+        cv.setFont("Helvetica-Bold", 10); cv.setFillColor(AZUL)
+        cv.drawString(15*mm, y, "Salidas e ingresos extraordinarios"); y -= 7*mm
+        sdata = [["Tipo", "Concepto", "Estado", "Monto"]]
+        for sa in salidas:
+            monto = float(sa.monto)
+            es_ingreso = monto < 0
+            tipo = "Ingreso" if es_ingreso else "Salida"
+            concepto = (sa.concepto or "—").replace("[INGRESO]", "").strip()[:40]
+            sdata.append([tipo, concepto, sa.estado.capitalize(), f"L {abs(monto):,.2f}"])
+        ts = Table(sdata, colWidths=[20*mm, 80*mm, 28*mm, 32*mm])
+        ts.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#5b6b7a")),
+            ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"), ("FONTSIZE", (0,0), (-1,-1), 8),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, GRIS_C]),
+            ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#e3e9f2")),
+            ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ("LEFTPADDING", (0,0), (-1,-1), 4), ("ALIGN", (3,1), (3,-1), "RIGHT"),
+        ]))
+        ts.wrapOn(cv, W - 30*mm, H)
+        if y - ts._height < 40*mm:
+            cv.showPage(); y = H - 25*mm
+        ts.drawOn(cv, 15*mm, y - ts._height)
+        y -= ts._height + 8*mm
+
+    # Desglose de billetes contados al cierre
+    if s.desglose_billetes:
+        import json as _json2
+        try:
+            desg = _json2.loads(s.desglose_billetes)
+        except Exception:
+            desg = {}
+        if desg and any(int(v or 0) > 0 for v in desg.values()):
+            if y < 70*mm:
+                cv.showPage(); y = H - 25*mm
+            cv.setFont("Helvetica-Bold", 10); cv.setFillColor(AZUL)
+            cv.drawString(15*mm, y, "Desglose de billetes contados"); y -= 7*mm
+            DEN = [500, 200, 100, 50, 20, 10, 5, 2, 1]
+            bdata = [["Denominación", "Cantidad", "Subtotal"]]
+            total_b = 0
+            for den in DEN:
+                cant = int(desg.get(str(den), 0) or 0)
+                if cant > 0:
+                    sub = cant * den
+                    total_b += sub
+                    bdata.append([f"L {den}", str(cant), f"L {sub:,.2f}"])
+            bdata.append(["", "TOTAL", f"L {total_b:,.2f}"])
+            tbil = Table(bdata, colWidths=[35*mm, 30*mm, 35*mm])
+            tbil.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), AZUL), ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"), ("FONTSIZE", (0,0), (-1,-1), 8),
+                ("ROWBACKGROUNDS", (0,1), (-2,-2), [colors.white, GRIS_C]),
+                ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#e3e9f2")),
+                ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+                ("LEFTPADDING", (0,0), (-1,-1), 6), ("ALIGN", (1,0), (-1,-1), "RIGHT"),
+                ("BACKGROUND", (0,-1), (-1,-1), colors.HexColor("#fff3e6")),
+                ("FONTNAME", (0,-1), (-1,-1), "Helvetica-Bold"),
+            ]))
+            tbil.wrapOn(cv, W - 30*mm, H)
+            tbil.drawOn(cv, 15*mm, y - tbil._height)
+            y -= tbil._height + 8*mm
     cv.line(15*mm, y, W - 15*mm, y); y -= 8*mm
     cv.setFont("Helvetica-Bold", 10); cv.setFillColor(AZUL)
     cv.drawString(15*mm, y, "Resumen del arqueo"); y -= 7*mm

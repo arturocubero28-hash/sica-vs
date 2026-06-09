@@ -158,7 +158,11 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
   const [seleccion, setSeleccion] = useState<{ cuotaId: string; label: string; monto: number } | null>(null);
   const [metodo, setMetodo] = useState("efectivo");
   const [referencia, setReferencia] = useState("");
+  const [pagaCon, setPagaCon] = useState("");
   const [msg, setMsg] = useState("");
+
+  const montoPagaCon = parseFloat(pagaCon || "0");
+  const vuelto = seleccion && montoPagaCon > 0 ? montoPagaCon - seleccion.monto : 0;
 
   async function buscar() {
     if (!busqueda.trim()) return;
@@ -173,7 +177,7 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
     try {
       await registrarPagoCaja({ cuota_id: seleccion.cuotaId, metodo, referencia });
       setMsg(`✓ Pago de ${L(seleccion.monto)} registrado`);
-      setSeleccion(null); setBusqueda(""); setResultados([]); setReferencia("");
+      setSeleccion(null); setBusqueda(""); setResultados([]); setReferencia(""); setPagaCon("");
       onRegistrado();
       setTimeout(() => setMsg(""), 4000);
     } catch (e) { setMsg((e as Error).message); }
@@ -228,7 +232,29 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
             <input placeholder="N° de voucher / referencia POS" value={referencia}
               onChange={e => setReferencia(e.target.value)} />
           )}
-          <button className="cuota-btn-pagar full" onClick={cobrar}>
+          {metodo === "efectivo" && (
+            <div className="vuelto-box">
+              <div className="form-field" style={{ margin: 0 }}>
+                <label>¿Con cuánto paga el residente?</label>
+                <input type="number" min="0" value={pagaCon}
+                  onChange={e => setPagaCon(e.target.value)}
+                  placeholder={`Mínimo ${seleccion.monto}`} />
+              </div>
+              {montoPagaCon > 0 && (
+                vuelto < 0 ? (
+                  <div className="vuelto-resultado falta">
+                    Falta: <b>{L(Math.abs(vuelto))}</b> (el pago no cubre la cuota)
+                  </div>
+                ) : (
+                  <div className="vuelto-resultado ok">
+                    Vuelto a entregar: <b>{L(vuelto)}</b>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+          <button className="cuota-btn-pagar full" onClick={cobrar}
+            disabled={metodo === "efectivo" && montoPagaCon > 0 && vuelto < 0}>
             Confirmar pago {L(seleccion.monto)}
           </button>
         </div>
@@ -242,25 +268,33 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
 function CerrarCaja({ sesion, onCancelar, onCerrada }: {
   sesion: SesionCajaDTO; onCancelar: () => void; onCerrada: () => void;
 }) {
-  const [efectivo, setEfectivo] = useState("");
+  const DENOMINACIONES = [500, 200, 100, 50, 20, 10, 5, 2, 1];
+  const [billetes, setBilletes] = useState<Record<number, string>>({});
   const [pos, setPos] = useState("");
   const [nota, setNota] = useState("");
   const [cerrando, setCerrando] = useState(false);
   const [error, setError] = useState("");
   const [confirmarForzar, setConfirmarForzar] = useState(false);
 
-  const efContado = parseFloat(efectivo || "0");
+  // El efectivo contado se calcula del desglose de billetes
+  const efContado = DENOMINACIONES.reduce((sum, d) => sum + (parseInt(billetes[d] || "0") || 0) * d, 0);
   const posContado = parseFloat(pos || "0");
   const difEf = efContado - sesion.efectivo_esperado;
   const difPos = posContado - sesion.total_pos;
 
+  function setBillete(den: number, cant: string) {
+    setBilletes(b => ({ ...b, [den]: cant }));
+  }
+
   async function cerrar(forzar = false) {
     setCerrando(true); setError("");
     try {
-      await cerrarCaja({ efectivo_contado: efContado, pos_contado: posContado, nota, forzar });
+      const desglose: Record<string, number> = {};
+      DENOMINACIONES.forEach(d => { desglose[String(d)] = parseInt(billetes[d] || "0") || 0; });
+      await cerrarCaja({ efectivo_contado: efContado, pos_contado: posContado, nota, forzar,
+        desglose_billetes: desglose });
       onCerrada();
     } catch (e: any) {
-      // Si el backend pide confirmación por salidas pendientes (409)
       const msg = (e as Error).message || "";
       if (msg.includes("pendiente")) {
         setConfirmarForzar(true);
@@ -280,11 +314,29 @@ function CerrarCaja({ sesion, onCancelar, onCerrada }: {
         <div className="arqueo-fila">
           <span>Efectivo esperado</span><b>{L(sesion.efectivo_esperado)}</b>
         </div>
+
         <div className="form-field">
-          <label>Efectivo contado (L)</label>
-          <input type="number" value={efectivo} onChange={e => setEfectivo(e.target.value)} placeholder="0.00" />
+          <label>Conteo de billetes</label>
+          <p className="muted small">Contá cuántos billetes tenés de cada denominación. El total se calcula solo.</p>
+          <div className="billetes-grid">
+            {DENOMINACIONES.map(den => (
+              <div key={den} className="billete-row">
+                <span className="billete-den">L {den}</span>
+                <input type="number" min="0" className="billete-input"
+                  value={billetes[den] || ""} onChange={e => setBillete(den, e.target.value)}
+                  placeholder="0" />
+                <span className="billete-sub muted small">
+                  {(parseInt(billetes[den] || "0") || 0) > 0 ? L((parseInt(billetes[den] || "0") || 0) * den) : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="billetes-total">
+            <span>Total efectivo contado</span>
+            <b>{L(efContado)}</b>
+          </div>
         </div>
-        {efectivo !== "" && (
+        {efContado > 0 && (
           <div className={`arqueo-dif ${Math.abs(difEf) < 0.01 ? "ok" : "alerta"}`}>
             {Math.abs(difEf) < 0.01 ? "✓ Cuadra" : `Diferencia: ${L(difEf)} ${difEf > 0 ? "(sobra)" : "(falta)"}`}
           </div>

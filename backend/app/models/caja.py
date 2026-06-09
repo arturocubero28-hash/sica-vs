@@ -35,6 +35,8 @@ class SesionCaja(db.Model):
     efectivo_contado = db.Column(db.Numeric(10, 2))
     pos_contado      = db.Column(db.Numeric(10, 2))
     nota_cierre      = db.Column(db.String(255))
+    # Desglose de billetes al cierre (JSON: {"500": 3, "100": 12, ...})
+    desglose_billetes = db.Column(db.Text)
 
     abierta_en      = db.Column(db.DateTime(timezone=True), default=_now)
     cerrada_en      = db.Column(db.DateTime(timezone=True))

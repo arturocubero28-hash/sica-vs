@@ -1450,3 +1450,20 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .seg-tl-bar-track { flex: 1; width: 100%; display: flex; align-items: flex-end; }
 .seg-tl-bar { width: 100%; border-radius: 5px 5px 0 0; min-height: 3px; transition: height 0.3s; }
 .seg-tl-num { font-size: 12px; font-weight: 700; color: #022E45; }
+
+/* Conteo de billetes (cierre de caja) */
+.billetes-grid { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.billete-row { display: grid; grid-template-columns: 60px 1fr 90px; align-items: center; gap: 10px; }
+.billete-den { font-weight: 700; color: #022E45; font-size: 14px; }
+.billete-input { width: 100%; }
+.billete-sub { text-align: right; }
+.billetes-total { display: flex; justify-content: space-between; align-items: center;
+  margin-top: 10px; padding: 10px 12px; background: #fff3e6; border-radius: 8px; }
+.billetes-total b { color: #F48723; font-size: 18px; }
+
+/* Calculadora de vuelto */
+.vuelto-box { margin-top: 10px; padding: 12px; background: #f9fbfd; border: 1px solid #e3e9f2; border-radius: 8px; }
+.vuelto-resultado { margin-top: 8px; padding: 8px 12px; border-radius: 6px; font-size: 14px; }
+.vuelto-resultado.ok { background: #f4fbf6; color: #1d8a4a; }
+.vuelto-resultado.ok b { font-size: 18px; }
+.vuelto-resultado.falta { background: #fff0f0; color: #c81e1e; }

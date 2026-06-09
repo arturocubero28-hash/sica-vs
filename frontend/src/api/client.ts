@@ -503,7 +503,7 @@ export const buscarCuentaCaja = (q: string) =>
   request<CuentaCajaDTO[]>(`/caja/buscar-cuenta?q=${encodeURIComponent(q)}`);
 export const registrarPagoCaja = (body: { cuota_id: string; metodo: string; referencia?: string }) =>
   request<{ pago: any; sesion: SesionCajaDTO }>("/caja/pago", { method: "POST", body: JSON.stringify(body) });
-export const cerrarCaja = (body: { efectivo_contado: number; pos_contado: number; nota?: string; forzar?: boolean }) =>
+export const cerrarCaja = (body: { efectivo_contado: number; pos_contado: number; nota?: string; forzar?: boolean; desglose_billetes?: Record<string, number> }) =>
   request<SesionCajaDTO>("/caja/cerrar", { method: "POST", body: JSON.stringify(body) });
 export const listarSesionesCaja = () => request<SesionCajaDTO[]>("/caja/sesiones");
 export const detalleSesionCaja = (uuid: string) => request<SesionCajaDTO>(`/caja/sesiones/${uuid}`);
