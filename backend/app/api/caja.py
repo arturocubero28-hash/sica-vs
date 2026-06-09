@@ -290,6 +290,150 @@ def detalle_sesion(usuario_actual, uuid_sesion):
     return jsonify({"data": s.to_dict(con_pagos=True)})
 
 
+# ── Constancia PDF del turno del cajero ──────────────────────────────────────
+@caja_bp.get("/sesiones/<uuid_sesion>/pdf")
+@roles_required("cajero", "admin", "super_admin", "desarrollador")
+def constancia_pdf(usuario_actual, uuid_sesion):
+    """Genera la constancia PDF del turno del cajero con arqueo."""
+    s = SesionCaja.query.filter_by(uuid_publico=uuid_sesion).first()
+    if not s:
+        return jsonify({"error": {"code": "no_encontrada", "message": "Sesión no encontrada"}}), 404
+
+    import io
+    import datetime as dt
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.platypus import Table, TableStyle
+    from flask import send_file
+
+    AZUL   = colors.HexColor("#022E45")
+    GRIS   = colors.HexColor("#6b7280")
+    GRIS_C = colors.HexColor("#f4f7fb")
+
+    buf = io.BytesIO()
+    W, H = letter
+    cv = rl_canvas.Canvas(buf, pagesize=letter)
+
+    # Encabezado
+    cv.setFillColor(AZUL)
+    cv.rect(0, H - 22*mm, W, 22*mm, fill=1, stroke=0)
+    cv.setFillColor(colors.white)
+    cv.setFont("Helvetica-Bold", 14)
+    cv.drawString(15*mm, H - 10*mm, "Residencial Villas del Sol")
+    cv.setFont("Helvetica", 9)
+    cv.drawString(15*mm, H - 16*mm, "CONSTANCIA DE TURNO DE CAJA")
+    cv.setFont("Helvetica-Bold", 10)
+    cv.drawRightString(W - 15*mm, H - 10*mm, f"Sesión #{str(s.uuid_publico)[:8].upper()}")
+    cv.setFont("Helvetica", 8)
+    cv.drawRightString(W - 15*mm, H - 16*mm, "ABIERTA" if s.estado == "abierta" else "CERRADA")
+
+    y = H - 32*mm
+    cajero = s.cajero
+    nombre_cajero = f"{cajero.nombre} {cajero.apellido}" if cajero else "—"
+    abierta_str = s.abierta_en.strftime("%d/%m/%Y %I:%M %p") if s.abierta_en else "—"
+    cerrada_str = s.cerrada_en.strftime("%d/%m/%Y %I:%M %p") if s.cerrada_en else "En curso"
+
+    def fila_d(label, valor, yp):
+        cv.setFont("Helvetica-Bold", 8); cv.setFillColor(GRIS)
+        cv.drawString(15*mm, yp, label)
+        cv.setFont("Helvetica", 9); cv.setFillColor(AZUL)
+        cv.drawString(55*mm, yp, str(valor))
+
+    fila_d("Cajero:", nombre_cajero, y);                y -= 6*mm
+    fila_d("Apertura:", abierta_str, y);                y -= 6*mm
+    fila_d("Cierre:", cerrada_str, y);                  y -= 6*mm
+    fila_d("Fondo inicial:", f"L {float(s.monto_inicial):,.2f}", y); y -= 8*mm
+
+    cv.setStrokeColor(colors.HexColor("#e3e9f2")); cv.setLineWidth(0.6)
+    cv.line(15*mm, y, W - 15*mm, y); y -= 8*mm
+
+    # Detalle de cobros
+    cv.setFont("Helvetica-Bold", 10); cv.setFillColor(AZUL)
+    cv.drawString(15*mm, y, "Detalle de cobros del turno"); y -= 7*mm
+
+    pagos = Pago.query.filter_by(sesion_caja_id=s.id, estado="aprobado").order_by(Pago.created_at).all()
+    met_label = {"efectivo": "Efectivo", "tarjeta_pos": "Tarjeta POS",
+                 "transferencia": "Transf.", "linea": "En línea", "pasarela": "En línea"}
+    total_ef = total_pos = 0.0
+
+    if not pagos:
+        cv.setFont("Helvetica-Oblique", 9); cv.setFillColor(GRIS)
+        cv.drawString(15*mm, y, "No hay cobros registrados en este turno."); y -= 6*mm
+    else:
+        tdata = [["#", "Casa", "Titular", "Método", "Monto"]]
+        for i, p in enumerate(pagos, 1):
+            cuenta = p.cuenta
+            unidad = cuenta.unidad.identificador if cuenta and cuenta.unidad else "—"
+            tit = next((r for r in cuenta.residentes if r.rol_cuenta == "titular"), None) if cuenta else None
+            titular = (f"{tit.usuario.nombre} {tit.usuario.apellido}"[:24] if tit and tit.usuario else "—")
+            monto = float(p.monto)
+            if p.metodo == "efectivo": total_ef += monto
+            elif p.metodo == "tarjeta_pos": total_pos += monto
+            tdata.append([str(i), unidad, titular, met_label.get(p.metodo, p.metodo), f"L {monto:,.2f}"])
+        tb = Table(tdata, colWidths=[8*mm, 28*mm, 70*mm, 22*mm, 32*mm])
+        tb.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), AZUL), ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"), ("FONTSIZE", (0,0), (-1,-1), 8),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, GRIS_C]),
+            ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#e3e9f2")),
+            ("TOPPADDING", (0,0), (-1,-1), 4), ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ("LEFTPADDING", (0,0), (-1,-1), 4), ("ALIGN", (4,1), (4,-1), "RIGHT"),
+        ]))
+        tb.wrapOn(cv, W - 30*mm, H)
+        tb.drawOn(cv, 15*mm, y - tb._height)
+        y -= tb._height + 8*mm
+
+    # Resumen del arqueo
+    cv.line(15*mm, y, W - 15*mm, y); y -= 8*mm
+    cv.setFont("Helvetica-Bold", 10); cv.setFillColor(AZUL)
+    cv.drawString(15*mm, y, "Resumen del arqueo"); y -= 7*mm
+
+    d = s.to_dict()
+    ef_esperado = float(d.get("efectivo_esperado", 0))
+    ef_contado  = float(s.efectivo_contado or 0)
+    dif         = ef_contado - ef_esperado if s.cerrada_en else 0
+
+    def fila_a(label, valor, color_v=None):
+        nonlocal y
+        cv.setFont("Helvetica-Bold", 8); cv.setFillColor(GRIS)
+        cv.drawString(60*mm, y, label)
+        cv.setFont("Helvetica-Bold", 9); cv.setFillColor(color_v or AZUL)
+        cv.drawRightString(W - 15*mm, y, valor); y -= 6*mm
+
+    fila_a("Fondo inicial de apertura:", f"L {float(s.monto_inicial):,.2f}")
+    fila_a("Cobros en efectivo:", f"L {total_ef:,.2f}")
+    fila_a("Cobros con tarjeta POS:", f"L {total_pos:,.2f}")
+    fila_a("Efectivo esperado en caja:", f"L {ef_esperado:,.2f}")
+    if s.cerrada_en:
+        fila_a("Efectivo contado al cierre:", f"L {ef_contado:,.2f}")
+        if abs(dif) < 0.01:
+            fila_a("Diferencia:", "L 0.00  (CUADRA ✓)", color_v=colors.HexColor("#1d8a4a"))
+        elif dif < 0:
+            fila_a("Diferencia:", f"L {dif:,.2f}  (FALTA)", color_v=colors.HexColor("#c81e1e"))
+        else:
+            fila_a("Diferencia:", f"L {dif:,.2f}  (SOBRA)", color_v=colors.HexColor("#d89000"))
+
+    # Firmas
+    y -= 16*mm
+    if y < 45*mm:
+        cv.showPage(); y = H - 30*mm
+    cv.setStrokeColor(AZUL); cv.setLineWidth(0.5)
+    cv.line(20*mm, y, 90*mm, y)
+    cv.line(120*mm, y, W - 20*mm, y)
+    cv.setFont("Helvetica", 8); cv.setFillColor(GRIS)
+    cv.drawCentredString(55*mm, y - 5*mm, "Firma del cajero")
+    cv.drawCentredString(55*mm, y - 10*mm, nombre_cajero)
+    cv.drawCentredString((120*mm + W - 20*mm) / 2, y - 5*mm, "Firma del supervisor")
+    cv.setFont("Helvetica", 7)
+    cv.drawCentredString(W/2, 12*mm, f"Generado el {dt.datetime.now().strftime('%d/%m/%Y %I:%M %p')}  ·  SICA-VS  ·  Residencial Villas del Sol")
+
+    cv.showPage(); cv.save(); buf.seek(0)
+    return send_file(buf, mimetype="application/pdf", as_attachment=False,
+                     download_name=f"constancia-caja-{str(s.uuid_publico)[:8]}.pdf")
+
+
 # =====================================================================
 # AUTORIZACIÓN CON CLAVE DE DESARROLLADOR
 # =====================================================================

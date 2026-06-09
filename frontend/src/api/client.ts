@@ -687,6 +687,11 @@ export function urlReciboPDF(pagoUuid: string): string {
   return `${API_URL}/recibos/${pagoUuid}/pdf?_auth=${token}`;
 }
 
+export function urlConstanciaCaja(sesionUuid: string): string {
+  const token = getToken();
+  return `${API_URL}/caja/sesiones/${sesionUuid}/pdf?_auth=${token}`;
+}
+
 // ── SESIONES / DISPOSITIVOS ───────────────────────────────────────────────────
 export interface SesionDTO {
   id: number; dispositivo: string; ip?: string;

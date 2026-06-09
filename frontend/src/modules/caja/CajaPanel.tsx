@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   estadoCaja, abrirCaja, saldoApertura, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
-  reportarDescuadre, solicitarSalida, solicitarIngreso,
+  reportarDescuadre, solicitarSalida, solicitarIngreso, urlConstanciaCaja,
   type SesionCajaDTO, type CuentaCajaDTO,
 } from "../../api/client";
 
@@ -31,7 +31,11 @@ export function CajaPanel() {
           <h2 className="dash-titulo">Caja abierta</h2>
           <span className="muted">Cajero: {sesion.cajero}</span>
         </div>
-        <button className="btn-baja mini" onClick={() => setCerrando(true)}>Cerrar caja</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <a className="ghost mini" href={urlConstanciaCaja(sesion.id)} target="_blank" rel="noreferrer"
+            style={{ textDecoration: "none" }}>📄 Constancia</a>
+          <button className="btn-baja mini" onClick={() => setCerrando(true)}>Cerrar caja</button>
+        </div>
       </div>
 
       {/* Arqueo en vivo */}

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   listarSesionesCaja, detalleSesionCaja, resumenCaja,
   modificarSaldoInicial, ajustarSaldoConteo, listarDescuadres, resolverDescuadre,
-  salidasPendientes, listarSalidas, autorizarSalida,
+  salidasPendientes, listarSalidas, autorizarSalida, urlConstanciaCaja,
   type SesionCajaDTO, type ResumenCajaDTO, type DescuadreDTO, type SalidaCajaDTO,
 } from "../../api/client";
 
@@ -202,7 +202,11 @@ export function SupervisionCaja() {
                         </span>
                       ) : "—"}
                     </td>
-                    <td><button className="mini" onClick={async () => setDetalle(await detalleSesionCaja(s.id))}>Ver</button></td>
+                    <td style={{ display: "flex", gap: 6 }}>
+                      <button className="mini" onClick={async () => setDetalle(await detalleSesionCaja(s.id))}>Ver</button>
+                      <a className="mini" href={urlConstanciaCaja(s.id)} target="_blank" rel="noreferrer"
+                        style={{ textDecoration: "none" }}>📄 PDF</a>
+                    </td>
                   </tr>
                 ))}
               </tbody>
