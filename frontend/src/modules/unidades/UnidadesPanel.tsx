@@ -249,7 +249,7 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
         unidad_id: unidadId, apartamento: esEdificio ? apartamento : undefined,
         tarifa_id: tarifaId, dia_pago: diaPago,
         codigo_enrolamiento: codigoEnrol.trim() || undefined,
-        es_dueno_edificio: esEdificio && esDuenoEdificio,
+        es_dueno_edificio: esEdificio && esDuenoEdificio && !enrolInfo,
         titular: {
           nombre, apellido, email, telefono, relacion: "propietario",
           dni, rtn, direccion_exacta: direccionExacta, profesion,
@@ -391,11 +391,15 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
               <div className="sub">Apartamento</div>
               <input placeholder="Ej. 1A, 2B" value={apartamento}
                 onChange={(e) => setApartamento(e.target.value)} />
-              <label className="check-dueno">
-                <input type="checkbox" checked={esDuenoEdificio}
-                  onChange={e => setEsDuenoEdificio(e.target.checked)} />
-                <span>Este titular es el <b>dueño del edificio</b> (podrá generar códigos para sus inquilinos)</span>
-              </label>
+              {/* La casilla de dueño no aplica si llegó con código: ese es un inquilino,
+                  no el dueño (el dueño es quien generó el código) */}
+              {!enrolInfo && (
+                <label className="check-dueno">
+                  <input type="checkbox" checked={esDuenoEdificio}
+                    onChange={e => setEsDuenoEdificio(e.target.checked)} />
+                  <span>Este titular es el <b>dueño del edificio</b> (podrá generar códigos para sus inquilinos)</span>
+                </label>
+              )}
             </>
           )}
 
