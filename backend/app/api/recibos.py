@@ -72,6 +72,16 @@ def recibo_pdf(usuario_actual, pago_uuid):
     if pago.estado != "aprobado":
         return _err("no_aprobado", "Solo se generan recibos de pagos aprobados", 400)
 
+    # Autorización: roles administrativos/operativos ven cualquier recibo.
+    # Un residente solo puede ver el recibo de un pago de SU cuenta.
+    roles_admin = ("admin", "super_admin", "cajero", "guardia", "desarrollador")
+    if usuario_actual.rol not in roles_admin:
+        cuenta = pago.cuenta
+        es_suyo = cuenta and any(
+            r.usuario_id == usuario_actual.id and r.activo for r in cuenta.residentes)
+        if not es_suyo:
+            return _err("sin_permiso", "No tenés permiso para ver este recibo", 403)
+
     # Asignar correlativo si por alguna razón no lo tiene
     if not pago.numero_recibo:
         asignar_recibo(pago)

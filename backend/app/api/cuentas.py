@@ -108,7 +108,7 @@ def crear_unidad(usuario_actual):
 # CUENTAS
 # =====================================================================
 @cuentas_bp.get("/cuentas")
-@token_required
+@roles_required("admin", "super_admin")
 def listar_cuentas(usuario_actual):
     cuentas = Cuenta.query.order_by(Cuenta.id.desc()).all()
     return jsonify({"data": [c.to_dict() for c in cuentas]})
@@ -204,7 +204,7 @@ def crear_cuenta(usuario_actual):
 
 
 @cuentas_bp.get("/cuentas/<cuenta_uuid>")
-@token_required
+@roles_required("admin", "super_admin")
 def detalle_cuenta(usuario_actual, cuenta_uuid):
     cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
     if not cuenta:

@@ -101,6 +101,9 @@ def registrar_pago(usuario_actual):
         return jsonify({"error": {"code": "cuota_no_encontrada", "message": "Cuota no encontrada"}}), 404
     if cuota.estado == "pagada":
         return jsonify({"error": {"code": "ya_pagada", "message": "Esa cuota ya está pagada"}}), 400
+    if cuota.estado == "en_arreglo":
+        return jsonify({"error": {"code": "en_arreglo",
+                                  "message": "Esa cuota está dentro de un arreglo de pago. Cobrá el abono del arreglo, no la cuota directamente."}}), 400
 
     pago = Pago(
         cuota_id=cuota.id,
@@ -198,9 +201,12 @@ def buscar_cuenta(usuario_actual):
         blob = f"{identificador} {nombre_titular}".lower()
         if q not in blob:
             continue
-        # Cuotas pendientes de esta cuenta
+        # Cuotas pendientes de esta cuenta.
+        # Excluye 'pagada' y 'en_arreglo' (estas últimas están congeladas en un
+        # plan de pago y se cobran como abonos, no en ventanilla directa).
         pendientes = (Cuota.query
-                      .filter(Cuota.cuenta_id == c.id, Cuota.estado != "pagada")
+                      .filter(Cuota.cuenta_id == c.id,
+                              Cuota.estado.notin_(["pagada", "en_arreglo"]))
                       .order_by(Cuota.periodo.asc()).all())
         resultados.append({
             "cuenta_id": str(c.uuid_publico),

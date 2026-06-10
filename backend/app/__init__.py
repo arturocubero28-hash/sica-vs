@@ -23,6 +23,10 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # Seguridad: en producción, abortar si hay secretos inseguros (ver config.py)
+    from app.config import validar_config_produccion
+    validar_config_produccion()
+
     # --- Extensiones ---
     db.init_app(app)
     migrate.init_app(app, db)
