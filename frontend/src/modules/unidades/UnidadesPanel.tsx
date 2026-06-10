@@ -119,7 +119,7 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
                 const dadaBaja = c.activa === false;
                 return (
                   <tr key={c.id} className={dadaBaja ? "fila-baja" : ""}>
-                    <td>{c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "Casa")}</td>
+                    <td>{c.nombre_completo || c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "Casa")}</td>
                     <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
                     <td>{c.tarifa} (L {c.monto})</td>
                     <td>{c.dia_pago}</td>
@@ -409,7 +409,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>{cuenta.apartamento ? `Apartamento ${cuenta.apartamento}` : "Casa"} · {cuenta.tarifa}</h3>
+          <h3>{cuenta.nombre_completo || (cuenta.apartamento ? `Apartamento ${cuenta.apartamento}` : "Casa")} · {cuenta.tarifa}</h3>
           <button className="ghost mini" onClick={onCerrar}>Cerrar</button>
         </div>
 

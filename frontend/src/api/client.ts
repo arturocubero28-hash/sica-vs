@@ -113,7 +113,8 @@ export interface TarjetaDTO {
   id: string; card_uid: string; etiqueta?: string; estado: string; asignada_a: string;
 }
 export interface Cuenta {
-  id: string; apartamento?: string; identificador?: string; dia_pago: number; estado: string;
+  id: string; apartamento?: string; identificador?: string; nombre_completo?: string;
+  es_apartamento?: boolean; dia_pago: number; estado: string;
   bloqueada: boolean; activa?: boolean; tarifa: string; monto: number;
   titular?: ResidenteDTO; total_residentes: number; total_tarjetas: number;
   residentes?: ResidenteDTO[]; tarjetas?: TarjetaDTO[];

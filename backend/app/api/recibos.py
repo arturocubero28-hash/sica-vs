@@ -143,6 +143,8 @@ def _generar_pdf_recibo(pago, cfg):
     # Datos del pago
     cuenta = pago.cuenta
     unidad = cuenta.unidad.identificador if cuenta and cuenta.unidad else "—"
+    if cuenta and cuenta.apartamento:
+        unidad = f"{unidad} · Apto {cuenta.apartamento}"
     titular = "—"
     if cuenta:
         tit = next((r for r in cuenta.residentes if r.rol_cuenta == "titular"), None)

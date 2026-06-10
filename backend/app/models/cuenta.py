@@ -96,6 +96,9 @@ class Cuenta(db.Model):
             "id": str(self.uuid_publico),
             "apartamento": self.apartamento,
             "identificador": unidad,
+            "nombre_completo": (f"{unidad} · Apto {self.apartamento}"
+                                if unidad and self.apartamento else (unidad or "—")),
+            "es_apartamento": bool(self.apartamento),
             "dia_pago": self.dia_pago,
             "estado": self.estado,
             "bloqueada": self.bloqueada,
@@ -287,6 +290,7 @@ class Pago(db.Model):
             "metodo":              self.metodo,
             "referencia":          self.referencia,
             "comprobante_archivo": self.comprobante_archivo,
+            "numero_recibo":       self.numero_recibo,
             "estado":              self.estado,
             "nota_admin":          self.nota_admin,
             "revisado_en":         self.revisado_en.isoformat() if self.revisado_en else None,

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   estadoCaja, abrirCaja, saldoApertura, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
-  reportarDescuadre, solicitarSalida, solicitarIngreso, urlConstanciaCaja,
+  reportarDescuadre, solicitarSalida, solicitarIngreso, urlConstanciaCaja, urlReciboPDF,
   type SesionCajaDTO, type CuentaCajaDTO,
 } from "../../api/client";
 
@@ -166,6 +166,7 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
   const [referencia, setReferencia] = useState("");
   const [pagaCon, setPagaCon] = useState("");
   const [msg, setMsg] = useState("");
+  const [ultimoRecibo, setUltimoRecibo] = useState<{ uuid: string; numero?: number | null; label: string; monto: number; vuelto: number } | null>(null);
 
   const montoPagaCon = parseFloat(pagaCon || "0");
   const vuelto = seleccion && montoPagaCon > 0 ? montoPagaCon - seleccion.monto : 0;
@@ -181,11 +182,15 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
     if (!seleccion) return;
     setMsg("");
     try {
-      await registrarPagoCaja({ cuota_id: seleccion.cuotaId, metodo, referencia });
-      setMsg(`✓ Pago de ${L(seleccion.monto)} registrado`);
+      const res = await registrarPagoCaja({ cuota_id: seleccion.cuotaId, metodo, referencia });
+      const vueltoFinal = metodo === "efectivo" && montoPagaCon > 0 ? vuelto : 0;
+      setUltimoRecibo({
+        uuid: res.pago.id, numero: res.pago.numero_recibo,
+        label: seleccion.label, monto: seleccion.monto, vuelto: vueltoFinal,
+      });
+      setMsg("");
       setSeleccion(null); setBusqueda(""); setResultados([]); setReferencia(""); setPagaCon("");
       onRegistrado();
-      setTimeout(() => setMsg(""), 4000);
     } catch (e) { setMsg((e as Error).message); }
   }
 
@@ -199,6 +204,30 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
           {buscando ? "…" : "Buscar"}
         </button>
       </div>
+
+      {/* Comprobante tras cobrar */}
+      {ultimoRecibo && (
+        <div className="recibo-cobro">
+          <div className="recibo-cobro-head">
+            <span className="recibo-check">✓</span>
+            <div>
+              <div className="recibo-cobro-titulo">Pago registrado</div>
+              <div className="muted small">{ultimoRecibo.label} — {L(ultimoRecibo.monto)}
+                {ultimoRecibo.numero ? ` · Recibo REC-${String(ultimoRecibo.numero).padStart(6, "0")}` : ""}</div>
+            </div>
+          </div>
+          {ultimoRecibo.vuelto > 0 && (
+            <div className="recibo-vuelto">Vuelto entregado: <b>{L(ultimoRecibo.vuelto)}</b></div>
+          )}
+          <div className="recibo-cobro-acciones">
+            <a className="cuota-btn-pagar" href={urlReciboPDF(ultimoRecibo.uuid)} target="_blank" rel="noreferrer"
+              style={{ textDecoration: "none", textAlign: "center" }}>
+              🧾 Imprimir recibo
+            </a>
+            <button className="ghost" onClick={() => setUltimoRecibo(null)}>Cobrar otro</button>
+          </div>
+        </div>
+      )}
 
       {resultados.map(c => (
         <div key={c.cuenta_id} className="caja-resultado">
