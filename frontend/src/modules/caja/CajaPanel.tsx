@@ -25,10 +25,10 @@ export function CajaPanel() {
   if (cerrando) return <CerrarCaja sesion={sesion} onCancelar={() => setCerrando(false)} onCerrada={() => { setCerrando(false); recargar(); }} />;
 
   return (
-    <div className="caja">
+    <div className="caja caja-pos">
       <div className="dash-header-pro">
         <div>
-          <h2 className="dash-titulo">Caja abierta</h2>
+          <h2 className="dash-titulo">Caja</h2>
           <span className="muted">Cajero: {sesion.cajero}</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -38,38 +38,44 @@ export function CajaPanel() {
         </div>
       </div>
 
-      {/* Arqueo en vivo */}
-      <div className="metric-grid">
-        <div className="metric-card azul">
-          <div className="metric-top"><span className="metric-label">Fondo inicial</span></div>
-          <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.monto_inicial)}</div>
+      {/* Layout POS: cobro a la izquierda (protagonista), arqueo a la derecha */}
+      <div className="pos-grid">
+        <div className="pos-main">
+          <RegistrarPago onRegistrado={recargar} />
         </div>
-        <div className="metric-card verde">
-          <div className="metric-top"><span className="metric-label">Efectivo esperado</span></div>
-          <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.efectivo_esperado)}</div>
-        </div>
-        <div className="metric-card naranja">
-          <div className="metric-top"><span className="metric-label">POS (tarjeta)</span></div>
-          <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.total_pos)}</div>
-        </div>
-        <div className="metric-card verde">
-          <div className="metric-top"><span className="metric-label">Ingresos autorizados</span></div>
-          <div className="metric-valor" style={{ fontSize: 20 }}>{L((sesion as any).total_ingresos || 0)}</div>
-        </div>
-        <div className="metric-card azul">
-          <div className="metric-top"><span className="metric-label">Salidas autorizadas</span></div>
-          <div className="metric-valor" style={{ fontSize: 20 }}>{L(sesion.total_salidas || 0)}</div>
-        </div>
-        <div className="metric-card azul">
-          <div className="metric-top"><span className="metric-label">Pagos registrados</span></div>
-          <div className="metric-valor">{sesion.cantidad_pagos}</div>
-        </div>
-      </div>
 
-      <RegistrarPago onRegistrado={recargar} />
-      <SolicitarSalida onRegistrada={recargar} />
-      <SolicitarIngreso onRegistrado={recargar} />
-      <ReportarDescuadre />
+        <aside className="pos-side">
+          <div className="pos-arqueo">
+            <div className="pos-arqueo-titulo">Arqueo en vivo</div>
+            <div className="pos-arqueo-row destacado">
+              <span>Efectivo esperado</span><b>{L(sesion.efectivo_esperado)}</b>
+            </div>
+            <div className="pos-arqueo-row">
+              <span>Fondo inicial</span><span>{L(sesion.monto_inicial)}</span>
+            </div>
+            <div className="pos-arqueo-row">
+              <span>POS (tarjeta)</span><span>{L(sesion.total_pos)}</span>
+            </div>
+            <div className="pos-arqueo-row">
+              <span>↓ Ingresos</span><span>{L((sesion as any).total_ingresos || 0)}</span>
+            </div>
+            <div className="pos-arqueo-row">
+              <span>↑ Salidas</span><span>{L(sesion.total_salidas || 0)}</span>
+            </div>
+            <div className="pos-arqueo-row">
+              <span>Pagos registrados</span><b>{sesion.cantidad_pagos}</b>
+            </div>
+          </div>
+
+          {/* Operaciones secundarias agrupadas */}
+          <div className="pos-ops">
+            <div className="pos-ops-titulo">Movimientos de efectivo</div>
+            <SolicitarSalida onRegistrada={recargar} />
+            <SolicitarIngreso onRegistrado={recargar} />
+            <ReportarDescuadre />
+          </div>
+        </aside>
+      </div>
 
       {/* Pagos de la sesión */}
       <div className="dash-card">
@@ -184,12 +190,12 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
   }
 
   return (
-    <div className="dash-card">
-      <h3>Registrar pago en ventanilla</h3>
-      <div className="caja-buscar-row">
-        <input placeholder="Buscar por casa o titular…" value={busqueda}
+    <div className="dash-card pos-cobro-card">
+      <h3 className="pos-cobro-titulo">💵 Cobrar en ventanilla</h3>
+      <div className="caja-buscar-row pos-buscar">
+        <input placeholder="Buscar casa o titular…" value={busqueda} autoFocus
           onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === "Enter" && buscar()} />
-        <button className="cuota-btn-pagar" style={{ maxWidth: 110 }} onClick={buscar} disabled={buscando}>
+        <button className="cuota-btn-pagar pos-buscar-btn" onClick={buscar} disabled={buscando}>
           {buscando ? "…" : "Buscar"}
         </button>
       </div>

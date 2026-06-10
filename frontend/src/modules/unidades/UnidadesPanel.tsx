@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import {
   listarCuentas, listarUnidades, listarTarifas, crearUnidad, crearCuenta,
   detalleCuenta, agregarMiembro, asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
+  crearTarifa, editarTarifa, desactivarTarifa,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
 
 export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
-  const [tab, setTab] = useState<"cuentas" | "nueva">("cuentas");
+  const [tab, setTab] = useState<"cuentas" | "nueva" | "tarifas">("cuentas");
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [seleccionada, setSeleccionada] = useState<Cuenta | null>(null);
 
@@ -23,6 +24,9 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
         <button className={tab === "nueva" ? "tab on" : "tab"} onClick={() => setTab("nueva")}>
           + Dar de alta
         </button>
+        <button className={tab === "tarifas" ? "tab on" : "tab"} onClick={() => setTab("tarifas")}>
+          Tarifas
+        </button>
       </div>
 
       {tab === "cuentas" && (
@@ -32,6 +36,7 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
       {tab === "nueva" && (
         <FormNuevaCuenta onCreada={async () => { await recargar(); }} />
       )}
+      {tab === "tarifas" && <GestionTarifas />}
       {seleccionada && (
         <DetalleCuenta cuenta={seleccionada} onCerrar={() => setSeleccionada(null)}
           onCambio={async () => setSeleccionada(await detalleCuenta(seleccionada.id))} />
@@ -163,6 +168,8 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
   const [nuevaUnidadId, setNuevaUnidadId] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [mostrarSug, setMostrarSug] = useState(false);
+  // Modo de selección de unidad: "nueva" (crear) es lo más común al dar de alta
+  const [modoUnidad, setModoUnidad] = useState<"nueva" | "existente">("nueva");
 
   const sugerencias = unidades.filter(u =>
     u.identificador.toLowerCase().includes(busqueda.toLowerCase())
@@ -242,36 +249,62 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
 
       {!enlace && (
         <>
-          <div className="sub">1. Unidad</div>
-          <div className="search-box">
-            <input
-              placeholder="Buscar unidad (ej: Casa 24, Edificio 1...)"
-              value={busqueda}
-              onChange={e => { setBusqueda(e.target.value); setMostrarSug(true); setUnidadId(""); }}
-              onFocus={() => setMostrarSug(true)}
-              onBlur={() => setTimeout(() => setMostrarSug(false), 150)}
-            />
-            {mostrarSug && sugerencias.length > 0 && (
-              <div className="search-dropdown">
-                {sugerencias.map(u => (
-                  <div key={u.id} className="search-option" onMouseDown={() => seleccionarUnidad(u)}>
-                    <b>{u.identificador}</b> <span className="muted small">({u.tipo})</span>
-                  </div>
-                ))}
+          <div className="sub">1. Casa o edificio</div>
+
+          {/* Toggle: crear nueva (lo más común) o elegir existente */}
+          <div className="seg-toggle">
+            <button type="button" className={modoUnidad === "nueva" ? "on" : ""}
+              onClick={() => { setModoUnidad("nueva"); setUnidadId(""); setBusqueda(""); }}>
+              + Crear nueva
+            </button>
+            <button type="button" className={modoUnidad === "existente" ? "on" : ""}
+              onClick={() => { setModoUnidad("existente"); setNuevaUnidadId(""); }}>
+              Elegir existente
+            </button>
+          </div>
+
+          {modoUnidad === "nueva" ? (
+            <div className="crear-unidad-box">
+              <div className="row">
+                <select value={nuevaUnidadTipo}
+                  onChange={(e) => setNuevaUnidadTipo(e.target.value as "casa" | "edificio")}>
+                  <option value="casa">Casa</option>
+                  <option value="edificio">Edificio</option>
+                </select>
+                <input placeholder="Identificador (ej. Casa 24, Edificio B)" value={nuevaUnidadId}
+                  onChange={(e) => setNuevaUnidadId(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && crearUnidadInline()} />
+                <button className="mini" onClick={crearUnidadInline} disabled={!nuevaUnidadId.trim()}>
+                  Crear
+                </button>
               </div>
-            )}
-            {unidadId && <span className="pill green" style={{position:'absolute',right:10,top:10}}>✓ seleccionada</span>}
-          </div>
-          <div className="inline-create">
-            <span className="muted small">¿No existe? Créala:</span>
-            <select value={nuevaUnidadTipo} onChange={(e) => setNuevaUnidadTipo(e.target.value as "casa" | "edificio")}>
-              <option value="casa">Casa</option>
-              <option value="edificio">Edificio</option>
-            </select>
-            <input placeholder="Ej. Casa 24" value={nuevaUnidadId}
-              onChange={(e) => setNuevaUnidadId(e.target.value)} />
-            <button className="mini" onClick={crearUnidadInline}>Crear unidad</button>
-          </div>
+              {unidadId && unidadSel && (
+                <div className="unidad-creada">
+                  ✓ <b>{unidadSel.identificador}</b> creada y seleccionada
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="search-box">
+              <input
+                placeholder="Buscar casa o edificio existente…"
+                value={busqueda}
+                onChange={e => { setBusqueda(e.target.value); setMostrarSug(true); setUnidadId(""); }}
+                onFocus={() => setMostrarSug(true)}
+                onBlur={() => setTimeout(() => setMostrarSug(false), 150)}
+              />
+              {mostrarSug && sugerencias.length > 0 && (
+                <div className="search-dropdown">
+                  {sugerencias.map(u => (
+                    <div key={u.id} className="search-option" onMouseDown={() => seleccionarUnidad(u)}>
+                      <b>{u.identificador}</b> <span className="muted small">({u.tipo})</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {unidadId && <span className="pill green" style={{position:'absolute',right:10,top:10}}>✓ seleccionada</span>}
+            </div>
+          )}
 
           {esEdificio && (
             <>
@@ -569,6 +602,113 @@ function FilaResidente({ residente, onActualizado }: {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function GestionTarifas() {
+  const [tarifas, setTarifas] = useState<Tarifa[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [nombre, setNombre] = useState("");
+  const [monto, setMonto] = useState("");
+  const [descripcion, setDescripcion] = useState("");
+  const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
+  const [editando, setEditando] = useState<number | null>(null);
+  const [editMonto, setEditMonto] = useState("");
+
+  function cargar() {
+    setCargando(true);
+    listarTarifas().then(setTarifas).catch(() => {}).finally(() => setCargando(false));
+  }
+  useEffect(() => { cargar(); }, []);
+
+  async function crear() {
+    setMsg(null);
+    const m = parseFloat(monto);
+    if (!nombre.trim()) { setMsg({ tipo: "err", texto: "Indicá el nombre de la tarifa" }); return; }
+    if (isNaN(m) || m < 0) { setMsg({ tipo: "err", texto: "Monto inválido" }); return; }
+    try {
+      await crearTarifa({ nombre: nombre.trim(), monto: m, descripcion: descripcion.trim() || undefined });
+      setNombre(""); setMonto(""); setDescripcion("");
+      setMsg({ tipo: "ok", texto: "Tarifa creada" });
+      cargar();
+      setTimeout(() => setMsg(null), 3000);
+    } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+  }
+
+  async function guardarEdicion(id: number) {
+    const m = parseFloat(editMonto);
+    if (isNaN(m) || m < 0) { setMsg({ tipo: "err", texto: "Monto inválido" }); return; }
+    try {
+      await editarTarifa(id, { monto: m });
+      setEditando(null);
+      cargar();
+    } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+  }
+
+  async function desactivar(id: number, nombre: string) {
+    if (!confirm(`¿Desactivar la tarifa "${nombre}"? Las cuentas que la usan no se ven afectadas.`)) return;
+    try { await desactivarTarifa(id); cargar(); }
+    catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+  }
+
+  return (
+    <div className="form">
+      <h3>Tarifas de cuota</h3>
+      <p className="muted small">Definí los planes de cuota que se asignan a cada casa al darla de alta.</p>
+
+      {/* Crear nueva tarifa */}
+      <div className="crear-unidad-box" style={{ marginTop: 12 }}>
+        <div className="sub">Nueva tarifa</div>
+        <div className="row">
+          <input placeholder="Nombre (ej. Cuota estándar)" value={nombre} onChange={e => setNombre(e.target.value)} />
+          <input type="number" placeholder="Monto (L)" value={monto} onChange={e => setMonto(e.target.value)} style={{ maxWidth: 140 }} />
+        </div>
+        <input placeholder="Descripción (opcional)" value={descripcion}
+          onChange={e => setDescripcion(e.target.value)} style={{ marginTop: 8 }} />
+        <button className="mini" onClick={crear} style={{ marginTop: 8 }}>+ Crear tarifa</button>
+      </div>
+
+      {msg && <div className={msg.tipo === "ok" ? "cuota-ok" : "error"} style={{ marginTop: 10 }}>{msg.texto}</div>}
+
+      {/* Lista de tarifas */}
+      <div className="sub" style={{ marginTop: 16 }}>Tarifas activas</div>
+      {cargando ? <p className="muted">Cargando…</p>
+        : tarifas.length === 0 ? <p className="muted">No hay tarifas. Creá la primera arriba.</p>
+        : (
+          <div className="scroll-x">
+            <table className="data">
+              <thead><tr><th>Nombre</th><th>Monto</th><th>Descripción</th><th></th></tr></thead>
+              <tbody>
+                {tarifas.map(t => (
+                  <tr key={t.id}>
+                    <td><b>{t.nombre}</b></td>
+                    <td>
+                      {editando === t.id ? (
+                        <input type="number" value={editMonto} onChange={e => setEditMonto(e.target.value)}
+                          style={{ width: 90 }} autoFocus />
+                      ) : `L ${t.monto.toLocaleString("es-HN", { minimumFractionDigits: 2 })}`}
+                    </td>
+                    <td className="small muted">{t.descripcion || "—"}</td>
+                    <td style={{ display: "flex", gap: 6 }}>
+                      {editando === t.id ? (
+                        <>
+                          <button className="mini" onClick={() => guardarEdicion(t.id)}>Guardar</button>
+                          <button className="ghost mini" onClick={() => setEditando(null)}>✕</button>
+                        </>
+                      ) : (
+                        <>
+                          <button className="mini" onClick={() => { setEditando(t.id); setEditMonto(String(t.monto)); }}>Editar monto</button>
+                          <button className="ghost mini" style={{ color: "#c81e1e" }} onClick={() => desactivar(t.id, t.nombre)}>Desactivar</button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
     </div>
   );
 }

@@ -97,7 +97,7 @@ export async function logout() {
 // =====================================================================
 // MÓDULO 2 — Unidades, Cuentas, Residentes, Tarjetas (Integrante 2)
 // =====================================================================
-export interface Tarifa { id: number; nombre: string; monto: number; }
+export interface Tarifa { id: number; nombre: string; monto: number; descripcion?: string | null; activa?: boolean; }
 export interface Unidad {
   id: string; tipo: "casa" | "edificio"; identificador: string;
   direccion_ref?: string; activa: boolean; total_cuentas: number;
@@ -122,6 +122,12 @@ export interface Cuenta {
 export const listarUnidades = () => request<Unidad[]>("/unidades");
 export const listarCuentas = () => request<Cuenta[]>("/unidades/cuentas");
 export const listarTarifas = () => request<Tarifa[]>("/unidades/tarifas");
+export const crearTarifa = (body: { nombre: string; monto: number; descripcion?: string }) =>
+  request<Tarifa>("/unidades/tarifas", { method: "POST", body: JSON.stringify(body) });
+export const editarTarifa = (id: number, body: { nombre?: string; monto?: number; descripcion?: string }) =>
+  request<Tarifa>(`/unidades/tarifas/${id}`, { method: "PUT", body: JSON.stringify(body) });
+export const desactivarTarifa = (id: number) =>
+  request<{ message: string }>(`/unidades/tarifas/${id}`, { method: "DELETE" });
 export const detalleCuenta = (id: string) => request<Cuenta>(`/unidades/cuentas/${id}`);
 export const darBajaCuenta = (id: string) =>
   request<Cuenta>(`/unidades/cuentas/${id}/baja`, { method: "POST" });

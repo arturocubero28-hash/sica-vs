@@ -308,3 +308,60 @@ def asignar_tarjeta(usuario_actual, cuenta_uuid):
 def listar_tarifas(usuario_actual):
     tarifas = Tarifa.query.filter_by(activa=True).all()
     return jsonify({"data": [t.to_dict() for t in tarifas]})
+
+
+@cuentas_bp.post("/tarifas")
+@roles_required("admin", "super_admin")
+def crear_tarifa(usuario_actual):
+    data = request.get_json(silent=True) or {}
+    nombre = (data.get("nombre") or "").strip()
+    if not nombre:
+        return _err("nombre_requerido", "El nombre de la tarifa es obligatorio", 400)
+    try:
+        monto = float(data.get("monto"))
+        if monto < 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return _err("monto_invalido", "El monto debe ser un número válido", 400)
+    tarifa = Tarifa(nombre=nombre, monto=monto,
+                    descripcion=(data.get("descripcion") or "").strip() or None, activa=True)
+    db.session.add(tarifa)
+    db.session.commit()
+    return jsonify({"data": tarifa.to_dict()}), 201
+
+
+@cuentas_bp.put("/tarifas/<int:tarifa_id>")
+@roles_required("admin", "super_admin")
+def editar_tarifa(usuario_actual, tarifa_id):
+    tarifa = Tarifa.query.get(tarifa_id)
+    if not tarifa:
+        return _err("no_encontrada", "Tarifa no encontrada", 404)
+    data = request.get_json(silent=True) or {}
+    if "nombre" in data:
+        nombre = (data.get("nombre") or "").strip()
+        if not nombre:
+            return _err("nombre_requerido", "El nombre no puede quedar vacío", 400)
+        tarifa.nombre = nombre
+    if "monto" in data:
+        try:
+            tarifa.monto = float(data.get("monto"))
+        except (TypeError, ValueError):
+            return _err("monto_invalido", "Monto inválido", 400)
+    if "descripcion" in data:
+        tarifa.descripcion = (data.get("descripcion") or "").strip() or None
+    db.session.commit()
+    return jsonify({"data": tarifa.to_dict()})
+
+
+@cuentas_bp.delete("/tarifas/<int:tarifa_id>")
+@roles_required("admin", "super_admin")
+def desactivar_tarifa(usuario_actual, tarifa_id):
+    tarifa = Tarifa.query.get(tarifa_id)
+    if not tarifa:
+        return _err("no_encontrada", "Tarifa no encontrada", 404)
+    # No se borra: se desactiva (puede haber cuentas que la usan)
+    en_uso = Cuenta.query.filter_by(tarifa_id=tarifa.id).count()
+    tarifa.activa = False
+    db.session.commit()
+    return jsonify({"data": {"message": f"Tarifa desactivada"
+                             + (f" ({en_uso} cuentas la seguían usando)" if en_uso else "")}})
