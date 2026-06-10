@@ -178,6 +178,10 @@ def crear_cuenta(usuario_actual):
     )
     db.session.add(residente)
 
+    # Si se indica, este titular queda como dueño/responsable del edificio
+    if data.get("es_dueno_edificio") and unidad.tipo == "edificio":
+        unidad.propietario_id = usuario.id
+
     # Si el inquilino llegó con un código de enrolamiento, marcarlo como usado
     codigo_enrol = (data.get("codigo_enrolamiento") or "").strip()
     if codigo_enrol:

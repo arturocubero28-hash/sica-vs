@@ -160,7 +160,7 @@ export const crearUnidad = (body: { tipo: string; identificador: string; direcci
 
 export interface NuevaCuenta {
   unidad_id: string; apartamento?: string; tarifa_id: number; dia_pago: number;
-  codigo_enrolamiento?: string;
+  codigo_enrolamiento?: string; es_dueno_edificio?: boolean;
   titular: { nombre: string; apellido: string; email: string; telefono?: string; relacion?: string;
     dni?: string; rtn?: string; direccion_exacta?: string; profesion?: string;
     contacto_emergencia_nombre?: string; contacto_emergencia_telefono?: string };

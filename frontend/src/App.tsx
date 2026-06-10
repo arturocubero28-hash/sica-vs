@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   login, getMe, logout, getToken, setToken,
   activarCuenta, solicitarRecuperacion, restablecerPassword, cambiarPassword,
-  contarPagosPendientes,
+  contarPagosPendientes, misEdificios,
   type Usuario, type Rol,
 } from "./api/client";
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
@@ -357,12 +357,31 @@ function navParaRol(rol: Rol): NavItem[] {
 }
 
 function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => void }) {
-  const nav = navParaRol(usuario.rol);
-  const [seccion, setSeccion] = useState(nav[0].id);
-  const [menuAbierto, setMenuAbierto] = useState(false);
-  const [pagosBadge, setPagosBadge] = useState(0);
+  const navBase = navParaRol(usuario.rol);
+  const [esDuenoEdif, setEsDuenoEdif] = useState(false);
   const esAdmin = usuario.rol === "admin" || usuario.rol === "super_admin";
   const esResidente = usuario.rol === "residente";
+
+  // Detectar si el residente es dueño de algún edificio (para mostrar "Mi edificio")
+  useEffect(() => {
+    if (!esResidente) return;
+    misEdificios().then(eds => setEsDuenoEdif(eds.length > 0)).catch(() => {});
+  }, [esResidente]);
+
+  // Insertar "Mi edificio" antes de "Mi perfil" si es dueño
+  const nav = esDuenoEdif
+    ? (() => {
+        const items = [...navBase];
+        const idx = items.findIndex(i => i.id === "perfil");
+        const item = { id: "edificio", label: "Mi edificio", icon: "🏢" };
+        if (idx >= 0) items.splice(idx, 0, item); else items.push(item);
+        return items;
+      })()
+    : navBase;
+
+  const [seccion, setSeccion] = useState(navBase[0].id);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [pagosBadge, setPagosBadge] = useState(0);
 
   // Polling de pagos pendientes cada 30 segundos (solo admin)
   useEffect(() => {

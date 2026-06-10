@@ -5,6 +5,7 @@ import {
 } from "../../api/client";
 import { CuotasResidente } from "./CuotasResidente";
 import { HomeResidente } from "./HomeResidente";
+import { MiEdificio } from "./MiEdificio";
 
 // Comparte el QR por WhatsApp (descarga la imagen y abre WhatsApp con mensaje)
 async function compartirWhatsApp(visita: VisitaDTO) {
@@ -72,6 +73,7 @@ export function ResidentePortal({ seccion = "home" }: { seccion?: string }) {
       {seccion === "qr" && <GenerarQR bloqueada={cuenta?.cuenta.bloqueada || false} />}
       {seccion === "historial" && <Historial />}
       {seccion === "cuotas" && <CuotasResidente />}
+      {seccion === "edificio" && <MiEdificio />}
       {seccion === "cuenta" && cuenta && <EstadoCuenta data={cuenta} />}
     </div>
   );

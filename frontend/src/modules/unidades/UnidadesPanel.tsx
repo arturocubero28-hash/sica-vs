@@ -3,6 +3,7 @@ import {
   listarCuentas, listarUnidades, listarTarifas, crearUnidad, crearCuenta,
   detalleCuenta, agregarMiembro, asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
   crearTarifa, editarTarifa, desactivarTarifa,
+  validarCodigoEnrolamiento,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
@@ -162,6 +163,11 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
   const [profesion, setProfesion] = useState("");
   const [emergNombre, setEmergNombre] = useState("");
   const [emergTel, setEmergTel] = useState("");
+  // Enrolamiento por código (inquilino avalado por el dueño del edificio)
+  const [codigoEnrol, setCodigoEnrol] = useState("");
+  const [validando, setValidando] = useState(false);
+  const [enrolInfo, setEnrolInfo] = useState<{ edificio_nombre: string; apartamento_sugerido?: string | null; dueno_nombre?: string | null } | null>(null);
+  const [esDuenoEdificio, setEsDuenoEdificio] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
   const [enlace, setEnlace] = useState<{ email: string; url: string } | null>(null);
   const [nuevaUnidadTipo, setNuevaUnidadTipo] = useState<"casa" | "edificio">("casa");
@@ -201,6 +207,30 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
     } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
   }
 
+  async function validarCodigo() {
+    if (!codigoEnrol.trim()) return;
+    setValidando(true); setMsg(null);
+    try {
+      const info = await validarCodigoEnrolamiento(codigoEnrol.trim());
+      // Buscar el edificio en la lista y precargarlo
+      const ed = unidades.find(u => u.id === info.edificio_id);
+      if (ed) {
+        setModoUnidad("existente");
+        setUnidadId(ed.id);
+        setBusqueda(ed.identificador);
+      }
+      if (info.apartamento_sugerido) setApartamento(info.apartamento_sugerido);
+      setEnrolInfo({
+        edificio_nombre: info.edificio_nombre,
+        apartamento_sugerido: info.apartamento_sugerido,
+        dueno_nombre: info.dueno_nombre,
+      });
+    } catch (e) {
+      setEnrolInfo(null);
+      setMsg({ tipo: "err", texto: (e as Error).message });
+    } finally { setValidando(false); }
+  }
+
   async function guardar() {
     setMsg(null); setEnlace(null);
     if (!unidadId || !tarifaId || !nombre || !email) {
@@ -211,6 +241,8 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
       const res = await crearCuenta({
         unidad_id: unidadId, apartamento: esEdificio ? apartamento : undefined,
         tarifa_id: tarifaId, dia_pago: diaPago,
+        codigo_enrolamiento: codigoEnrol.trim() || undefined,
+        es_dueno_edificio: esEdificio && esDuenoEdificio,
         titular: {
           nombre, apellido, email, telefono, relacion: "propietario",
           dni, rtn, direccion_exacta: direccionExacta, profesion,
@@ -249,6 +281,31 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
 
       {!enlace && (
         <>
+          {/* Código de enrolamiento (inquilino avalado por el dueño del edificio) */}
+          <div className="enrol-box">
+            <div className="sub" style={{ marginTop: 0 }}>¿El inquilino trae un código del dueño del edificio?</div>
+            <div className="row">
+              <input placeholder="Código de 6 dígitos (opcional)" value={codigoEnrol}
+                inputMode="numeric" maxLength={6}
+                onChange={e => { setCodigoEnrol(e.target.value.replace(/\D/g, "")); setEnrolInfo(null); }}
+                onKeyDown={e => e.key === "Enter" && validarCodigo()} />
+              <button className="mini" onClick={validarCodigo}
+                disabled={validando || codigoEnrol.length < 6}>
+                {validando ? "…" : "Validar"}
+              </button>
+            </div>
+            {enrolInfo && (
+              <div className="enrol-ok">
+                ✓ Código válido — <b>{enrolInfo.edificio_nombre}</b>
+                {enrolInfo.apartamento_sugerido ? ` · Apto ${enrolInfo.apartamento_sugerido}` : ""}
+                {enrolInfo.dueno_nombre ? <span className="muted small"><br/>Avalado por: {enrolInfo.dueno_nombre}</span> : null}
+              </div>
+            )}
+            <p className="muted small" style={{ marginTop: 6 }}>
+              Si trae código, el edificio se selecciona solo. Si no, continuá normalmente abajo.
+            </p>
+          </div>
+
           <div className="sub">1. Casa o edificio</div>
 
           {/* Toggle: crear nueva (lo más común) o elegir existente */}
@@ -311,6 +368,11 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
               <div className="sub">Apartamento</div>
               <input placeholder="Ej. 1A, 2B" value={apartamento}
                 onChange={(e) => setApartamento(e.target.value)} />
+              <label className="check-dueno">
+                <input type="checkbox" checked={esDuenoEdificio}
+                  onChange={e => setEsDuenoEdificio(e.target.checked)} />
+                <span>Este titular es el <b>dueño del edificio</b> (podrá generar códigos para sus inquilinos)</span>
+              </label>
             </>
           )}
 

@@ -1511,3 +1511,20 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .recibo-vuelto b { color: #F48723; font-size: 18px; }
 .recibo-cobro-acciones { display: flex; gap: 10px; margin-top: 14px; }
 .recibo-cobro-acciones a { flex: 1; }
+
+/* Enrolamiento de inquilinos por código */
+.enrol-box { background: #eef6ff; border: 1px solid #cfe2f5; border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+.enrol-ok { margin-top: 10px; padding: 10px 12px; background: #f4fbf6; color: #1d8a4a; border-radius: 8px; }
+.check-dueno { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; padding: 10px 12px; background: #fff8e6; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.check-dueno input { margin-top: 3px; flex-shrink: 0; }
+
+/* Portal del dueño: tarjetas de código */
+.codigos-lista { display: flex; flex-direction: column; gap: 10px; }
+.codigo-card { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: 1px solid #e3e9f2; border-radius: 10px; background: #fff; }
+.codigo-numero { font-family: var(--font-mono, monospace); font-size: 26px; font-weight: 700; letter-spacing: 3px; color: #022E45; background: #f4f7fb; padding: 8px 16px; border-radius: 8px; }
+.codigo-info { flex: 1; }
+.codigo-acciones { display: flex; gap: 6px; flex-shrink: 0; }
+@media (max-width: 600px) {
+  .codigo-card { flex-wrap: wrap; }
+  .codigo-numero { font-size: 22px; }
+}
