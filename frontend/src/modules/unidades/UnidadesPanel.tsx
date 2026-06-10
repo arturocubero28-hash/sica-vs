@@ -181,6 +181,12 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
     u.identificador.toLowerCase().includes(busqueda.toLowerCase())
   ).slice(0, 8);
 
+  // Para "agregar apto a edificio existente": solo edificios
+  const sugerenciasEdificios = unidades.filter(u =>
+    u.tipo === "edificio" &&
+    u.identificador.toLowerCase().includes(busqueda.toLowerCase())
+  ).slice(0, 8);
+
   function seleccionarUnidad(u: Unidad) {
     setUnidadId(u.id);
     setBusqueda(u.identificador);
@@ -215,6 +221,7 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
       // Buscar el edificio en la lista y precargarlo
       const ed = unidades.find(u => u.id === info.edificio_id);
       if (ed) {
+        setNuevaUnidadTipo("edificio");
         setModoUnidad("existente");
         setUnidadId(ed.id);
         setBusqueda(ed.identificador);
@@ -308,27 +315,43 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
 
           <div className="sub">1. Casa o edificio</div>
 
-          {/* Toggle: crear nueva (lo más común) o elegir existente */}
+          {/* Primero: tipo de unidad */}
           <div className="seg-toggle">
-            <button type="button" className={modoUnidad === "nueva" ? "on" : ""}
-              onClick={() => { setModoUnidad("nueva"); setUnidadId(""); setBusqueda(""); }}>
-              + Crear nueva
+            <button type="button" className={nuevaUnidadTipo === "casa" ? "on" : ""}
+              onClick={() => {
+                setNuevaUnidadTipo("casa"); setModoUnidad("nueva");
+                setUnidadId(""); setBusqueda(""); setNuevaUnidadId("");
+              }}>
+              🏠 Casa
             </button>
-            <button type="button" className={modoUnidad === "existente" ? "on" : ""}
-              onClick={() => { setModoUnidad("existente"); setNuevaUnidadId(""); }}>
-              Elegir existente
+            <button type="button" className={nuevaUnidadTipo === "edificio" ? "on" : ""}
+              onClick={() => {
+                setNuevaUnidadTipo("edificio"); setModoUnidad("nueva");
+                setUnidadId(""); setBusqueda(""); setNuevaUnidadId("");
+              }}>
+              🏢 Edificio
             </button>
           </div>
+
+          {/* Para EDIFICIO: elegir entre crear uno nuevo o sumar apartamento a uno existente */}
+          {nuevaUnidadTipo === "edificio" && (
+            <div className="seg-toggle" style={{ marginTop: 4 }}>
+              <button type="button" className={modoUnidad === "nueva" ? "on" : ""}
+                onClick={() => { setModoUnidad("nueva"); setUnidadId(""); setBusqueda(""); }}>
+                + Edificio nuevo
+              </button>
+              <button type="button" className={modoUnidad === "existente" ? "on" : ""}
+                onClick={() => { setModoUnidad("existente"); setNuevaUnidadId(""); }}>
+                Agregar apto a uno existente
+              </button>
+            </div>
+          )}
 
           {modoUnidad === "nueva" ? (
             <div className="crear-unidad-box">
               <div className="row">
-                <select value={nuevaUnidadTipo}
-                  onChange={(e) => setNuevaUnidadTipo(e.target.value as "casa" | "edificio")}>
-                  <option value="casa">Casa</option>
-                  <option value="edificio">Edificio</option>
-                </select>
-                <input placeholder="Identificador (ej. Casa 24, Edificio B)" value={nuevaUnidadId}
+                <input placeholder={nuevaUnidadTipo === "casa" ? "Identificador (ej. Casa 24)" : "Nombre del edificio (ej. Edificio B)"}
+                  value={nuevaUnidadId}
                   onChange={(e) => setNuevaUnidadId(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && crearUnidadInline()} />
                 <button className="mini" onClick={crearUnidadInline} disabled={!nuevaUnidadId.trim()}>
@@ -337,29 +360,29 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
               </div>
               {unidadId && unidadSel && (
                 <div className="unidad-creada">
-                  ✓ <b>{unidadSel.identificador}</b> creada y seleccionada
+                  ✓ <b>{unidadSel.identificador}</b> {unidadSel.tipo === "edificio" ? "creado" : "creada"} y {unidadSel.tipo === "edificio" ? "seleccionado" : "seleccionada"}
                 </div>
               )}
             </div>
           ) : (
             <div className="search-box">
               <input
-                placeholder="Buscar casa o edificio existente…"
+                placeholder="Buscar el edificio existente…"
                 value={busqueda}
                 onChange={e => { setBusqueda(e.target.value); setMostrarSug(true); setUnidadId(""); }}
                 onFocus={() => setMostrarSug(true)}
                 onBlur={() => setTimeout(() => setMostrarSug(false), 150)}
               />
-              {mostrarSug && sugerencias.length > 0 && (
+              {mostrarSug && sugerenciasEdificios.length > 0 && (
                 <div className="search-dropdown">
-                  {sugerencias.map(u => (
+                  {sugerenciasEdificios.map(u => (
                     <div key={u.id} className="search-option" onMouseDown={() => seleccionarUnidad(u)}>
                       <b>{u.identificador}</b> <span className="muted small">({u.tipo})</span>
                     </div>
                   ))}
                 </div>
               )}
-              {unidadId && <span className="pill green" style={{position:'absolute',right:10,top:10}}>✓ seleccionada</span>}
+              {unidadId && <span className="pill green" style={{position:'absolute',right:10,top:10}}>✓ seleccionado</span>}
             </div>
           )}
 
