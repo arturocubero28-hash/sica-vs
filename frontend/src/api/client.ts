@@ -129,6 +129,25 @@ export const editarTarifa = (id: number, body: { nombre?: string; monto?: number
   request<Tarifa>(`/unidades/tarifas/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const desactivarTarifa = (id: number) =>
   request<{ message: string }>(`/unidades/tarifas/${id}`, { method: "DELETE" });
+
+// ── Enrolamiento de inquilinos por código (dueño de edificio) ──
+export interface CodigoEnrolamiento {
+  id: string; codigo: string; edificio?: string | null;
+  apartamento_sugerido?: string | null; nota?: string | null;
+  estado: string; created_at?: string; usado_en?: string | null;
+}
+export const misEdificios = () => request<Unidad[]>("/unidades/mis-edificios");
+export const generarCodigoEnrolamiento = (body: { edificio_id: string; apartamento?: string; nota?: string }) =>
+  request<CodigoEnrolamiento>("/unidades/enrolamiento/generar", { method: "POST", body: JSON.stringify(body) });
+export const misCodigosEnrolamiento = () => request<CodigoEnrolamiento[]>("/unidades/enrolamiento/mis-codigos");
+export const borrarCodigoEnrolamiento = (id: string) =>
+  request<{ message: string }>(`/unidades/enrolamiento/${id}`, { method: "DELETE" });
+export interface ValidacionEnrolamiento {
+  codigo_id: string; edificio_id: string; edificio_nombre: string;
+  apartamento_sugerido?: string | null; nota?: string | null; dueno_nombre?: string | null;
+}
+export const validarCodigoEnrolamiento = (codigo: string) =>
+  request<ValidacionEnrolamiento>(`/unidades/enrolamiento/validar/${codigo}`);
 export const detalleCuenta = (id: string) => request<Cuenta>(`/unidades/cuentas/${id}`);
 export const darBajaCuenta = (id: string) =>
   request<Cuenta>(`/unidades/cuentas/${id}/baja`, { method: "POST" });
@@ -141,6 +160,7 @@ export const crearUnidad = (body: { tipo: string; identificador: string; direcci
 
 export interface NuevaCuenta {
   unidad_id: string; apartamento?: string; tarifa_id: number; dia_pago: number;
+  codigo_enrolamiento?: string;
   titular: { nombre: string; apellido: string; email: string; telefono?: string; relacion?: string;
     dni?: string; rtn?: string; direccion_exacta?: string; profesion?: string;
     contacto_emergencia_nombre?: string; contacto_emergencia_telefono?: string };

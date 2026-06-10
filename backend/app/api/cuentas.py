@@ -26,7 +26,7 @@ from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db
 from app.models.usuario import Usuario
-from app.models.cuenta import Unidad, Cuenta, Residente, Tarjeta, Tarifa
+from app.models.cuenta import Unidad, Cuenta, Residente, Tarjeta, Tarifa, CodigoEnrolamiento
 from app.auth.security import roles_required, token_required
 
 cuentas_bp = Blueprint("cuentas", __name__)
@@ -177,6 +177,16 @@ def crear_cuenta(usuario_actual):
         rol_cuenta="titular", relacion=titular_data.get("relacion", "propietario"),
     )
     db.session.add(residente)
+
+    # Si el inquilino llegó con un código de enrolamiento, marcarlo como usado
+    codigo_enrol = (data.get("codigo_enrolamiento") or "").strip()
+    if codigo_enrol:
+        cod = CodigoEnrolamiento.query.filter_by(codigo=codigo_enrol, estado="activo").first()
+        if cod:
+            cod.estado = "usado"
+            cod.usado_por_cuenta_id = cuenta.id
+            cod.usado_en = dt.datetime.now(dt.timezone.utc)
+
     db.session.commit()
 
     return jsonify({"data": {
@@ -365,3 +375,102 @@ def desactivar_tarifa(usuario_actual, tarifa_id):
     db.session.commit()
     return jsonify({"data": {"message": f"Tarifa desactivada"
                              + (f" ({en_uso} cuentas la seguían usando)" if en_uso else "")}})
+
+
+# =====================================================================
+# ENROLAMIENTO DE INQUILINOS POR CÓDIGO (dueño de edificio)
+# =====================================================================
+
+def _edificios_de_propietario(usuario):
+    """Edificios donde el usuario es el propietario/dueño registrado."""
+    return Unidad.query.filter_by(tipo="edificio", propietario_id=usuario.id, activa=True).all()
+
+
+@cuentas_bp.get("/mis-edificios")
+@token_required
+def mis_edificios(usuario_actual):
+    """Edificios de los que el usuario actual es dueño (para su portal)."""
+    edificios = _edificios_de_propietario(usuario_actual)
+    return jsonify({"data": [u.to_dict() for u in edificios]})
+
+
+@cuentas_bp.post("/enrolamiento/generar")
+@token_required
+def generar_codigo_enrolamiento(usuario_actual):
+    """El dueño de un edificio genera un código numérico de un solo uso
+    para que su inquilino se enrole en la oficina de administración."""
+    data = request.get_json(silent=True) or {}
+    edificio_uuid = data.get("edificio_id")
+    edificio = Unidad.query.filter_by(uuid_publico=edificio_uuid, tipo="edificio").first()
+    if not edificio:
+        return _err("edificio_invalido", "Edificio no encontrado", 404)
+    # Solo el dueño del edificio (o un admin) puede generar códigos
+    if edificio.propietario_id != usuario_actual.id and usuario_actual.rol not in ("admin", "super_admin"):
+        return _err("sin_permiso", "No sos el dueño de este edificio", 403)
+
+    # Generar código numérico único de 6 dígitos
+    import random
+    for _ in range(20):
+        codigo = f"{random.randint(0, 999999):06d}"
+        if not CodigoEnrolamiento.query.filter_by(codigo=codigo).first():
+            break
+    else:
+        return _err("error_codigo", "No se pudo generar un código único, intentá de nuevo", 500)
+
+    cod = CodigoEnrolamiento(
+        codigo=codigo, unidad_id=edificio.id, generado_por=usuario_actual.id,
+        apartamento_sugerido=(data.get("apartamento") or "").strip() or None,
+        nota=(data.get("nota") or "").strip() or None,
+        estado="activo",
+    )
+    db.session.add(cod)
+    db.session.commit()
+    return jsonify({"data": cod.to_dict()}), 201
+
+
+@cuentas_bp.get("/enrolamiento/mis-codigos")
+@token_required
+def mis_codigos_enrolamiento(usuario_actual):
+    """Lista los códigos que el dueño generó, con su estado."""
+    codigos = (CodigoEnrolamiento.query
+               .filter_by(generado_por=usuario_actual.id)
+               .order_by(CodigoEnrolamiento.created_at.desc()).all())
+    return jsonify({"data": [c.to_dict() for c in codigos]})
+
+
+@cuentas_bp.delete("/enrolamiento/<uuid_codigo>")
+@token_required
+def borrar_codigo_enrolamiento(usuario_actual, uuid_codigo):
+    """El dueño borra un código que aún no se ha usado."""
+    cod = CodigoEnrolamiento.query.filter_by(uuid_publico=uuid_codigo).first()
+    if not cod:
+        return _err("no_encontrado", "Código no encontrado", 404)
+    if cod.generado_por != usuario_actual.id and usuario_actual.rol not in ("admin", "super_admin"):
+        return _err("sin_permiso", "No podés borrar este código", 403)
+    if cod.estado == "usado":
+        return _err("ya_usado", "Este código ya fue usado, no se puede borrar", 400)
+    db.session.delete(cod)
+    db.session.commit()
+    return jsonify({"data": {"message": "Código eliminado"}})
+
+
+@cuentas_bp.get("/enrolamiento/validar/<codigo>")
+@roles_required("admin", "super_admin")
+def validar_codigo_enrolamiento(usuario_actual, codigo):
+    """La administración valida un código que el inquilino trae a la oficina.
+    Devuelve el edificio al que pertenece para precargar el alta."""
+    cod = CodigoEnrolamiento.query.filter_by(codigo=codigo.strip()).first()
+    if not cod:
+        return _err("codigo_invalido", "Código no encontrado", 404)
+    if cod.estado == "usado":
+        return _err("codigo_usado", "Este código ya fue utilizado", 400)
+    edificio = cod.unidad
+    dueno = cod.generador
+    return jsonify({"data": {
+        "codigo_id": str(cod.uuid_publico),
+        "edificio_id": str(edificio.uuid_publico) if edificio else None,
+        "edificio_nombre": edificio.identificador if edificio else None,
+        "apartamento_sugerido": cod.apartamento_sugerido,
+        "nota": cod.nota,
+        "dueno_nombre": f"{dueno.nombre} {dueno.apellido}" if dueno else None,
+    }})

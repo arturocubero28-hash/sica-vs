@@ -35,6 +35,8 @@ class Unidad(db.Model):
     tipo = db.Column(db.String(10), nullable=False)        # 'casa' | 'edificio'
     identificador = db.Column(db.String(60), unique=True, nullable=False)  # "Casa 24", "Edificio 1"
     direccion_ref = db.Column(db.String(160))
+    # Para edificios: el usuario dueño/responsable que avala a sus inquilinos
+    propietario_id = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
     activa = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
@@ -485,4 +487,40 @@ class ConfigRecibo(db.Model):
             "establecimiento": self.establecimiento,
             "tipo_documento": self.tipo_documento,
             "fase_sar_activa": self.fase_sar_activa,
+        }
+
+
+# ---------------------------------------------------------------------
+# CÓDIGO DE ENROLAMIENTO: el dueño de un edificio genera un código
+# numérico de un solo uso para que su inquilino se enrole en la oficina.
+# La administración lo usa al dar de alta y asocia al inquilino al edificio.
+# ---------------------------------------------------------------------
+class CodigoEnrolamiento(db.Model):
+    __tablename__ = "codigos_enrolamiento"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid_col()
+    codigo = db.Column(db.String(8), unique=True, nullable=False)   # numérico, ej. "428173"
+    unidad_id = db.Column(db.BigInteger, db.ForeignKey("unidades.id"), nullable=False)  # el edificio
+    generado_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)  # el dueño
+    apartamento_sugerido = db.Column(db.String(40))   # opcional, lo que el dueño indica
+    nota = db.Column(db.String(160))                  # opcional: "Inquilino del 3B, familia López"
+    estado = db.Column(db.String(10), nullable=False, default="activo")  # activo | usado
+    usado_por_cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"))  # cuenta creada al enrolar
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+    usado_en = db.Column(db.DateTime(timezone=True))
+
+    unidad = db.relationship("Unidad", foreign_keys=[unidad_id])
+    generador = db.relationship("Usuario", foreign_keys=[generado_por])
+
+    def to_dict(self):
+        return {
+            "id": str(self.uuid_publico),
+            "codigo": self.codigo,
+            "edificio": self.unidad.identificador if self.unidad else None,
+            "apartamento_sugerido": self.apartamento_sugerido,
+            "nota": self.nota,
+            "estado": self.estado,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "usado_en": self.usado_en.isoformat() if self.usado_en else None,
         }

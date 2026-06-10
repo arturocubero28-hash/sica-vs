@@ -163,6 +163,8 @@ def create_app(config_class=Config):
             "ALTER TABLE pagos ADD COLUMN IF NOT EXISTS numero_recibo INTEGER",
             # Control de billetes al cierre (Día 9)
             "ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS desglose_billetes TEXT",
+            # Dueño del edificio que avala inquilinos (Día 10)
+            "ALTER TABLE unidades ADD COLUMN IF NOT EXISTS propietario_id BIGINT REFERENCES usuarios(id)",
         ]
         for sql in columnas:
             try:
