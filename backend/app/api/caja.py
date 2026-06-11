@@ -238,46 +238,12 @@ def listar_sesiones(usuario_actual):
 @roles_required("admin", "super_admin", "desarrollador")
 def resumen_caja(usuario_actual):
     """
-    Saldo de caja del sistema. Fórmula:
-
-      saldo_actual = saldo_inicial_configurado
-                   + efectivo cobrado (todos los pagos en efectivo, histórico)
-                   - salidas autorizadas (depósitos al banco)
-                   + ingresos autorizados (efectivo traído del banco)
-                   + ajustes aprobados (descuadres sobrante/faltante)
-
-    NOTA: el monto_inicial de cada sesión NO se suma aquí, porque el fondo de
-    apertura proviene del cierre anterior (es dinero ya contado en el saldo
-    base). Sumarlo duplicaría el efectivo.
+    Saldo de caja del sistema. La fórmula vive en UN solo lugar:
+    models/caja.py -> calcular_saldo_global(). Acá solo se arma la respuesta.
     """
+    from app.models.caja import calcular_saldo_global
+    g = calcular_saldo_global()
     cfg = ConfigCaja.get()
-    saldo_inicial = float(cfg.saldo_inicial)
-
-    sesiones = SesionCaja.query.all()
-    total_efectivo = 0.0
-    total_pos = 0.0
-    total_salidas = 0.0
-    total_ingresos = 0.0
-    efectivo_en_cajas_abiertas = 0.0
-    cajas_abiertas = 0
-
-    for s in sesiones:
-        r = s.resumen()
-        total_efectivo += r["efectivo"]
-        total_pos += r["pos"]
-        total_salidas += r["salidas"]
-        total_ingresos += r["ingresos"]
-        if s.estado == "abierta":
-            cajas_abiertas += 1
-            # Efectivo físico en la caja abierta = fondo + cobros - salidas + ingresos
-            efectivo_en_cajas_abiertas += float(s.monto_inicial) + r["efectivo"] - r["salidas"] + r["ingresos"]
-
-    # Ajustes aprobados (descuadres + conteos físicos)
-    ajustes_aprobados = AjusteCaja.query.filter_by(estado="aprobado").all()
-    total_ajustes = sum(float(a.monto) for a in ajustes_aprobados if a.tipo in ("sobrante", "faltante", "conteo"))
-
-    # Saldo global del sistema (no incluye monto_inicial de sesiones — ver nota)
-    saldo_actual = saldo_inicial + total_efectivo - total_salidas + total_ingresos + total_ajustes
 
     descuadres_pendientes = AjusteCaja.query.filter(
         AjusteCaja.tipo.in_(["sobrante", "faltante"]), AjusteCaja.estado == "pendiente"
@@ -285,15 +251,15 @@ def resumen_caja(usuario_actual):
     salidas_pend = SalidaCaja.query.filter_by(estado="pendiente").count()
 
     return jsonify({"data": {
-        "saldo_inicial": saldo_inicial,
-        "saldo_actual": round(saldo_actual, 2),
-        "total_efectivo_historico": round(total_efectivo, 2),
-        "total_pos_historico": round(total_pos, 2),
-        "total_salidas_historico": round(total_salidas, 2),
-        "total_ingresos_historico": round(total_ingresos, 2),
-        "total_ajustes": round(total_ajustes, 2),
-        "efectivo_en_cajas_abiertas": round(efectivo_en_cajas_abiertas, 2),
-        "cajas_abiertas": cajas_abiertas,
+        "saldo_inicial": g["saldo_inicial"],
+        "saldo_actual": g["saldo_actual"],
+        "total_efectivo_historico": g["total_efectivo"],
+        "total_pos_historico": g["total_pos"],
+        "total_salidas_historico": g["total_salidas"],
+        "total_ingresos_historico": g["total_ingresos"],
+        "total_ajustes": g["total_ajustes"],
+        "efectivo_en_cajas_abiertas": g["efectivo_en_cajas_abiertas"],
+        "cajas_abiertas": g["cajas_abiertas"],
         "descuadres_pendientes": descuadres_pendientes,
         "salidas_pendientes": salidas_pend,
         "actualizado_en": cfg.actualizado_en.isoformat() if cfg.actualizado_en else None,
@@ -596,16 +562,9 @@ def ajuste_conteo(usuario_actual):
                                   "message": "Clave de desarrollador incorrecta"}}), 403
 
     # Calcular el saldo actual que el sistema tiene registrado
-    cfg = ConfigCaja.get()
-    saldo_inicial = float(cfg.saldo_inicial)
-    sesiones = SesionCaja.query.all()
-    total_efectivo = total_salidas = total_ingresos = 0.0
-    for s in sesiones:
-        r = s.resumen()
-        total_efectivo += r["efectivo"]; total_salidas += r["salidas"]; total_ingresos += r["ingresos"]
-    ajustes_aprobados = AjusteCaja.query.filter_by(estado="aprobado").all()
-    total_ajustes = sum(float(a.monto) for a in ajustes_aprobados if a.tipo in ("sobrante", "faltante", "conteo"))
-    saldo_sistema = saldo_inicial + total_efectivo - total_salidas + total_ingresos + total_ajustes
+    # (fórmula centralizada en models/caja.py -> calcular_saldo_global)
+    from app.models.caja import calcular_saldo_global
+    saldo_sistema = calcular_saldo_global()["saldo_actual"]
 
     diferencia = round(saldo_real - saldo_sistema, 2)
     if abs(diferencia) < 0.01:

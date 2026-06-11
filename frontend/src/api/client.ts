@@ -438,18 +438,15 @@ export const actualizarPerfil = (body: { nombre?: string; apellido?: string; tel
   request<{ usuario: Usuario }>("/auth/perfil", { method: "PUT", body: JSON.stringify(body) });
 
 // ── GUARDIAS ──────────────────────────────────────────────────────────────────
+// Solo queda crearGuardia (usado por UsuariosAdmin). Listar/editar/reset de
+// guardias se hace por el módulo Usuarios (resetPasswordUsuario, editarUsuario).
 export interface GuardiaDTO {
   id: string; nombre: string; apellido: string; email: string;
   rol: string; activo: boolean; debe_cambiar_password?: boolean;
   password_generica?: string;
 }
-export const listarGuardias = () => request<GuardiaDTO[]>("/guardias");
 export const crearGuardia = (body: { nombre: string; apellido: string; email: string }) =>
   request<GuardiaDTO>("/guardias", { method: "POST", body: JSON.stringify(body) });
-export const editarGuardia = (uuid: string, body: { nombre?: string; apellido?: string; activo?: boolean }) =>
-  request<GuardiaDTO>(`/guardias/${uuid}`, { method: "PUT", body: JSON.stringify(body) });
-export const resetPasswordGuardia = (uuid: string) =>
-  request<{ message: string; password_generica: string }>(`/guardias/${uuid}/reset-password`, { method: "POST" });
 
 // ── HISTORIAL DE ACCESOS ──────────────────────────────────────────────────────
 export interface EventoHistorialDTO {

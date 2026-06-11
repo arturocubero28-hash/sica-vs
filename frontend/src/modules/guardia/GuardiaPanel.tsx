@@ -92,10 +92,15 @@ export function GuardiaPanel() {
   function capturarFoto() {
     if (!fotoVideoRef.current) return;
     const video = fotoVideoRef.current;
+    // Limitar a máx 1280px en el lado mayor: de sobra para leer DNI/placas,
+    // y reduce 4-10x el peso de cada foto (sube más rápido en la caseta
+    // y ahorra almacenamiento — son 3 fotos por cada acceso).
+    const MAX_LADO = 1280;
+    const escala = Math.min(1, MAX_LADO / Math.max(video.videoWidth, video.videoHeight));
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d")!.drawImage(video, 0, 0);
+    canvas.width = Math.round(video.videoWidth * escala);
+    canvas.height = Math.round(video.videoHeight * escala);
+    canvas.getContext("2d")!.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
     if (tomandoFoto === "id") setFotoId(dataUrl);
     else if (tomandoFoto === "placa") setFotoPlaca(dataUrl);

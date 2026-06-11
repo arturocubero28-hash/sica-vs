@@ -61,11 +61,20 @@ class SesionCaja(db.Model):
             "cantidad_pagos": len(self.pagos),
         }
 
+    def efectivo_esperado(self, resumen=None):
+        """
+        FÓRMULA ÚNICA del efectivo esperado en la sesión:
+            fondo de apertura + cobros en efectivo - salidas autorizadas + ingresos autorizados
+        Único lugar donde vive esta regla financiera. Si cambia, se cambia solo aquí.
+        Acepta un resumen ya calculado para no recalcularlo.
+        """
+        r = resumen or self.resumen()
+        return float(self.monto_inicial) + r["efectivo"] - r["salidas"] + r["ingresos"]
+
     def to_dict(self, con_pagos=False):
         r = self.resumen()
         inicial = float(self.monto_inicial)
-        # efectivo_esperado = fondo + cobros - salidas + ingresos
-        efectivo_esperado = inicial + r["efectivo"] - r["salidas"] + r["ingresos"]
+        efectivo_esperado = self.efectivo_esperado(resumen=r)
 
         d = {
             "id":             str(self.uuid_publico),
@@ -230,3 +239,55 @@ class SalidaCaja(db.Model):
             "created_at":     self.created_at.isoformat() if self.created_at else None,
             "resuelto_en":    self.resuelto_en.isoformat() if self.resuelto_en else None,
         }
+
+
+def calcular_saldo_global():
+    """
+    FÓRMULA ÚNICA del saldo global del sistema:
+        saldo inicial configurado
+        + cobros en efectivo históricos
+        - salidas autorizadas históricas (depósitos al banco)
+        + ingresos autorizados históricos (efectivo traído del banco)
+        + ajustes aprobados (sobrantes/faltantes/conteos)
+
+    NOTA: el monto_inicial de cada sesión NO se suma, porque el fondo de
+    apertura proviene del cierre anterior (dinero ya contado). Sumarlo
+    duplicaría el efectivo.
+
+    Devuelve un dict con todos los componentes para que las vistas armen
+    su respuesta sin recalcular nada. Único lugar de esta regla financiera.
+    """
+    cfg = ConfigCaja.get()
+    saldo_inicial = float(cfg.saldo_inicial)
+
+    sesiones = SesionCaja.query.all()
+    total_efectivo = total_pos = total_salidas = total_ingresos = 0.0
+    efectivo_en_cajas_abiertas = 0.0
+    cajas_abiertas = 0
+    for s in sesiones:
+        r = s.resumen()
+        total_efectivo += r["efectivo"]
+        total_pos += r["pos"]
+        total_salidas += r["salidas"]
+        total_ingresos += r["ingresos"]
+        if s.estado == "abierta":
+            cajas_abiertas += 1
+            efectivo_en_cajas_abiertas += s.efectivo_esperado(resumen=r)
+
+    ajustes_aprobados = AjusteCaja.query.filter_by(estado="aprobado").all()
+    total_ajustes = sum(float(a.monto) for a in ajustes_aprobados
+                        if a.tipo in ("sobrante", "faltante", "conteo"))
+
+    saldo_actual = saldo_inicial + total_efectivo - total_salidas + total_ingresos + total_ajustes
+
+    return {
+        "saldo_inicial": saldo_inicial,
+        "saldo_actual": round(saldo_actual, 2),
+        "total_efectivo": round(total_efectivo, 2),
+        "total_pos": round(total_pos, 2),
+        "total_salidas": round(total_salidas, 2),
+        "total_ingresos": round(total_ingresos, 2),
+        "total_ajustes": round(total_ajustes, 2),
+        "efectivo_en_cajas_abiertas": round(efectivo_en_cajas_abiertas, 2),
+        "cajas_abiertas": cajas_abiertas,
+    }
