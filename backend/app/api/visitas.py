@@ -256,11 +256,13 @@ def validar_qr(usuario_actual):
     # haya vencido o la visita esté marcada como usada/expirada. Físicamente la
     # persona está dentro y hay que poder registrar que salió.
     if esta_adentro:
+        cuenta_in = Cuenta.query.get(visita.cuenta_id)
         return jsonify({"data": {
             "visita": visita.to_dict(),
             "valido": True,
             "adentro": True,
             "direccion_sugerida": "salida",
+            "cuenta_bloqueada": bool(cuenta_in and cuenta_in.bloqueada),
             "mensaje": "Esta visita está adentro. Puede registrar su SALIDA.",
         }})
 
@@ -282,11 +284,11 @@ def validar_qr(usuario_actual):
         return jsonify({"error": {"code": "qr_usado",
                                   "message": "Este código de visita única ya fue utilizado"}}), 400
 
-    # Check cuenta bloqueada
+    # Estado de la cuenta del residente: si está bloqueada por mora, NO se
+    # rechaza la entrada (la mora es del residente, no del visitante), pero se
+    # avisa al guardia para que tome la decisión informado.
     cuenta = Cuenta.query.get(visita.cuenta_id)
-    if cuenta and cuenta.bloqueada:
-        return jsonify({"error": {"code": "cuenta_bloqueada",
-                                  "message": "La cuenta del residente está bloqueada por mora"}}), 400
+    cuenta_bloqueada = bool(cuenta and cuenta.bloqueada)
 
     # Si llegamos aquí, la visita NO está adentro (eso se manejó al inicio).
     # Es una entrada válida nueva.
@@ -295,7 +297,10 @@ def validar_qr(usuario_actual):
         "valido": True,
         "adentro": False,
         "direccion_sugerida": "entrada",
-        "mensaje": "QR válido. Puede proceder con la validación.",
+        "cuenta_bloqueada": cuenta_bloqueada,
+        "mensaje": ("QR válido, pero la cuenta del residente tiene mora."
+                    if cuenta_bloqueada else
+                    "QR válido. Puede proceder con la validación."),
     }})
 
 

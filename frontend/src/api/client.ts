@@ -221,6 +221,7 @@ export const validarQR = (token: string) =>
   request<{
     visita: VisitaDTO; valido: boolean; mensaje: string;
     adentro?: boolean; direccion_sugerida?: "entrada" | "salida";
+    cuenta_bloqueada?: boolean;
   }>(
     "/visitas/qr/validar", { method: "POST", body: JSON.stringify({ token }) });
 

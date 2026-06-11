@@ -111,26 +111,45 @@ def _visitas_adentro():
     """
     Devuelve las visitas que entraron pero aún no han salido.
     Una visita está 'adentro' si su último evento de acceso es una 'entrada'.
+
+    Trae las visitas con entrada y carga TODOS sus eventos en una sola query
+    (joinedload), en vez de una query por visita (evita N+1).
     """
-    # Visitas que tienen al menos un evento de entrada
-    visitas_con_entrada = (
+    from sqlalchemy.orm import joinedload
+
+    # IDs de visitas que tienen al menos un evento de entrada
+    ids_con_entrada = [
+        row[0] for row in (
+            db.session.query(EventoAcceso.visita_id)
+            .filter(EventoAcceso.direccion == "entrada")
+            .distinct()
+            .all()
+        )
+    ]
+    if not ids_con_entrada:
+        return []
+
+    # Cargar esas visitas con todos sus eventos de una sola vez
+    visitas = (
         Visita.query
-        .join(EventoAcceso, EventoAcceso.visita_id == Visita.id)
-        .filter(EventoAcceso.direccion == "entrada")
-        .distinct()
+        .options(joinedload(Visita.eventos))
+        .filter(Visita.id.in_(ids_con_entrada))
         .all()
     )
 
+    def _key(e):
+        t = e.ocurrido_en
+        if t is None:
+            return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=dt.timezone.utc)
+        return t
+
     adentro = []
-    for v in visitas_con_entrada:
-        eventos = (
-            EventoAcceso.query
-            .filter_by(visita_id=v.id)
-            .order_by(EventoAcceso.ocurrido_en.asc())
-            .all()
-        )
-        if not eventos:
+    for v in visitas:
+        if not v.eventos:
             continue
+        eventos = sorted(v.eventos, key=_key)
         # Si el último evento es 'entrada', sigue adentro
         if eventos[-1].direccion == "entrada":
             adentro.append((v, eventos))
@@ -221,10 +240,6 @@ def historial_accesos(usuario_actual):
     """
     from app.models.visita import Visita
 
-    desde = request.args.get("desde")
-    hasta = request.args.get("hasta")
-    direccion = request.args.get("direccion")
-    buscar = (request.args.get("buscar") or "").strip().lower()
     desde = request.args.get("desde")
     hasta = request.args.get("hasta")
     direccion = request.args.get("direccion")

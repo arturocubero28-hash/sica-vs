@@ -6,6 +6,7 @@ export function GuardiaPanel() {
   const [qrInput, setQrInput] = useState("");
   const [visita, setVisita] = useState<VisitaDTO | null>(null);
   const [direccion, setDireccion] = useState<"entrada" | "salida">("entrada");
+  const [cuentaBloqueada, setCuentaBloqueada] = useState(false);
   const [error, setError] = useState("");
   const [fotoId, setFotoId] = useState("");
   const [fotoPlaca, setFotoPlaca] = useState("");
@@ -28,6 +29,7 @@ export function GuardiaPanel() {
       const data = await validarQR(token.trim());
       setVisita(data.visita);
       setDireccion(data.direccion_sugerida || "entrada");
+      setCuentaBloqueada(!!data.cuenta_bloqueada);
       setStep("review");
     } catch (e) { setError((e as Error).message); }
   }
@@ -132,7 +134,7 @@ export function GuardiaPanel() {
   }
 
   function reiniciar() {
-    setStep("scan"); setQrInput(""); setVisita(null); setDireccion("entrada");
+    setStep("scan"); setQrInput(""); setVisita(null); setDireccion("entrada"); setCuentaBloqueada(false);
     setError(""); setFotoId(""); setFotoPlaca(""); setFotoNumero(""); setResultado("");
   }
 
@@ -194,6 +196,13 @@ export function GuardiaPanel() {
               <div><span className="muted">Autorizado por:</span> <b>{visita.generada_por}</b></div>
             </div>
           </div>
+
+          {cuentaBloqueada && (
+            <div className="aviso-mora">
+              ⚠️ <b>La cuenta del residente tiene mora.</b> El código es válido;
+              queda a tu criterio autorizar el ingreso según las reglas de la residencial.
+            </div>
+          )}
 
           {direccion === "salida" ? (
             <div className="nota">

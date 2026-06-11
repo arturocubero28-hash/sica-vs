@@ -1528,3 +1528,10 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
   .codigo-card { flex-wrap: wrap; }
   .codigo-numero { font-size: 22px; }
 }
+
+/* Aviso de mora al guardia (cuenta bloqueada pero QR válido) */
+.aviso-mora {
+  margin: 12px 0; padding: 12px 14px;
+  background: #fff8e6; border: 1px solid #f5c518; border-left: 4px solid #d89000;
+  border-radius: 8px; color: #6b4e00; font-size: 14px; line-height: 1.4;
+}
