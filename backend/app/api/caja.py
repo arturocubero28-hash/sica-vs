@@ -188,26 +188,55 @@ def cerrar_caja(usuario_actual):
 @caja_bp.get("/buscar-cuenta")
 @roles_required("cajero", "admin", "super_admin")
 def buscar_cuenta(usuario_actual):
-    q = (request.args.get("q") or "").strip().lower()
+    q = (request.args.get("q") or "").strip()
     if not q:
         return jsonify({"data": []})
 
-    cuentas = Cuenta.query.filter_by(activa=True).all()
+    from sqlalchemy import or_
+    from sqlalchemy.orm import joinedload
+    from app.models.cuenta import Unidad, Residente
+
+    patron = f"%{q}%"
+    # Filtrar en SQL por identificador de unidad o nombre/apellido del titular,
+    # en vez de cargar las 500 cuentas y filtrar en Python. Precarga unidad y
+    # residentes->usuario para no disparar lazy loads por cada resultado.
+    cuentas = (
+        Cuenta.query
+        .filter(Cuenta.activa.is_(True))
+        .outerjoin(Unidad, Cuenta.unidad_id == Unidad.id)
+        .outerjoin(Residente, (Residente.cuenta_id == Cuenta.id) &
+                              (Residente.rol_cuenta == "titular"))
+        .outerjoin(Usuario, Residente.usuario_id == Usuario.id)
+        .filter(or_(
+            Unidad.identificador.ilike(patron),
+            Usuario.nombre.ilike(patron),
+            Usuario.apellido.ilike(patron),
+            (Usuario.nombre + " " + Usuario.apellido).ilike(patron),
+        ))
+        .options(joinedload(Cuenta.unidad),
+                 joinedload(Cuenta.residentes).joinedload(Residente.usuario))
+        .distinct()
+        .limit(10)
+        .all()
+    )
+
+    # Precargar las cuotas pendientes de todas las cuentas encontradas (una query)
+    cuenta_ids = [c.id for c in cuentas]
+    cuotas_por_cuenta = {}
+    if cuenta_ids:
+        cuotas = (Cuota.query
+                  .filter(Cuota.cuenta_id.in_(cuenta_ids),
+                          Cuota.estado.notin_(["pagada", "en_arreglo"]))
+                  .order_by(Cuota.periodo.asc()).all())
+        for q2 in cuotas:
+            cuotas_por_cuenta.setdefault(q2.cuenta_id, []).append(q2)
+
     resultados = []
     for c in cuentas:
         identificador = c.unidad.identificador if c.unidad else ""
         titular = c.titular()
         nombre_titular = f"{titular.usuario.nombre} {titular.usuario.apellido}" if titular and titular.usuario else ""
-        blob = f"{identificador} {nombre_titular}".lower()
-        if q not in blob:
-            continue
-        # Cuotas pendientes de esta cuenta.
-        # Excluye 'pagada' y 'en_arreglo' (estas últimas están congeladas en un
-        # plan de pago y se cobran como abonos, no en ventanilla directa).
-        pendientes = (Cuota.query
-                      .filter(Cuota.cuenta_id == c.id,
-                              Cuota.estado.notin_(["pagada", "en_arreglo"]))
-                      .order_by(Cuota.periodo.asc()).all())
+        pendientes = cuotas_por_cuenta.get(c.id, [])
         resultados.append({
             "cuenta_id": str(c.uuid_publico),
             "identificador": identificador or "Casa",
@@ -219,8 +248,6 @@ def buscar_cuenta(usuario_actual):
                 "estado": q2.estado,
             } for q2 in pendientes],
         })
-        if len(resultados) >= 10:
-            break
     return jsonify({"data": resultados})
 
 

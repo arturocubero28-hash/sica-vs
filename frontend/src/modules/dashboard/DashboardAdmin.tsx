@@ -23,8 +23,18 @@ export function DashboardAdmin() {
   const [vistaActivas, setVistaActivas] = useState(false);
 
   useEffect(() => {
-    dashboardMetricas().then(setM).catch(() => {});
-    dashboardVisitas().then(setVisitas).catch(() => {});
+    function cargar() {
+      dashboardMetricas().then(setM).catch(() => {});
+      dashboardVisitas().then(setVisitas).catch(() => {});
+    }
+    cargar();
+    // Refrescar las métricas cada 60s para que el Centro de Monitoreo refleje
+    // los accesos que el guardia registra en tiempo real. Se limpia el intervalo
+    // al desmontar (mismo patrón que el badge de pagos pendientes).
+    const id = setInterval(() => {
+      dashboardMetricas().then(setM).catch(() => clearInterval(id));
+    }, 60_000);
+    return () => clearInterval(id);
   }, []);
 
   if (vistaActivas) {
