@@ -282,7 +282,6 @@ def metricas_seguridad(usuario_actual):
         return query.scalar() or 0
 
     # ── Logins fallidos ──
-    base_login_fail = L.query.filter(L.endpoint.like("%/auth/login"), L.status_code == 401)
     login_fail_24h = contar(db.session.query(func.count(L.id)).filter(
         L.endpoint.like("%/auth/login"), L.status_code == 401, L.created_at >= hace_24h))
     login_fail_7d = contar(db.session.query(func.count(L.id)).filter(
@@ -300,7 +299,6 @@ def metricas_seguridad(usuario_actual):
     ENDPOINTS_POLLING = ["%/auth/me", "%/cuotas/pendientes/count",
                          "%/auth/logout", "%/auth/logout%"]
     filtro_polling = [~L.endpoint.like(ep) for ep in ENDPOINTS_POLLING]
-    from sqlalchemy import and_
     authz_24h = contar(db.session.query(func.count(L.id)).filter(
         L.status_code.in_([401, 403]),
         ~L.endpoint.like("%/auth/login"),

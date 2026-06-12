@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { historialAccesos, historialPagos, urlFotoGuardia, urlReciboPDF, type HistorialDTO, type HistorialPagosDTO, type EventoHistorialDTO } from "../../api/client";
+import { L } from "../../utils/formato";
 
 export function HistorialAccesos() {
   const [tab, setTab] = useState<"accesos" | "pagos">("accesos");
@@ -202,9 +203,6 @@ function TabPagos() {
     setTimeout(cargar, 0);
   }
 
-  function L(n: number) {
-    return "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
 
   return (
     <>

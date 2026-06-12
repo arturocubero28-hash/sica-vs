@@ -4,13 +4,11 @@ Módulo de Reportería — /api/v1/reportes/
 Reportes financieros para el patronato: cobranza, morosos, recaudación.
 """
 import datetime as dt
-import calendar
 from collections import defaultdict
 
 from flask import Blueprint, jsonify, request
 
-from app.extensions import db
-from app.models.cuenta import Cuenta, Cuota, Pago, Unidad
+from app.models.cuenta import Cuota, Pago
 from app.auth.security import roles_required
 
 reportes_bp = Blueprint("reportes", __name__)

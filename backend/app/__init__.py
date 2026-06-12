@@ -169,6 +169,15 @@ def create_app(config_class=Config):
             "ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS desglose_billetes TEXT",
             # Dueño del edificio que avala inquilinos (Día 10)
             "ALTER TABLE unidades ADD COLUMN IF NOT EXISTS propietario_id BIGINT REFERENCES usuarios(id)",
+            # Índices en columnas más consultadas (Día 12 — F5 de la auditoría).
+            # Aceleran mora, reportes, caja y dashboard cuando crecen los datos.
+            "CREATE INDEX IF NOT EXISTS ix_cuotas_estado ON cuotas (estado)",
+            "CREATE INDEX IF NOT EXISTS ix_cuotas_cuenta_id ON cuotas (cuenta_id)",
+            "CREATE INDEX IF NOT EXISTS ix_pagos_estado ON pagos (estado)",
+            "CREATE INDEX IF NOT EXISTS ix_pagos_cuenta_id ON pagos (cuenta_id)",
+            "CREATE INDEX IF NOT EXISTS ix_visitas_estado ON visitas (estado)",
+            "CREATE INDEX IF NOT EXISTS ix_visitas_cuenta_id ON visitas (cuenta_id)",
+            "CREATE INDEX IF NOT EXISTS ix_eventos_acceso_visita_id ON eventos_acceso (visita_id)",
         ]
         for sql in columnas:
             try:

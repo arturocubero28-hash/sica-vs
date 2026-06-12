@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { misCuotas, subirComprobante, detalleCuota, type CuotaDTO } from "../../api/client";
+import { misCuotas, subirComprobante, type CuotaDTO } from "../../api/client";
 
 const estadoLabel: Record<string, string> = {
   pendiente: "Pendiente", en_revision: "En revisión", pagada: "Pagada", vencida: "Vencida",

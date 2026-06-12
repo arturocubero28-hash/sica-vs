@@ -5,13 +5,11 @@ Módulo de Dashboard administrativo — estadísticas reales desde la base de da
   GET /api/v1/dashboard/visitas-tabla  -> tabla de visitas recientes con datos reales
 """
 import datetime as dt
-import os
 
-from flask import Blueprint, jsonify, send_file, current_app, request
-from sqlalchemy import func
+from flask import Blueprint, jsonify, current_app, request
 
 from app.extensions import db
-from app.models.visita import Visita, CodigoQR, EventoAcceso
+from app.models.visita import Visita, EventoAcceso
 from app.models.cuenta import Cuenta, Unidad, Residente
 from app.auth.security import roles_required, token_required
 
@@ -23,7 +21,6 @@ dashboard_bp = Blueprint("dashboard", __name__)
 def metricas(usuario_actual):
     """Tarjetas de métricas del Centro de Monitoreo, calculadas en vivo."""
     hoy_inicio = dt.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    ahora = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc)
 
     # QR generados hoy
     qr_hoy = Visita.query.filter(Visita.created_at >= hoy_inicio).count()

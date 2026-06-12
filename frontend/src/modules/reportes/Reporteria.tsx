@@ -1,10 +1,7 @@
 import { useState, useEffect } from "react";
 import { reporteFinanciero, reporteMoraPorCasa,
   type ReporteFinancieroDTO, type MoraPorCasaDTO, type CasaMoraDTO } from "../../api/client";
-
-function L(n: number) {
-  return "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { L } from "../../utils/formato";
 
 export function Reporteria() {
   const [tab, setTab] = useState<"financiero" | "mora">("financiero");

@@ -8,7 +8,6 @@ Previene:
   - Validación por contenido real (magic bytes), no solo extensión
 """
 import os
-import io
 import uuid as uuid_lib
 from flask import send_file, jsonify
 from werkzeug.utils import secure_filename

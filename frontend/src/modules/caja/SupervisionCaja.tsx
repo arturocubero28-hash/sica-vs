@@ -2,13 +2,10 @@ import { useState, useEffect } from "react";
 import {
   listarSesionesCaja, detalleSesionCaja, resumenCaja,
   modificarSaldoInicial, ajustarSaldoConteo, listarDescuadres, resolverDescuadre,
-  salidasPendientes, listarSalidas, autorizarSalida, urlConstanciaCaja,
+  listarSalidas, autorizarSalida, urlConstanciaCaja,
   type SesionCajaDTO, type ResumenCajaDTO, type DescuadreDTO, type SalidaCajaDTO,
 } from "../../api/client";
-
-function L(n: number) {
-  return "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { L } from "../../utils/formato";
 
 export function SupervisionCaja() {
   const [sesiones, setSesiones] = useState<SesionCajaDTO[]>([]);
@@ -390,7 +387,6 @@ function ModalAjusteConteo({ saldoSistema, onCerrar, onGuardado }: {
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
 
-  const L = (n: number) => "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const saldoReal = parseFloat(monto || "");
   const diferencia = !isNaN(saldoReal) ? saldoReal - saldoSistema : null;
 

@@ -3,7 +3,6 @@ Log de auditoría forense — registra accesos al sistema para diagnóstico.
 Cada entrada guarda: usuario, acción (endpoint), método HTTP, IP, timestamp
 y el status code de la respuesta.
 """
-import uuid
 import datetime as dt
 from app.extensions import db
 

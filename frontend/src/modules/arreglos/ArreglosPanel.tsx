@@ -4,10 +4,7 @@ import {
   listarCuentas, cuotasPendientesCuenta,
   type ArregloDTO, type Cuenta, type CuotaDTO,
 } from "../../api/client";
-
-function L(n: number) {
-  return "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { L } from "../../utils/formato";
 
 const ESTADO_PILL: Record<string, string> = {
   activo: "green", completado: "", incumplido: "red", cancelado: "amber",

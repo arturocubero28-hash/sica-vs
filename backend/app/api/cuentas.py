@@ -17,7 +17,6 @@ Sobre la creación de usuarios de residentes:
     con Resend) se envía por correo para que el residente defina su contraseña.
     Por ahora el token se devuelve en la respuesta para pruebas.
 """
-import uuid
 import secrets
 import datetime as dt
 

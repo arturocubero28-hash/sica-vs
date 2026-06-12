@@ -30,7 +30,7 @@ class Visita(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True)
     uuid_publico = _uuid()
-    cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
+    cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False, index=True)
     generada_por = db.Column(db.BigInteger, db.ForeignKey("residentes.id"), nullable=False)
     tipo = db.Column(db.String(20), nullable=False)  # unica | recurrente | repartidor
 
@@ -45,7 +45,7 @@ class Visita(db.Model):
     valido_hasta = db.Column(db.DateTime(timezone=True))
     modo_recurrencia = db.Column(db.String(20))  # libre | una_por_dia
 
-    estado = db.Column(db.String(20), nullable=False, default="activa")
+    estado = db.Column(db.String(20), nullable=False, default="activa", index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow, onupdate=dt.datetime.utcnow)
 
@@ -121,7 +121,7 @@ class EventoAcceso(db.Model):
     tarjeta_id = db.Column(db.BigInteger, db.ForeignKey("tarjetas_proximidad.id"))
     residente_id = db.Column(db.BigInteger, db.ForeignKey("residentes.id"))
 
-    visita_id = db.Column(db.BigInteger, db.ForeignKey("visitas.id"))
+    visita_id = db.Column(db.BigInteger, db.ForeignKey("visitas.id"), index=True)
     guardia_id = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
     foto_identidad = db.Column(db.String(255))
     foto_placa = db.Column(db.String(255))

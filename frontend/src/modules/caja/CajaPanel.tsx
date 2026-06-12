@@ -4,10 +4,7 @@ import {
   reportarDescuadre, solicitarSalida, solicitarIngreso, urlConstanciaCaja, urlReciboPDF,
   type SesionCajaDTO, type CuentaCajaDTO,
 } from "../../api/client";
-
-function L(n: number) {
-  return "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { L } from "../../utils/formato";
 
 export function CajaPanel() {
   const [sesion, setSesion] = useState<SesionCajaDTO | null>(null);
@@ -120,7 +117,6 @@ function AbrirCaja({ onAbierta }: { onAbierta: () => void }) {
     catch (e) { setError((e as Error).message); setAbriendo(false); }
   }
 
-  const L = (n: number) => "L " + n.toLocaleString("es-HN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return (
     <div className="caja-abrir">

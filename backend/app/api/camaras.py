@@ -6,9 +6,8 @@ El navegador no puede leer RTSP directamente, así que el backend transcodifica
 con OpenCV y sirve un stream MJPEG que se muestra en un <img>.
 """
 import time
-import threading
 
-from flask import Blueprint, request, jsonify, Response, current_app
+from flask import Blueprint, request, jsonify, Response
 
 from app.extensions import db
 from app.models.camara import Camara

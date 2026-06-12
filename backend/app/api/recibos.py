@@ -9,13 +9,12 @@ Estructura preparada para FASE 2 (SAR): CAI, rango autorizado, fecha límite.
 - GET /recibos/<pago_uuid>/pdf: genera el PDF del recibo.
 - GET/PUT /recibos/config: ver y editar la configuración del emisor.
 """
-import datetime as dt
 import io
 
 from flask import Blueprint, jsonify, request, send_file
 
 from app.extensions import db
-from app.models.cuenta import Pago, ConfigRecibo, Cuenta
+from app.models.cuenta import Pago, ConfigRecibo
 from app.auth.security import roles_required, token_required
 
 recibos_bp = Blueprint("recibos", __name__)

@@ -177,10 +177,6 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
   // Modo de selección de unidad: "nueva" (crear) es lo más común al dar de alta
   const [modoUnidad, setModoUnidad] = useState<"nueva" | "existente">("nueva");
 
-  const sugerencias = unidades.filter(u =>
-    u.identificador.toLowerCase().includes(busqueda.toLowerCase())
-  ).slice(0, 8);
-
   // Para "agregar apto a edificio existente": solo edificios
   const sugerenciasEdificios = unidades.filter(u =>
     u.tipo === "edificio" &&
