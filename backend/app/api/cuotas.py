@@ -314,6 +314,9 @@ def historial_pagos(usuario_actual):
             "identificador": identificador or "—",
             "titular": titular_nombre or "—",
             "cobrado_por": cobrado_por,
+            # Imagen del comprobante (solo transferencias lo tienen): permite
+            # volver a verlo desde el historial, no solo el recibo.
+            "comprobante_archivo": p.comprobante_archivo or None,
         })
 
     total = len(filtrados)

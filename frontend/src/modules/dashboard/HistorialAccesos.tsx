@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { historialAccesos, historialPagos, urlFotoGuardia, urlReciboPDF, type HistorialDTO, type HistorialPagosDTO, type EventoHistorialDTO } from "../../api/client";
+import { historialAccesos, historialPagos, urlFotoGuardia, urlReciboPDF, urlComprobante, type HistorialDTO, type HistorialPagosDTO, type EventoHistorialDTO } from "../../api/client";
 import { L } from "../../utils/formato";
 
 export function HistorialAccesos() {
@@ -263,6 +263,11 @@ function TabPagos() {
                       <td>
                         <a className="mini" href={urlReciboPDF(p.id)} target="_blank" rel="noreferrer"
                           style={{ textDecoration: "none" }}>🧾 Recibo</a>
+                        {p.comprobante_archivo && (
+                          <a className="mini ghost" href={urlComprobante(p.comprobante_archivo)}
+                            target="_blank" rel="noreferrer"
+                            style={{ textDecoration: "none", marginLeft: 6 }}>📎 Comprobante</a>
+                        )}
                       </td>
                     </tr>
                   ))}

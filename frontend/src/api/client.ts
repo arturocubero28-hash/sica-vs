@@ -625,6 +625,7 @@ export const resolverDescuadre = (uuid: string, accion: string, claveDev?: strin
 export interface PagoHistorialItem {
   id: string; fecha: string; monto: number; metodo: string; referencia?: string;
   identificador: string; titular: string; cobrado_por: string;
+  comprobante_archivo?: string | null;
 }
 export interface HistorialPagosDTO {
   pagos: PagoHistorialItem[]; pagina: number; total_paginas: number; total: number;
