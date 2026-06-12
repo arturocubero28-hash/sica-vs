@@ -37,6 +37,10 @@ class Config:
     # Entorno: 'development' (default) o 'production'
     ENV = os.environ.get("SICAVS_ENV", "development")
 
+    # Token que usan los dispositivos de acceso (Raspberry Pi) para autenticarse
+    # al validar tarjetas. En producción debe setearse a un valor secreto.
+    DEVICE_TOKEN = os.environ.get("DEVICE_TOKEN", "sicavs-device-dev")
+
 
 # Defaults inseguros que NUNCA deben usarse en producción
 _SECRETOS_INSEGUROS = {

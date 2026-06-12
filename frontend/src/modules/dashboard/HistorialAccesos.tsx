@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { historialAccesos, historialPagos, urlFotoGuardia, urlReciboPDF, urlComprobante, type HistorialDTO, type HistorialPagosDTO, type EventoHistorialDTO } from "../../api/client";
+import { historialAccesos, historialPagos, historialTarjetas, urlFotoGuardia, urlReciboPDF, urlComprobante, type HistorialDTO, type HistorialPagosDTO, type HistorialTarjetasDTO, type EventoHistorialDTO } from "../../api/client";
 import { L } from "../../utils/formato";
 
 export function HistorialAccesos() {
-  const [tab, setTab] = useState<"accesos" | "pagos">("accesos");
+  const [tab, setTab] = useState<"accesos" | "tarjetas" | "pagos">("accesos");
 
   return (
     <div className="historial">
@@ -11,14 +11,19 @@ export function HistorialAccesos() {
 
       <div className="hist-tabs">
         <button className={`hist-tab ${tab === "accesos" ? "on" : ""}`} onClick={() => setTab("accesos")}>
-          📜 Accesos
+          🎫 Accesos de visitas
+        </button>
+        <button className={`hist-tab ${tab === "tarjetas" ? "on" : ""}`} onClick={() => setTab("tarjetas")}>
+          🪪 Accesos de residentes
         </button>
         <button className={`hist-tab ${tab === "pagos" ? "on" : ""}`} onClick={() => setTab("pagos")}>
           💰 Pagos
         </button>
       </div>
 
-      {tab === "accesos" ? <TabAccesos /> : <TabPagos />}
+      {tab === "accesos" && <TabAccesos />}
+      {tab === "tarjetas" && <TabTarjetas />}
+      {tab === "pagos" && <TabPagos />}
     </div>
   );
 }
@@ -281,6 +286,86 @@ function TabPagos() {
             <span className="muted small">Página {data.pagina} de {data.total_paginas} · {data.total} pagos</span>
             <button className="ghost mini" disabled={pagina >= data.total_paginas} onClick={() => setPagina(p => p + 1)}>Siguiente →</button>
           </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function TabTarjetas() {
+  const [data, setData] = useState<HistorialTarjetasDTO | null>(null);
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [direccion, setDireccion] = useState("");
+  const [buscar, setBuscar] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    setCargando(true);
+    historialTarjetas({ desde, hasta, direccion, buscar, pagina })
+      .then(setData).catch(() => {}).finally(() => setCargando(false));
+  }, [desde, hasta, direccion, buscar, pagina]);
+
+  return (
+    <>
+      <div className="hist-filtros">
+        <input type="date" value={desde} onChange={e => { setDesde(e.target.value); setPagina(1); }} />
+        <input type="date" value={hasta} onChange={e => { setHasta(e.target.value); setPagina(1); }} />
+        <select value={direccion} onChange={e => { setDireccion(e.target.value); setPagina(1); }}>
+          <option value="">Entrada y salida</option>
+          <option value="entrada">Solo entradas</option>
+          <option value="salida">Solo salidas</option>
+        </select>
+        <input placeholder="Buscar residente, casa o tarjeta…" value={buscar}
+          onChange={e => { setBuscar(e.target.value); setPagina(1); }} />
+      </div>
+
+      {cargando ? <p className="muted">Cargando…</p> : !data || data.eventos.length === 0 ? (
+        <div className="empty-state">
+          <p className="muted">No hay accesos por tarjeta registrados todavía.</p>
+          <p className="muted small">
+            Acá aparecerán las entradas y salidas de residentes cuando el sistema
+            de acceso por tarjeta esté en operación.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="scroll-x">
+            <table className="data">
+              <thead>
+                <tr><th>Fecha / Hora</th><th>Residente</th><th>Casa</th><th>Tarjeta</th><th>Tipo</th><th>Acceso</th><th>Dirección</th></tr>
+              </thead>
+              <tbody>
+                {data.eventos.map(e => (
+                  <tr key={e.id}>
+                    <td className="small">{new Date(e.ocurrido_en).toLocaleString("es-HN")}</td>
+                    <td>{e.residente}</td>
+                    <td>{e.unidad}</td>
+                    <td><code>{e.tarjeta}</code></td>
+                    <td>
+                      <span className={`pill ${e.tipo_acceso === "peatonal" ? "" : "green"}`}>
+                        {e.tipo_acceso === "peatonal" ? "🚶 Peatonal" : "🚗 Vehicular"}
+                      </span>
+                    </td>
+                    <td className="small">{e.acceso}</td>
+                    <td>
+                      <span className={`pill ${e.direccion === "entrada" ? "green" : ""}`}>
+                        {e.direccion === "entrada" ? "↓ Entrada" : "↑ Salida"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {data.total_paginas > 1 && (
+            <div className="paginacion">
+              <button className="mini" disabled={pagina <= 1} onClick={() => setPagina(p => p - 1)}>← Anterior</button>
+              <span className="muted small">Página {data.pagina} de {data.total_paginas}</span>
+              <button className="mini" disabled={pagina >= data.total_paginas} onClick={() => setPagina(p => p + 1)}>Siguiente →</button>
+            </div>
+          )}
         </>
       )}
     </>

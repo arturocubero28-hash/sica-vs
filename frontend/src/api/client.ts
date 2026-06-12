@@ -473,6 +473,27 @@ export const historialAccesos = (params: {
   return request<HistorialDTO>(`/dashboard/historial${qs ? "?" + qs : ""}`);
 };
 
+export interface EventoTarjetaDTO {
+  id: string; direccion: string; residente: string; unidad: string;
+  tarjeta: string; tipo_acceso?: "vehicular" | "peatonal"; acceso: string; ocurrido_en: string;
+}
+export interface HistorialTarjetasDTO {
+  eventos: EventoTarjetaDTO[];
+  pagina: number; por_pagina: number; total: number; total_paginas: number;
+}
+export const historialTarjetas = (params: {
+  desde?: string; hasta?: string; direccion?: string; buscar?: string; pagina?: number;
+}) => {
+  const q = new URLSearchParams();
+  if (params.desde) q.set("desde", params.desde);
+  if (params.hasta) q.set("hasta", params.hasta);
+  if (params.direccion) q.set("direccion", params.direccion);
+  if (params.buscar) q.set("buscar", params.buscar);
+  if (params.pagina) q.set("pagina", String(params.pagina));
+  const qs = q.toString();
+  return request<HistorialTarjetasDTO>(`/dashboard/historial-tarjetas${qs ? "?" + qs : ""}`);
+};
+
 // ── NOTIFICACIONES ────────────────────────────────────────────────────────────
 export const contarPagosPendientes = () =>
   request<{ pendientes: number }>("/cuotas/pendientes/count");

@@ -266,7 +266,10 @@ def historial_accesos(usuario_actual):
     pagina = max(1, int(request.args.get("pagina", 1)))
     por_pagina = 30
 
-    q = EventoAcceso.query
+    # Solo eventos de VISITAS (los de tarjeta de residente van en su propio
+    # historial). Antes traía todos; ahora que existen accesos por tarjeta,
+    # cada historial filtra por su origen.
+    q = EventoAcceso.query.filter(EventoAcceso.origen == "visita")
     if desde:
         try:
             q = q.filter(EventoAcceso.ocurrido_en >= dt.datetime.fromisoformat(desde))
@@ -327,6 +330,94 @@ def historial_accesos(usuario_actual):
         # Filtro de texto en memoria (placa/visitante/unidad)
         if buscar:
             blob = f"{visitante} {unidad} {placa or ''}".lower()
+            if buscar not in blob:
+                continue
+        filas.append(fila)
+
+    return jsonify({"data": {
+        "eventos": filas,
+        "pagina": pagina,
+        "por_pagina": por_pagina,
+        "total": total,
+        "total_paginas": (total + por_pagina - 1) // por_pagina,
+    }})
+
+
+@dashboard_bp.get("/historial-tarjetas")
+@roles_required("admin", "super_admin", "guardia", "desarrollador")
+def historial_accesos_tarjeta(usuario_actual):
+    """
+    Historial de accesos de RESIDENTES por tarjeta RFID (origen='residente').
+    Estos eventos los genera el agente de acceso (Raspberry Pi) al validar una
+    tarjeta. Filtros: rango de fechas, dirección, búsqueda por residente/casa.
+    """
+    from app.models.cuenta import Tarjeta, Residente
+    from sqlalchemy.orm import joinedload
+
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    direccion = request.args.get("direccion")
+    buscar = (request.args.get("buscar") or "").strip().lower()
+    pagina = max(1, int(request.args.get("pagina", 1)))
+    por_pagina = 30
+
+    q = EventoAcceso.query.filter(EventoAcceso.origen == "residente")
+
+    if desde:
+        try:
+            q = q.filter(EventoAcceso.ocurrido_en >= dt.datetime.fromisoformat(desde))
+        except ValueError:
+            pass
+    if hasta:
+        try:
+            fin = dt.datetime.fromisoformat(hasta) + dt.timedelta(days=1)
+            q = q.filter(EventoAcceso.ocurrido_en < fin)
+        except ValueError:
+            pass
+    if direccion in ("entrada", "salida"):
+        q = q.filter(EventoAcceso.direccion == direccion)
+
+    q = q.order_by(EventoAcceso.ocurrido_en.desc())
+    total = q.count()
+    eventos = q.offset((pagina - 1) * por_pagina).limit(por_pagina).all()
+
+    # Precargar tarjetas, residentes y accesos para no hacer N+1
+    tarjeta_ids = {e.tarjeta_id for e in eventos if e.tarjeta_id}
+    tarjetas = {t.id: t for t in Tarjeta.query.filter(Tarjeta.id.in_(tarjeta_ids)).all()} if tarjeta_ids else {}
+    res_ids = {e.residente_id for e in eventos if e.residente_id}
+    residentes = ({r.id: r for r in Residente.query
+                   .options(joinedload(Residente.usuario))
+                   .filter(Residente.id.in_(res_ids)).all()} if res_ids else {})
+    acc_ids = {e.acceso_id for e in eventos if e.acceso_id}
+    accesos = {a.id: a for a in AccesoFisico.query.filter(AccesoFisico.id.in_(acc_ids)).all()} if acc_ids else {}
+
+    filas = []
+    for e in eventos:
+        tarjeta = tarjetas.get(e.tarjeta_id)
+        residente = residentes.get(e.residente_id)
+        acceso = accesos.get(e.acceso_id)
+        nombre = "—"
+        unidad = "—"
+        if residente and residente.usuario:
+            nombre = f"{residente.usuario.nombre} {residente.usuario.apellido}"
+        if tarjeta:
+            cuenta = Cuenta.query.get(tarjeta.cuenta_id)
+            if cuenta:
+                unidad = cuenta.nombre_completo if hasattr(cuenta, "nombre_completo") else "—"
+                if not unidad or unidad == "—":
+                    unidad = cuenta.unidad.identificador if cuenta.unidad else "—"
+        fila = {
+            "id": str(e.uuid_publico),
+            "direccion": e.direccion,
+            "residente": nombre,
+            "unidad": unidad,
+            "tarjeta": tarjeta.card_uid if tarjeta else "—",
+            "tipo_acceso": tarjeta.tipo_acceso if tarjeta else None,
+            "acceso": acceso.nombre if acceso else "—",
+            "ocurrido_en": e.ocurrido_en.isoformat() if e.ocurrido_en else None,
+        }
+        if buscar:
+            blob = f"{nombre} {unidad} {fila['tarjeta']}".lower()
             if buscar not in blob:
                 continue
         filas.append(fila)
