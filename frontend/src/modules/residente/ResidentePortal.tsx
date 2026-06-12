@@ -61,7 +61,15 @@ async function descargarQR(visita: VisitaDTO) {
 export function ResidentePortal({ seccion = "home" }: { seccion?: string }) {
   const [cuenta, setCuenta] = useState<MiCuentaDTO | null>(null);
 
-  useEffect(() => { miCuenta().then(setCuenta).catch(() => {}); }, []);
+  useEffect(() => {
+    function cargar() { miCuenta().then(setCuenta).catch(() => {}); }
+    cargar();
+    // Si el admin aprueba un pago mientras el portal está abierto, al volver
+    // el foco a la ventana se recarga el estado (el banner de mora se actualiza
+    // sin tener que recargar la página).
+    window.addEventListener("focus", cargar);
+    return () => window.removeEventListener("focus", cargar);
+  }, []);
 
   return (
     <div className="card wide">

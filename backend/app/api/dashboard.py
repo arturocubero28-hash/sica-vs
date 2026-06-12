@@ -64,26 +64,40 @@ def metricas(usuario_actual):
 @roles_required("admin", "super_admin")
 def visitas_tabla(usuario_actual):
     """Tabla de visitas recientes. El estado mostrado refleja el ÚLTIMO evento de acceso."""
+    from sqlalchemy.orm import joinedload
+
     visitas = (Visita.query
+               .options(joinedload(Visita.eventos),
+                        joinedload(Visita.residente))
                .order_by(Visita.created_at.desc())
                .limit(40).all())
 
+    # Precargar en bloque las cuentas y unidades necesarias (evita N+1):
+    # antes se hacía Cuenta.query.get() + Unidad.query.get() por cada visita.
+    cuenta_ids = {v.cuenta_id for v in visitas if v.cuenta_id}
+    cuentas = {c.id: c for c in Cuenta.query.filter(Cuenta.id.in_(cuenta_ids)).all()} if cuenta_ids else {}
+    unidad_ids = {c.unidad_id for c in cuentas.values() if c.unidad_id}
+    unidades = {u.id: u for u in Unidad.query.filter(Unidad.id.in_(unidad_ids)).all()} if unidad_ids else {}
+
+    def _key(e):
+        t = e.ocurrido_en
+        if t is None:
+            return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=dt.timezone.utc)
+        return t
+
     filas = []
     for v in visitas:
-        cuenta = Cuenta.query.get(v.cuenta_id)
-        unidad = Unidad.query.get(cuenta.unidad_id) if cuenta else None
+        cuenta = cuentas.get(v.cuenta_id)
+        unidad = unidades.get(cuenta.unidad_id) if cuenta else None
         residente_nombre = "—"
         if v.residente and v.residente.usuario:
             residente_nombre = f"{v.residente.usuario.nombre} {v.residente.usuario.apellido}"
 
-        # Determinar estado real basado en el último evento de acceso
-        ultimo_evento = (
-            EventoAcceso.query
-            .filter_by(visita_id=v.id)
-            .order_by(EventoAcceso.ocurrido_en.desc())
-            .first()
-        )
-        if ultimo_evento:
+        # Estado real basado en el último evento (ya cargado con joinedload)
+        if v.eventos:
+            ultimo_evento = max(v.eventos, key=_key)
             estado_real = "adentro" if ultimo_evento.direccion == "entrada" else "salio"
         else:
             estado_real = v.estado  # activa, expirada, revocada

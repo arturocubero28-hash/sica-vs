@@ -283,7 +283,9 @@ class Pago(db.Model):
     created_at           = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at           = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
-    cuenta   = db.relationship("Cuenta", foreign_keys=[cuenta_id], backref="pagos")
+    # backref renombrado a 'pagos_de_cuenta' para no confundir con Cuota.pagos
+    # y SesionCaja.pagos (tres relaciones distintas que antes se llamaban igual).
+    cuenta   = db.relationship("Cuenta", foreign_keys=[cuenta_id], backref="pagos_de_cuenta")
     uploader = db.relationship("Usuario", foreign_keys=[subido_por])
     revisor  = db.relationship("Usuario", foreign_keys=[revisado_por])
 
