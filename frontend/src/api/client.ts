@@ -32,7 +32,7 @@ interface ApiError {
 const TOKEN_KEY = "sicavs_token";
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t: string) => localStorage.setItem(TOKEN_KEY, t);
-export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 // ---- Función base de fetch con token y manejo de errores ----
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -435,8 +435,6 @@ export const cambiarPassword = (passwordActual: string, passwordNueva: string) =
     method: "POST",
     body: JSON.stringify({ password_actual: passwordActual, password_nueva: passwordNueva }),
   });
-export const actualizarPerfil = (body: { nombre?: string; apellido?: string; telefono?: string }) =>
-  request<{ usuario: Usuario }>("/auth/perfil", { method: "PUT", body: JSON.stringify(body) });
 
 // ── GUARDIAS ──────────────────────────────────────────────────────────────────
 // Solo queda crearGuardia (usado por UsuariosAdmin). Listar/editar/reset de
@@ -594,6 +592,8 @@ export const devLogs = (params?: { email?: string; endpoint?: string; errores?: 
   if (params?.pagina) q.set("pagina", String(params.pagina));
   return request<any>(`/dev/logs?${q.toString()}`);
 };
+// Intencional: el rol desarrollador se crea una sola vez directo en la BD,
+// no desde la UI. Se mantiene por si a futuro se habilita un flujo de alta.
 export const crearDesarrollador = (body: { nombre: string; apellido: string; email: string }) =>
   request<UsuarioAdminDTO>("/usuarios/desarrolladores", { method: "POST", body: JSON.stringify(body) });
 
@@ -702,6 +702,8 @@ export interface ConfigReciboDTO {
   telefono_emisor?: string; ultimo_correlativo?: number; prefijo?: string;
   cai?: string; fase_sar_activa?: boolean;
 }
+// Intencional: la config del emisor de recibos se edita por API hasta que
+// se construya la pantalla de configuración (recibos SAR Fase 2).
 export const verConfigRecibo = () => request<ConfigReciboDTO>("/recibos/config");
 export const editarConfigRecibo = (body: Partial<ConfigReciboDTO>) =>
   request<ConfigReciboDTO>("/recibos/config", { method: "PUT", body: JSON.stringify(body) });

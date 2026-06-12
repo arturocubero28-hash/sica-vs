@@ -20,7 +20,14 @@ dashboard_bp = Blueprint("dashboard", __name__)
 @roles_required("admin", "super_admin")
 def metricas(usuario_actual):
     """Tarjetas de métricas del Centro de Monitoreo, calculadas en vivo."""
-    hoy_inicio = dt.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    # "Hoy" según la hora local de Honduras (UTC-6), no UTC. Antes el día
+    # arrancaba a medianoche UTC = 6pm del día anterior en Honduras, así que
+    # las métricas "de hoy" estaban corridas 6 horas.
+    HN = dt.timezone(dt.timedelta(hours=-6))
+    ahora_hn = dt.datetime.now(HN)
+    inicio_hn = ahora_hn.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Convertir a UTC naive para comparar con created_at (que se guarda en UTC)
+    hoy_inicio = inicio_hn.astimezone(dt.timezone.utc).replace(tzinfo=None)
 
     # QR generados hoy
     qr_hoy = Visita.query.filter(Visita.created_at >= hoy_inicio).count()
@@ -231,7 +238,7 @@ def visitas_activas(usuario_actual):
 # SERVIR FOTOS TOMADAS POR EL GUARDIA (cédula, placa)
 # =====================================================================
 @dashboard_bp.get("/fotos/<nombre_archivo>")
-@token_required
+@roles_required("admin", "super_admin", "guardia", "cajero", "desarrollador")
 def ver_foto(usuario_actual, nombre_archivo):
     from app.utils.archivos import servir_archivo_seguro
     carpeta = current_app.config.get("UPLOAD_FOLDER", "/app/uploads")

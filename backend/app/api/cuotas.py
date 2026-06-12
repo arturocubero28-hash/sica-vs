@@ -124,7 +124,7 @@ def subir_comprobante(usuario_actual, uuid_cuota):
 
 # ── ADMIN: servir imagen del comprobante ──────────────────────────────────────
 @cuotas_bp.get("/comprobantes/<nombre_archivo>")
-@token_required
+@roles_required("admin", "super_admin", "cajero")
 def ver_comprobante(usuario_actual, nombre_archivo):
     return servir_archivo_seguro(_carpeta_comprobantes(), nombre_archivo)
 
