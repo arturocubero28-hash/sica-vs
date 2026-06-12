@@ -48,14 +48,20 @@ def reporte_financiero(usuario_actual):
                  else f"{desde.strftime('%d/%m/%Y')} – {hasta.strftime('%d/%m/%Y')}")
 
         # Pagos aprobados cuya fecha efectiva (revisado_en, o created_at si null)
-        # caiga dentro del rango.
-        pagos = Pago.query.filter(Pago.estado == "aprobado").all()
+        # caiga dentro del rango. El filtro de fecha se hace en SQL con COALESCE
+        # para no cargar todo el histórico de pagos en memoria.
+        from sqlalchemy import func
+        fecha_sql = func.coalesce(Pago.revisado_en, Pago.created_at)
+        pagos_rango = (Pago.query
+                       .filter(Pago.estado == "aprobado",
+                               fecha_sql >= ini, fecha_sql <= fin)
+                       .all())
+
         def fecha_efectiva(p):
             f = p.revisado_en or p.created_at
             if f and f.tzinfo is None:
                 f = f.replace(tzinfo=dt.timezone.utc)
             return f
-        pagos_rango = [p for p in pagos if (fe := fecha_efectiva(p)) and ini <= fe <= fin]
 
         total_recaudado = sum(float(p.monto) for p in pagos_rango)
         por_metodo = {"efectivo": 0.0, "tarjeta_pos": 0.0, "transferencia": 0.0, "linea": 0.0}

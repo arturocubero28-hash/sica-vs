@@ -251,6 +251,9 @@ class Cuota(db.Model):
         if ultimo and ultimo.estado == "rechazado":
             d["pago_rechazado"] = True
             d["nota_rechazo"] = ultimo.nota_admin or ""
+        # Si hay un pago esperando aprobación del admin, avisar al residente
+        # para que sepa que su comprobante llegó y no lo suba de nuevo.
+        d["en_revision"] = bool(ultimo and ultimo.estado == "en_revision")
         if con_pagos:
             d["pagos"] = [p.to_dict() for p in self.pagos.all()]
         return d

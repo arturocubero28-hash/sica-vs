@@ -90,14 +90,15 @@ function CuotaCard({ cuota, onPagar }: { cuota: CuotaDTO; onPagar?: () => void }
           <span> Podés subir un nuevo comprobante.</span>
         </div>
       )}
-      {(cuota.estado === "pendiente" || cuota.estado === "vencida") && onPagar && (
+      {(cuota.estado === "pendiente" || cuota.estado === "vencida") && !cuota.en_revision && onPagar && (
         <button className="cuota-btn-pagar" onClick={onPagar}>
           {cuota.pago_rechazado ? "Subir nuevo comprobante" : "Subir comprobante de pago"}
         </button>
       )}
-      {cuota.estado === "en_revision" && (
+      {(cuota.estado === "en_revision" || cuota.en_revision) && (
         <div className="cuota-revision">
-          Tu comprobante está siendo revisado por la administración. Te notificaremos pronto.
+          ⏳ <b>Comprobante recibido.</b> La administración lo está revisando.
+          No necesitás subirlo de nuevo — te avisaremos cuando se apruebe.
         </div>
       )}
       {cuota.estado === "pagada" && (
