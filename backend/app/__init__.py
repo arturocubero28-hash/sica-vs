@@ -156,6 +156,9 @@ def create_app(config_class=Config):
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contacto_emergencia_telefono VARCHAR(30)",
             # Foto extra del guardia: número asignado (Día 6)
             "ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS foto_numero_asignado VARCHAR(255)",
+            # Tipo de acceso de cada tarjeta RFID (Día 13): vehicular abre
+            # torniquetes y barreras; peatonal solo torniquetes.
+            "ALTER TABLE tarjetas_proximidad ADD COLUMN IF NOT EXISTS tipo_acceso VARCHAR(20) NOT NULL DEFAULT 'vehicular'",
             # Código numérico para delivery (Día 6)
             "ALTER TABLE codigos_qr ADD COLUMN IF NOT EXISTS codigo_numerico VARCHAR(8)",
             # Arreglos de pago (Día 7): vincular cuota a su arreglo

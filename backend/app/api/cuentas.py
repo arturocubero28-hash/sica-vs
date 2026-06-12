@@ -303,10 +303,15 @@ def asignar_tarjeta(usuario_actual, cuenta_uuid):
         if not residente:
             return _err("residente_invalido", "El residente no pertenece a esta cuenta", 400)
 
+    tipo_acceso = (data.get("tipo_acceso") or "vehicular").strip()
+    if tipo_acceso not in ("vehicular", "peatonal"):
+        tipo_acceso = "vehicular"
+
     tarjeta = Tarjeta(
         card_uid=card_uid, cuenta_id=cuenta.id,
         residente_id=residente.id if residente else None,
         etiqueta=data.get("etiqueta"),
+        tipo_acceso=tipo_acceso,
     )
     db.session.add(tarjeta)
     db.session.commit()

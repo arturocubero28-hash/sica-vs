@@ -195,6 +195,7 @@ class Tarjeta(db.Model):
     cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
     residente_id = db.Column(db.BigInteger, db.ForeignKey("residentes.id"))
     etiqueta = db.Column(db.String(80))                    # "Tarjeta principal", "Auto 2"
+    tipo_acceso = db.Column(db.String(20), nullable=False, default="vehicular")  # vehicular | peatonal
     estado = db.Column(db.String(20), nullable=False, default="activa")
     fecha_asignacion = db.Column(db.Date, nullable=False, default=dt.date.today)
     fecha_baja = db.Column(db.Date)
@@ -208,6 +209,7 @@ class Tarjeta(db.Model):
             "id": str(self.uuid_publico),
             "card_uid": self.card_uid,
             "etiqueta": self.etiqueta,
+            "tipo_acceso": self.tipo_acceso,
             "estado": self.estado,
             "asignada_a": (
                 f"{self.residente.usuario.nombre} {self.residente.usuario.apellido}"

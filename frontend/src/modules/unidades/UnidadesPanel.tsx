@@ -452,6 +452,11 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   { cuenta: Cuenta; onCerrar: () => void; onCambio: () => void }) {
   const [cardUid, setCardUid] = useState("");
   const [etiqueta, setEtiqueta] = useState("");
+  // Tipo de acceso de la tarjeta. Si la cuenta es un apartamento, se sugiere
+  // peatonal (común en estudiantes); si es casa, vehicular.
+  const [tipoAcceso, setTipoAcceso] = useState<"vehicular" | "peatonal">(
+    cuenta.es_apartamento ? "peatonal" : "vehicular");
+  const [portadorId, setPortadorId] = useState("");
   const [mNombre, setMNombre] = useState("");
   const [mEmail, setMEmail] = useState("");
   const [mApellido, setMApellido] = useState("");
@@ -466,8 +471,15 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   async function addTarjeta() {
     if (!cardUid.trim()) return;
     try {
-      await asignarTarjeta(cuenta.id, { card_uid: cardUid.trim(), etiqueta });
-      setCardUid(""); setEtiqueta(""); setMsg(""); onCambio();
+      await asignarTarjeta(cuenta.id, {
+        card_uid: cardUid.trim(),
+        etiqueta,
+        tipo_acceso: tipoAcceso,
+        residente_id: portadorId || undefined,
+      });
+      setCardUid(""); setEtiqueta(""); setPortadorId("");
+      setTipoAcceso(cuenta.es_apartamento ? "peatonal" : "vehicular");
+      setMsg(""); onCambio();
     } catch (e) { setMsg((e as Error).message); }
   }
 
@@ -565,18 +577,52 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
                 <td><code>{t.card_uid}</code></td>
                 <td>{t.etiqueta}</td>
                 <td>{t.asignada_a}</td>
+                <td>
+                  <span className={`pill ${t.tipo_acceso === "peatonal" ? "" : "green"}`}>
+                    {t.tipo_acceso === "peatonal" ? "🚶 Peatonal" : "🚗 Vehicular"}
+                  </span>
+                </td>
                 <td><span className="pill green">{t.estado}</span></td>
               </tr>
             ))}
             {(cuenta.tarjetas || []).length === 0 && (
-              <tr><td colSpan={4} className="muted">Sin tarjetas asignadas</td></tr>
+              <tr><td colSpan={5} className="muted">Sin tarjetas asignadas</td></tr>
             )}
           </tbody>
         </table></div>
-        <div className="inline-create tarjeta-create">
+        <div className="tarjeta-create-box">
           <LectorTarjeta valor={cardUid} onLeida={setCardUid} />
-          <input placeholder="Etiqueta (ej. Auto 1)" value={etiqueta}
-            onChange={(e) => setEtiqueta(e.target.value)} />
+
+          <div className="row" style={{ marginTop: 8 }}>
+            <select value={portadorId} onChange={(e) => setPortadorId(e.target.value)}>
+              <option value="">Portador (opcional)…</option>
+              {(cuenta.residentes || []).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.nombre}{r.rol_cuenta === "titular" ? " (titular)" : ""}
+                </option>
+              ))}
+            </select>
+            <input placeholder="Etiqueta (ej. Auto 1)" value={etiqueta}
+              onChange={(e) => setEtiqueta(e.target.value)} />
+          </div>
+
+          <div className="acceso-toggle">
+            <span className="muted small">Tipo de acceso:</span>
+            <button type="button" className={tipoAcceso === "vehicular" ? "on" : ""}
+              onClick={() => setTipoAcceso("vehicular")}>
+              🚗 Vehicular
+            </button>
+            <button type="button" className={tipoAcceso === "peatonal" ? "on" : ""}
+              onClick={() => setTipoAcceso("peatonal")}>
+              🚶 Peatonal
+            </button>
+          </div>
+          <p className="muted small" style={{ margin: "4px 0 8px" }}>
+            {tipoAcceso === "peatonal"
+              ? "Solo abre torniquetes peatonales."
+              : "Abre torniquetes y barreras vehiculares."}
+          </p>
+
           <button className="mini" onClick={addTarjeta} disabled={!cardUid}>+ Asignar tarjeta</button>
         </div>
 

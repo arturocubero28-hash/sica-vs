@@ -111,6 +111,7 @@ export interface ResidenteDTO {
 }
 export interface TarjetaDTO {
   id: string; card_uid: string; etiqueta?: string; estado: string; asignada_a: string;
+  tipo_acceso?: "vehicular" | "peatonal";
 }
 export interface Cuenta {
   id: string; apartamento?: string; identificador?: string; nombre_completo?: string;
@@ -173,7 +174,7 @@ export const agregarMiembro = (cuentaId: string, body: object) =>
   request<{ residente: ResidenteDTO }>(`/unidades/cuentas/${cuentaId}/residentes`,
     { method: "POST", body: JSON.stringify(body) });
 
-export const asignarTarjeta = (cuentaId: string, body: { card_uid: string; etiqueta?: string; residente_id?: string }) =>
+export const asignarTarjeta = (cuentaId: string, body: { card_uid: string; etiqueta?: string; residente_id?: string; tipo_acceso?: "vehicular" | "peatonal" }) =>
   request<TarjetaDTO>(`/unidades/cuentas/${cuentaId}/tarjetas`,
     { method: "POST", body: JSON.stringify(body) });
 
