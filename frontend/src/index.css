@@ -230,7 +230,8 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .mini-metric.alerta .mini-valor { color: #c81e1e; }
 .mini-label { font-size: 11px; color: var(--gris); margin-top: 4px; }
 
-.dash-card { background: #fff; border: 1px solid #e3e9f2; border-radius: 14px; padding: 18px; }
+.dash-card { background: #fff; border: 1px solid #e8edf4; border-radius: 14px; padding: 20px;
+  box-shadow: 0 2px 14px rgba(2,46,69,.07); }
 .dash-card h3 { color: #022E45; margin: 0 0 12px; }
 
 /* ============================================================
@@ -325,6 +326,7 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .main-area {
   flex: 1; margin-left: var(--sidebar-w);
   display: flex; flex-direction: column; min-width: 0;
+  background: var(--bg);
 }
 .topbar {
   background: #fff; padding: 14px 24px;
@@ -341,6 +343,7 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .topbar .user-avatar.small { display: none; }
 
 .content { padding: 26px; display: flex; justify-content: center; }
+.content > * { width: 100%; max-width: 1400px; }
 .content .card.wide { box-shadow: 0 4px 24px rgba(2,46,69,.07); }
 
 /* ---- Bottom nav (oculta en desktop) ---- */
@@ -704,8 +707,8 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .dash-fecha-completa { font-size: 13px; color: var(--gris); text-transform: capitalize; }
 
 .padron-card {
-  background: #fff; border: 1px solid #e9eef5; border-radius: 14px;
-  padding: 16px 18px;
+  background: #fff; border: 1px solid #e8edf4; border-radius: 14px;
+  padding: 16px 18px; box-shadow: 0 2px 14px rgba(2,46,69,.07);
 }
 .padron-titulo { text-transform: uppercase; letter-spacing: .5px; font-weight: 700; margin-bottom: 12px; }
 .padron-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -1544,8 +1547,9 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 /* ===== Día 15: tablas y listas unificadas ===== */
 /* Contenedor de lista admin: mismo marco que .dash-card */
 .lista-card {
-  background: #fff; border: 1px solid #e3e9f2; border-radius: 14px;
-  padding: 18px; margin-top: 14px;
+  background: #fff; border: 1px solid #e8edf4; border-radius: 14px;
+  padding: 20px; margin-top: 14px;
+  box-shadow: 0 2px 14px rgba(2,46,69,.07);
 }
 .lista-card .casas-filtros { margin-bottom: 14px; }
 
@@ -1590,8 +1594,9 @@ table.data tbody tr:hover td { background: #f7faff; }
   gap: 12px; margin-bottom: 18px;
 }
 .rep-kpi {
-  background: #fff; border: 1px solid #e3e9f2; border-radius: 12px;
+  background: #fff; border: 1px solid #e8edf4; border-radius: 12px;
   padding: 14px 16px; display: flex; flex-direction: column; gap: 4px;
+  box-shadow: 0 2px 10px rgba(2,46,69,.06);
 }
 .rep-kpi span { font-size: 12px; color: var(--gris); }
 .rep-kpi b { font-size: 20px; color: var(--azul); }
