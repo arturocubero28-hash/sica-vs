@@ -8,7 +8,7 @@ from collections import defaultdict
 
 from flask import Blueprint, jsonify, request
 
-from app.models.cuenta import Cuota, Pago
+from app.models.cuenta import Cuota, Pago, Cuenta
 from app.auth.security import roles_required
 
 reportes_bp = Blueprint("reportes", __name__)
@@ -264,10 +264,36 @@ def mora_por_casa(usuario_actual):
     # Ordenar: las más atrasadas primero
     casas.sort(key=lambda c: (c["cantidad_meses"], c["max_dias_atraso"]), reverse=True)
 
+    # Aging de cartera: clasificar cada cuota vencida por antigüedad de la deuda.
+    # Es la lectura que un contador/tesorero hace para medir el riesgo de cobro.
+    # El tramo 90+ es la "cartera de difícil cobro".
+    aging = {"d_1_30": 0.0, "d_31_60": 0.0, "d_61_90": 0.0, "d_90_mas": 0.0, "sin_vencer": 0.0}
+    for c in cuotas:
+        monto = float(c.monto)
+        dias = (hoy - c.fecha_vencimiento).days
+        if dias <= 0:
+            aging["sin_vencer"] += monto
+        elif dias <= 30:
+            aging["d_1_30"] += monto
+        elif dias <= 60:
+            aging["d_31_60"] += monto
+        elif dias <= 90:
+            aging["d_61_90"] += monto
+        else:
+            aging["d_90_mas"] += monto
+    aging = {k: round(v, 2) for k, v in aging.items()}
+
+    # % de morosidad de la comunidad (casas en mora / total de cuentas activas)
+    total_cuentas = Cuenta.query.filter_by(activa=True).count()
+    pct_morosidad = round((len(casas) / total_cuentas * 100), 1) if total_cuentas else 0.0
+
     return jsonify({"data": {
         "casas": casas,
         "total_casas_mora": len(casas),
         "total_general_adeudado": round(total_general, 2),
+        "aging": aging,
+        "total_cuentas_activas": total_cuentas,
+        "pct_morosidad": pct_morosidad,
         "generado": hoy.isoformat(),
     }})
 

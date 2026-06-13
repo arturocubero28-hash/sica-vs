@@ -417,6 +417,8 @@ export interface CasaMoraDTO {
 }
 export interface MoraPorCasaDTO {
   casas: CasaMoraDTO[]; total_casas_mora: number; total_general_adeudado: number; generado: string;
+  aging?: { d_1_30: number; d_31_60: number; d_61_90: number; d_90_mas: number; sin_vencer: number };
+  total_cuentas_activas?: number; pct_morosidad?: number;
 }
 export const reporteMoraPorCasa = () =>
   request<MoraPorCasaDTO>("/reportes/mora-por-casa");

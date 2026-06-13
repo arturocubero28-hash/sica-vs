@@ -380,13 +380,28 @@ function ReporteMoraPorCasa() {
     doc.text("Residencial Villas del Sol", 14, 27);
     doc.text(`Generado: ${new Date(data.generado).toLocaleDateString("es-HN")}`, 14, 33);
     doc.text(`Total adeudado: ${L(data.total_general_adeudado)}  ·  ${data.total_casas_mora} casas en mora`, 14, 39);
+    let startY = 45;
+    if (data.aging) {
+      autoTable(doc, {
+        startY: 45,
+        head: [["Antigüedad de la deuda", "Monto"]],
+        body: [
+          ["1 – 30 días", L(data.aging.d_1_30)],
+          ["31 – 60 días", L(data.aging.d_31_60)],
+          ["61 – 90 días", L(data.aging.d_61_90)],
+          ["90+ días (difícil cobro)", L(data.aging.d_90_mas)],
+        ],
+        theme: "grid", headStyles: { fillColor: [2, 46, 69] }, styles: { fontSize: 8 },
+      });
+      startY = (doc as any).lastAutoTable.finalY + 6;
+    }
     const filas: string[][] = [];
     data.casas.forEach(c => {
       const meses = c.meses.map(m => m.mes_label).join(", ");
       filas.push([c.unidad, c.titular, c.telefono || "—", String(c.cantidad_meses), meses, L(c.total_adeudado)]);
     });
     autoTable(doc, {
-      startY: 45,
+      startY,
       head: [["Casa", "Titular", "Teléfono", "Meses", "Períodos que debe", "Total"]],
       body: filas,
       styles: { fontSize: 7 },
@@ -418,6 +433,23 @@ function ReporteMoraPorCasa() {
           <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
         </div>
       </div>
+
+      {data.aging && (
+        <>
+          <div className="rep-resumen-grid">
+            <div className="rep-kpi"><span>Casas en mora</span><b>{data.total_casas_mora}</b></div>
+            <div className="rep-kpi"><span>% morosidad</span><b>{data.pct_morosidad ?? 0}%</b></div>
+            <div className="rep-kpi"><span>Cartera vencida</span><b>{L(data.total_general_adeudado)}</b></div>
+          </div>
+          <h3 className="rep-subtitulo">Antigüedad de la deuda (aging)</h3>
+          <div className="rep-resumen-grid" style={{ marginTop: 8 }}>
+            <div className="rep-kpi"><span>1 – 30 días</span><b>{L(data.aging.d_1_30)}</b></div>
+            <div className="rep-kpi"><span>31 – 60 días</span><b>{L(data.aging.d_31_60)}</b></div>
+            <div className="rep-kpi"><span>61 – 90 días</span><b>{L(data.aging.d_61_90)}</b></div>
+            <div className="rep-kpi rep-kpi-alerta"><span>90+ días (difícil cobro)</span><b>{L(data.aging.d_90_mas)}</b></div>
+          </div>
+        </>
+      )}
 
       {casasFiltradas.length === 0 ? (
         <div className="dash-card">
