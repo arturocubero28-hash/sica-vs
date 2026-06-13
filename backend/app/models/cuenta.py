@@ -531,3 +531,67 @@ class CodigoEnrolamiento(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "usado_en": self.usado_en.isoformat() if self.usado_en else None,
         }
+
+
+class TipoTarjeta(db.Model):
+    """
+    Catálogo de tipos de tarjeta RFID que la administración vende.
+    Define el precio y lleva el stock disponible en bodega.
+    El tipo_acceso conecta con la tarjeta física (vehicular = largo alcance,
+    peatonal = corto alcance).
+    """
+    __tablename__ = "tipos_tarjeta"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid_col()
+    nombre = db.Column(db.String(80), nullable=False)          # "Tarjeta vehicular UHF"
+    tipo_acceso = db.Column(db.String(20), nullable=False, default="vehicular")  # vehicular | peatonal
+    precio = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    stock = db.Column(db.Integer, nullable=False, default=0)   # unidades en bodega
+    activo = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+
+    def to_dict(self):
+        return {
+            "id": str(self.uuid_publico),
+            "nombre": self.nombre,
+            "tipo_acceso": self.tipo_acceso,
+            "precio": float(self.precio),
+            "stock": self.stock,
+            "activo": self.activo,
+        }
+
+
+class MovimientoStock(db.Model):
+    """
+    Auditoría de cambios de stock de tarjetas: entradas (compra de lotes),
+    salidas (ventas en caja) y ajustes manuales. Cada movimiento deja rastro
+    de quién, cuánto y por qué.
+    """
+    __tablename__ = "movimientos_stock"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid_col()
+    tipo_tarjeta_id = db.Column(db.BigInteger, db.ForeignKey("tipos_tarjeta.id"), nullable=False)
+    tipo_movimiento = db.Column(db.String(20), nullable=False)  # entrada | venta | ajuste
+    cantidad = db.Column(db.Integer, nullable=False)            # +entra, -sale
+    stock_resultante = db.Column(db.Integer, nullable=False)
+    nota = db.Column(db.String(255))
+    registrado_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+
+    tipo_tarjeta = db.relationship("TipoTarjeta", foreign_keys=[tipo_tarjeta_id])
+    usuario = db.relationship("Usuario", foreign_keys=[registrado_por])
+
+    def to_dict(self):
+        return {
+            "id": str(self.uuid_publico),
+            "tipo_tarjeta": self.tipo_tarjeta.nombre if self.tipo_tarjeta else "—",
+            "tipo_movimiento": self.tipo_movimiento,
+            "cantidad": self.cantidad,
+            "stock_resultante": self.stock_resultante,
+            "nota": self.nota,
+            "registrado_por": (f"{self.usuario.nombre} {self.usuario.apellido}"
+                               if self.usuario else "—"),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

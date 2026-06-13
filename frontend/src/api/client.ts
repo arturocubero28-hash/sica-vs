@@ -798,3 +798,22 @@ export const cerrarSesion = (sesionId: number) =>
   request<{ message: string }>(`/auth/sesiones/${sesionId}/cerrar`, { method: "POST" });
 export const cerrarOtrasSesiones = () =>
   request<{ message: string; cerradas: number }>("/auth/sesiones/cerrar-otras", { method: "POST" });
+
+// ── Inventario de tarjetas ────────────────────────────────────────────────
+export interface TipoTarjetaDTO {
+  id: string; nombre: string; tipo_acceso: "vehicular" | "peatonal";
+  precio: number; stock: number; activo: boolean;
+}
+export interface MovimientoStockDTO {
+  id: string; tipo_tarjeta: string; tipo_movimiento: string;
+  cantidad: number; stock_resultante: number; nota?: string;
+  registrado_por: string; created_at: string;
+}
+export const listarTiposTarjeta = () => request<TipoTarjetaDTO[]>("/inventario/tipos");
+export const crearTipoTarjeta = (body: { nombre: string; tipo_acceso: string; precio: number; stock: number }) =>
+  request<TipoTarjetaDTO>("/inventario/tipos", { method: "POST", body: JSON.stringify(body) });
+export const editarTipoTarjeta = (uuid: string, body: Partial<{ nombre: string; precio: number; tipo_acceso: string; activo: boolean }>) =>
+  request<TipoTarjetaDTO>(`/inventario/tipos/${uuid}`, { method: "PUT", body: JSON.stringify(body) });
+export const agregarStock = (uuid: string, cantidad: number, nota?: string) =>
+  request<TipoTarjetaDTO>(`/inventario/tipos/${uuid}/stock`, { method: "POST", body: JSON.stringify({ cantidad, nota }) });
+export const listarMovimientosStock = () => request<MovimientoStockDTO[]>("/inventario/movimientos");

@@ -97,6 +97,9 @@ def create_app(config_class=Config):
     from app.api.acceso import acceso_bp
     app.register_blueprint(acceso_bp, url_prefix="/api/v1/acceso")
 
+    from app.api.inventario import inventario_bp
+    app.register_blueprint(inventario_bp, url_prefix="/api/v1/inventario")
+
     from app.api.usuarios import usuarios_bp
     app.register_blueprint(usuarios_bp, url_prefix="/api/v1/usuarios")
 
