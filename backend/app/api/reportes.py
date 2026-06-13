@@ -270,3 +270,199 @@ def mora_por_casa(usuario_actual):
         "total_general_adeudado": round(total_general, 2),
         "generado": hoy.isoformat(),
     }})
+
+
+@reportes_bp.get("/caja")
+@roles_required("admin", "super_admin")
+def reporte_caja(usuario_actual):
+    """
+    Reporte de sesiones de caja en un período (control de arqueo).
+    Filtros: ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD  ?cajero_id=<uuid>
+    Responde: resumen consolidado + lista de sesiones con sus descuadres.
+    Pensado para el tesorero: ¿cuánto cobró cada cajero, cuadró la caja?
+    """
+    from app.models.caja import SesionCaja
+    from app.models.usuario import Usuario
+
+    desde_str = request.args.get("desde")
+    hasta_str = request.args.get("hasta")
+    cajero_uuid = request.args.get("cajero_id")
+
+    q = SesionCaja.query.filter(SesionCaja.estado == "cerrada")
+
+    if desde_str and hasta_str:
+        try:
+            desde = dt.date.fromisoformat(desde_str)
+            hasta = dt.date.fromisoformat(hasta_str)
+        except ValueError:
+            return jsonify({"error": {"code": "fecha_invalida",
+                                      "message": "Formato de fecha inválido (use YYYY-MM-DD)"}}), 400
+        if desde > hasta:
+            desde, hasta = hasta, desde
+        ini = dt.datetime.combine(desde, dt.time.min).replace(tzinfo=dt.timezone.utc)
+        fin = dt.datetime.combine(hasta, dt.time.max).replace(tzinfo=dt.timezone.utc)
+        q = q.filter(SesionCaja.cerrada_en >= ini, SesionCaja.cerrada_en <= fin)
+        label = (desde.strftime("%d/%m/%Y") if desde == hasta
+                 else f"{desde.strftime('%d/%m/%Y')} – {hasta.strftime('%d/%m/%Y')}")
+    else:
+        label = "Todas las sesiones cerradas"
+
+    if cajero_uuid:
+        cajero = Usuario.query.filter_by(uuid_publico=cajero_uuid).first()
+        if cajero:
+            q = q.filter(SesionCaja.cajero_id == cajero.id)
+
+    sesiones = q.order_by(SesionCaja.cerrada_en.desc()).all()
+
+    # Consolidado general y por cajero
+    total_efectivo = total_pos = total_otros = 0.0
+    total_dif_efectivo = total_dif_pos = 0.0
+    sesiones_descuadradas = 0
+    por_cajero = {}
+    filas = []
+
+    for s in sesiones:
+        d = s.to_dict()
+        total_efectivo += d["total_efectivo"]
+        total_pos += d["total_pos"]
+        total_otros += d.get("total_otros", 0.0)
+        dif_ef = d.get("diferencia_efectivo", 0.0)
+        dif_pos = d.get("diferencia_pos", 0.0)
+        total_dif_efectivo += dif_ef
+        total_dif_pos += dif_pos
+        if abs(dif_ef) > 0.009 or abs(dif_pos) > 0.009:
+            sesiones_descuadradas += 1
+
+        nombre = d["cajero"]
+        pc = por_cajero.setdefault(nombre, {
+            "cajero": nombre, "sesiones": 0, "efectivo": 0.0, "pos": 0.0,
+            "diferencia": 0.0, "cobros": 0,
+        })
+        pc["sesiones"] += 1
+        pc["efectivo"] += d["total_efectivo"]
+        pc["pos"] += d["total_pos"]
+        pc["diferencia"] += dif_ef + dif_pos
+        pc["cobros"] += d["cantidad_pagos"]
+
+        filas.append({
+            "id": d["id"],
+            "cajero": nombre,
+            "abierta_en": d["abierta_en"],
+            "cerrada_en": d["cerrada_en"],
+            "monto_inicial": d["monto_inicial"],
+            "total_efectivo": d["total_efectivo"],
+            "total_pos": d["total_pos"],
+            "cantidad_pagos": d["cantidad_pagos"],
+            "diferencia_efectivo": dif_ef,
+            "diferencia_pos": dif_pos,
+            "cuadrada": abs(dif_ef) < 0.009 and abs(dif_pos) < 0.009,
+        })
+
+    return jsonify({"data": {
+        "periodo_label": label,
+        "total_sesiones": len(sesiones),
+        "total_efectivo": round(total_efectivo, 2),
+        "total_pos": round(total_pos, 2),
+        "total_otros": round(total_otros, 2),
+        "total_recaudado": round(total_efectivo + total_pos + total_otros, 2),
+        "total_diferencia": round(total_dif_efectivo + total_dif_pos, 2),
+        "sesiones_descuadradas": sesiones_descuadradas,
+        "por_cajero": list(por_cajero.values()),
+        "sesiones": filas,
+        "generado": dt.date.today().isoformat(),
+    }})
+
+
+@reportes_bp.get("/accesos")
+@roles_required("admin", "super_admin")
+def reporte_accesos(usuario_actual):
+    """
+    Reporte de accesos y seguridad en un período.
+    Filtros: ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD  ?tipo=unica|recurrente|repartidor
+    Responde: totales de visitas, desglose por tipo, horas pico, casas con más
+    visitas. Pensado para el administrador: control de seguridad de la comunidad.
+    """
+    from app.models.visita import Visita, EventoAcceso
+    from app.models.cuenta import Cuenta, Unidad
+    from sqlalchemy import func
+
+    desde_str = request.args.get("desde")
+    hasta_str = request.args.get("hasta")
+    tipo_filtro = request.args.get("tipo")
+
+    q = Visita.query
+    if desde_str and hasta_str:
+        try:
+            desde = dt.date.fromisoformat(desde_str)
+            hasta = dt.date.fromisoformat(hasta_str)
+        except ValueError:
+            return jsonify({"error": {"code": "fecha_invalida",
+                                      "message": "Formato de fecha inválido (use YYYY-MM-DD)"}}), 400
+        if desde > hasta:
+            desde, hasta = hasta, desde
+        ini = dt.datetime.combine(desde, dt.time.min).replace(tzinfo=dt.timezone.utc)
+        fin = dt.datetime.combine(hasta, dt.time.max).replace(tzinfo=dt.timezone.utc)
+        q = q.filter(Visita.created_at >= ini, Visita.created_at <= fin)
+        label = (desde.strftime("%d/%m/%Y") if desde == hasta
+                 else f"{desde.strftime('%d/%m/%Y')} – {hasta.strftime('%d/%m/%Y')}")
+    else:
+        label = "Histórico completo"
+
+    if tipo_filtro in ("unica", "recurrente", "repartidor"):
+        q = q.filter(Visita.tipo == tipo_filtro)
+
+    visitas = q.all()
+    visita_ids = [v.id for v in visitas]
+
+    # Desglose por tipo
+    por_tipo = {"unica": 0, "recurrente": 0, "repartidor": 0}
+    for v in visitas:
+        if v.tipo in por_tipo:
+            por_tipo[v.tipo] += 1
+
+    # Eventos de entrada de esas visitas (para horas pico y conteo real de accesos)
+    eventos_entrada = []
+    if visita_ids:
+        eventos_entrada = (EventoAcceso.query
+                           .filter(EventoAcceso.visita_id.in_(visita_ids),
+                                   EventoAcceso.direccion == "entrada")
+                           .all())
+
+    # Horas pico (distribución por hora del día)
+    por_hora = {h: 0 for h in range(24)}
+    for e in eventos_entrada:
+        if e.ocurrido_en:
+            por_hora[e.ocurrido_en.hour] += 1
+    horas_pico = sorted(
+        [{"hora": f"{h:02d}:00", "cantidad": c} for h, c in por_hora.items() if c > 0],
+        key=lambda x: x["cantidad"], reverse=True)[:5]
+
+    # Casas que más visitas generan
+    cuenta_ids = [v.cuenta_id for v in visitas if v.cuenta_id]
+    conteo_casa = {}
+    for cid in cuenta_ids:
+        conteo_casa[cid] = conteo_casa.get(cid, 0) + 1
+    top_ids = sorted(conteo_casa, key=conteo_casa.get, reverse=True)[:10]
+    cuentas = {c.id: c for c in Cuenta.query.filter(Cuenta.id.in_(top_ids)).all()} if top_ids else {}
+    unidad_ids = {c.unidad_id for c in cuentas.values() if c.unidad_id}
+    unidades = {u.id: u for u in Unidad.query.filter(Unidad.id.in_(unidad_ids)).all()} if unidad_ids else {}
+    top_casas = []
+    for cid in top_ids:
+        c = cuentas.get(cid)
+        ident = "—"
+        if c:
+            u = unidades.get(c.unidad_id)
+            ident = u.identificador if u else "—"
+            if c.apartamento:
+                ident = f"{ident} - {c.apartamento}"
+        top_casas.append({"casa": ident, "visitas": conteo_casa[cid]})
+
+    return jsonify({"data": {
+        "periodo_label": label,
+        "total_visitas": len(visitas),
+        "total_entradas": len(eventos_entrada),
+        "por_tipo": por_tipo,
+        "horas_pico": horas_pico,
+        "top_casas": top_casas,
+        "generado": dt.date.today().isoformat(),
+    }})

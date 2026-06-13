@@ -421,6 +421,49 @@ export interface MoraPorCasaDTO {
 export const reporteMoraPorCasa = () =>
   request<MoraPorCasaDTO>("/reportes/mora-por-casa");
 
+// ── Reporte de caja y arqueo ──────────────────────────────────────────────
+export interface CajaPorCajeroDTO {
+  cajero: string; sesiones: number; efectivo: number; pos: number;
+  diferencia: number; cobros: number;
+}
+export interface SesionReporteDTO {
+  id: string; cajero: string; abierta_en: string; cerrada_en: string;
+  monto_inicial: number; total_efectivo: number; total_pos: number;
+  cantidad_pagos: number; diferencia_efectivo: number; diferencia_pos: number;
+  cuadrada: boolean;
+}
+export interface ReporteCajaDTO {
+  periodo_label: string; total_sesiones: number;
+  total_efectivo: number; total_pos: number; total_otros: number;
+  total_recaudado: number; total_diferencia: number; sesiones_descuadradas: number;
+  por_cajero: CajaPorCajeroDTO[]; sesiones: SesionReporteDTO[]; generado: string;
+}
+export const reporteCaja = (desde?: string, hasta?: string, cajeroId?: string) => {
+  const q = new URLSearchParams();
+  if (desde) q.set("desde", desde);
+  if (hasta) q.set("hasta", hasta);
+  if (cajeroId) q.set("cajero_id", cajeroId);
+  const qs = q.toString();
+  return request<ReporteCajaDTO>(`/reportes/caja${qs ? "?" + qs : ""}`);
+};
+
+// ── Reporte de accesos y seguridad ────────────────────────────────────────
+export interface ReporteAccesosDTO {
+  periodo_label: string; total_visitas: number; total_entradas: number;
+  por_tipo: { unica: number; recurrente: number; repartidor: number };
+  horas_pico: { hora: string; cantidad: number }[];
+  top_casas: { casa: string; visitas: number }[];
+  generado: string;
+}
+export const reporteAccesos = (desde?: string, hasta?: string, tipo?: string) => {
+  const q = new URLSearchParams();
+  if (desde) q.set("desde", desde);
+  if (hasta) q.set("hasta", hasta);
+  if (tipo) q.set("tipo", tipo);
+  const qs = q.toString();
+  return request<ReporteAccesosDTO>(`/reportes/accesos${qs ? "?" + qs : ""}`);
+};
+
 export const reporteFinanciero = (anio?: number, mes?: number, desde?: string, hasta?: string) => {
   let q = "";
   if (desde && hasta) {

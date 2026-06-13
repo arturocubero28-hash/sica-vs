@@ -1,21 +1,31 @@
 import { useState, useEffect } from "react";
-import { reporteFinanciero, reporteMoraPorCasa,
-  type ReporteFinancieroDTO, type MoraPorCasaDTO, type CasaMoraDTO } from "../../api/client";
+import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos,
+  type ReporteFinancieroDTO, type MoraPorCasaDTO, type CasaMoraDTO,
+  type ReporteCajaDTO, type ReporteAccesosDTO } from "../../api/client";
 import { L } from "../../utils/formato";
 
 export function Reporteria() {
-  const [tab, setTab] = useState<"financiero" | "mora">("financiero");
+  const [tab, setTab] = useState<"financiero" | "mora" | "caja" | "accesos">("financiero");
   return (
     <div className="reporteria">
       <div className="historial-tabs" style={{ marginBottom: 14 }}>
         <button className={`htab ${tab === "financiero" ? "activo" : ""}`} onClick={() => setTab("financiero")}>
-          Financiero
+          💰 Financiero
         </button>
         <button className={`htab ${tab === "mora" ? "activo" : ""}`} onClick={() => setTab("mora")}>
-          Mora por casa
+          📋 Mora y cartera
+        </button>
+        <button className={`htab ${tab === "caja" ? "activo" : ""}`} onClick={() => setTab("caja")}>
+          🏦 Caja y arqueo
+        </button>
+        <button className={`htab ${tab === "accesos" ? "activo" : ""}`} onClick={() => setTab("accesos")}>
+          🛡️ Accesos y seguridad
         </button>
       </div>
-      {tab === "financiero" ? <ReporteFinancieroVista /> : <ReporteMoraPorCasa />}
+      {tab === "financiero" && <ReporteFinancieroVista />}
+      {tab === "mora" && <ReporteMoraPorCasa />}
+      {tab === "caja" && <ReporteCajaVista />}
+      {tab === "accesos" && <ReporteAccesosVista />}
     </div>
   );
 }
@@ -460,5 +470,302 @@ function ReporteMoraPorCasa() {
         </div>
       )}
     </>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// REPORTE DE CAJA Y ARQUEO (tesorero)
+// ════════════════════════════════════════════════════════════════
+function ReporteCajaVista() {
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [data, setData] = useState<ReporteCajaDTO | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  function cargar() {
+    setCargando(true);
+    reporteCaja(desde || undefined, hasta || undefined)
+      .then(setData).catch(() => {}).finally(() => setCargando(false));
+  }
+  useEffect(() => { cargar(); }, []);
+
+  async function exportarPDF() {
+    if (!data) return;
+    const { jsPDF } = await import("jspdf");
+    const autoTable = (await import("jspdf-autotable")).default;
+    const doc = new jsPDF();
+    doc.setFillColor(2, 46, 69); doc.rect(0, 0, 210, 28, "F");
+    doc.setTextColor(255); doc.setFontSize(16);
+    doc.text("Reporte de Caja y Arqueo", 14, 13);
+    doc.setFontSize(10);
+    doc.text(`Villas del Sol · ${data.periodo_label}`, 14, 21);
+    doc.setTextColor(0);
+
+    autoTable(doc, {
+      startY: 34,
+      head: [["Resumen", ""]],
+      body: [
+        ["Sesiones cerradas", String(data.total_sesiones)],
+        ["Total efectivo", L(data.total_efectivo)],
+        ["Total POS", L(data.total_pos)],
+        ["Total recaudado", L(data.total_recaudado)],
+        ["Diferencia acumulada", L(data.total_diferencia)],
+        ["Sesiones descuadradas", String(data.sesiones_descuadradas)],
+      ],
+      theme: "grid", headStyles: { fillColor: [244, 135, 35] },
+    });
+
+    autoTable(doc, {
+      head: [["Cajero", "Sesiones", "Efectivo", "POS", "Cobros", "Diferencia"]],
+      body: data.por_cajero.map(c => [
+        c.cajero, String(c.sesiones), L(c.efectivo), L(c.pos),
+        String(c.cobros), L(c.diferencia),
+      ]),
+      theme: "striped", headStyles: { fillColor: [2, 46, 69] },
+    });
+    doc.save(`reporte-caja-${data.periodo_label.replace(/[/\s–]/g, "-")}.pdf`);
+  }
+
+  async function exportarExcel() {
+    if (!data) return;
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    const resumen = [
+      ["Reporte de Caja — Villas del Sol"], [data.periodo_label], [],
+      ["Sesiones cerradas", data.total_sesiones],
+      ["Total efectivo", data.total_efectivo],
+      ["Total POS", data.total_pos],
+      ["Total recaudado", data.total_recaudado],
+      ["Diferencia acumulada", data.total_diferencia],
+      ["Sesiones descuadradas", data.sesiones_descuadradas],
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
+    const porCajero = [["Cajero", "Sesiones", "Efectivo", "POS", "Cobros", "Diferencia"],
+      ...data.por_cajero.map(c => [c.cajero, c.sesiones, c.efectivo, c.pos, c.cobros, c.diferencia])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(porCajero), "Por cajero");
+    const ses = [["Cajero", "Cerrada", "Inicial", "Efectivo", "POS", "Cobros", "Dif. efectivo", "Dif. POS", "Cuadrada"],
+      ...data.sesiones.map(s => [s.cajero, s.cerrada_en?.slice(0, 16).replace("T", " "),
+        s.monto_inicial, s.total_efectivo, s.total_pos, s.cantidad_pagos,
+        s.diferencia_efectivo, s.diferencia_pos, s.cuadrada ? "Sí" : "No"])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ses), "Sesiones");
+    XLSX.writeFile(wb, `reporte-caja-${data.periodo_label.replace(/[/\s–]/g, "-")}.xlsx`);
+  }
+
+  return (
+    <div>
+      <div className="rep-filtros">
+        <label>Desde <input type="date" value={desde} onChange={e => setDesde(e.target.value)} /></label>
+        <label>Hasta <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} /></label>
+        <button className="cuota-btn-pagar" style={{ maxWidth: 130 }} onClick={cargar}>Aplicar</button>
+        {data && data.total_sesiones > 0 && (
+          <div className="rep-export">
+            <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
+            <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
+          </div>
+        )}
+      </div>
+
+      {cargando ? <p className="muted">Cargando…</p> : !data ? <p className="muted">No se pudo cargar.</p> : (
+        <>
+          <div className="rep-resumen-grid">
+            <div className="rep-kpi"><span>Sesiones</span><b>{data.total_sesiones}</b></div>
+            <div className="rep-kpi"><span>Efectivo</span><b>{L(data.total_efectivo)}</b></div>
+            <div className="rep-kpi"><span>POS</span><b>{L(data.total_pos)}</b></div>
+            <div className="rep-kpi"><span>Total recaudado</span><b>{L(data.total_recaudado)}</b></div>
+            <div className={`rep-kpi ${data.sesiones_descuadradas ? "rep-kpi-alerta" : ""}`}>
+              <span>Descuadradas</span><b>{data.sesiones_descuadradas}</b>
+            </div>
+          </div>
+
+          {data.total_sesiones === 0 ? (
+            <div className="lista-card"><p className="muted">No hay sesiones de caja cerradas en este período.</p></div>
+          ) : (
+            <>
+              <h3 className="rep-subtitulo">Por cajero</h3>
+              <div className="lista-card"><div className="scroll-x">
+                <table className="data">
+                  <thead><tr><th>Cajero</th><th>Sesiones</th><th>Efectivo</th><th>POS</th><th>Cobros</th><th>Diferencia</th></tr></thead>
+                  <tbody>
+                    {data.por_cajero.map((c, i) => (
+                      <tr key={i}>
+                        <td>{c.cajero}</td><td>{c.sesiones}</td>
+                        <td>{L(c.efectivo)}</td><td>{L(c.pos)}</td><td>{c.cobros}</td>
+                        <td><span className={Math.abs(c.diferencia) < 0.01 ? "pill green" : "pill red"}>{L(c.diferencia)}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div></div>
+
+              <h3 className="rep-subtitulo">Detalle de sesiones</h3>
+              <div className="lista-card"><div className="scroll-x">
+                <table className="data">
+                  <thead><tr><th>Cajero</th><th>Cerrada</th><th>Efectivo</th><th>POS</th><th>Cobros</th><th>Estado</th></tr></thead>
+                  <tbody>
+                    {data.sesiones.map(s => (
+                      <tr key={s.id}>
+                        <td>{s.cajero}</td>
+                        <td className="small">{s.cerrada_en?.slice(0, 16).replace("T", " ")}</td>
+                        <td>{L(s.total_efectivo)}</td><td>{L(s.total_pos)}</td><td>{s.cantidad_pagos}</td>
+                        <td>{s.cuadrada
+                          ? <span className="pill green">Cuadró</span>
+                          : <span className="pill red">Descuadre</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div></div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// REPORTE DE ACCESOS Y SEGURIDAD (administrador)
+// ════════════════════════════════════════════════════════════════
+function ReporteAccesosVista() {
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [tipo, setTipo] = useState("");
+  const [data, setData] = useState<ReporteAccesosDTO | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  function cargar() {
+    setCargando(true);
+    reporteAccesos(desde || undefined, hasta || undefined, tipo || undefined)
+      .then(setData).catch(() => {}).finally(() => setCargando(false));
+  }
+  useEffect(() => { cargar(); }, []);
+
+  const tiposLabel: Record<string, string> = {
+    unica: "Visita única", recurrente: "Recurrente", repartidor: "Repartidor",
+  };
+
+  async function exportarPDF() {
+    if (!data) return;
+    const { jsPDF } = await import("jspdf");
+    const autoTable = (await import("jspdf-autotable")).default;
+    const doc = new jsPDF();
+    doc.setFillColor(2, 46, 69); doc.rect(0, 0, 210, 28, "F");
+    doc.setTextColor(255); doc.setFontSize(16);
+    doc.text("Reporte de Accesos y Seguridad", 14, 13);
+    doc.setFontSize(10);
+    doc.text(`Villas del Sol · ${data.periodo_label}`, 14, 21);
+    doc.setTextColor(0);
+    autoTable(doc, {
+      startY: 34,
+      head: [["Resumen", ""]],
+      body: [
+        ["Total de visitas (QR)", String(data.total_visitas)],
+        ["Entradas registradas", String(data.total_entradas)],
+        ["Visitas únicas", String(data.por_tipo.unica)],
+        ["Recurrentes", String(data.por_tipo.recurrente)],
+        ["Repartidores", String(data.por_tipo.repartidor)],
+      ],
+      theme: "grid", headStyles: { fillColor: [244, 135, 35] },
+    });
+    if (data.top_casas.length) {
+      autoTable(doc, {
+        head: [["Casa con más visitas", "Visitas"]],
+        body: data.top_casas.map(c => [c.casa, String(c.visitas)]),
+        theme: "striped", headStyles: { fillColor: [2, 46, 69] },
+      });
+    }
+    doc.save(`reporte-accesos-${data.periodo_label.replace(/[/\s–]/g, "-")}.pdf`);
+  }
+
+  async function exportarExcel() {
+    if (!data) return;
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    const resumen = [
+      ["Reporte de Accesos — Villas del Sol"], [data.periodo_label], [],
+      ["Total de visitas", data.total_visitas],
+      ["Entradas registradas", data.total_entradas],
+      ["Visitas únicas", data.por_tipo.unica],
+      ["Recurrentes", data.por_tipo.recurrente],
+      ["Repartidores", data.por_tipo.repartidor],
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
+    const casas = [["Casa", "Visitas"], ...data.top_casas.map(c => [c.casa, c.visitas])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(casas), "Casas con más visitas");
+    const horas = [["Hora", "Accesos"], ...data.horas_pico.map(h => [h.hora, h.cantidad])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(horas), "Horas pico");
+    XLSX.writeFile(wb, `reporte-accesos-${data.periodo_label.replace(/[/\s–]/g, "-")}.xlsx`);
+  }
+
+  return (
+    <div>
+      <div className="rep-filtros">
+        <label>Desde <input type="date" value={desde} onChange={e => setDesde(e.target.value)} /></label>
+        <label>Hasta <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} /></label>
+        <select value={tipo} onChange={e => setTipo(e.target.value)} className="periodo-select">
+          <option value="">Todos los tipos</option>
+          <option value="unica">Visita única</option>
+          <option value="recurrente">Recurrente</option>
+          <option value="repartidor">Repartidor</option>
+        </select>
+        <button className="cuota-btn-pagar" style={{ maxWidth: 130 }} onClick={cargar}>Aplicar</button>
+        {data && data.total_visitas > 0 && (
+          <div className="rep-export">
+            <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
+            <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
+          </div>
+        )}
+      </div>
+
+      {cargando ? <p className="muted">Cargando…</p> : !data ? <p className="muted">No se pudo cargar.</p> : (
+        <>
+          <div className="rep-resumen-grid">
+            <div className="rep-kpi"><span>Visitas (QR)</span><b>{data.total_visitas}</b></div>
+            <div className="rep-kpi"><span>Entradas</span><b>{data.total_entradas}</b></div>
+            <div className="rep-kpi"><span>Únicas</span><b>{data.por_tipo.unica}</b></div>
+            <div className="rep-kpi"><span>Recurrentes</span><b>{data.por_tipo.recurrente}</b></div>
+            <div className="rep-kpi"><span>Repartidores</span><b>{data.por_tipo.repartidor}</b></div>
+          </div>
+
+          {data.total_visitas === 0 ? (
+            <div className="lista-card"><p className="muted">No hay visitas registradas en este período.</p></div>
+          ) : (
+            <>
+              <h3 className="rep-subtitulo">Horas con más accesos</h3>
+              <div className="lista-card">
+                {data.horas_pico.length === 0 ? <p className="muted">Sin entradas registradas.</p> : (
+                  <div className="rep-horas">
+                    {data.horas_pico.map((h, i) => {
+                      const max = data.horas_pico[0].cantidad || 1;
+                      return (
+                        <div key={i} className="rep-hora-fila">
+                          <span className="rep-hora-label">{h.hora}</span>
+                          <div className="rep-hora-barra-cont">
+                            <div className="rep-hora-barra" style={{ width: `${(h.cantidad / max) * 100}%` }} />
+                          </div>
+                          <span className="rep-hora-num">{h.cantidad}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <h3 className="rep-subtitulo">Casas que más visitas generan</h3>
+              <div className="lista-card"><div className="scroll-x">
+                <table className="data">
+                  <thead><tr><th>Casa</th><th>Visitas generadas</th></tr></thead>
+                  <tbody>
+                    {data.top_casas.map((c, i) => (
+                      <tr key={i}><td>{c.casa}</td><td><span className="pill">{c.visitas}</span></td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div></div>
+            </>
+          )}
+        </>
+      )}
+    </div>
   );
 }
