@@ -23,3 +23,21 @@ export function fechaHora(iso?: string | null): string {
     hour: "2-digit", minute: "2-digit",
   });
 }
+
+/** Fecha relativa amigable: "hace 5 min", "hace 2 h", "ayer", "hace 3 días", o fecha si es viejo */
+export function fechaRelativa(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  const ahora = new Date();
+  const seg = Math.floor((ahora.getTime() - d.getTime()) / 1000);
+  if (seg < 60) return "hace un momento";
+  const min = Math.floor(seg / 60);
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const dias = Math.floor(h / 24);
+  if (dias === 1) return "ayer";
+  if (dias < 7) return `hace ${dias} días`;
+  if (dias < 30) return `hace ${Math.floor(dias / 7)} sem`;
+  return d.toLocaleDateString("es-HN");
+}

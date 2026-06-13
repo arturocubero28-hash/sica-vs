@@ -35,6 +35,7 @@ def listar_usuarios(usuario_actual):
                 continue
         d = u.to_dict()
         d["debe_cambiar_password"] = u.debe_cambiar_password
+        d["ultimo_acceso"] = u.ultimo_acceso.isoformat() if u.ultimo_acceso else None
         data.append(d)
     return jsonify({"data": data})
 

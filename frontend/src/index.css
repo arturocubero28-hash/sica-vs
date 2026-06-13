@@ -1541,3 +1541,37 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .acceso-toggle { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .acceso-toggle button { padding: 7px 14px; border: 1px solid #d4dce6; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
 .acceso-toggle button.on { background: #022E45; color: #fff; border-color: #022E45; }
+
+/* ===== Día 15: tablas y listas unificadas ===== */
+/* Contenedor de lista admin: mismo marco que .dash-card */
+.lista-card {
+  background: #fff; border: 1px solid #e3e9f2; border-radius: 14px;
+  padding: 18px; margin-top: 14px;
+}
+.lista-card .casas-filtros { margin-bottom: 14px; }
+
+/* Hover de fila para leer filas largas */
+table.data tbody tr { transition: background 0.12s; }
+table.data tbody tr:hover td { background: #f7faff; }
+.fila-baja:hover td { background: #f2f2f2 !important; }
+
+/* Encabezado de sección de lista (título + acciones) */
+.lista-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 4px; flex-wrap: wrap; gap: 10px;
+}
+.lista-head h2 { margin: 0; color: var(--azul); font-size: 20px; }
+
+/* Cards de métrica que abren detalle: indicar que son clicables */
+.metric-card.clickable { cursor: pointer; position: relative; transition: transform 0.1s, box-shadow 0.1s; }
+.metric-card.clickable:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(2,46,69,0.10); }
+.metric-card.clickable::after {
+  content: "→"; position: absolute; bottom: 10px; right: 12px;
+  font-size: 14px; opacity: 0.35;
+}
+.padron-item.clickable { cursor: pointer; border-radius: 10px; transition: background 0.1s; }
+.padron-item.clickable:hover { background: #f4f7fb; }
+
+/* Modal de detalle de métrica (reusa .modal existente, lista interna) */
+.metric-modal-lista { max-height: 60vh; overflow-y: auto; margin-top: 8px; }
+.metric-modal-empty { padding: 28px; text-align: center; color: var(--gris); }

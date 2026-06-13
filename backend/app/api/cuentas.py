@@ -25,7 +25,7 @@ from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db
 from app.models.usuario import Usuario
-from app.models.cuenta import Unidad, Cuenta, Residente, Tarjeta, Tarifa, CodigoEnrolamiento
+from app.models.cuenta import Unidad, Cuenta, Residente, Tarjeta, Tarifa, CodigoEnrolamiento, Cuota
 from app.auth.security import roles_required, token_required
 
 cuentas_bp = Blueprint("cuentas", __name__)
@@ -125,7 +125,21 @@ def crear_unidad(usuario_actual):
 @roles_required("admin", "super_admin")
 def listar_cuentas(usuario_actual):
     cuentas = Cuenta.query.order_by(Cuenta.id.desc()).all()
-    return jsonify({"data": [c.to_dict() for c in cuentas]})
+
+    # Conteo de cuotas pendientes/vencidas por cuenta, en UNA query (evita N+1).
+    # Sirve para que el admin vea de un vistazo qué casas deben sin entrar al detalle.
+    from sqlalchemy import func
+    pendientes_raw = (db.session.query(Cuota.cuenta_id, func.count(Cuota.id))
+                      .filter(Cuota.estado.notin_(["pagada", "en_arreglo"]))
+                      .group_by(Cuota.cuenta_id).all())
+    pendientes_por_cuenta = {cid: n for cid, n in pendientes_raw}
+
+    data = []
+    for c in cuentas:
+        d = c.to_dict()
+        d["cuotas_pendientes"] = pendientes_por_cuenta.get(c.id, 0)
+        data.append(d)
+    return jsonify({"data": data})
 
 
 @cuentas_bp.post("/cuentas")

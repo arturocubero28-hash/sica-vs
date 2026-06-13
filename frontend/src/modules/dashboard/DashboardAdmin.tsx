@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import {
   dashboardMetricas, dashboardVisitas, dashboardVisitasActivas, urlFotoGuardia,
-  type MetricasDTO, type VisitaTablaDTO, type VisitaActivaDTO,
+  reporteMoraPorCasa,
+  type MetricasDTO, type VisitaTablaDTO, type VisitaActivaDTO, type CasaMoraDTO,
 } from "../../api/client";
+import { L } from "../../utils/formato";
 
 function horaCorta(iso?: string): string {
   if (!iso) return "—";
@@ -21,6 +23,18 @@ export function DashboardAdmin() {
   const [m, setM] = useState<MetricasDTO | null>(null);
   const [visitas, setVisitas] = useState<VisitaTablaDTO[]>([]);
   const [vistaActivas, setVistaActivas] = useState(false);
+  const [modalMora, setModalMora] = useState<CasaMoraDTO[] | null>(null);
+  const [cargandoMora, setCargandoMora] = useState(false);
+
+  async function abrirMora() {
+    setCargandoMora(true);
+    setModalMora([]);
+    try {
+      const r = await reporteMoraPorCasa();
+      setModalMora(r.casas);
+    } catch { setModalMora([]); }
+    finally { setCargandoMora(false); }
+  }
 
   useEffect(() => {
     function cargar() {
@@ -78,7 +92,8 @@ export function DashboardAdmin() {
         <MetricCard label="Accesos hoy" valor={m?.accesos_hoy} icon="✓" color="azul" />
         <MetricCard label="QR generados hoy" valor={m?.qr_generados_hoy} icon="QR" color="naranja" />
         <MetricCard label="Cuentas en mora" valor={m?.cuentas_bloqueadas} icon="!"
-          color={m?.cuentas_bloqueadas ? "rojo" : "gris"} />
+          color={m?.cuentas_bloqueadas ? "rojo" : "gris"}
+          onClick={m?.cuentas_bloqueadas ? abrirMora : undefined} />
       </div>
 
       {/* Resumen del padrón */}
@@ -109,7 +124,7 @@ export function DashboardAdmin() {
           <div className="scroll-x">
             <table className="data">
               <thead>
-                <tr><th>Residente</th><th>Unidad</th><th>Visitante</th><th>Tipo</th><th>Estado</th></tr>
+                <tr><th>Residente</th><th>Unidad</th><th>Visitante</th><th>Tipo</th><th>Generado</th><th>Estado</th></tr>
               </thead>
               <tbody>
                 {visitas.map(v => (
@@ -118,6 +133,7 @@ export function DashboardAdmin() {
                     <td>{v.unidad}</td>
                     <td>{v.visitante}</td>
                     <td>{tiposVisita[v.tipo] || v.tipo}</td>
+                    <td className="small muted">{v.creado}</td>
                     <td><span className={`pill ${estadoColor[v.estado] || ""}`}>{estadoLabel[v.estado] || v.estado}</span></td>
                   </tr>
                 ))}
@@ -126,11 +142,41 @@ export function DashboardAdmin() {
           </div>
         )}
       </div>
+
+      {modalMora !== null && (
+        <div className="modal" onClick={() => setModalMora(null)}>
+          <div className="modal-body" onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3>Cuentas en mora</h3>
+              <button className="ghost mini" onClick={() => setModalMora(null)}>✕</button>
+            </div>
+            {cargandoMora ? (
+              <p className="muted">Cargando…</p>
+            ) : modalMora.length === 0 ? (
+              <div className="metric-modal-empty">No hay cuentas en mora. 🎉</div>
+            ) : (
+              <div className="metric-modal-lista">
+                <table className="data">
+                  <thead><tr><th>Casa</th><th>Titular</th><th>Meses</th><th>Adeudado</th></tr></thead>
+                  <tbody>
+                    {modalMora.map((c, i) => (
+                      <tr key={i}>
+                        <td>{c.unidad}</td>
+                        <td>{c.titular}<br/><span className="muted small">{c.telefono || ""}</span></td>
+                        <td><span className="pill red">{c.cantidad_meses}</span></td>
+                        <td><b>{L(c.total_adeudado)}</b></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-// ─── Vista de visitas DENTRO de la residencial ───────────────
 function VisitasAdentro({ onVolver, totalEsperado }: { onVolver: () => void; totalEsperado?: number }) {
   const [lista, setLista] = useState<VisitaActivaDTO[]>([]);
   const [filtro, setFiltro] = useState("");
@@ -296,10 +342,12 @@ function Dato({ label, valor }: { label: string; valor: string }) {
   );
 }
 
-function MetricCard({ label, valor, icon, color }:
-  { label: string; valor?: number; icon: string; color: string }) {
+function MetricCard({ label, valor, icon, color, onClick }:
+  { label: string; valor?: number; icon: string; color: string; onClick?: () => void }) {
   return (
-    <div className={`metric-card ${color}`}>
+    <div className={`metric-card ${color}${onClick ? " clickable" : ""}`}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}>
       <div className="metric-top">
         <span className="metric-label">{label}</span>
         <span className="metric-icon">{icon}</span>

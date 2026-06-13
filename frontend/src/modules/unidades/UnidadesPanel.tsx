@@ -112,18 +112,24 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
       {filtradas.length === 0 ? (
         <p className="muted">No hay casas que coincidan con la búsqueda.</p>
       ) : (
-        <div className="scroll-x">
+        <div className="lista-card"><div className="scroll-x">
           <table className="data">
-            <thead><tr><th>Identificador</th><th>Titular</th><th>Tarifa</th><th>Día pago</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>Identificador</th><th>Titular</th><th>Tarifa</th><th>Día pago</th><th>Cuotas</th><th>Estado</th><th></th></tr></thead>
             <tbody>
               {filtradas.map((c) => {
                 const dadaBaja = c.activa === false;
+                const pend = c.cuotas_pendientes || 0;
                 return (
                   <tr key={c.id} className={dadaBaja ? "fila-baja" : ""}>
                     <td>{c.nombre_completo || c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "Casa")}</td>
                     <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
                     <td>{c.tarifa} (L {c.monto})</td>
                     <td>{c.dia_pago}</td>
+                    <td>
+                      {pend === 0
+                        ? <span className="pill green">Al día</span>
+                        : <span className="pill red">{pend} pend.</span>}
+                    </td>
                     <td>
                       {dadaBaja
                         ? <span className="pill" style={{ background: "#6b7280", color: "#fff" }}>Baja</span>
@@ -140,7 +146,7 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
               })}
             </tbody>
           </table>
-        </div>
+        </div></div>
       )}
     </div>
   );

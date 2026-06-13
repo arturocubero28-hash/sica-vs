@@ -118,6 +118,7 @@ export interface Cuenta {
   es_apartamento?: boolean; dia_pago: number; estado: string;
   bloqueada: boolean; activa?: boolean; tarifa: string; monto: number;
   titular?: ResidenteDTO; total_residentes: number; total_tarjetas: number;
+  cuotas_pendientes?: number;
   residentes?: ResidenteDTO[]; tarjetas?: TarjetaDTO[];
 }
 
@@ -502,7 +503,7 @@ export const contarPagosPendientes = () =>
 export interface UsuarioAdminDTO {
   id: string; nombre: string; apellido: string; email: string;
   rol: string; activo: boolean; debe_cambiar_password?: boolean;
-  password_generica?: string;
+  password_generica?: string; ultimo_acceso?: string | null;
 }
 export const listarUsuarios = (params?: { rol?: string; buscar?: string }) => {
   const q = new URLSearchParams();

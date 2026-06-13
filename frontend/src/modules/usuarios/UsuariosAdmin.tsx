@@ -4,6 +4,7 @@ import {
   resetPasswordUsuario, editarUsuario,
   type UsuarioAdminDTO,
 } from "../../api/client";
+import { fechaRelativa } from "../../utils/formato";
 
 const ROL_LABEL: Record<string, string> = {
   super_admin: "Super Admin", admin: "Administrador",
@@ -47,7 +48,7 @@ export function UsuariosAdmin() {
 
   return (
     <div className="usuarios-admin">
-      <div className="dash-head">
+      <div className="lista-head">
         <h2>Usuarios registrados</h2>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="cuota-btn-pagar" style={{ maxWidth: 150 }} onClick={() => setCreando("guardia")}>
@@ -59,6 +60,7 @@ export function UsuariosAdmin() {
         </div>
       </div>
 
+      <div className="lista-card">
       <div className="casas-filtros">
         <input className="casas-buscar" placeholder="🔍 Buscar por nombre o correo…"
           value={busqueda} onChange={e => setBusqueda(e.target.value)} />
@@ -75,13 +77,14 @@ export function UsuariosAdmin() {
       {cargando ? <p className="muted">Cargando…</p> : (
         <div className="scroll-x">
           <table className="data">
-            <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Último acceso</th><th>Estado</th><th></th></tr></thead>
             <tbody>
               {filtrados.map(u => (
                 <tr key={u.id} className={!u.activo ? "fila-baja" : ""}>
                   <td>{u.nombre} {u.apellido}</td>
                   <td className="small">{u.email}</td>
                   <td><span className="pill">{ROL_LABEL[u.rol] || u.rol}</span></td>
+                  <td className="small muted">{u.ultimo_acceso ? fechaRelativa(u.ultimo_acceso) : "Nunca"}</td>
                   <td>{u.activo ? <span className="pill green">Activo</span> : <span className="pill">Inactivo</span>}</td>
                   <td style={{ display: "flex", gap: 6 }}>
                     <button className="mini" onClick={() => reset(u)}>Reset clave</button>
@@ -95,6 +98,7 @@ export function UsuariosAdmin() {
           </table>
         </div>
       )}
+      </div>
 
       {creando && (
         <FormUsuario tipo={creando} onCerrar={() => setCreando(null)}
