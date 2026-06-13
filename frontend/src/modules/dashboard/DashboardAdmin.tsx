@@ -96,25 +96,6 @@ export function DashboardAdmin() {
           onClick={m?.cuentas_bloqueadas ? abrirMora : undefined} />
       </div>
 
-      {/* Resumen del padrón */}
-      <div className="padron-card">
-        <div className="padron-titulo muted small">Padrón de la residencial</div>
-        <div className="padron-grid">
-          <div className="padron-item">
-            <span className="padron-icon">🏘️</span>
-            <div><b>{m?.total_unidades ?? "—"}</b><span>Casas / Edificios</span></div>
-          </div>
-          <div className="padron-item">
-            <span className="padron-icon">📄</span>
-            <div><b>{m?.total_cuentas ?? "—"}</b><span>Cuentas</span></div>
-          </div>
-          <div className="padron-item">
-            <span className="padron-icon">👥</span>
-            <div><b>{m?.total_residentes ?? "—"}</b><span>Residentes</span></div>
-          </div>
-        </div>
-      </div>
-
       {/* Tabla de visitas recientes */}
       <div className="dash-card">
         <h3>Actividad reciente de QR</h3>
@@ -141,6 +122,25 @@ export function DashboardAdmin() {
             </table>
           </div>
         )}
+      </div>
+
+      {/* Resumen del padrón (datos de referencia, al final) */}
+      <div className="padron-card">
+        <div className="padron-titulo muted small">Padrón de la residencial</div>
+        <div className="padron-grid">
+          <div className="padron-item">
+            <span className="padron-icon">🏘️</span>
+            <div><b>{m?.total_unidades ?? "—"}</b><span>Casas / Edificios</span></div>
+          </div>
+          <div className="padron-item">
+            <span className="padron-icon">📄</span>
+            <div><b>{m?.total_cuentas ?? "—"}</b><span>Cuentas</span></div>
+          </div>
+          <div className="padron-item">
+            <span className="padron-icon">👥</span>
+            <div><b>{m?.total_residentes ?? "—"}</b><span>Residentes</span></div>
+          </div>
+        </div>
       </div>
 
       {modalMora !== null && (

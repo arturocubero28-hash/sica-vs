@@ -406,7 +406,6 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 }
 
 @media (max-width: 420px) {
-  .metric-grid { grid-template-columns: 1fr; }
   .estado-grid { grid-template-columns: 1fr; }
 }
 
@@ -1573,7 +1572,7 @@ table.data tbody tr:hover td { background: #f7faff; }
 .padron-item.clickable:hover { background: #f4f7fb; }
 
 /* Modal de detalle de métrica (reusa .modal existente, lista interna) */
-.metric-modal-lista { max-height: 60vh; overflow-y: auto; margin-top: 8px; }
+.metric-modal-lista { max-height: 60vh; overflow-y: auto; overflow-x: auto; margin-top: 8px; }
 .metric-modal-empty { padding: 28px; text-align: center; color: var(--gris); }
 
 /* ===== Día 15: reportería nueva ===== */
@@ -1610,3 +1609,50 @@ table.data tbody tr:hover td { background: #f7faff; }
   border-radius: 6px; min-width: 4px; transition: width 0.3s;
 }
 .rep-hora-num { font-size: 13px; font-weight: 700; color: var(--azul); width: 36px; text-align: right; }
+
+/* ===== Día 15: dashboard responsive y anti-desborde ===== */
+/* Contener todo el dashboard para que nada exceda el ancho de pantalla */
+.dash { max-width: 100%; }
+.dash > * { min-width: 0; }
+.hero-metric { min-width: 0; gap: 12px; }
+.hero-left { min-width: 0; }
+.hero-valor { word-break: break-word; }
+
+/* En móvil el hero y sus números se achican para no desbordar */
+@media (max-width: 560px) {
+  .hero-metric { padding: 20px; }
+  .hero-valor { font-size: 40px; }
+  .hero-icon { font-size: 38px; }
+  .hero-label { font-size: 13px; }
+  .hero-hint { font-size: 11.5px; }
+  .metric-card .metric-valor { font-size: 26px; }
+  .dash-titulo { font-size: 20px; }
+  .padron-item b { font-size: 18px; }
+}
+
+/* En pantallas muy chicas, métricas a 2 columnas (no 1) para aprovechar el alto */
+@media (max-width: 420px) {
+  .metric-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .metric-card { padding: 12px; }
+}
+
+/* En móvil chico, el ícono del hero se reduce y no compite con el número */
+@media (max-width: 420px) {
+  .hero-metric { padding: 18px; }
+  .hero-valor { font-size: 36px; }
+  .hero-icon { font-size: 30px; opacity: 0.85; }
+  .hero-metric::after { width: 120px; height: 120px; right: -30px; top: -30px; }
+}
+
+/* ===== Día 15: contención móvil de listas y reportería ===== */
+@media (max-width: 560px) {
+  .lista-card { padding: 12px; }
+  .lista-head { flex-direction: column; align-items: stretch; }
+  .lista-head h2 { font-size: 18px; }
+  .rep-filtros { gap: 8px; }
+  .rep-filtros label, .rep-filtros input[type="date"], .rep-filtros .periodo-select { width: 100%; }
+  .rep-export { margin-left: 0; width: 100%; }
+  .rep-resumen-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .rep-kpi b { font-size: 17px; }
+  .historial-tabs { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+}
