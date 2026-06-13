@@ -1,9 +1,20 @@
 -- =====================================================================
 -- SICA-VS — Datos de prueba (seed)
 -- Se carga automáticamente la primera vez que arranca la base de datos.
+--
+-- ⚠️  ADVERTENCIA DE SEGURIDAD — SOLO PARA DESARROLLO  ⚠️
+-- Este archivo contiene usuarios con contraseñas conocidas (admin123).
+-- NUNCA debe cargarse en un despliegue de producción.
+-- Al desplegar a producción:
+--   1. NO ejecutar este seed.
+--   2. Crear el super_admin con una contraseña fuerte y única.
+--   3. Marcarlo con debe_cambiar_password=TRUE para forzar el cambio
+--      en el primer inicio de sesión.
+-- El backend además se niega a arrancar en producción con secretos de
+-- desarrollo (ver validar_config_produccion en config.py).
 -- =====================================================================
 
--- Usuario administrador de prueba
+-- Usuario administrador de prueba [DESARROLLO]
 --   email:    admin@villasdelsol.hn
 --   password: admin123
 INSERT INTO usuarios (uuid_publico, nombre, apellido, email, telefono, password_hash, rol, activo)

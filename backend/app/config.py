@@ -17,6 +17,10 @@ class Config:
 
     # Seguridad / JWT
     JWT_SECRET = os.environ.get("JWT_SECRET", "dev_secret_cambiar")
+    # Duración del token de sesión. 12h es un balance entre comodidad (no
+    # reloguear seguido) y exposición si un token se filtra. Hay blacklist por
+    # jti (logout) y registro de sesiones activas como mitigación. Para mayor
+    # seguridad, bajar este valor o implementar refresh tokens a futuro.
     JWT_EXPIRES_HOURS = int(os.environ.get("JWT_EXPIRES_HOURS", "12"))
 
     # CORS
@@ -67,6 +71,16 @@ def validar_config_produccion():
         )
     if "sicavs_dev" in Config.SQLALCHEMY_DATABASE_URI:
         problemas.append("La contraseña de PostgreSQL sigue siendo la de desarrollo (sicavs_dev).")
+    if Config.DEVICE_TOKEN in _SECRETOS_INSEGUROS or Config.DEVICE_TOKEN == "sicavs-device-dev" or len(Config.DEVICE_TOKEN) < 24:
+        problemas.append(
+            "DEVICE_TOKEN es inseguro o muy corto (lo usan las Raspberry Pi de acceso).\n"
+            "    Generá uno aleatorio largo, ej: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+    # CORS con credenciales no debe usar comodín ni http en producción
+    if "*" in Config.CORS_ORIGINS:
+        problemas.append("CORS_ORIGINS no puede contener '*' en producción (se usan credenciales).")
+    if any(o.strip().startswith("http://") for o in Config.CORS_ORIGINS):
+        problemas.append("CORS_ORIGINS contiene orígenes http:// en producción; deben ser https://.")
 
     if problemas:
         msg = ("\n" + "=" * 60 +

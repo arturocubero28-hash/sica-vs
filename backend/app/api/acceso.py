@@ -22,10 +22,11 @@ autenticación del dispositivo es un token simple en el header; se endurece al
 desplegar.
 """
 import datetime as dt
+import hmac
 
 from flask import Blueprint, request, jsonify, current_app
 
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models.cuenta import Tarjeta, Cuenta
 from app.models.visita import EventoAcceso, AccesoFisico
 
@@ -44,10 +45,15 @@ def _dispositivo_autorizado():
     """
     token = request.headers.get("X-Device-Token", "")
     esperado = current_app.config.get("DEVICE_TOKEN", "sicavs-device-dev")
-    return token and token == esperado
+    # Comparación en tiempo constante para evitar timing attacks que permitirían
+    # reconstruir el token carácter por carácter midiendo tiempos de respuesta.
+    if not token or not esperado:
+        return False
+    return hmac.compare_digest(token, esperado)
 
 
 @acceso_bp.post("/validar-tarjeta")
+@limiter.limit("60 per minute")
 def validar_tarjeta():
     """
     Recibe {card_uid, acceso_id} y decide si se permite el acceso.

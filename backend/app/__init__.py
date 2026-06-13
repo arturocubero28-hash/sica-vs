@@ -27,6 +27,12 @@ def create_app(config_class=Config):
     from app.config import validar_config_produccion
     validar_config_produccion()
 
+    # Confiar en X-Forwarded-For solo del reverse proxy (1 salto). Sin esto, el
+    # cliente podría falsear su IP en los logs de auditoría. En local sin proxy,
+    # Werkzeug usa remote_addr normalmente.
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
     # --- Extensiones ---
     db.init_app(app)
     migrate.init_app(app, db)

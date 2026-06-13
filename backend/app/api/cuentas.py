@@ -31,6 +31,21 @@ from app.auth.security import roles_required, token_required
 cuentas_bp = Blueprint("cuentas", __name__)
 
 
+def _bloque_activacion(usuario, token_o_error, nota=None):
+    """
+    Arma el bloque de activación de la respuesta. El token de activación se
+    incluye SOLO en desarrollo (no hay correos aún). En producción se omite:
+    ahí el token debe llegar al residente por correo (Resend), nunca en la
+    respuesta de la API, para que un acceso indebido no active cuentas ajenas.
+    """
+    bloque = {"usuario_email": usuario.email}
+    if nota:
+        bloque["nota"] = nota
+    if current_app.config.get("ENV") != "production":
+        bloque["token_activacion"] = token_o_error
+    return bloque
+
+
 def _err(code, msg, status):
     return jsonify({"error": {"code": code, "message": msg}}), status
 
@@ -194,11 +209,8 @@ def crear_cuenta(usuario_actual):
 
     return jsonify({"data": {
         "cuenta": cuenta.to_dict(detalle=True),
-        "activacion": {
-            "usuario_email": usuario.email,
-            "token_activacion": token_o_error,   # en producción esto va por correo
-            "nota": "Enviar al residente para que defina su contraseña",
-        },
+        "activacion": _bloque_activacion(usuario, token_o_error,
+                                         nota="Enviar al residente para que defina su contraseña"),
     }}), 201
 
 
@@ -274,7 +286,7 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
 
     return jsonify({"data": {
         "residente": residente.to_dict(),
-        "activacion": {"usuario_email": usuario.email, "token_activacion": token_o_error},
+        "activacion": _bloque_activacion(usuario, token_o_error),
     }}), 201
 
 

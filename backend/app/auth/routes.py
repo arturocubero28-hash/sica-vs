@@ -214,11 +214,14 @@ def solicitar_recuperacion():
     #     "html": f"<a href='https://sitio/reset?token={token_reset}'>Restablecer</a>"
     # })
 
-    return jsonify({"data": {
-        "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.",
-        # SOLO EN DESARROLLO: devolver el token para pruebas
-        "dev_token": token_reset,
-    }})
+    respuesta = {"message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."}
+    # El token se devuelve en pantalla SOLO en desarrollo (no hay correos aún).
+    # En producción esto sería una fuga crítica: cualquiera con un email válido
+    # tomaría la cuenta sin acceder al correo. Por eso se condiciona al entorno.
+    if current_app.config.get("ENV") != "production":
+        respuesta["dev_token"] = token_reset
+
+    return jsonify({"data": respuesta})
 
 
 # ── Restablecer contraseña ─────────────────────────────────────
