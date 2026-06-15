@@ -609,7 +609,7 @@ class VentaTarjeta(db.Model):
     id = db.Column(db.BigInteger, primary_key=True)
     uuid_publico = _uuid_col()
     tipo_tarjeta_id = db.Column(db.BigInteger, db.ForeignKey("tipos_tarjeta.id"), nullable=False)
-    tarjeta_id = db.Column(db.BigInteger, db.ForeignKey("tarjetas.id"))
+    tarjeta_id = db.Column(db.BigInteger, db.ForeignKey("tarjetas_proximidad.id"))
     cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
     pago_id = db.Column(db.BigInteger, db.ForeignKey("pagos.id"))
     sesion_caja_id = db.Column(db.BigInteger, db.ForeignKey("sesiones_caja.id"))
