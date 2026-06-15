@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import {
   estadoCaja, abrirCaja, saldoApertura, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
   reportarDescuadre, solicitarSalida, solicitarIngreso, urlConstanciaCaja, urlReciboPDF,
-  type SesionCajaDTO, type CuentaCajaDTO,
+  listarTiposTarjeta, venderTarjetaCaja,
+  type SesionCajaDTO, type CuentaCajaDTO, type TipoTarjetaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
 
@@ -10,6 +11,7 @@ export function CajaPanel() {
   const [sesion, setSesion] = useState<SesionCajaDTO | null>(null);
   const [cargando, setCargando] = useState(true);
   const [cerrando, setCerrando] = useState(false);
+  const [vendiendo, setVendiendo] = useState(false);
 
   function recargar() {
     estadoCaja().then(r => setSesion(r.abierta ? r.sesion! : null)).catch(() => {}).finally(() => setCargando(false));
@@ -29,11 +31,17 @@ export function CajaPanel() {
           <span className="muted">Cajero: {sesion.cajero}</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="cuota-btn-pagar mini" style={{ maxWidth: 150 }} onClick={() => setVendiendo(true)}>
+            🎟️ Vender tarjeta
+          </button>
           <a className="ghost mini" href={urlConstanciaCaja(sesion.id)} target="_blank" rel="noreferrer"
             style={{ textDecoration: "none" }}>📄 Constancia</a>
           <button className="btn-baja mini" onClick={() => setCerrando(true)}>Cerrar caja</button>
         </div>
       </div>
+
+      {vendiendo && <ModalVenderTarjeta onCerrar={() => setVendiendo(false)}
+        onVendida={() => { setVendiendo(false); recargar(); }} />}
 
       {/* Layout POS: cobro a la izquierda (protagonista), arqueo a la derecha */}
       <div className="pos-grid">
@@ -596,6 +604,148 @@ function SolicitarIngreso({ onRegistrado }: { onRegistrado: () => void }) {
         </div>
       )}
       {msg && <div className={msg.startsWith("✓") ? "cuota-ok" : "error"} style={{ marginTop: 10 }}>{msg}</div>}
+    </div>
+  );
+}
+
+// ─── Modal: vender tarjeta en caja (cobra + asigna + baja stock) ─────────────
+function ModalVenderTarjeta({ onCerrar, onVendida }: {
+  onCerrar: () => void; onVendida: () => void;
+}) {
+  const [tipos, setTipos] = useState<TipoTarjetaDTO[]>([]);
+  const [tipoSel, setTipoSel] = useState<TipoTarjetaDTO | null>(null);
+  const [busqueda, setBusqueda] = useState("");
+  const [resultados, setResultados] = useState<CuentaCajaDTO[]>([]);
+  const [casaSel, setCasaSel] = useState<CuentaCajaDTO | null>(null);
+  const [cardUid, setCardUid] = useState("");
+  const [metodo, setMetodo] = useState("efectivo");
+  const [error, setError] = useState("");
+  const [ok, setOk] = useState<{ tipo: string; stock: number } | null>(null);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    listarTiposTarjeta().then(ts => setTipos(ts.filter(t => t.activo))).catch(() => {});
+  }, []);
+
+  async function buscar() {
+    if (busqueda.trim().length < 2) return;
+    try { setResultados(await buscarCuentaCaja(busqueda)); } catch { setResultados([]); }
+  }
+
+  async function vender() {
+    if (!tipoSel) { setError("Elegí el tipo de tarjeta"); return; }
+    if (!casaSel) { setError("Elegí la casa"); return; }
+    if (!cardUid.trim()) { setError("Ingresá el código (UID) de la tarjeta"); return; }
+    setError(""); setGuardando(true);
+    try {
+      const r = await venderTarjetaCaja({
+        tipo_tarjeta_id: tipoSel.id, cuenta_id: casaSel.cuenta_id,
+        card_uid: cardUid.trim(), metodo,
+      });
+      setOk({ tipo: tipoSel.nombre, stock: r.stock_restante });
+    } catch (e) { setError((e as Error).message); }
+    finally { setGuardando(false); }
+  }
+
+  if (ok) {
+    return (
+      <div className="modal" onClick={onVendida}>
+        <div className="modal-body" onClick={e => e.stopPropagation()}>
+          <div className="venta-ok">
+            <div className="venta-ok-icon">✓</div>
+            <h3>Tarjeta vendida</h3>
+            <p className="muted">{ok.tipo} · cobrada y asignada a la casa.</p>
+            <p className="muted small">Stock restante de este tipo: <b>{ok.stock}</b></p>
+            <button className="cuota-btn-pagar full" onClick={onVendida}>Listo</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body modal-venta" onClick={e => e.stopPropagation()}>
+        <div className="modal-head"><h3>🎟️ Vender tarjeta</h3>
+          <button className="ghost mini" onClick={onCerrar}>✕</button></div>
+
+        {/* Paso 1: tipo de tarjeta */}
+        <div className="venta-paso">
+          <label className="venta-label">1. Tipo de tarjeta</label>
+          {tipos.length === 0 ? (
+            <p className="muted small">No hay tipos de tarjeta configurados o con stock. Pedile al admin que los configure en Inventario.</p>
+          ) : (
+            <div className="venta-tipos">
+              {tipos.map(t => (
+                <button key={t.id} type="button"
+                  className={`venta-tipo-card ${tipoSel?.id === t.id ? "sel" : ""} ${t.stock <= 0 ? "agotado" : ""}`}
+                  disabled={t.stock <= 0}
+                  onClick={() => setTipoSel(t)}>
+                  <span className="venta-tipo-nombre">{t.nombre}</span>
+                  <span className="venta-tipo-precio">{L(t.precio)}</span>
+                  <span className={`pill ${t.stock === 0 ? "red" : t.stock <= 5 ? "amber" : "green"}`}>
+                    {t.stock > 0 ? `${t.stock} en stock` : "Sin stock"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Paso 2: casa */}
+        <div className="venta-paso">
+          <label className="venta-label">2. Casa</label>
+          {casaSel ? (
+            <div className="venta-casa-sel">
+              <span>{casaSel.identificador} · {casaSel.titular}</span>
+              <button className="ghost mini" onClick={() => { setCasaSel(null); setResultados([]); }}>Cambiar</button>
+            </div>
+          ) : (
+            <>
+              <div className="caja-buscar-row">
+                <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && buscar()}
+                  placeholder="Buscar por casa o titular…" />
+                <button className="ghost mini" onClick={buscar}>Buscar</button>
+              </div>
+              {resultados.map(c => (
+                <button key={c.cuenta_id} type="button" className="venta-casa-opcion"
+                  onClick={() => setCasaSel(c)}>
+                  {c.identificador} · {c.titular}
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Paso 3: UID de la tarjeta */}
+        <div className="venta-paso">
+          <label className="venta-label">3. Código (UID) de la tarjeta física</label>
+          <input value={cardUid} onChange={e => setCardUid(e.target.value)}
+            placeholder="Escaneá o ingresá el UID de la tarjeta" />
+        </div>
+
+        {/* Paso 4: método de pago */}
+        <div className="venta-paso">
+          <label className="venta-label">4. Método de cobro</label>
+          <div className="caja-cobro-metodo">
+            <button type="button" className={metodo === "efectivo" ? "sel" : ""}
+              onClick={() => setMetodo("efectivo")}>💵 Efectivo</button>
+            <button type="button" className={metodo === "tarjeta_pos" ? "sel" : ""}
+              onClick={() => setMetodo("tarjeta_pos")}>💳 POS</button>
+          </div>
+        </div>
+
+        {tipoSel && (
+          <div className="venta-total">
+            <span>Total a cobrar</span><b>{L(tipoSel.precio)}</b>
+          </div>
+        )}
+        {error && <div className="error">{error}</div>}
+        <button className="cuota-btn-pagar full" onClick={vender} disabled={guardando}>
+          {guardando ? "Procesando…" : "Cobrar y asignar tarjeta"}
+        </button>
+      </div>
     </div>
   );
 }

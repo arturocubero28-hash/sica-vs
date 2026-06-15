@@ -817,3 +817,14 @@ export const editarTipoTarjeta = (uuid: string, body: Partial<{ nombre: string; 
 export const agregarStock = (uuid: string, cantidad: number, nota?: string) =>
   request<TipoTarjetaDTO>(`/inventario/tipos/${uuid}/stock`, { method: "POST", body: JSON.stringify({ cantidad, nota }) });
 export const listarMovimientosStock = () => request<MovimientoStockDTO[]>("/inventario/movimientos");
+
+// ── Venta de tarjeta en caja ──────────────────────────────────────────────
+export interface VentaTarjetaResultDTO {
+  venta: { id: string; tipo_tarjeta: string; precio: number; metodo: string; created_at: string };
+  tarjeta: TarjetaDTO;
+  stock_restante: number;
+}
+export const venderTarjetaCaja = (body: {
+  tipo_tarjeta_id: string; cuenta_id: string; card_uid: string;
+  metodo: string; residente_id?: string; etiqueta?: string;
+}) => request<VentaTarjetaResultDTO>("/caja/vender-tarjeta", { method: "POST", body: JSON.stringify(body) });

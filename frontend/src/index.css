@@ -1661,3 +1661,40 @@ table.data tbody tr:hover td { background: #f7faff; }
   .rep-kpi b { font-size: 17px; }
   .historial-tabs { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
 }
+
+/* ===== Día 16: modal de venta de tarjeta en caja ===== */
+.modal-venta { max-width: 480px; }
+.venta-paso { margin-bottom: 16px; }
+.venta-label { display: block; font-size: 13px; font-weight: 600; color: var(--azul); margin-bottom: 8px; }
+.venta-tipos { display: flex; flex-direction: column; gap: 8px; }
+.venta-tipo-card {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  border: 1.5px solid #e3e9f2; border-radius: 11px; background: #fff;
+  cursor: pointer; text-align: left; transition: border-color 0.1s, background 0.1s;
+}
+.venta-tipo-card:hover:not(:disabled) { border-color: var(--marca-naranja); }
+.venta-tipo-card.sel { border-color: var(--marca-naranja); background: #fff7f0; }
+.venta-tipo-card.agotado { opacity: 0.5; cursor: not-allowed; }
+.venta-tipo-nombre { flex: 1; font-weight: 600; color: var(--azul); }
+.venta-tipo-precio { font-weight: 700; color: var(--marca-naranja); }
+.venta-casa-sel {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 11px 14px; background: #f4f7fb; border-radius: 10px; font-weight: 600; color: var(--azul);
+}
+.venta-casa-opcion {
+  display: block; width: 100%; text-align: left; padding: 10px 14px; margin-top: 6px;
+  border: 1px solid #e3e9f2; border-radius: 9px; background: #fff; cursor: pointer;
+}
+.venta-casa-opcion:hover { border-color: var(--marca-naranja); background: #fff7f0; }
+.venta-total {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; background: var(--marca-azul); color: #fff; border-radius: 11px;
+  margin: 16px 0; font-size: 15px;
+}
+.venta-total b { font-size: 22px; }
+.venta-ok { text-align: center; padding: 20px; }
+.venta-ok-icon {
+  width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%;
+  background: #e3f6ea; color: #1d8a4a; font-size: 30px; font-weight: bold;
+  display: flex; align-items: center; justify-content: center;
+}

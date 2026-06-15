@@ -10,7 +10,7 @@ from flask import Blueprint, request, jsonify
 
 from app.extensions import db
 from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja, SalidaCaja
-from app.models.cuenta import Cuenta, Cuota, Pago
+from app.models.cuenta import Cuenta, Cuota, Pago, Tarjeta, Residente, TipoTarjeta, MovimientoStock, VentaTarjeta
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
 
@@ -135,7 +135,104 @@ def registrar_pago(usuario_actual):
     return jsonify({"data": {"pago": pago.to_dict(), "sesion": sesion.to_dict()}}), 201
 
 
-# ── Cerrar caja (arqueo) ──────────────────────────────────────────────────────
+# ── Vender tarjeta en caja (cobra + asigna a la casa + baja stock) ─────────────
+@caja_bp.post("/vender-tarjeta")
+@roles_required("cajero", "admin", "super_admin")
+def vender_tarjeta(usuario_actual):
+    sesion = _sesion_abierta_de(usuario_actual)
+    if not sesion:
+        return jsonify({"error": {"code": "sin_caja",
+                                  "message": "Abrí la caja antes de vender tarjetas"}}), 400
+
+    data = request.get_json(silent=True) or {}
+    tipo_uuid = data.get("tipo_tarjeta_id")
+    cuenta_uuid = data.get("cuenta_id")
+    card_uid = (data.get("card_uid") or "").strip()
+    metodo = data.get("metodo")
+    residente_uuid = data.get("residente_id")
+
+    if metodo not in METODOS_VENTANILLA:
+        return jsonify({"error": {"code": "metodo_invalido",
+                                  "message": "Método debe ser efectivo o tarjeta_pos"}}), 400
+
+    tipo = TipoTarjeta.query.filter_by(uuid_publico=tipo_uuid).first()
+    if not tipo or not tipo.activo:
+        return jsonify({"error": {"code": "tipo_invalido",
+                                  "message": "Tipo de tarjeta no encontrado o inactivo"}}), 404
+    if tipo.stock <= 0:
+        return jsonify({"error": {"code": "sin_stock",
+                                  "message": f"No hay stock de '{tipo.nombre}'. Registrá una entrada primero."}}), 400
+
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return jsonify({"error": {"code": "cuenta_no_encontrada", "message": "Casa no encontrada"}}), 404
+
+    if not card_uid:
+        return jsonify({"error": {"code": "card_uid_requerido",
+                                  "message": "Ingresá el código (UID) de la tarjeta física"}}), 400
+    if Tarjeta.query.filter_by(card_uid=card_uid).first():
+        return jsonify({"error": {"code": "tarjeta_duplicada",
+                                  "message": "Esa tarjeta ya está registrada en el sistema"}}), 409
+
+    # Residente opcional (portador de la tarjeta)
+    residente = None
+    if residente_uuid:
+        residente = Residente.query.filter_by(uuid_publico=residente_uuid, cuenta_id=cuenta.id).first()
+        if not residente:
+            return jsonify({"error": {"code": "residente_invalido",
+                                      "message": "El portador no pertenece a esta casa"}}), 400
+
+    precio = float(tipo.precio)
+
+    # 1. Crear la tarjeta física asignada a la casa
+    tarjeta = Tarjeta(
+        card_uid=card_uid, cuenta_id=cuenta.id,
+        residente_id=residente.id if residente else None,
+        tipo_acceso=tipo.tipo_acceso,
+        etiqueta=data.get("etiqueta") or tipo.nombre,
+    )
+    db.session.add(tarjeta)
+    db.session.flush()
+
+    # 2. Registrar el cobro como Pago (suma al arqueo, sin cuota)
+    pago = Pago(
+        cuota_id=None, cuenta_id=cuenta.id, subido_por=usuario_actual.id,
+        metodo=metodo, monto=precio,
+        referencia=f"Venta tarjeta: {tipo.nombre}",
+        estado="aprobado", revisado_por=usuario_actual.id,
+        revisado_en=dt.datetime.now(dt.timezone.utc),
+        sesion_caja_id=sesion.id,
+    )
+    db.session.add(pago)
+    db.session.flush()
+
+    # 3. Bajar stock + registrar movimiento
+    tipo.stock -= 1
+    db.session.add(MovimientoStock(
+        tipo_tarjeta_id=tipo.id, tipo_movimiento="venta",
+        cantidad=-1, stock_resultante=tipo.stock,
+        nota=f"Venta a {cuenta.uuid_publico} ({card_uid})",
+        registrado_por=usuario_actual.id,
+    ))
+
+    # 4. Registro auditable de la venta
+    venta = VentaTarjeta(
+        tipo_tarjeta_id=tipo.id, tarjeta_id=tarjeta.id, cuenta_id=cuenta.id,
+        pago_id=pago.id, sesion_caja_id=sesion.id, precio=precio,
+        metodo=metodo, vendido_por=usuario_actual.id,
+    )
+    db.session.add(venta)
+
+    db.session.commit()
+    return jsonify({"data": {
+        "venta": venta.to_dict(),
+        "tarjeta": tarjeta.to_dict(),
+        "stock_restante": tipo.stock,
+        "sesion": sesion.to_dict(),
+    }}), 201
+
+
+
 @caja_bp.post("/cerrar")
 @roles_required("cajero", "admin", "super_admin")
 def cerrar_caja(usuario_actual):

@@ -595,3 +595,40 @@ class MovimientoStock(db.Model):
                                if self.usuario else "—"),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class VentaTarjeta(db.Model):
+    """
+    Registro auditable de cada venta de tarjeta en caja: qué tipo, a qué casa,
+    qué tarjeta física, a qué precio, qué cajero y en qué sesión de caja.
+    El cobro en sí se registra como un Pago (para que sume al arqueo); esta
+    tabla guarda el detalle específico de la venta.
+    """
+    __tablename__ = "ventas_tarjeta"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid_col()
+    tipo_tarjeta_id = db.Column(db.BigInteger, db.ForeignKey("tipos_tarjeta.id"), nullable=False)
+    tarjeta_id = db.Column(db.BigInteger, db.ForeignKey("tarjetas.id"))
+    cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
+    pago_id = db.Column(db.BigInteger, db.ForeignKey("pagos.id"))
+    sesion_caja_id = db.Column(db.BigInteger, db.ForeignKey("sesiones_caja.id"))
+    precio = db.Column(db.Numeric(10, 2), nullable=False)
+    metodo = db.Column(db.String(20), nullable=False)
+    vendido_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
+
+    tipo_tarjeta = db.relationship("TipoTarjeta", foreign_keys=[tipo_tarjeta_id])
+    cuenta = db.relationship("Cuenta", foreign_keys=[cuenta_id])
+    vendedor = db.relationship("Usuario", foreign_keys=[vendido_por])
+
+    def to_dict(self):
+        return {
+            "id": str(self.uuid_publico),
+            "tipo_tarjeta": self.tipo_tarjeta.nombre if self.tipo_tarjeta else "—",
+            "precio": float(self.precio),
+            "metodo": self.metodo,
+            "vendido_por": (f"{self.vendedor.nombre} {self.vendedor.apellido}"
+                            if self.vendedor else "—"),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
