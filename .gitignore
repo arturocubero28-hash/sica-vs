@@ -18,3 +18,4 @@ uploads/
 .vscode/
 .idea/
 .DS_Store
+backend/instance/
