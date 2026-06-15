@@ -473,6 +473,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   const [mEmergTel, setMEmergTel] = useState("");
   const [msg, setMsg] = useState("");
   const [miembroEnlace, setMiembroEnlace] = useState<{ email: string; url: string } | null>(null);
+  const [mostrarAgregar, setMostrarAgregar] = useState(false);
 
   async function addTarjeta() {
     if (!cardUid.trim()) return;
@@ -533,6 +534,11 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           </div>
         )}
 
+        <button className="toggle-agregar-miembro" onClick={() => setMostrarAgregar(v => !v)}>
+          {mostrarAgregar ? "▲ Ocultar formulario" : "＋ Agregar nuevo miembro"}
+        </button>
+
+        {mostrarAgregar && (
         <div className="agregar-miembro-card">
           <div className="agregar-miembro-head">
             <span className="agregar-miembro-icon">👤</span>
@@ -574,6 +580,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
 
           <button className="agregar-miembro-btn" onClick={addMiembro}>+ Agregar miembro</button>
         </div>
+        )}
 
         <div className="sub">Tarjetas de proximidad ({(cuenta.tarjetas || []).length})</div>
         <div className="scroll-x"><table className="data">
