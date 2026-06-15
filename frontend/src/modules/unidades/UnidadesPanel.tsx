@@ -575,13 +575,16 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           <button className="agregar-miembro-btn" onClick={addMiembro}>+ Agregar miembro</button>
         </div>
 
-        <div className="sub">Tarjetas de proximidad</div>
+        <div className="sub">Tarjetas de proximidad ({(cuenta.tarjetas || []).length})</div>
         <div className="scroll-x"><table className="data">
+          <thead>
+            <tr><th>Código (UID)</th><th>Etiqueta</th><th>Asignada a</th><th>Acceso</th><th>Estado</th></tr>
+          </thead>
           <tbody>
             {(cuenta.tarjetas || []).map((t) => (
               <tr key={t.id}>
                 <td><code>{t.card_uid}</code></td>
-                <td>{t.etiqueta}</td>
+                <td>{t.etiqueta || <span className="muted">—</span>}</td>
                 <td>{t.asignada_a}</td>
                 <td>
                   <span className={`pill ${t.tipo_acceso === "peatonal" ? "" : "green"}`}>
