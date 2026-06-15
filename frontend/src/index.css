@@ -1684,8 +1684,10 @@ table.data tbody tr:hover td { background: #f7faff; }
 .venta-casa-opcion {
   display: block; width: 100%; text-align: left; padding: 10px 14px; margin-top: 6px;
   border: 1px solid #e3e9f2; border-radius: 9px; background: #fff; cursor: pointer;
+  color: var(--azul); font-size: 14px; font-weight: 500;
 }
 .venta-casa-opcion:hover { border-color: var(--marca-naranja); background: #fff7f0; }
+.venta-buscar-vacio { color: var(--gris); font-size: 13px; margin-top: 8px; }
 .venta-total {
   display: flex; justify-content: space-between; align-items: center;
   padding: 14px 16px; background: var(--marca-azul); color: #fff; border-radius: 11px;

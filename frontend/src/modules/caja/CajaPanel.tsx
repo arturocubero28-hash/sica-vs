@@ -6,6 +6,7 @@ import {
   type SesionCajaDTO, type CuentaCajaDTO, type TipoTarjetaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
+import { LectorTarjeta } from "../unidades/LectorTarjeta";
 
 export function CajaPanel() {
   const [sesion, setSesion] = useState<SesionCajaDTO | null>(null);
@@ -618,6 +619,7 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
   const [resultados, setResultados] = useState<CuentaCajaDTO[]>([]);
   const [casaSel, setCasaSel] = useState<CuentaCajaDTO | null>(null);
   const [cardUid, setCardUid] = useState("");
+  const [etiqueta, setEtiqueta] = useState("");
   const [metodo, setMetodo] = useState("efectivo");
   const [error, setError] = useState("");
   const [ok, setOk] = useState<{ tipo: string; stock: number } | null>(null);
@@ -641,6 +643,7 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
       const r = await venderTarjetaCaja({
         tipo_tarjeta_id: tipoSel.id, cuenta_id: casaSel.cuenta_id,
         card_uid: cardUid.trim(), metodo,
+        etiqueta: etiqueta.trim() || undefined,
       });
       setOk({ tipo: tipoSel.nombre, stock: r.stock_restante });
     } catch (e) { setError((e as Error).message); }
@@ -714,15 +717,23 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
                   {c.identificador} · {c.titular}
                 </button>
               ))}
+              {busqueda.trim().length >= 2 && resultados.length === 0 && (
+                <div className="venta-buscar-vacio">Tocá "Buscar" para ver resultados, o no se encontró ninguna casa.</div>
+              )}
             </>
           )}
         </div>
 
-        {/* Paso 3: UID de la tarjeta */}
+        {/* Paso 3: UID de la tarjeta (con escáner) */}
         <div className="venta-paso">
-          <label className="venta-label">3. Código (UID) de la tarjeta física</label>
-          <input value={cardUid} onChange={e => setCardUid(e.target.value)}
-            placeholder="Escaneá o ingresá el UID de la tarjeta" />
+          <label className="venta-label">3. Tarjeta física</label>
+          <LectorTarjeta valor={cardUid} onLeida={setCardUid} />
+          <input style={{ marginTop: 8, width: "100%" }} value={cardUid}
+            onChange={e => setCardUid(e.target.value)}
+            placeholder="…o ingresá el UID a mano" />
+          <input style={{ marginTop: 8, width: "100%" }} value={etiqueta}
+            onChange={e => setEtiqueta(e.target.value)}
+            placeholder="Etiqueta (ej. Auto 1, opcional)" />
         </div>
 
         {/* Paso 4: método de pago */}
