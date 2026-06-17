@@ -188,6 +188,13 @@ def create_app(config_class=Config):
             "ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS desglose_billetes TEXT",
             # Dueño del edificio que avala inquilinos (Día 10)
             "ALTER TABLE unidades ADD COLUMN IF NOT EXISTS propietario_id BIGINT REFERENCES usuarios(id)",
+            # Login biométrico WebAuthn (Día 17): columnas que pudieron faltar si la
+            # tabla se creó parcialmente en un arranque anterior.
+            "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS nombre_dispositivo VARCHAR(120)",
+            "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS transports VARCHAR(120)",
+            "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS ultimo_uso TIMESTAMPTZ",
+            "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS creada_en TIMESTAMPTZ",
+            "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS sign_count BIGINT NOT NULL DEFAULT 0",
             # Índices en columnas más consultadas (Día 12 — F5 de la auditoría).
             # Aceleran mora, reportes, caja y dashboard cuando crecen los datos.
             "CREATE INDEX IF NOT EXISTS ix_cuotas_estado ON cuotas (estado)",
