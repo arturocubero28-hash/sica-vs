@@ -49,6 +49,13 @@ services:
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: cambiar_esto_en_produccion
       CORS_ORIGINS: http://localhost:5173
+      # WebAuthn (login con huella). Para probar por ngrok, poné acá tu URL ACTUAL
+      # (sin https:// en RP_ID, con https:// en ORIGIN). Si cambia la URL de ngrok,
+      # actualizá estas dos líneas y reconstruí. Las huellas registradas con una URL
+      # solo sirven con esa misma URL.
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:5173}
+      WEBAUTHN_RP_NAME: SICA-VS Villas del Sol
     depends_on:
       db:
         condition: service_healthy

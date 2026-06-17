@@ -55,6 +55,7 @@ def create_app(config_class=Config):
     from app.models.auditoria import LogAuditoria  # noqa: F401  auditoría forense
     from app.models.token_revocado import TokenRevocado  # noqa: F401  blacklist JWT
     from app.models.sesion_activa import SesionActiva  # noqa: F401  sesiones/dispositivos
+    from app.models.credencial_webauthn import CredencialWebAuthn  # noqa: F401  biometría WebAuthn
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp
@@ -99,6 +100,9 @@ def create_app(config_class=Config):
 
     from app.api.inventario import inventario_bp
     app.register_blueprint(inventario_bp, url_prefix="/api/v1/inventario")
+
+    from app.api.webauthn import webauthn_bp
+    app.register_blueprint(webauthn_bp, url_prefix="/api/v1/auth/webauthn")
 
     from app.api.usuarios import usuarios_bp
     app.register_blueprint(usuarios_bp, url_prefix="/api/v1/usuarios")
