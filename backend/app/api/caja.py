@@ -334,10 +334,17 @@ def buscar_cuenta(usuario_actual):
         titular = c.titular()
         nombre_titular = f"{titular.usuario.nombre} {titular.usuario.apellido}" if titular and titular.usuario else ""
         pendientes = cuotas_por_cuenta.get(c.id, [])
+        # Residentes activos de la casa, para elegir portador al vender tarjeta
+        residentes_casa = [
+            {"id": str(r.uuid_publico),
+             "nombre": f"{r.usuario.nombre} {r.usuario.apellido}" if r.usuario else "—"}
+            for r in c.residentes if r.activo
+        ]
         resultados.append({
             "cuenta_id": str(c.uuid_publico),
             "identificador": identificador or "Casa",
             "titular": nombre_titular or "— sin titular —",
+            "residentes": residentes_casa,
             "cuotas_pendientes": [{
                 "cuota_id": str(q2.uuid_publico),
                 "mes_label": q2.periodo.strftime("%B %Y"),

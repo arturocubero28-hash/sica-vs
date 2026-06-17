@@ -620,6 +620,7 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
   const [casaSel, setCasaSel] = useState<CuentaCajaDTO | null>(null);
   const [cardUid, setCardUid] = useState("");
   const [etiqueta, setEtiqueta] = useState("");
+  const [portadorId, setPortadorId] = useState("");
   const [metodo, setMetodo] = useState("efectivo");
   const [error, setError] = useState("");
   const [ok, setOk] = useState<{ tipo: string; stock: number } | null>(null);
@@ -644,6 +645,7 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
         tipo_tarjeta_id: tipoSel.id, cuenta_id: casaSel.cuenta_id,
         card_uid: cardUid.trim(), metodo,
         etiqueta: etiqueta.trim() || undefined,
+        residente_id: portadorId || undefined,
       });
       setOk({ tipo: tipoSel.nombre, stock: r.stock_restante });
     } catch (e) { setError((e as Error).message); }
@@ -734,6 +736,15 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
           <input style={{ marginTop: 8, width: "100%" }} value={etiqueta}
             onChange={e => setEtiqueta(e.target.value)}
             placeholder="Etiqueta (ej. Auto 1, opcional)" />
+          {casaSel && casaSel.residentes && casaSel.residentes.length > 0 && (
+            <select style={{ marginTop: 8, width: "100%" }} value={portadorId}
+              onChange={e => setPortadorId(e.target.value)}>
+              <option value="">Portador (opcional)…</option>
+              {casaSel.residentes.map(r => (
+                <option key={r.id} value={r.id}>{r.nombre}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Paso 4: método de pago */}

@@ -572,6 +572,7 @@ export const editarUsuario = (uuid: string, body: {
 export interface CuotaPendienteCaja { cuota_id: string; mes_label: string; monto: number; estado: string; }
 export interface CuentaCajaDTO {
   cuenta_id: string; identificador: string; titular: string;
+  residentes?: { id: string; nombre: string }[];
   cuotas_pendientes: CuotaPendienteCaja[];
 }
 export interface SesionCajaDTO {
