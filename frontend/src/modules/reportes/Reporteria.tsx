@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos,
+import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos, reporteInventario,
   type ReporteFinancieroDTO, type MoraPorCasaDTO, type CasaMoraDTO,
-  type ReporteCajaDTO, type ReporteAccesosDTO } from "../../api/client";
+  type ReporteCajaDTO, type ReporteAccesosDTO, type ReporteInventarioDTO } from "../../api/client";
 import { L } from "../../utils/formato";
 
 export function Reporteria() {
-  const [tab, setTab] = useState<"financiero" | "mora" | "caja" | "accesos">("financiero");
+  const [tab, setTab] = useState<"financiero" | "mora" | "caja" | "accesos" | "inventario">("financiero");
   return (
     <div className="reporteria">
       <div className="historial-tabs" style={{ marginBottom: 14 }}>
@@ -21,11 +21,15 @@ export function Reporteria() {
         <button className={`htab ${tab === "accesos" ? "activo" : ""}`} onClick={() => setTab("accesos")}>
           🛡️ Accesos y seguridad
         </button>
+        <button className={`htab ${tab === "inventario" ? "activo" : ""}`} onClick={() => setTab("inventario")}>
+          🎟️ Inventario
+        </button>
       </div>
       {tab === "financiero" && <ReporteFinancieroVista />}
       {tab === "mora" && <ReporteMoraPorCasa />}
       {tab === "caja" && <ReporteCajaVista />}
       {tab === "accesos" && <ReporteAccesosVista />}
+      {tab === "inventario" && <ReporteInventarioVista />}
     </div>
   );
 }
@@ -795,6 +799,134 @@ function ReporteAccesosVista() {
                 </table>
               </div></div>
             </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// REPORTE DE INVENTARIO DE TARJETAS (administración)
+// ════════════════════════════════════════════════════════════════
+function ReporteInventarioVista() {
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [data, setData] = useState<ReporteInventarioDTO | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  function cargar() {
+    setCargando(true);
+    reporteInventario(desde || undefined, hasta || undefined)
+      .then(setData).catch(() => {}).finally(() => setCargando(false));
+  }
+  useEffect(() => { cargar(); }, []);
+
+  async function exportarPDF() {
+    if (!data) return;
+    const { jsPDF } = await import("jspdf");
+    const autoTable = (await import("jspdf-autotable")).default;
+    const doc = new jsPDF();
+    doc.setFillColor(2, 46, 69); doc.rect(0, 0, 210, 28, "F");
+    doc.setTextColor(255); doc.setFontSize(16);
+    doc.text("Reporte de Inventario de Tarjetas", 14, 13);
+    doc.setFontSize(10);
+    doc.text(`Villas del Sol · ${data.periodo_label}`, 14, 21);
+    doc.setTextColor(0);
+    autoTable(doc, {
+      startY: 34,
+      head: [["Resumen", ""]],
+      body: [
+        ["Tarjetas vendidas (período)", String(data.total_vendidas)],
+        ["Recaudado (período)", L(data.total_recaudado)],
+        ["Stock total en bodega", String(data.stock_total)],
+        ["Tipos en bajo stock", String(data.tipos_bajo_stock)],
+      ],
+      theme: "grid", headStyles: { fillColor: [244, 135, 35] },
+    });
+    autoTable(doc, {
+      head: [["Tipo", "Acceso", "Precio", "Stock", "Vendidas", "Recaudado"]],
+      body: data.tipos.map(t => [
+        t.nombre, t.tipo_acceso === "peatonal" ? "Corto alcance" : "Largo alcance",
+        L(t.precio), String(t.stock), String(t.vendidas_periodo), L(t.recaudado_periodo),
+      ]),
+      theme: "striped", headStyles: { fillColor: [2, 46, 69] },
+    });
+    doc.save(`reporte-inventario-${data.periodo_label.replace(/[/\s–]/g, "-")}.pdf`);
+  }
+
+  async function exportarExcel() {
+    if (!data) return;
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    const resumen = [
+      ["Reporte de Inventario — Villas del Sol"], [data.periodo_label], [],
+      ["Tarjetas vendidas (período)", data.total_vendidas],
+      ["Recaudado (período)", data.total_recaudado],
+      ["Stock total en bodega", data.stock_total],
+      ["Tipos en bajo stock", data.tipos_bajo_stock],
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
+    const tipos = [["Tipo", "Acceso", "Precio", "Stock", "Vendidas período", "Recaudado período", "Activo"],
+      ...data.tipos.map(t => [t.nombre, t.tipo_acceso, t.precio, t.stock,
+        t.vendidas_periodo, t.recaudado_periodo, t.activo ? "Sí" : "No"])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(tipos), "Tipos de tarjeta");
+    XLSX.writeFile(wb, `reporte-inventario-${data.periodo_label.replace(/[/\s–]/g, "-")}.xlsx`);
+  }
+
+  return (
+    <div>
+      <div className="rep-filtros">
+        <label>Desde <input type="date" value={desde} onChange={e => setDesde(e.target.value)} /></label>
+        <label>Hasta <input type="date" value={hasta} onChange={e => setHasta(e.target.value)} /></label>
+        <button className="cuota-btn-pagar" style={{ maxWidth: 130 }} onClick={cargar}>Aplicar</button>
+        {data && (
+          <div className="rep-export">
+            <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
+            <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
+          </div>
+        )}
+      </div>
+
+      {cargando ? <p className="muted">Cargando…</p> : !data ? <p className="muted">No se pudo cargar.</p> : (
+        <>
+          <div className="rep-resumen-grid">
+            <div className="rep-kpi"><span>Vendidas (período)</span><b>{data.total_vendidas}</b></div>
+            <div className="rep-kpi"><span>Recaudado</span><b>{L(data.total_recaudado)}</b></div>
+            <div className="rep-kpi"><span>Stock en bodega</span><b>{data.stock_total}</b></div>
+            <div className={`rep-kpi ${data.tipos_bajo_stock ? "rep-kpi-alerta" : ""}`}>
+              <span>Tipos bajo stock</span><b>{data.tipos_bajo_stock}</b>
+            </div>
+          </div>
+
+          {data.tipos.length === 0 ? (
+            <div className="lista-card"><p className="muted">No hay tipos de tarjeta configurados.</p></div>
+          ) : (
+            <div className="lista-card"><div className="scroll-x">
+              <table className="data">
+                <thead><tr><th>Tipo</th><th>Acceso</th><th>Precio</th><th>Stock</th><th>Vendidas</th><th>Recaudado</th></tr></thead>
+                <tbody>
+                  {data.tipos.map((t, i) => (
+                    <tr key={i} className={!t.activo ? "fila-baja" : ""}>
+                      <td>{t.nombre}</td>
+                      <td>
+                        <span className={`pill ${t.tipo_acceso === "peatonal" ? "" : "green"}`}>
+                          {t.tipo_acceso === "peatonal" ? "🚶 Corto" : "🚗 Largo"}
+                        </span>
+                      </td>
+                      <td>{L(t.precio)}</td>
+                      <td>
+                        <span className={`pill ${t.stock === 0 ? "red" : t.stock <= 5 ? "amber" : "green"}`}>
+                          {t.stock} u.
+                        </span>
+                      </td>
+                      <td>{t.vendidas_periodo}</td>
+                      <td>{L(t.recaudado_periodo)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div></div>
           )}
         </>
       )}

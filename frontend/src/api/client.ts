@@ -829,3 +829,21 @@ export const venderTarjetaCaja = (body: {
   tipo_tarjeta_id: string; cuenta_id: string; card_uid: string;
   metodo: string; residente_id?: string; etiqueta?: string;
 }) => request<VentaTarjetaResultDTO>("/caja/vender-tarjeta", { method: "POST", body: JSON.stringify(body) });
+
+// ── Reporte de inventario de tarjetas ─────────────────────────────────────
+export interface ReporteInventarioTipoDTO {
+  nombre: string; tipo_acceso: string; precio: number; stock: number;
+  activo: boolean; vendidas_periodo: number; recaudado_periodo: number; bajo_stock: boolean;
+}
+export interface ReporteInventarioDTO {
+  periodo_label: string; total_vendidas: number; total_recaudado: number;
+  stock_total: number; tipos_bajo_stock: number;
+  tipos: ReporteInventarioTipoDTO[]; generado: string;
+}
+export const reporteInventario = (desde?: string, hasta?: string) => {
+  const q = new URLSearchParams();
+  if (desde) q.set("desde", desde);
+  if (hasta) q.set("hasta", hasta);
+  const qs = q.toString();
+  return request<ReporteInventarioDTO>(`/reportes/inventario${qs ? "?" + qs : ""}`);
+};

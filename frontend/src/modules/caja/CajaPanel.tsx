@@ -639,6 +639,7 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
     if (!tipoSel) { setError("Elegí el tipo de tarjeta"); return; }
     if (!casaSel) { setError("Elegí la casa"); return; }
     if (!cardUid.trim()) { setError("Ingresá el código (UID) de la tarjeta"); return; }
+    if (!portadorId) { setError("Elegí el portador a quien se asigna la tarjeta"); return; }
     setError(""); setGuardando(true);
     try {
       const r = await venderTarjetaCaja({
@@ -736,15 +737,19 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
           <input style={{ marginTop: 8, width: "100%" }} value={etiqueta}
             onChange={e => setEtiqueta(e.target.value)}
             placeholder="Etiqueta (ej. Auto 1, opcional)" />
-          {casaSel && casaSel.residentes && casaSel.residentes.length > 0 && (
+          {casaSel && casaSel.residentes && casaSel.residentes.length > 0 ? (
             <select style={{ marginTop: 8, width: "100%" }} value={portadorId}
               onChange={e => setPortadorId(e.target.value)}>
-              <option value="">Portador (opcional)…</option>
+              <option value="">Portador (a quién se asigna) *…</option>
               {casaSel.residentes.map(r => (
                 <option key={r.id} value={r.id}>{r.nombre}</option>
               ))}
             </select>
-          )}
+          ) : casaSel ? (
+            <div className="venta-buscar-vacio" style={{ marginTop: 8 }}>
+              Esta casa no tiene residentes registrados. Agregá un residente antes de venderle una tarjeta.
+            </div>
+          ) : null}
         </div>
 
         {/* Paso 4: método de pago */}

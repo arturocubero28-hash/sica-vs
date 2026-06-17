@@ -492,3 +492,80 @@ def reporte_accesos(usuario_actual):
         "top_casas": top_casas,
         "generado": dt.date.today().isoformat(),
     }})
+
+
+@reportes_bp.get("/inventario")
+@roles_required("admin", "super_admin")
+def reporte_inventario(usuario_actual):
+    """
+    Reporte de inventario de tarjetas en un período.
+    Filtros: ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+    Responde: stock actual por tipo, vendidas y recaudado en el período,
+    alertas de stock bajo. Para que la administración controle el inventario.
+    """
+    from app.models.cuenta import TipoTarjeta, VentaTarjeta
+
+    desde_str = request.args.get("desde")
+    hasta_str = request.args.get("hasta")
+
+    q = VentaTarjeta.query
+    if desde_str and hasta_str:
+        try:
+            desde = dt.date.fromisoformat(desde_str)
+            hasta = dt.date.fromisoformat(hasta_str)
+        except ValueError:
+            return jsonify({"error": {"code": "fecha_invalida",
+                                      "message": "Formato de fecha inválido (use YYYY-MM-DD)"}}), 400
+        if desde > hasta:
+            desde, hasta = hasta, desde
+        ini = dt.datetime.combine(desde, dt.time.min).replace(tzinfo=dt.timezone.utc)
+        fin = dt.datetime.combine(hasta, dt.time.max).replace(tzinfo=dt.timezone.utc)
+        q = q.filter(VentaTarjeta.created_at >= ini, VentaTarjeta.created_at <= fin)
+        label = (desde.strftime("%d/%m/%Y") if desde == hasta
+                 else f"{desde.strftime('%d/%m/%Y')} – {hasta.strftime('%d/%m/%Y')}")
+    else:
+        label = "Histórico completo"
+
+    ventas = q.all()
+
+    # Stock actual por tipo (todos los tipos)
+    tipos = TipoTarjeta.query.order_by(TipoTarjeta.nombre.asc()).all()
+    tipos_por_id = {t.id: t for t in tipos}
+
+    # Vendidas y recaudado por tipo en el período
+    vendidas_por_tipo = {}
+    total_recaudado = 0.0
+    for v in ventas:
+        total_recaudado += float(v.precio)
+        d = vendidas_por_tipo.setdefault(v.tipo_tarjeta_id, {"cantidad": 0, "recaudado": 0.0})
+        d["cantidad"] += 1
+        d["recaudado"] += float(v.precio)
+
+    filas = []
+    stock_total = 0
+    bajo_stock = 0
+    for t in tipos:
+        vt = vendidas_por_tipo.get(t.id, {"cantidad": 0, "recaudado": 0.0})
+        stock_total += t.stock
+        if t.activo and t.stock <= 5:
+            bajo_stock += 1
+        filas.append({
+            "nombre": t.nombre,
+            "tipo_acceso": t.tipo_acceso,
+            "precio": float(t.precio),
+            "stock": t.stock,
+            "activo": t.activo,
+            "vendidas_periodo": vt["cantidad"],
+            "recaudado_periodo": round(vt["recaudado"], 2),
+            "bajo_stock": t.activo and t.stock <= 5,
+        })
+
+    return jsonify({"data": {
+        "periodo_label": label,
+        "total_vendidas": len(ventas),
+        "total_recaudado": round(total_recaudado, 2),
+        "stock_total": stock_total,
+        "tipos_bajo_stock": bajo_stock,
+        "tipos": filas,
+        "generado": dt.date.today().isoformat(),
+    }})
