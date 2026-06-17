@@ -1709,3 +1709,11 @@ table.data tbody tr:hover td { background: #f7faff; }
   transition: background 0.1s, border-color 0.1s;
 }
 .toggle-agregar-miembro:hover { background: #eaf1fa; border-color: var(--marca-naranja); }
+
+/* ===== Día 17: lista de dispositivos con huella ===== */
+.huella-lista { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.huella-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; background: #f4f7fb; border-radius: 10px;
+}
+.huella-item b { color: var(--azul); }

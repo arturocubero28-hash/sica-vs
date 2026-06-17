@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesiones,
-  type Usuario, type SesionDTO } from "../../api/client";
+  registrarHuella, listarCredencialesHuella, eliminarCredencialHuella, soportaHuella,
+  type Usuario, type SesionDTO, type CredencialWebAuthnDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
 
 export function MiPerfil() {
@@ -32,6 +33,7 @@ export function MiPerfil() {
 
       <DatosForm usuario={usuario} />
       <PasswordForm />
+      <HuellaDigital />
       <SesionesForm />
     </div>
   );
@@ -179,6 +181,78 @@ function SesionesForm() {
         <button className="ghost mini" style={{ marginTop: 12, color: "#c81e1e" }} onClick={cerrarOtras}>
           Cerrar todas las otras sesiones
         </button>
+      )}
+    </div>
+  );
+}
+
+function HuellaDigital() {
+  const [creds, setCreds] = useState<CredencialWebAuthnDTO[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [registrando, setRegistrando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const soportado = soportaHuella();
+
+  function recargar() {
+    listarCredencialesHuella().then(setCreds).catch(() => {}).finally(() => setCargando(false));
+  }
+  useEffect(() => { if (soportado) recargar(); else setCargando(false); }, []);
+
+  async function activar() {
+    setMsg(""); setRegistrando(true);
+    try {
+      const nombre = navigator.userAgent.includes("Mobile") ? "Mi celular" : "Este dispositivo";
+      await registrarHuella(nombre);
+      setMsg("✓ Huella activada en este dispositivo");
+      recargar();
+    } catch (e) {
+      const err = (e as Error).message || "";
+      if (err.includes("NotAllowed") || err.includes("cancel")) setMsg("Registro cancelado.");
+      else setMsg("No se pudo activar la huella. " + err);
+    } finally { setRegistrando(false); }
+  }
+
+  async function quitar(id: number) {
+    try { await eliminarCredencialHuella(id); recargar(); } catch { /* noop */ }
+  }
+
+  return (
+    <div className="dash-card">
+      <h3>🔐 Ingreso con huella</h3>
+      {!soportado ? (
+        <p className="muted small">Este dispositivo o navegador no soporta ingreso con huella.</p>
+      ) : (
+        <>
+          <p className="muted small">
+            Activá el ingreso con huella o Face ID en este dispositivo para entrar más rápido,
+            sin escribir tu contraseña. Tu huella nunca sale de tu teléfono.
+          </p>
+          {cargando ? <p className="muted">Cargando…</p> : (
+            <>
+              {creds.length > 0 && (
+                <div className="huella-lista">
+                  {creds.map(c => (
+                    <div key={c.id} className="huella-item">
+                      <div>
+                        <b>{c.nombre_dispositivo}</b>
+                        <span className="muted small">
+                          {c.ultimo_uso ? ` · último uso ${new Date(c.ultimo_uso).toLocaleDateString("es-HN")}` : " · sin usar aún"}
+                        </span>
+                      </div>
+                      <button className="ghost mini" onClick={() => quitar(c.id)}>Quitar</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button className="cuota-btn-pagar" style={{ maxWidth: 260, marginTop: 10 }}
+                onClick={activar} disabled={registrando}>
+                {registrando ? "Esperando huella…" : "＋ Activar huella en este dispositivo"}
+              </button>
+              {msg && <p className="small" style={{ marginTop: 8,
+                color: msg.startsWith("✓") ? "#1d8a4a" : "#c81e1e" }}>{msg}</p>}
+            </>
+          )}
+        </>
       )}
     </div>
   );

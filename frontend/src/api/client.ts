@@ -7,6 +7,8 @@
  *   - Cada módulo agrega sus funciones tipadas (ver ejemplos al final).
  */
 
+import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
+
 const API_URL = "/api/v1";
 
 // ---- Tipos compartidos (cada módulo amplía los suyos en src/api) ----
@@ -847,3 +849,50 @@ export const reporteInventario = (desde?: string, hasta?: string) => {
   const qs = q.toString();
   return request<ReporteInventarioDTO>(`/reportes/inventario${qs ? "?" + qs : ""}`);
 };
+
+// ── Login biométrico (WebAuthn / huella) ──────────────────────────────────
+export interface CredencialWebAuthnDTO {
+  id: number; nombre_dispositivo: string; creada_en: string; ultimo_uso?: string | null;
+}
+
+// fetch que NO asume el wrapper {data}, para las opciones crudas de WebAuthn
+async function fetchCrudo(path: string, body: unknown, conToken: boolean) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (conToken) {
+    const t = getToken();
+    if (t) headers["Authorization"] = `Bearer ${t}`;
+  }
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST", headers, body: JSON.stringify(body),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || "Error de servidor");
+  return json;
+}
+
+/** Registrar la huella del dispositivo actual (usuario ya logueado). */
+export async function registrarHuella(nombreDispositivo: string) {
+  const opciones = await fetchCrudo("/auth/webauthn/registro/iniciar", {}, true);
+  const credential = await startRegistration(opciones);
+  return request<{ mensaje: string; dispositivo: CredencialWebAuthnDTO }>(
+    "/auth/webauthn/registro/completar",
+    { method: "POST", body: JSON.stringify({ credential, nombre_dispositivo: nombreDispositivo }) });
+}
+
+/** Entrar con huella (sin contraseña). Devuelve el usuario y guarda el token. */
+export async function loginConHuella(email: string) {
+  const opciones = await fetchCrudo("/auth/webauthn/login/iniciar", { email }, false);
+  const credential = await startAuthentication(opciones);
+  const data = await fetchCrudo("/auth/webauthn/login/completar", { email, credential }, false);
+  setToken(data.data.token);
+  return data.data.usuario as Usuario;
+}
+
+export const listarCredencialesHuella = () =>
+  request<CredencialWebAuthnDTO[]>("/auth/webauthn/credenciales");
+export const eliminarCredencialHuella = (id: number) =>
+  request<{ mensaje: string }>(`/auth/webauthn/credenciales/${id}`, { method: "DELETE" });
+
+/** ¿El navegador soporta WebAuthn? */
+export const soportaHuella = () =>
+  typeof window !== "undefined" && !!window.PublicKeyCredential;

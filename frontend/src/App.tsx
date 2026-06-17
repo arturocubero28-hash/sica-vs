@@ -3,6 +3,7 @@ import {
   login, getMe, logout, getToken, setToken,
   activarCuenta, solicitarRecuperacion, restablecerPassword, cambiarPassword,
   contarPagosPendientes, misEdificios,
+  loginConHuella, soportaHuella,
   type Usuario, type Rol,
 } from "./api/client";
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
@@ -72,12 +73,26 @@ function Login({ onLogin, onRecuperar, onVolver }: { onLogin: (u: Usuario) => vo
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [conHuella, setConHuella] = useState(false);
 
   async function entrar() {
     setError(""); setEnviando(true);
     try { onLogin(await login(email, password)); }
     catch (e) { setError((e as Error).message); }
     finally { setEnviando(false); }
+  }
+
+  async function entrarConHuella() {
+    if (!email.trim()) { setError("Ingresá tu correo para entrar con huella"); return; }
+    setError(""); setConHuella(true);
+    try { onLogin(await loginConHuella(email.trim().toLowerCase())); }
+    catch (e) {
+      const err = (e as Error).message || "";
+      if (err.includes("NotAllowed") || err.includes("cancel")) setError("Ingreso con huella cancelado.");
+      else if (err.includes("huella registrada")) setError("Este correo no tiene huella registrada. Entrá con contraseña y activala en tu perfil.");
+      else setError(err || "No se pudo entrar con huella.");
+    }
+    finally { setConHuella(false); }
   }
 
   return (
@@ -91,7 +106,11 @@ function Login({ onLogin, onRecuperar, onVolver }: { onLogin: (u: Usuario) => vo
           onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && entrar()} />
         {error && <div className="error">{error}</div>}
         <button onClick={entrar} disabled={enviando}>{enviando ? "Entrando…" : "Iniciar sesión"}</button>
-        <button className="ghost" disabled title="Disponible más adelante">Ingresar con huella / Face ID</button>
+        {soportaHuella() && (
+          <button className="ghost" onClick={entrarConHuella} disabled={conHuella}>
+            {conHuella ? "Esperando huella…" : "🔐 Ingresar con huella / Face ID"}
+          </button>
+        )}
         <button className="link-btn" onClick={onRecuperar}>¿Olvidaste tu contraseña?</button>
         <button className="link-btn" onClick={onVolver}>← Volver al inicio</button>
       </div>
