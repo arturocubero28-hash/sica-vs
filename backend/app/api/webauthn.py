@@ -84,7 +84,7 @@ def registro_iniciar(usuario_actual):
         user_display_name=f"{usuario_actual.nombre} {usuario_actual.apellido}",
         exclude_credentials=exclude,
         authenticator_selection=AuthenticatorSelectionCriteria(
-            resident_key=ResidentKeyRequirement.PREFERRED,
+            resident_key=ResidentKeyRequirement.REQUIRED,
             user_verification=UserVerificationRequirement.PREFERRED,
         ),
     )
@@ -139,30 +139,19 @@ def registro_completar(usuario_actual):
 # ══════════════════════════════════════════════════════════════════
 @webauthn_bp.post("/login/iniciar")
 def login_iniciar():
-    data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip().lower()
-    if not email:
-        return jsonify({"error": {"code": "datos_incompletos",
-                                  "message": "Ingresá tu correo"}}), 400
-
-    usuario = Usuario.query.filter_by(email=email).first()
-    # No revelar si el email existe: si no hay credenciales, igual devolvemos error genérico
-    creds = (CredencialWebAuthn.query.filter_by(usuario_id=usuario.id).all()
-             if usuario else [])
-    if not creds:
-        return jsonify({"error": {"code": "sin_huella",
-                                  "message": "Este correo no tiene huella registrada en este sistema"}}), 404
-
-    allow = [
-        PublicKeyCredentialDescriptor(id=base64url_to_bytes(c.credential_id))
-        for c in creds
-    ]
+    """
+    Inicia el login con huella SIN pedir email (passkey discoverable).
+    No se pasa allow_credentials: el teléfono muestra las cuentas que tiene
+    guardadas para este sitio y el usuario elige con la huella.
+    """
     opciones = webauthn.generate_authentication_options(
         rp_id=_rp_id(),
-        allow_credentials=allow,
         user_verification=UserVerificationRequirement.PREFERRED,
     )
-    _guardar_challenge(f"login:{email}", opciones.challenge, {"usuario_id": usuario.id})
+    # Guardamos el challenge bajo una clave global temporal por IP+navegador.
+    # Como no hay email, usamos el challenge mismo como clave de recuperación.
+    challenge_b64 = bytes_to_base64url(opciones.challenge)
+    _redis().setex(f"webauthn:disc:{challenge_b64}", 300, "1")
     return current_app.response_class(
         webauthn.options_to_json(opciones), mimetype="application/json")
 
@@ -170,28 +159,41 @@ def login_iniciar():
 @webauthn_bp.post("/login/completar")
 def login_completar():
     data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip().lower()
     credential = data.get("credential")
-    if not email or not credential:
+    if not credential:
         return jsonify({"error": {"code": "datos_incompletos",
                                   "message": "Faltan datos"}}), 400
 
-    guardado = _leer_challenge(f"login:{email}")
-    if not guardado:
+    # Recuperar el challenge que enviamos (viene dentro de clientDataJSON,
+    # pero lo validamos contra el que guardamos en Redis).
+    import base64 as _b64
+    try:
+        client_data_b64 = credential.get("response", {}).get("clientDataJSON", "")
+        # base64url decode con padding
+        padded = client_data_b64 + "=" * (-len(client_data_b64) % 4)
+        client_data = json.loads(_b64.urlsafe_b64decode(padded))
+        challenge_recibido = client_data.get("challenge", "")
+    except Exception:
+        return jsonify({"error": {"code": "datos_invalidos",
+                                  "message": "Datos de la huella inválidos"}}), 400
+
+    # Verificar que ese challenge lo emitimos nosotros (anti-replay)
+    if not _redis().get(f"webauthn:disc:{challenge_recibido}"):
         return jsonify({"error": {"code": "challenge_expirado",
                                   "message": "El inicio de sesión expiró, intentá de nuevo"}}), 400
+    _redis().delete(f"webauthn:disc:{challenge_recibido}")  # un solo uso
 
-    # Buscar la credencial usada
+    # Descubrir el usuario por la credencial (el teléfono nos dice cuál usó)
     cred_id = credential.get("id")
     cred = CredencialWebAuthn.query.filter_by(credential_id=cred_id).first()
-    if not cred or cred.usuario_id != guardado.get("usuario_id"):
+    if not cred:
         return jsonify({"error": {"code": "credencial_invalida",
-                                  "message": "Credencial no reconocida"}}), 400
+                                  "message": "Esta huella no está registrada en el sistema"}}), 400
 
     try:
         verificacion = webauthn.verify_authentication_response(
             credential=json.dumps(credential),
-            expected_challenge=base64url_to_bytes(guardado["challenge"]),
+            expected_challenge=base64url_to_bytes(challenge_recibido),
             expected_rp_id=_rp_id(),
             expected_origin=_origin(),
             credential_public_key=base64url_to_bytes(cred.public_key),
@@ -207,12 +209,10 @@ def login_completar():
         return jsonify({"error": {"code": "usuario_inactivo",
                                   "message": "Usuario inactivo"}}), 403
 
-    # Actualizar contador anti-clonación y último uso
     cred.sign_count = verificacion.new_sign_count
     cred.ultimo_uso = dt.datetime.now(dt.timezone.utc)
     usuario.ultimo_acceso = dt.datetime.utcnow()
 
-    # Generar token igual que el login normal + registrar sesión
     token, jti, expira = generar_token(usuario, devolver_jti=True)
     from app.models.sesion_activa import SesionActiva, describir_dispositivo
     ua = (request.user_agent.string or "")[:300]

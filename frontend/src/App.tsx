@@ -83,13 +83,12 @@ function Login({ onLogin, onRecuperar, onVolver }: { onLogin: (u: Usuario) => vo
   }
 
   async function entrarConHuella() {
-    if (!email.trim()) { setError("Ingresá tu correo para entrar con huella"); return; }
     setError(""); setConHuella(true);
-    try { onLogin(await loginConHuella(email.trim().toLowerCase())); }
+    try { onLogin(await loginConHuella()); }
     catch (e) {
       const err = (e as Error).message || "";
       if (err.includes("NotAllowed") || err.includes("cancel")) setError("Ingreso con huella cancelado.");
-      else if (err.includes("huella registrada")) setError("Este correo no tiene huella registrada. Entrá con contraseña y activala en tu perfil.");
+      else if (err.includes("no está registrada")) setError("Esta huella no está registrada. Entrá con contraseña y activala en tu perfil.");
       else setError(err || "No se pudo entrar con huella.");
     }
     finally { setConHuella(false); }

@@ -879,11 +879,11 @@ export async function registrarHuella(nombreDispositivo: string) {
     { method: "POST", body: JSON.stringify({ credential, nombre_dispositivo: nombreDispositivo }) });
 }
 
-/** Entrar con huella (sin contraseña). Devuelve el usuario y guarda el token. */
-export async function loginConHuella(email: string) {
-  const opciones = await fetchCrudo("/auth/webauthn/login/iniciar", { email }, false);
+/** Entrar con huella SIN escribir correo (passkey discoverable). */
+export async function loginConHuella() {
+  const opciones = await fetchCrudo("/auth/webauthn/login/iniciar", {}, false);
   const credential = await startAuthentication(opciones);
-  const data = await fetchCrudo("/auth/webauthn/login/completar", { email, credential }, false);
+  const data = await fetchCrudo("/auth/webauthn/login/completar", { credential }, false);
   setToken(data.data.token);
   return data.data.usuario as Usuario;
 }
