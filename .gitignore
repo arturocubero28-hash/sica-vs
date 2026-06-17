@@ -19,3 +19,7 @@ uploads/
 .idea/
 .DS_Store
 backend/instance/
+
+# Archivos temporales de Celery
+backend/celerybeat-schedule
+backend/celerybeat-schedule.db
