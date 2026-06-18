@@ -28,14 +28,21 @@ input {
   font-size: 15px; outline: none;
 }
 input:focus { border-color: var(--azul2); }
+/* ===== Sistema de botones unificado (Día 18) ===== */
 button {
-  padding: 12px; border: none; border-radius: 9px; cursor: pointer;
-  background: var(--azul2); color: #fff; font-size: 15px; font-weight: 600;
+  padding: 11px 18px; border: none; border-radius: 10px; cursor: pointer;
+  background: var(--azul2); color: #fff; font-size: 14.5px; font-weight: 600;
+  font-family: inherit; transition: all .16s ease; -webkit-tap-highlight-color: transparent;
 }
-button:hover { background: var(--azul); }
+button:hover:not(:disabled) { background: var(--azul); transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(31,78,121,.22); }
+button:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
 button:disabled { opacity: .5; cursor: not-allowed; }
-button.ghost { background: transparent; color: var(--azul2); border: 1px solid #d6deea; }
-button.ghost:hover { background: #eef4fb; }
+button:focus-visible { outline: 2px solid var(--marca-naranja); outline-offset: 2px; }
+/* Fantasma: acciones secundarias/terciarias */
+button.ghost { background: transparent; color: var(--azul2); border: 1.5px solid #d6deea; }
+button.ghost:hover:not(:disabled) { background: #eef4fb; border-color: #b9c6da;
+  box-shadow: none; transform: translateY(-1px); }
 .muted { color: var(--gris); }
 .small { font-size: 12px; text-align: center; }
 .error {
@@ -596,9 +603,11 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .cuota-btn-pagar {
   width: 100%; background: var(--marca-naranja); color: #fff;
   border: none; border-radius: 10px; padding: 12px; font-size: 14px;
-  font-weight: 700; cursor: pointer; transition: background .15s;
+  font-weight: 700; cursor: pointer; transition: all .16s ease;
 }
-.cuota-btn-pagar:hover { background: #d6741a; }
+.cuota-btn-pagar:hover:not(:disabled) { background: #e07b18; transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(244,135,35,.32); }
+.cuota-btn-pagar:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
 .cuota-btn-pagar.full { display: block; }
 .cuota-revision { font-size: 13px; color: #7a5c00; background: #fff8ec; padding: 10px 12px; border-radius: 9px; border: 1px solid #f0d9a8; }
 .cuota-ok { font-size: 13px; color: #1d8a4a; font-weight: 600; }
@@ -996,13 +1005,15 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .btn-baja {
   background: #fdecec !important; color: #c81e1e !important;
   border: 1px solid #f3c2c2 !important; font-weight: 700 !important;
+  transition: all .16s ease !important;
 }
-.btn-baja:hover { background: #fbd5d5 !important; }
+.btn-baja:hover { background: #fbd5d5 !important; transform: translateY(-1px); }
 .btn-reactivar {
   background: #e6f7ee !important; color: #1d8a4a !important;
   border: 1px solid #b8e6cc !important; font-weight: 700 !important;
+  transition: all .16s ease !important;
 }
-.btn-reactivar:hover { background: #d0f0de !important; }
+.btn-reactivar:hover { background: #d0f0de !important; transform: translateY(-1px); }
 
 /* Perfil — datos en solo lectura */
 .perfil-info-grid { display: flex; flex-direction: column; gap: 12px; }
@@ -1067,6 +1078,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   border-radius: 20px; padding: 7px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
 }
 .caja-cuota-chip.on { background: var(--marca-naranja); color: #fff; border-color: var(--marca-naranja); }
+.caja-cuota-chip:hover:not(.on) { background: #e6f0fa; border-color: var(--marca-naranja); }
 
 .caja-cobro { background: #fff7ed; border: 1.5px solid #f5c98a; border-radius: 12px; padding: 14px; margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
 .caja-cobro-info { color: #9a6700; }
