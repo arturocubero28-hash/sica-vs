@@ -31,13 +31,17 @@ export function CajaPanel() {
           <h2 className="dash-titulo">Caja</h2>
           <span className="muted">Cajero: {sesion.cajero}</span>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="cuota-btn-pagar mini" style={{ maxWidth: 150 }} onClick={() => setVendiendo(true)}>
-            🎟️ Vender tarjeta
+        <div className="caja-acciones">
+          <button className="caja-accion-primaria" onClick={() => setVendiendo(true)}>
+            <span className="caja-accion-icono">🎟️</span> Vender tarjeta
           </button>
-          <a className="ghost mini" href={urlConstanciaCaja(sesion.id)} target="_blank" rel="noreferrer"
-            style={{ textDecoration: "none" }}>📄 Constancia</a>
-          <button className="btn-baja mini" onClick={() => setCerrando(true)}>Cerrar caja</button>
+          <a className="caja-accion-secundaria" href={urlConstanciaCaja(sesion.id)}
+            target="_blank" rel="noreferrer">
+            <span className="caja-accion-icono">📄</span> Constancia
+          </a>
+          <button className="caja-accion-cerrar" onClick={() => setCerrando(true)}>
+            Cerrar caja
+          </button>
         </div>
       </div>
 

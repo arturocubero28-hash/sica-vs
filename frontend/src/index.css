@@ -1755,3 +1755,23 @@ table.data tbody tr:hover td { background: #f1f6fd; }
   padding: 10px 14px; background: #f4f7fb; border-radius: 10px;
 }
 .huella-item b { color: var(--azul); }
+
+/* ===== Día 18: cabecera de acciones del cajero (unificada) ===== */
+.caja-acciones { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.caja-acciones button, .caja-acciones a {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 42px; padding: 0 18px; border-radius: 11px; font-size: 14px; font-weight: 600;
+  font-family: inherit; cursor: pointer; text-decoration: none; white-space: nowrap;
+  transition: all .16s ease; border: 1.5px solid transparent;
+}
+.caja-accion-icono { font-size: 15px; line-height: 1; }
+/* Primaria: vender tarjeta (acción frecuente, naranja sólido) */
+.caja-accion-primaria { background: var(--marca-naranja); color: #fff; }
+.caja-accion-primaria:hover { background: #e07b18; transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(244,135,35,.32); }
+/* Secundaria: constancia (borde, neutra) */
+.caja-accion-secundaria { background: #fff; color: var(--marca-azul); border-color: #d6deea; }
+.caja-accion-secundaria:hover { background: #f4f8fc; border-color: #b9c6da; transform: translateY(-1px); }
+/* Cerrar: discreta pero reconocible (acción final, poco frecuente) */
+.caja-accion-cerrar { background: #fff; color: #c2410c; border-color: #f0d0bc; }
+.caja-accion-cerrar:hover { background: #fef5f0; border-color: #e8b896; transform: translateY(-1px); }
