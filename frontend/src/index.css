@@ -76,12 +76,23 @@ button.ghost.mini { padding: 6px 12px; }
 .form .sub { font-weight: 700; color: var(--azul); margin-top: 8px; font-size: 14px; }
 .form .row { display: flex; gap: 10px; }
 .form .row > * { flex: 1; }
-select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font-size: 15px; background: #fff; }
+select {
+  padding: 11px 38px 11px 14px; border: 1.5px solid #dce4ef; border-radius: 11px;
+  font-size: 14px; font-family: inherit; color: #1e2a37; background-color: #fff;
+  cursor: pointer; transition: border-color .16s ease, box-shadow .16s ease;
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  /* Flecha custom: misma en todos los navegadores y sistemas */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%236b7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+}
+select:hover { border-color: #b9c6da; }
+select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 0 0 3px rgba(244,135,35,.13); }
 .diapago { display: flex; flex-direction: column; font-size: 12px; color: var(--gris); gap: 4px; max-width: 120px; }
 .diapago input { width: 100%; }
 .inline-create { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   background: #f7f9fc; padding: 10px; border-radius: 9px; margin: 4px 0; }
-.inline-create input, .inline-create select { padding: 8px 10px; font-size: 14px; }
+.inline-create input { padding: 8px 10px; font-size: 14px; }
+.inline-create select { font-size: 14px; }
 .nota { background: #eef4fb; border-left: 3px solid var(--azul2); padding: 9px 12px;
   border-radius: 0 6px 6px 0; font-size: 13px; color: #3a4a5e; }
 .ok-box { background: #e3f6ea; color: #1d8a4a; padding: 10px 12px; border-radius: 8px; font-size: 14px; }
@@ -938,7 +949,8 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .filtro-campo { display: flex; flex-direction: column; gap: 4px; }
 .filtro-campo.flex1 { flex: 1; min-width: 160px; }
 .filtro-campo label { font-size: 12px; font-weight: 600; color: var(--gris); }
-.filtro-campo input, .filtro-campo select { border: 1.5px solid #dce4ef; border-radius: 9px; padding: 9px 12px; font-size: 14px; }
+.filtro-campo input { border: 1.5px solid #dce4ef; border-radius: 9px; padding: 9px 12px; font-size: 14px; }
+.filtro-campo select { font-size: 14px; }
 .filtro-botones { display: flex; gap: 8px; align-items: center; }
 .paginacion { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px; }
 
@@ -963,11 +975,7 @@ select { padding: 11px 12px; border: 1px solid #d6deea; border-radius: 9px; font
 .reporte-controles {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
-.periodo-select {
-  border: 1.5px solid #dce4ef; border-radius: 9px; padding: 8px 12px;
-  font-size: 14px; color: var(--marca-azul); background: #fff; cursor: pointer;
-}
-.periodo-select:focus { border-color: var(--marca-naranja); outline: none; }
+.periodo-select { color: var(--marca-azul); }
 
 /* ============================================================
    CASAS — buscador y filtros
