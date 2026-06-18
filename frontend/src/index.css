@@ -1688,10 +1688,16 @@ table.data tbody tr:hover td { background: #f7faff; }
 .venta-tipo-card {
   display: flex; align-items: center; gap: 10px; padding: 12px 14px;
   border: 1.5px solid #e3e9f2; border-radius: 11px; background: #fff;
-  cursor: pointer; text-align: left; transition: border-color 0.1s, background 0.1s;
+  cursor: pointer; text-align: left; transition: all .16s ease;
 }
-.venta-tipo-card:hover:not(:disabled) { border-color: var(--marca-naranja); }
-.venta-tipo-card.sel { border-color: var(--marca-naranja); background: #fff7f0; }
+.venta-tipo-card:hover:not(:disabled) {
+  border-color: var(--marca-naranja); background: #fff;
+  box-shadow: 0 3px 12px rgba(244,135,35,.16); transform: translateY(-1px);
+}
+.venta-tipo-card.sel {
+  border-color: var(--marca-naranja); background: #fff7f0;
+  box-shadow: 0 2px 10px rgba(244,135,35,.14);
+}
 .venta-tipo-card.agotado { opacity: 0.5; cursor: not-allowed; }
 .venta-tipo-nombre { flex: 1; font-weight: 600; color: var(--azul); }
 .venta-tipo-precio { font-weight: 700; color: var(--marca-naranja); }
