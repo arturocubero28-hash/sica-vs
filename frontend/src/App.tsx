@@ -119,46 +119,69 @@ function Login({ onLogin, onRecuperar, onVolver }: { onLogin: (u: Usuario) => vo
 
 // ─── Landing page pública ────────────────────────────────────
 function Landing({ onEntrar }: { onEntrar: () => void }) {
-  const features = [
-    { icon: "🎫", titulo: "Visitas con QR", desc: "Cada residente genera códigos QR para sus visitas. El guardia los valida en segundos." },
-    { icon: "📹", titulo: "Monitoreo en vivo", desc: "Cámaras de seguridad de toda la residencial en una sola pantalla." },
-    { icon: "💳", titulo: "Cuotas y pagos", desc: "Los residentes pagan en línea y la administración aprueba al instante." },
-    { icon: "📊", titulo: "Control total", desc: "Sabé quién entra, quién autorizó y cuándo. Reportes para el patronato." },
+  const modulos = [
+    { n: "01", titulo: "Visitas con QR", desc: "El residente genera el código desde su teléfono. El guardia lo valida en la garita en segundos, con foto y registro." },
+    { n: "02", titulo: "Monitoreo en vivo", desc: "Las cámaras de los cuatro accesos en una sola pantalla, con historial de cada entrada y salida." },
+    { n: "03", titulo: "Cuotas y caja", desc: "Pagos en línea, aprobación inmediata y arqueo de caja con cierre diario cuadrado al centavo." },
+    { n: "04", titulo: "Control y reportes", desc: "Quién entró, quién autorizó y a qué hora. Reportes financieros y de acceso para el patronato." },
   ];
   return (
-    <div className="landing">
-      <header className="landing-nav">
-        <div className="landing-brand">
+    <div className="lp">
+      <header className="lp-nav">
+        <div className="lp-brand">
           <img src="/logo-vs.png" alt="Villas del Sol" />
-          <span>SICA-VS</span>
+          <div>
+            <span className="lp-brand-name">SICA-VS</span>
+            <span className="lp-brand-sub">Villas del Sol</span>
+          </div>
         </div>
-        <button className="landing-login-btn" onClick={onEntrar}>Iniciar sesión</button>
+        <button className="lp-nav-btn" onClick={onEntrar}>Iniciar sesión</button>
       </header>
 
-      <section className="landing-hero">
-        <div className="landing-hero-text">
-          <h1>Control de accesos<br /><span>inteligente y seguro</span></h1>
-          <p>SICA-VS centraliza la seguridad de Residencial Villas del Sol: visitas con QR, monitoreo de cámaras, cuotas en línea y comunicación con los residentes — todo en una sola plataforma.</p>
-          <button className="landing-cta" onClick={onEntrar}>Acceder al sistema →</button>
+      <section className="lp-hero">
+        <div className="lp-hero-eyebrow">Sistema Integral de Control de Accesos</div>
+        <h1 className="lp-hero-title">
+          La seguridad de la residencial,<br /><span>en una sola plataforma.</span>
+        </h1>
+        <p className="lp-hero-lead">
+          SICA-VS conecta la garita, la administración y a cada familia de Villas del Sol.
+          Accesos, cámaras, cuotas y comunicación, operando juntos en tiempo real.
+        </p>
+        <div className="lp-hero-actions">
+          <button className="lp-cta" onClick={onEntrar}>Acceder al sistema →</button>
+          <span className="lp-hero-note">San Pedro Sula, Honduras</span>
         </div>
-        <div className="landing-hero-logo">
+
+        <div className="lp-stats">
+          <div className="lp-stat"><b>500+</b><span>familias conectadas</span></div>
+          <div className="lp-stat-div" />
+          <div className="lp-stat"><b>4</b><span>accesos controlados</span></div>
+          <div className="lp-stat-div" />
+          <div className="lp-stat"><b>24/7</b><span>monitoreo activo</span></div>
+        </div>
+      </section>
+
+      <section className="lp-modulos">
+        <div className="lp-modulos-head">
+          <span className="lp-section-label">Qué hace el sistema</span>
+        </div>
+        <div className="lp-modulos-grid">
+          {modulos.map((m) => (
+            <div key={m.n} className="lp-modulo">
+              <span className="lp-modulo-n">{m.n}</span>
+              <h3>{m.titulo}</h3>
+              <p>{m.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <footer className="lp-footer">
+        <div className="lp-footer-brand">
           <img src="/logo-vs.png" alt="Villas del Sol" />
+          <span>SICA-VS · Residencial Villas del Sol</span>
         </div>
-      </section>
-
-      <section className="landing-features">
-        {features.map((f, i) => (
-          <div key={i} className="landing-feature">
-            <div className="landing-feature-icon">{f.icon}</div>
-            <h3>{f.titulo}</h3>
-            <p>{f.desc}</p>
-          </div>
-        ))}
-      </section>
-
-      <footer className="landing-footer">
-        <p>Residencial Villas del Sol · San Pedro Sula, Honduras</p>
-        <p className="muted small">SICA-VS — Sistema Integral de Control de Accesos</p>
+        <span className="lp-footer-loc">San Pedro Sula, Cortés · Honduras</span>
       </footer>
     </div>
   );
