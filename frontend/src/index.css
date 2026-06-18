@@ -861,110 +861,137 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 /* ============================================================
    LANDING PAGE PÚBLICA
    ============================================================ */
-/* ===== Landing rediseñada (Día 18): técnica, panel de control ===== */
+/* ===== Landing clara y luminosa (Día 18) ===== */
 .lp {
-  min-height: 100vh; background: #061826; color: #e8eef5;
+  min-height: 100vh; background: #fcfcfb; color: #1b2733;
   font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif;
   position: relative; overflow: hidden;
 }
-/* Rejilla técnica sutil de fondo */
+/* Halo de luz cálido arriba (el "sol" de Villas del Sol, sutil) */
 .lp::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background-image:
-    linear-gradient(rgba(80,130,170,.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(80,130,170,.05) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+  content: ""; position: absolute; top: -340px; right: -200px; width: 760px; height: 760px;
+  background: radial-gradient(circle, rgba(245,197,24,.16) 0%, rgba(244,135,35,.07) 38%, transparent 68%);
+  pointer-events: none; z-index: 0;
+}
+.lp::after {
+  content: ""; position: absolute; top: 380px; left: -260px; width: 620px; height: 620px;
+  background: radial-gradient(circle, rgba(2,46,69,.05) 0%, transparent 66%);
+  pointer-events: none; z-index: 0;
 }
 .lp > * { position: relative; z-index: 1; }
+
+/* Animaciones de entrada */
+@keyframes lp-rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes lp-fade { from { opacity: 0; } to { opacity: 1; } }
+.lp-anim { opacity: 0; animation: lp-rise .7s cubic-bezier(.16,.84,.44,1) forwards; }
+.lp-d1 { animation-delay: .05s; } .lp-d2 { animation-delay: .15s; }
+.lp-d3 { animation-delay: .25s; } .lp-d4 { animation-delay: .35s; }
+.lp-d5 { animation-delay: .45s; } .lp-d6 { animation-delay: .55s; }
+@media (prefers-reduced-motion: reduce) {
+  .lp-anim { animation: lp-fade .01s forwards; opacity: 1; }
+}
 
 .lp-nav {
   display: flex; align-items: center; justify-content: space-between;
   padding: 22px 40px; max-width: 1180px; margin: 0 auto;
 }
 .lp-brand { display: flex; align-items: center; gap: 13px; }
-.lp-brand img { width: 44px; height: 44px; border-radius: 11px; object-fit: cover; }
-.lp-brand-name { display: block; font-weight: 700; font-size: 18px; color: #fff; letter-spacing: -.02em; }
-.lp-brand-sub { display: block; font-size: 12px; color: #6b8499; letter-spacing: .04em; }
+.lp-brand img { width: 46px; height: 46px; border-radius: 12px; object-fit: cover;
+  box-shadow: 0 4px 14px rgba(2,46,69,.12); }
+.lp-brand-name { display: block; font-weight: 700; font-size: 18px; color: var(--marca-azul); letter-spacing: -.02em; }
+.lp-brand-sub { display: block; font-size: 12px; color: #93a0ad; letter-spacing: .04em; }
 .lp-nav-btn {
-  background: rgba(255,255,255,.06); color: #e8eef5; border: 1px solid rgba(255,255,255,.14);
-  padding: 10px 22px; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px;
-  font-family: inherit; transition: all .16s ease;
+  background: var(--marca-azul); color: #fff; border: none;
+  padding: 11px 24px; border-radius: 11px; font-weight: 600; cursor: pointer; font-size: 14px;
+  font-family: inherit; transition: all .18s ease;
 }
-.lp-nav-btn:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.25);
-  transform: none; box-shadow: none; }
+.lp-nav-btn:hover { background: #033b5a; transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(2,46,69,.22); }
 
-.lp-hero { max-width: 1180px; margin: 0 auto; padding: 70px 40px 50px; }
+.lp-hero { max-width: 1180px; margin: 0 auto; padding: 64px 40px 54px; }
 .lp-hero-eyebrow {
   display: inline-block; font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--marca-naranja); font-weight: 600; margin-bottom: 24px;
-  padding-left: 14px; border-left: 2px solid var(--marca-naranja);
+  color: var(--marca-naranja); font-weight: 600; margin-bottom: 22px;
+  padding-left: 14px; border-left: 3px solid var(--marca-naranja);
 }
 .lp-hero-title {
-  font-size: 58px; font-weight: 600; line-height: 1.05; letter-spacing: -.03em;
-  color: #fff; margin: 0 0 26px; max-width: 880px;
+  font-size: 60px; font-weight: 600; line-height: 1.04; letter-spacing: -.035em;
+  color: var(--marca-azul); margin: 0 0 26px; max-width: 900px;
 }
-.lp-hero-title span { color: #5fa8d8; }
+.lp-hero-title span {
+  background: linear-gradient(100deg, var(--marca-naranja), #f5a623);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
 .lp-hero-lead {
-  font-size: 18px; line-height: 1.65; color: #9fb3c4; max-width: 600px; margin: 0 0 36px;
+  font-size: 18px; line-height: 1.65; color: #5a6b7b; max-width: 580px; margin: 0 0 36px;
   font-family: -apple-system, system-ui, sans-serif;
 }
 .lp-hero-actions { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
 .lp-cta {
   background: var(--marca-naranja); color: #fff; border: none;
-  padding: 15px 30px; border-radius: 12px; font-weight: 600; font-size: 16px; cursor: pointer;
-  font-family: inherit; transition: all .18s ease;
-  box-shadow: 0 10px 30px rgba(244,135,35,.3);
+  padding: 16px 32px; border-radius: 13px; font-weight: 600; font-size: 16px; cursor: pointer;
+  font-family: inherit; transition: all .2s cubic-bezier(.16,.84,.44,1);
+  box-shadow: 0 10px 28px rgba(244,135,35,.26);
 }
-.lp-cta:hover { transform: translateY(-2px); box-shadow: 0 14px 38px rgba(244,135,35,.42); background: #f48723; }
-.lp-hero-note { font-size: 13px; color: #6b8499; font-family: -apple-system, system-ui, sans-serif; }
+.lp-cta:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgba(244,135,35,.4); }
+.lp-cta:active { transform: translateY(-1px); }
+.lp-hero-note { font-size: 13px; color: #93a0ad; font-family: -apple-system, system-ui, sans-serif; }
 
 .lp-stats {
-  display: flex; align-items: center; gap: 30px; margin-top: 60px; flex-wrap: wrap;
-  padding-top: 36px; border-top: 1px solid rgba(255,255,255,.08);
+  display: flex; align-items: center; gap: 32px; margin-top: 58px; flex-wrap: wrap;
+  padding-top: 36px; border-top: 1px solid #ecebe6;
 }
-.lp-stat { display: flex; flex-direction: column; gap: 2px; }
-.lp-stat b { font-size: 38px; font-weight: 600; color: #fff; letter-spacing: -.02em; line-height: 1; }
-.lp-stat span { font-size: 13px; color: #7d93a6; font-family: -apple-system, system-ui, sans-serif; }
-.lp-stat-div { width: 1px; height: 38px; background: rgba(255,255,255,.1); }
+.lp-stat { display: flex; flex-direction: column; gap: 3px; }
+.lp-stat b { font-size: 40px; font-weight: 600; color: var(--marca-azul); letter-spacing: -.03em; line-height: 1; }
+.lp-stat:nth-child(1) b { color: var(--marca-naranja); }
+.lp-stat span { font-size: 13px; color: #8493a1; font-family: -apple-system, system-ui, sans-serif; }
+.lp-stat-div { width: 1px; height: 40px; background: #e6e5df; }
 
-.lp-modulos { max-width: 1180px; margin: 0 auto; padding: 50px 40px 40px; }
+.lp-modulos { max-width: 1180px; margin: 0 auto; padding: 56px 40px 40px; }
 .lp-section-label {
-  font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; color: #6b8499; font-weight: 600;
+  font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; color: #93a0ad; font-weight: 600;
 }
-.lp-modulos-head { margin-bottom: 28px; }
-.lp-modulos-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: rgba(255,255,255,.07);
-  border: 1px solid rgba(255,255,255,.07); border-radius: 16px; overflow: hidden; }
+.lp-modulos-head { margin-bottom: 26px; }
+.lp-modulos-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .lp-modulo {
-  background: #08202f; padding: 32px 30px; transition: background .2s ease;
+  background: #fff; padding: 30px 28px; border-radius: 18px; border: 1px solid #eeede8;
+  box-shadow: 0 2px 16px rgba(2,46,69,.04);
+  transition: transform .22s cubic-bezier(.16,.84,.44,1), box-shadow .22s ease, border-color .22s ease;
+  position: relative; overflow: hidden;
 }
-.lp-modulo:hover { background: #0a2738; }
+.lp-modulo::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--marca-naranja); transform: scaleY(0); transform-origin: top; transition: transform .25s ease;
+}
+.lp-modulo:hover {
+  transform: translateY(-4px); box-shadow: 0 16px 40px rgba(2,46,69,.1); border-color: #e3e9f2;
+}
+.lp-modulo:hover::before { transform: scaleY(1); }
 .lp-modulo-n {
   font-size: 13px; font-weight: 600; color: var(--marca-naranja); letter-spacing: .05em;
 }
-.lp-modulo h3 { font-size: 20px; font-weight: 600; color: #fff; margin: 14px 0 10px; letter-spacing: -.01em; }
-.lp-modulo p { font-size: 14.5px; line-height: 1.6; color: #92a7b8; margin: 0;
+.lp-modulo h3 { font-size: 20px; font-weight: 600; color: var(--marca-azul); margin: 12px 0 10px; letter-spacing: -.01em; }
+.lp-modulo p { font-size: 14.5px; line-height: 1.6; color: #6b7a89; margin: 0;
   font-family: -apple-system, system-ui, sans-serif; }
 
 .lp-footer {
-  max-width: 1180px; margin: 0 auto; padding: 36px 40px;
+  max-width: 1180px; margin: 30px auto 0; padding: 34px 40px;
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
-  border-top: 1px solid rgba(255,255,255,.08); margin-top: 30px;
+  border-top: 1px solid #ecebe6;
 }
-.lp-footer-brand { display: flex; align-items: center; gap: 12px; color: #c3d2df; font-weight: 600; font-size: 14px; }
+.lp-footer-brand { display: flex; align-items: center; gap: 12px; color: var(--marca-azul); font-weight: 600; font-size: 14px; }
 .lp-footer-brand img { width: 30px; height: 30px; border-radius: 8px; object-fit: cover; }
-.lp-footer-loc { font-size: 13px; color: #6b8499; font-family: -apple-system, system-ui, sans-serif; }
+.lp-footer-loc { font-size: 13px; color: #93a0ad; font-family: -apple-system, system-ui, sans-serif; }
 
 @media (max-width: 820px) {
-  .lp-hero { padding: 50px 24px 40px; }
+  .lp-hero { padding: 46px 24px 38px; }
   .lp-hero-title { font-size: 38px; }
   .lp-hero-lead { font-size: 16px; }
   .lp-stats { gap: 22px; }
-  .lp-stat b { font-size: 30px; }
+  .lp-stat b { font-size: 32px; }
   .lp-modulos-grid { grid-template-columns: 1fr; }
   .lp-nav { padding: 18px 24px; }
-  .lp-modulos { padding: 40px 24px; }
+  .lp-modulos { padding: 44px 24px; }
   .lp-footer { padding: 28px 24px; }
 }
 

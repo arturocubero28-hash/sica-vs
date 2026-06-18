@@ -127,7 +127,7 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
   ];
   return (
     <div className="lp">
-      <header className="lp-nav">
+      <header className="lp-nav lp-anim lp-d1">
         <div className="lp-brand">
           <img src="/logo-vs.png" alt="Villas del Sol" />
           <div>
@@ -139,20 +139,20 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
       </header>
 
       <section className="lp-hero">
-        <div className="lp-hero-eyebrow">Sistema Integral de Control de Accesos</div>
-        <h1 className="lp-hero-title">
+        <div className="lp-hero-eyebrow lp-anim lp-d1">Sistema Integral de Control de Accesos</div>
+        <h1 className="lp-hero-title lp-anim lp-d2">
           La seguridad de la residencial,<br /><span>en una sola plataforma.</span>
         </h1>
-        <p className="lp-hero-lead">
+        <p className="lp-hero-lead lp-anim lp-d3">
           SICA-VS conecta la garita, la administración y a cada familia de Villas del Sol.
           Accesos, cámaras, cuotas y comunicación, operando juntos en tiempo real.
         </p>
-        <div className="lp-hero-actions">
+        <div className="lp-hero-actions lp-anim lp-d4">
           <button className="lp-cta" onClick={onEntrar}>Acceder al sistema →</button>
           <span className="lp-hero-note">San Pedro Sula, Honduras</span>
         </div>
 
-        <div className="lp-stats">
+        <div className="lp-stats lp-anim lp-d5">
           <div className="lp-stat"><b>500+</b><span>familias conectadas</span></div>
           <div className="lp-stat-div" />
           <div className="lp-stat"><b>4</b><span>accesos controlados</span></div>
@@ -166,8 +166,8 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
           <span className="lp-section-label">Qué hace el sistema</span>
         </div>
         <div className="lp-modulos-grid">
-          {modulos.map((m) => (
-            <div key={m.n} className="lp-modulo">
+          {modulos.map((m, i) => (
+            <div key={m.n} className={`lp-modulo lp-anim lp-d${i + 2}`}>
               <span className="lp-modulo-n">{m.n}</span>
               <h3>{m.titulo}</h3>
               <p>{m.desc}</p>
