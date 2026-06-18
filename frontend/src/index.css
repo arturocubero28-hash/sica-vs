@@ -224,8 +224,8 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 /* ---- Dashboard admin ---- */
 .dash { display: flex; flex-direction: column; gap: 18px; }
-.dash-head h2 { color: #022E45; margin: 0; }
-.dash-head { display: flex; align-items: baseline; gap: 12px; }
+.dash-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.dash-head h2 { color: var(--marca-azul); margin: 0; font-size: 24px; font-weight: 800; }
 
 .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
 .metric-grid.small { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
