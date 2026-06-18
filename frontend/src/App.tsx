@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import {
   login, getMe, logout, getToken, setToken,
   activarCuenta, solicitarRecuperacion, restablecerPassword, cambiarPassword,
@@ -125,6 +125,20 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
     { n: "03", titulo: "Cuotas y caja", desc: "Pagos en línea, aprobación inmediata y arqueo de caja con cierre diario cuadrado al centavo." },
     { n: "04", titulo: "Control y reportes", desc: "Quién entró, quién autorizó y a qué hora. Reportes financieros y de acceso para el patronato." },
   ];
+  const roles = [
+    { ic: "\u{1F6E1}\uFE0F", t: "Guardia", d: "Valida visitas y tarjetas en la garita" },
+    { ic: "\u{1F3E0}", t: "Residente", d: "Genera QR y paga sus cuotas en línea" },
+    { ic: "\u{1F4CA}", t: "Administración", d: "Controla accesos, pagos y reportes" },
+    { ic: "\u{1F4B5}", t: "Cajero", d: "Cobra en ventanilla con arqueo en vivo" },
+  ];
+
+  // Muestra una captura real si existe en /landing, o el mockup dibujado por código.
+  function ShotConFallback({ src, children }: { src: string; children: ReactNode }) {
+    const [falla, setFalla] = useState(false);
+    if (falla) return <>{children}</>;
+    return <img className="lp-shot-img" src={src} alt="" onError={() => setFalla(true)} />;
+  }
+
   return (
     <div className="lp">
       <header className="lp-nav lp-anim lp-d1">
@@ -139,41 +153,117 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
       </header>
 
       <section className="lp-hero">
-        <div className="lp-hero-eyebrow lp-anim lp-d1">Sistema Integral de Control de Accesos</div>
-        <h1 className="lp-hero-title lp-anim lp-d2">
-          La seguridad de la residencial,<br /><span>en una sola plataforma.</span>
-        </h1>
-        <p className="lp-hero-lead lp-anim lp-d3">
-          SICA-VS conecta la garita, la administración y a cada familia de Villas del Sol.
-          Accesos, cámaras, cuotas y comunicación, operando juntos en tiempo real.
-        </p>
-        <div className="lp-hero-actions lp-anim lp-d4">
-          <button className="lp-cta" onClick={onEntrar}>Acceder al sistema →</button>
-          <span className="lp-hero-note">San Pedro Sula, Honduras</span>
+        <div className="lp-hero-text">
+          <div className="lp-hero-eyebrow lp-anim lp-d1">Sistema Integral de Control de Accesos</div>
+          <h1 className="lp-hero-title lp-anim lp-d2">
+            La seguridad de la residencial,<br /><span>en una sola plataforma.</span>
+          </h1>
+          <p className="lp-hero-lead lp-anim lp-d3">
+            SICA-VS conecta la garita, la administración y a cada familia de Villas del Sol.
+            Accesos, cámaras, cuotas y comunicación, operando juntos en tiempo real.
+          </p>
+          <div className="lp-hero-actions lp-anim lp-d4">
+            <button className="lp-cta" onClick={onEntrar}>Acceder al sistema →</button>
+            <span className="lp-hero-note">San Pedro Sula, Honduras</span>
+          </div>
         </div>
+        <div className="lp-hero-mock lp-anim lp-d3">
+          <ShotConFallback src="/landing/dashboard.png">
+            <div className="lp-mock">
+              <div className="lp-mock-bar">
+                <span className="lp-mock-dot" style={{ background: "#ff5f57" }} />
+                <span className="lp-mock-dot" style={{ background: "#febc2e" }} />
+                <span className="lp-mock-dot" style={{ background: "#28c840" }} />
+              </div>
+              <div className="lp-mock-body">
+                <div className="lp-mock-h"><span className="lp-mock-title">Panel de control</span><span className="lp-mock-pill">EN VIVO</span></div>
+                <div className="lp-mock-cards">
+                  <div className="lp-mc"><div className="lp-mc-n">487</div><div className="lp-mc-l">Casas activas</div></div>
+                  <div className="lp-mc"><div className="lp-mc-n">23</div><div className="lp-mc-l">Visitas hoy</div></div>
+                  <div className="lp-mc"><div className="lp-mc-n">L 142K</div><div className="lp-mc-l">Recaudado</div></div>
+                </div>
+                <div className="lp-mock-row"><span>Casa 124 · Erica Rivera</span><span className="lp-mock-tag">Al día</span></div>
+                <div className="lp-mock-row"><span>Casa 88 · Visita autorizada</span><span className="lp-mock-tag">Adentro</span></div>
+                <div className="lp-mock-row"><span>Edificio 2 · Apto 3</span><span className="lp-mock-tag">Al día</span></div>
+              </div>
+            </div>
+          </ShotConFallback>
+        </div>
+      </section>
 
-        <div className="lp-stats lp-anim lp-d5">
-          <div className="lp-stat"><b>500+</b><span>familias conectadas</span></div>
-          <div className="lp-stat-div" />
-          <div className="lp-stat"><b>4</b><span>accesos controlados</span></div>
-          <div className="lp-stat-div" />
-          <div className="lp-stat"><b>24/7</b><span>monitoreo activo</span></div>
+      <section className="lp-stats lp-anim lp-d5">
+        <div className="lp-stat"><b>500+</b><span>familias conectadas</span></div>
+        <div className="lp-stat-div" />
+        <div className="lp-stat"><b>4</b><span>accesos controlados</span></div>
+        <div className="lp-stat-div" />
+        <div className="lp-stat"><b>24/7</b><span>monitoreo activo</span></div>
+      </section>
+
+      <section className="lp-accion-sec">
+        <div className="lp-section-label">El sistema en acción</div>
+        <h2 className="lp-section-title">Pensado para cómo trabaja la residencial</h2>
+        <div className="lp-accion-grid">
+          <div className="lp-accion-card">
+            <div className="lp-accion-shot lp-shot-qr">
+              <ShotConFallback src="/landing/guardia.png">
+                <div className="lp-qr"><div className="lp-qr-grid" /></div>
+              </ShotConFallback>
+            </div>
+            <div className="lp-accion-text">
+              <h3>El guardia valida en segundos</h3>
+              <p>El residente genera el QR desde su teléfono. En la garita, el guardia lo escanea, ve la foto y registra la entrada al instante.</p>
+            </div>
+          </div>
+          <div className="lp-accion-card">
+            <div className="lp-accion-shot lp-shot-arqueo">
+              <ShotConFallback src="/landing/arqueo.png">
+                <div className="lp-arq">
+                  <div className="lp-arq-row"><span>Efectivo esperado</span><b>L 9,350</b></div>
+                  <div className="lp-arq-row"><span>Fondo inicial</span><span>L 8,600</span></div>
+                  <div className="lp-arq-row"><span>Pagos registrados</span><b>3</b></div>
+                </div>
+              </ShotConFallback>
+            </div>
+            <div className="lp-accion-text">
+              <h3>La caja cuadra sola</h3>
+              <p>Cada cobro suma al arqueo en vivo. Al cierre del día, la caja cuadra al centavo con su reporte listo para la administración.</p>
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="lp-modulos">
-        <div className="lp-modulos-head">
-          <span className="lp-section-label">Qué hace el sistema</span>
-        </div>
+        <div className="lp-section-label">Qué hace el sistema</div>
+        <h2 className="lp-section-title">Todo el control, en un solo lugar</h2>
         <div className="lp-modulos-grid">
-          {modulos.map((m, i) => (
-            <div key={m.n} className={`lp-modulo lp-anim lp-d${i + 2}`}>
+          {modulos.map((m) => (
+            <div key={m.n} className="lp-modulo">
               <span className="lp-modulo-n">{m.n}</span>
               <h3>{m.titulo}</h3>
               <p>{m.desc}</p>
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="lp-roles-sec">
+        <div className="lp-section-label">Para cada rol</div>
+        <h2 className="lp-section-title">Una herramienta para cada persona</h2>
+        <div className="lp-roles-grid">
+          {roles.map((r) => (
+            <div key={r.t} className="lp-role">
+              <div className="lp-role-ic">{r.ic}</div>
+              <h4>{r.t}</h4>
+              <p>{r.d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="lp-cierre">
+        <h2>Toda la residencial, bajo control.</h2>
+        <p>Accesos, cámaras, cuotas y comunicación en una sola plataforma.</p>
+        <button className="lp-cta" onClick={onEntrar}>Acceder al sistema →</button>
       </section>
 
       <footer className="lp-footer">
@@ -186,7 +276,6 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
     </div>
   );
 }
-
 // ─── Cambio obligatorio de contraseña ────────────────────────
 function CambioObligatorio({ usuario, onListo }: { usuario: Usuario; onListo: (u: Usuario) => void }) {
   const [pass, setPass] = useState("");
