@@ -52,6 +52,30 @@ export function CajaPanel() {
       <div className="pos-grid">
         <div className="pos-main">
           <RegistrarPago onRegistrado={recargar} />
+
+          {/* Pagos de la sesión: debajo del cobro, en la columna principal */}
+          <div className="dash-card pos-pagos-card">
+            <h3>Pagos de esta sesión</h3>
+            {!sesion.pagos || sesion.pagos.length === 0 ? (
+              <p className="muted">Aún no hay pagos registrados. Los cobros aparecerán aquí.</p>
+            ) : (
+              <div className="scroll-x">
+                <table className="data">
+                  <thead><tr><th>Hora</th><th>Monto</th><th>Método</th><th>Referencia</th></tr></thead>
+                  <tbody>
+                    {sesion.pagos.map(p => (
+                      <tr key={p.id}>
+                        <td className="small">{new Date(p.hora).toLocaleTimeString("es-HN")}</td>
+                        <td>{L(p.monto)}</td>
+                        <td><span className="pill">{p.metodo === "efectivo" ? "Efectivo" : "Tarjeta POS"}</span></td>
+                        <td>{p.referencia || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
         <aside className="pos-side">
@@ -77,7 +101,7 @@ export function CajaPanel() {
             </div>
           </div>
 
-          {/* Operaciones secundarias agrupadas */}
+          {/* Operaciones secundarias agrupadas y comprimidas */}
           <div className="pos-ops">
             <div className="pos-ops-titulo">Movimientos de efectivo</div>
             <SolicitarSalida onRegistrada={recargar} />
@@ -85,30 +109,6 @@ export function CajaPanel() {
             <ReportarDescuadre />
           </div>
         </aside>
-      </div>
-
-      {/* Pagos de la sesión */}
-      <div className="dash-card">
-        <h3>Pagos de esta sesión</h3>
-        {!sesion.pagos || sesion.pagos.length === 0 ? (
-          <p className="muted">Aún no hay pagos registrados.</p>
-        ) : (
-          <div className="scroll-x">
-            <table className="data">
-              <thead><tr><th>Hora</th><th>Monto</th><th>Método</th><th>Referencia</th></tr></thead>
-              <tbody>
-                {sesion.pagos.map(p => (
-                  <tr key={p.id}>
-                    <td className="small">{new Date(p.hora).toLocaleTimeString("es-HN")}</td>
-                    <td>{L(p.monto)}</td>
-                    <td><span className="pill">{p.metodo === "efectivo" ? "Efectivo" : "Tarjeta POS"}</span></td>
-                    <td>{p.referencia || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
     </div>
   );

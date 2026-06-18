@@ -1605,12 +1605,21 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .pos-arqueo-row.destacado { background: rgba(244,135,35,0.18); margin: -4px -8px 6px; padding: 10px 8px; border-radius: 8px; border-bottom: none; }
 .pos-arqueo-row.destacado b { color: #F5C518; font-size: 18px; }
 
-/* Operaciones secundarias agrupadas */
-.pos-ops { background: #f9fbfd; border: 1px solid #e3e9f2; border-radius: 12px; padding: 12px; }
-.pos-ops-titulo { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 8px; padding: 0 4px; }
-.pos-ops .dash-card { box-shadow: none; border: none; padding: 8px; margin-bottom: 0; background: transparent; }
-.pos-ops .dash-card + .dash-card { margin-top: 0; }
-.pos-ops .dash-card h3 { font-size: 14px !important; }
+/* Columna principal: cobro + pagos de la sesión */
+.pos-main { display: flex; flex-direction: column; gap: 16px; }
+.pos-pagos-card h3 { font-size: 16px; }
+
+/* Operaciones secundarias agrupadas y comprimidas */
+.pos-ops { background: #f9fbfd; border: 1px solid #e3e9f2; border-radius: 12px; padding: 8px; }
+.pos-ops-titulo { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 4px; padding: 6px 6px 2px; }
+.pos-ops .dash-card { box-shadow: none; border: none; padding: 8px 6px; margin-bottom: 0; background: transparent; }
+.pos-ops .dash-card + .dash-card { margin-top: 0; border-top: 1px solid #e9eef4; }
+.pos-ops .dash-card h3 { font-size: 13.5px !important; }
+/* El párrafo explicativo largo solo se ve cuando el formulario está abierto
+   (cuando hay un .form-pago hermano visible). Por defecto, comprimido. */
+.pos-ops .dash-card > p.muted.small { display: none; }
+.pos-ops .dash-card:has(.form-pago) > p.muted.small { display: block; }
+
 
 /* Comprobante tras cobrar en caja */
 .recibo-cobro { background: #f4fbf6; border: 1px solid #b8e0c8; border-radius: 12px; padding: 16px; margin: 14px 0; }
