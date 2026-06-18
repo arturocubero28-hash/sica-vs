@@ -65,9 +65,9 @@ button.ghost:hover:not(:disabled) { background: #eef4fb; border-color: #b9c6da;
 .tab:hover { background: transparent; color: var(--azul); }
 
 table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
-table.data th { text-align: left; color: var(--gris); font-weight: 600; padding: 8px 10px;
-  border-bottom: 2px solid #e3e9f2; font-size: 12px; text-transform: uppercase; }
-table.data td { padding: 9px 10px; border-bottom: 1px solid #eef2f8; }
+table.data th { text-align: left; color: var(--gris); font-weight: 600; padding: 10px 12px;
+  border-bottom: 2px solid #e3e9f2; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
+table.data td { padding: 11px 12px; border-bottom: 1px solid #eef2f8; }
 code { background: #f1f4f8; padding: 2px 6px; border-radius: 5px; font-size: 13px; color: #b5005a; }
 
 .pill { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px;
@@ -250,6 +250,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .dash-card { background: #fff; border: 1px solid #e8edf4; border-radius: 14px; padding: 20px;
   box-shadow: 0 2px 14px rgba(2,46,69,.07); }
+.dash-card + .dash-card { margin-top: 16px; }
 .dash-card h3 { color: #022E45; margin: 0 0 12px; }
 
 /* ============================================================
@@ -1532,6 +1533,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .pos-ops { background: #f9fbfd; border: 1px solid #e3e9f2; border-radius: 12px; padding: 12px; }
 .pos-ops-titulo { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 8px; padding: 0 4px; }
 .pos-ops .dash-card { box-shadow: none; border: none; padding: 8px; margin-bottom: 0; background: transparent; }
+.pos-ops .dash-card + .dash-card { margin-top: 0; }
 .pos-ops .dash-card h3 { font-size: 14px !important; }
 
 /* Comprobante tras cobrar en caja */
@@ -1584,8 +1586,8 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .lista-card .casas-filtros { margin-bottom: 14px; }
 
 /* Hover de fila para leer filas largas */
-table.data tbody tr { transition: background 0.12s; }
-table.data tbody tr:hover td { background: #f7faff; }
+table.data tbody tr { transition: background .14s ease; }
+table.data tbody tr:hover td { background: #f1f6fd; }
 .fila-baja:hover td { background: #f2f2f2 !important; }
 
 /* Encabezado de sección de lista (título + acciones) */
