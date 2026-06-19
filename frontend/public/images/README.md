@@ -5,7 +5,7 @@ Poné acá las fotos reales de la residencial para la sección
 
 ## Nombres (sin importar la extensión)
 
-La galería acepta varias extensiones: .jpg, .jpeg, .jfif, .png o .webp.
+La galería acepta cualquier extensión de imagen común: .png, .jpg, .jpeg, .jfif, .webp, .avif, .gif o .bmp.
 Solo importa que el nombre (antes del punto) sea exactamente uno de estos:
 
 - tranca-vehicular  -> Acceso vehicular (la barrera / tranca)

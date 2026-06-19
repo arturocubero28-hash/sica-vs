@@ -227,7 +227,7 @@ function ComoFunciona() {
 // Fondo del hero: foto real si existe; si no, aurora animada (CSS).
 // Prioridad: /images/hero-residencial.* (foto) > aurora.
 function HeroFondo() {
-  const exts = ["jpg", "jpeg", "jfif", "png", "webp"];
+  const exts = ["png", "jpg", "jpeg", "jfif", "webp", "avif", "gif", "bmp"];
   const [idx, setIdx] = useState(0);
   const [hayFoto, setHayFoto] = useState(false);
   return (
@@ -251,7 +251,7 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
   // Prueba varias extensiones (.jpg/.jpeg/.jfif/.png/.webp) y usa la que cargue.
   // Si ninguna existe, muestra un marcador con ícono (nunca imagen rota).
   function GaleriaImg({ base, ic }: { base: string; ic: string }) {
-    const exts = ["jpg", "jpeg", "jfif", "png", "webp"];
+    const exts = ["png", "jpg", "jpeg", "jfif", "webp", "avif", "gif", "bmp"];
     const [idx, setIdx] = useState(0);
     const [falla, setFalla] = useState(false);
     if (falla) return <div className="lp-galeria-ph"><span>{ic}</span></div>;
