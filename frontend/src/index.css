@@ -994,7 +994,12 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   background: var(--lp-nav-scrolled);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--lp-border);
+  box-shadow: 0 4px 20px rgba(2,46,69,0.08);
+}
+/* Fallback: si el navegador no soporta backdrop-filter, fondo más sólido */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .lp-v2 .lp-nav-v2.scrolled { background: var(--lp-bg); }
 }
 
 .lp-nav-inner {
