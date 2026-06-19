@@ -144,6 +144,7 @@ function useLandingFx() {
 
 function Landing({ onEntrar }: { onEntrar: () => void }) {
   const scrolled = useLandingFx();
+  const [tema, setTema] = useState<"oscuro" | "claro">("oscuro");
   const pilares = [
     { ic: "\u{1F512}", t: "Acceso controlado", d: "Solo entra quien está autorizado. Cada visita se registra y queda identificada en las cuatro entradas de la residencial." },
     { ic: "\u{1F4F9}", t: "Vigilancia 24/7", d: "Cámaras de seguridad en todos los accesos, monitoreadas de forma permanente para tu tranquilidad." },
@@ -157,7 +158,7 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
   ];
 
   return (
-    <div className="lp-v2">
+    <div className={"lp-v2 tema-" + tema}>
       {/* Fondo con orbes animados */}
       <div className="lp-bg">
         <div className="orb orb-1" /><div className="orb orb-2" />
@@ -175,7 +176,13 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
               <span className="lp-brand-sub">San Pedro Sula</span>
             </div>
           </div>
-          <button className="lp-nav-btn-v2" onClick={onEntrar}>Ingresar</button>
+          <div className="lp-nav-acciones">
+            <button className="lp-tema-btn" onClick={() => setTema(t => t === "oscuro" ? "claro" : "oscuro")}
+              aria-label="Cambiar tema" title={tema === "oscuro" ? "Modo claro" : "Modo oscuro"}>
+              {tema === "oscuro" ? "☀️" : "🌙"}
+            </button>
+            <button className="lp-nav-btn-v2" onClick={onEntrar}>Ingresar</button>
+          </div>
         </div>
       </nav>
 

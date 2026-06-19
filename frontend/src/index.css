@@ -866,13 +866,57 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
    ============================================================ */
 
 .lp-v2 {
+  /* Variables de tema (modo oscuro por defecto) */
+  --lp-bg: #0a0e17;
+  --lp-text: #e8ecf2;
+  --lp-text-strong: #ffffff;
+  --lp-text-soft: rgba(255,255,255,0.55);
+  --lp-text-faint: rgba(255,255,255,0.4);
+  --lp-card-bg: rgba(255,255,255,0.03);
+  --lp-card-inner: rgba(14, 18, 28, 0.8);
+  --lp-border: rgba(255,255,255,0.06);
+  --lp-border-soft: rgba(255,255,255,0.1);
+  --lp-chip: rgba(255,255,255,0.04);
+  --lp-chip-text: rgba(255,255,255,0.85);
+  --lp-orb-op: 0.4;
+  --lp-banda-bg: linear-gradient(135deg, rgba(2,46,69,0.6), rgba(10,14,23,0.8));
+  --lp-nav-scrolled: rgba(10, 14, 23, 0.85);
+
   min-height: 100vh;
-  background: #0a0e17;
-  color: #e8ecf2;
+  background: var(--lp-bg);
+  color: var(--lp-text);
   font-family: 'Space Grotesk', -apple-system, system-ui, sans-serif;
   position: relative;
   overflow-x: hidden;
+  transition: background .4s ease, color .4s ease;
 }
+
+/* ===== MODO CLARO ===== */
+.lp-v2.tema-claro {
+  --lp-bg: #fcfcfb;
+  --lp-text: #1b2733;
+  --lp-text-strong: #022E45;
+  --lp-text-soft: #5a6b7b;
+  --lp-text-faint: #93a0ad;
+  --lp-card-bg: #ffffff;
+  --lp-card-inner: #ffffff;
+  --lp-border: #eeede8;
+  --lp-border-soft: #e3e9f2;
+  --lp-chip: #ffffff;
+  --lp-chip-text: #44515f;
+  --lp-orb-op: 0.5;
+  --lp-banda-bg: linear-gradient(135deg, #022E45, #06354f);
+  --lp-nav-scrolled: rgba(252, 252, 251, 0.85);
+}
+/* En claro, las tarjetas necesitan sombra en vez de glow oscuro */
+.lp-v2.tema-claro .lp-pilar-v2 { box-shadow: 0 4px 24px rgba(2,46,69,.06); }
+.lp-v2.tema-claro .lp-pilar-v2:hover { box-shadow: 0 18px 44px rgba(2,46,69,.12); }
+.lp-v2.tema-claro .lp-pilar-content { border: 1px solid #eeede8; }
+.lp-v2.tema-claro .lp-stats { box-shadow: 0 4px 20px rgba(2,46,69,.05); }
+.lp-v2.tema-claro .lp-nav-btn-v2 { color: #022E45; }
+.lp-v2.tema-claro .lp-tema-btn { background: #fff; border-color: #e3e9f2; }
+/* La banda y el cierre se mantienen oscuros (azul de marca) en ambos temas,
+   así que sus textos siguen claros — no se tocan. */
 
 /* ---- Fondo con orbes animados ---- */
 .lp-bg {
@@ -947,7 +991,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 }
 
 .lp-nav-v2.scrolled {
-  background: rgba(10, 14, 23, 0.85);
+  background: var(--lp-nav-scrolled);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(255,255,255,0.05);
@@ -1003,7 +1047,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .lp-brand-name {
   font-weight: 700;
   font-size: 17px;
-  color: #fff;
+  color: var(--lp-text-strong);
   letter-spacing: -0.02em;
 }
 
@@ -1035,6 +1079,16 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   transform: translateY(-1px);
   box-shadow: 0 8px 24px rgba(244,135,35,0.15);
 }
+
+/* Acciones del navbar + botón de tema */
+.lp-nav-acciones { display: flex; align-items: center; gap: 10px; }
+.lp-tema-btn {
+  width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+  font-size: 17px; cursor: pointer; background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1); transition: all .25s cubic-bezier(0.16,0.84,0.44,1);
+  backdrop-filter: blur(10px); padding: 0;
+}
+.lp-tema-btn:hover { transform: translateY(-1px) rotate(12deg); border-color: rgba(244,135,35,0.4); }
 
 /* ---- Hero V2 ---- */
 .lp-hero-v2 {
@@ -1097,7 +1151,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   font-weight: 600;
   line-height: 1.08;
   letter-spacing: -0.035em;
-  color: #fff;
+  color: var(--lp-text-strong);
   margin: 0 0 28px;
 }
 
@@ -1118,7 +1172,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .lp-hero-lead-v2 {
   font-size: clamp(16px, 2vw, 20px);
   line-height: 1.7;
-  color: rgba(255,255,255,0.55);
+  color: var(--lp-text-soft);
   max-width: 600px;
   margin: 0 auto 40px;
 }
@@ -1192,8 +1246,8 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   gap: 40px;
   margin-top: 60px;
   padding: 24px 40px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--lp-card-bg);
+  border: 1px solid var(--lp-border);
   border-radius: 20px;
   backdrop-filter: blur(20px);
 }
@@ -1213,7 +1267,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .lp-stat-label {
   font-size: 12px;
-  color: rgba(255,255,255,0.4);
+  color: var(--lp-text-faint);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -1247,7 +1301,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .lp-section-header h2 {
   font-size: clamp(28px, 4vw, 42px);
-  color: #fff;
+  color: var(--lp-text-strong);
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0 0 12px;
@@ -1255,7 +1309,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .lp-section-header p {
   font-size: 17px;
-  color: rgba(255,255,255,0.45);
+  color: var(--lp-text-soft);
   max-width: 500px;
   margin: 0 auto;
 }
@@ -1268,8 +1322,8 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .lp-pilar-v2 {
   position: relative;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--lp-card-bg);
+  border: 1px solid var(--lp-border);
   border-radius: 24px;
   padding: 2px;
   overflow: hidden;
@@ -1296,7 +1350,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .lp-pilar-content {
   position: relative;
-  background: rgba(14, 18, 28, 0.8);
+  background: var(--lp-card-inner);
   border-radius: 22px;
   padding: 40px 32px;
   height: 100%;
@@ -1324,14 +1378,14 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .lp-pilar-content h3 {
   font-size: 22px;
-  color: #fff;
+  color: var(--lp-text-strong);
   margin: 0 0 12px;
   font-weight: 600;
 }
 
 .lp-pilar-content p {
   font-size: 15px;
-  color: rgba(255,255,255,0.5);
+  color: var(--lp-text-soft);
   line-height: 1.65;
   margin: 0;
 }
@@ -1357,7 +1411,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   margin: 0 auto 100px;
   padding: 80px 60px;
   border-radius: 32px;
-  background: linear-gradient(135deg, rgba(2,46,69,0.6), rgba(10,14,23,0.8));
+  background: var(--lp-banda-bg);
   border: 1px solid rgba(255,255,255,0.06);
   overflow: hidden;
 }
@@ -1401,7 +1455,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .lp-banda-info p {
   font-size: 16px;
-  color: rgba(255,255,255,0.5);
+  color: var(--lp-text-soft);
   line-height: 1.7;
   margin: 0;
 }
@@ -1499,7 +1553,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .lp-cierre-v2 h2 {
   font-size: clamp(32px, 5vw, 52px);
-  color: #fff;
+  color: var(--lp-text-strong);
   font-weight: 600;
   letter-spacing: -0.03em;
   margin: 0 0 16px;
@@ -1507,7 +1561,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .lp-cierre-v2 p {
   font-size: 18px;
-  color: rgba(255,255,255,0.45);
+  color: var(--lp-text-soft);
   margin: 0 0 40px;
 }
 
