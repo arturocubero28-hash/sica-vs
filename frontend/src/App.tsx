@@ -145,6 +145,13 @@ function useLandingFx() {
 function Landing({ onEntrar }: { onEntrar: () => void }) {
   const scrolled = useLandingFx();
   const [tema, setTema] = useState<"oscuro" | "claro">("oscuro");
+
+  // Muestra la foto real si existe; si no, un marcador con ícono (nunca rota)
+  function GaleriaImg({ src, ic }: { src: string; ic: string }) {
+    const [falla, setFalla] = useState(false);
+    if (falla) return <div className="lp-galeria-ph"><span>{ic}</span></div>;
+    return <img src={src} alt="" loading="lazy" onError={() => setFalla(true)} />;
+  }
   const pilares = [
     { ic: "\u{1F512}", t: "Acceso controlado", d: "Solo entra quien está autorizado. Cada visita se registra y queda identificada en las cuatro entradas de la residencial." },
     { ic: "\u{1F4F9}", t: "Vigilancia 24/7", d: "Cámaras de seguridad en todos los accesos, monitoreadas de forma permanente para tu tranquilidad." },
@@ -227,6 +234,33 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
                 <h3>{p.t}</h3>
                 <p>{p.d}</p>
                 <div className="lp-pilar-line" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Galería de infraestructura */}
+      <section className="lp-galeria">
+        <div className="lp-section-header lp-reveal">
+          <span className="lp-section-tag">Infraestructura</span>
+          <h2>Seguridad que se ve y se siente</h2>
+        </div>
+        <div className="lp-galeria-grid">
+          {[
+            { img: "/images/tranca-vehicular.jpg", ic: "\u{1F6E3}\uFE0F", title: "Acceso vehicular", desc: "Barrera automática con lector de tarjeta" },
+            { img: "/images/caseta-guardia.jpg", ic: "\u{1F6E1}\uFE0F", title: "Caseta de vigilancia", desc: "Guardia permanente las 24 horas" },
+            { img: "/images/camaras-hd.jpg", ic: "\u{1F4F9}", title: "Cámaras HD", desc: "Monitoreo en tiempo real" },
+            { img: "/images/acceso-peatonal.jpg", ic: "\u{1F6B6}", title: "Acceso peatonal", desc: "Entrada controlada con tarjeta" },
+          ].map((item, i) => (
+            <div key={item.title} className={`lp-galeria-item lp-reveal lp-rev-d${i + 1}`}>
+              <div className="lp-galeria-img-wrap">
+                <GaleriaImg src={item.img} ic={item.ic} />
+                <div className="lp-galeria-shine" />
+              </div>
+              <div className="lp-galeria-info">
+                <h3>{item.title}</h3>
+                <p>{item.desc}</p>
               </div>
             </div>
           ))}
