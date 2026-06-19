@@ -1103,6 +1103,27 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   text-align: center;
 }
 
+/* Partículas flotantes del hero */
+.hero-particles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.particle {
+  position: absolute; bottom: -10px; width: 4px; height: 4px;
+  background: rgba(244,135,35,0.35); border-radius: 50%;
+  animation: float-particle 20s infinite linear;
+}
+@keyframes float-particle {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(-100vh) translateX(50px); opacity: 0; }
+}
+
+/* Glow pulsante permanente del CTA principal */
+.cta-pulse { animation: cta-glow 2.4s ease-in-out infinite; }
+@keyframes cta-glow {
+  0%, 100% { box-shadow: 0 8px 32px rgba(244,135,35,0.32), 0 0 0 1px rgba(244,135,35,0.2); }
+  50% { box-shadow: 0 8px 48px rgba(244,135,35,0.5), 0 0 0 1px rgba(244,135,35,0.3); }
+}
+
 .lp-hero-content {
   max-width: 900px;
 }
@@ -1708,9 +1729,10 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orb, .gradient-text, .pulse-dot::after { animation: none !important; }
+  .orb, .gradient-text, .pulse-dot::after, .particle, .cta-pulse { animation: none !important; }
   .lp-anim { animation: none; opacity: 1; }
   .lp-reveal { transition: none; opacity: 1; transform: none; }
+  .hero-particles { display: none; }
 }
 
 .login-logo { width: 72px; height: 72px; border-radius: 16px; object-fit: cover; margin: 0 auto 8px; display: block; }

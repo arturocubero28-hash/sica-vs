@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
   login, getMe, logout, getToken, setToken,
   activarCuenta, solicitarRecuperacion, restablecerPassword, cambiarPassword,
@@ -142,6 +142,37 @@ function useLandingFx() {
   return scrolled;
 }
 
+// Contador que sube de 0 a 'valor' cuando entra en pantalla (ease-out)
+function Contador({ valor, sufijo = "" }: { valor: number; sufijo?: string }) {
+  const [n, setN] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
+  const hecho = useRef(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || !("IntersectionObserver" in window)) { setN(valor); return; }
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting && !hecho.current) {
+          hecho.current = true;
+          const dur = 1800; const t0 = performance.now();
+          const tick = (t: number) => {
+            const p = Math.min((t - t0) / dur, 1);
+            const ease = 1 - Math.pow(1 - p, 3);
+            setN(Math.round(valor * ease));
+            if (p < 1) requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }
+      });
+    }, { threshold: 0.5 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [valor]);
+  return <span ref={ref}>{n}{sufijo}</span>;
+}
+
 function Landing({ onEntrar }: { onEntrar: () => void }) {
   const scrolled = useLandingFx();
   const [tema, setTema] = useState<"oscuro" | "claro">("oscuro");
@@ -201,6 +232,15 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
 
       {/* Hero */}
       <section className="lp-hero-v2">
+        <div className="hero-particles" aria-hidden="true">
+          {Array.from({ length: 18 }).map((_, i) => (
+            <span key={i} className="particle" style={{
+              left: `${(i * 5.4 + 3) % 100}%`,
+              animationDelay: `${(i * 1.3) % 20}s`,
+              animationDuration: `${16 + (i % 7) * 2}s`,
+            }} />
+          ))}
+        </div>
         <div className="lp-hero-content">
           <div className="lp-hero-eyebrow-v2 lp-anim"><span className="pulse-dot" />Residencial Villas del Sol</div>
           <h1 className="lp-hero-title-v2 lp-anim" style={{ animationDelay: ".1s" }}>
@@ -211,14 +251,14 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
             sabiendo quién entra y quién sale, en un entorno que cuidamos entre todos.
           </p>
           <div className="lp-hero-actions-v2 lp-anim" style={{ animationDelay: ".3s" }}>
-            <button className="lp-cta-v2 lp-cta-primary" onClick={onEntrar}>
+            <button className="lp-cta-v2 lp-cta-primary cta-pulse" onClick={onEntrar}>
               Ingresar al portal <span className="cta-arrow">→</span>
             </button>
             <span className="lp-hero-note-v2">Acceso para residentes y administración</span>
           </div>
           <div className="lp-stats lp-anim" style={{ animationDelay: ".4s" }}>
-            <div className="lp-stat"><span className="lp-stat-num">500+</span><span className="lp-stat-label">Familias</span></div>
-            <div className="lp-stat"><span className="lp-stat-num">4</span><span className="lp-stat-label">Accesos</span></div>
+            <div className="lp-stat"><span className="lp-stat-num"><Contador valor={500} sufijo="+" /></span><span className="lp-stat-label">Familias</span></div>
+            <div className="lp-stat"><span className="lp-stat-num"><Contador valor={4} /></span><span className="lp-stat-label">Accesos</span></div>
             <div className="lp-stat"><span className="lp-stat-num">24/7</span><span className="lp-stat-label">Monitoreo</span></div>
           </div>
         </div>
