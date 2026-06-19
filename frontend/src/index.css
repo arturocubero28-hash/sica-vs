@@ -1689,6 +1689,57 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .lp-galeria-info p { font-size: 14px; color: var(--lp-text-soft); margin: 0; }
 @media (max-width: 640px) { .lp-galeria-grid { grid-template-columns: 1fr; } }
 
+/* ---- Sección: Cómo funciona el acceso (línea de tiempo) ---- */
+.lp-pasos-sec { padding: 80px 24px 100px; max-width: 1100px; margin: 0 auto; position: relative; z-index: 1; }
+.lp-pasos { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 50px; }
+.lp-pasos-linea {
+  position: absolute; top: 30px; left: 12%; right: 12%; height: 3px;
+  background: var(--lp-border-soft); border-radius: 2px; overflow: hidden;
+}
+.lp-pasos-linea-fill {
+  height: 100%; background: linear-gradient(90deg, #F48723, #F5C518);
+  border-radius: 2px; transition: width .5s cubic-bezier(.16,.84,.44,1);
+}
+.lp-paso { text-align: center; position: relative; }
+.lp-paso-circle {
+  width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 18px;
+  background: var(--lp-card-inner); border: 3px solid var(--lp-border-soft);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 22px; color: var(--lp-text-faint);
+  transition: all .45s cubic-bezier(.16,.84,.44,1); position: relative; z-index: 1;
+}
+.lp-paso.activo .lp-paso-circle {
+  background: linear-gradient(135deg, #F48723, #F5C518); border-color: #F48723;
+  color: #fff; box-shadow: 0 8px 24px rgba(244,135,35,.32); transform: scale(1.05);
+}
+.lp-paso h4 { font-size: 17px; color: var(--lp-text-strong); margin: 0 0 6px; font-weight: 600; transition: color .4s; }
+.lp-paso p { font-size: 13.5px; color: var(--lp-text-soft); margin: 0; line-height: 1.5;
+  font-family: -apple-system, system-ui, sans-serif; }
+@media (max-width: 720px) {
+  .lp-pasos { grid-template-columns: 1fr; gap: 28px; max-width: 360px; margin-left: auto; margin-right: auto; }
+  .lp-pasos-linea { left: 30px; right: auto; top: 30px; bottom: 30px; width: 3px; height: auto; }
+  .lp-pasos-linea-fill { width: 100% !important; height: 0; transition: height .5s ease; }
+  .lp-paso { display: grid; grid-template-columns: 60px 1fr; gap: 16px; text-align: left; align-items: center; }
+  .lp-paso-circle { margin: 0; }
+  .lp-paso h4, .lp-paso p { grid-column: 2; }
+}
+
+/* ---- Parallax/patrón en la banda de compromiso ---- */
+.lp-banda-v2 { position: relative; }
+.lp-banda-v2::before {
+  content: ""; position: absolute; inset: -50%; pointer-events: none;
+  background: repeating-linear-gradient(45deg, transparent, transparent 10px,
+    rgba(255,255,255,0.025) 10px, rgba(255,255,255,0.025) 20px);
+  animation: pattern-move 22s linear infinite;
+}
+@keyframes pattern-move { 0% { transform: translate(0,0); } 100% { transform: translate(50px,50px); } }
+
+/* ---- Hovers mejorados de la galería (shine ya existe; reforzar) ---- */
+.lp-galeria-info h3, .lp-galeria-info p { transition: transform .4s cubic-bezier(.16,.84,.44,1); }
+.lp-galeria-item:hover .lp-galeria-info h3,
+.lp-galeria-item:hover .lp-galeria-info p { transform: translateY(-4px); }
+
+
 
 /* Animaciones */
 @keyframes lp-rise-v2 {
@@ -1729,7 +1780,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orb, .gradient-text, .pulse-dot::after, .particle, .cta-pulse { animation: none !important; }
+  .orb, .gradient-text, .pulse-dot::after, .particle, .cta-pulse, .lp-banda-v2::before { animation: none !important; }
   .lp-anim { animation: none; opacity: 1; }
   .lp-reveal { transition: none; opacity: 1; transform: none; }
   .hero-particles { display: none; }

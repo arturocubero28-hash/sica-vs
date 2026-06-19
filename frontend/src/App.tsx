@@ -173,6 +173,52 @@ function Contador({ valor, sufijo = "" }: { valor: number; sufijo?: string }) {
   return <span ref={ref}>{n}{sufijo}</span>;
 }
 
+// Sección "Cómo funciona el acceso": 4 pasos que se iluminan en secuencia
+function ComoFunciona() {
+  const [activos, setActivos] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+  const pasos = [
+    { ic: "\u{1F697}", t: "Llegada", d: "El visitante se presenta en la entrada" },
+    { ic: "\u{1FAAA}", t: "Verificación", d: "El guardia valida la identidad" },
+    { ic: "\u2705", t: "Autorización", d: "Se registra en el sistema" },
+    { ic: "\u{1F3E0}", t: "Acceso", d: "La tranca se abre y queda registrado" },
+  ];
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || !("IntersectionObserver" in window)) { setActivos(pasos.length); return; }
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          pasos.forEach((_, i) => setTimeout(() => setActivos(a => Math.max(a, i + 1)), i * 350));
+          obs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.4 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return (
+    <section className="lp-pasos-sec" ref={ref}>
+      <div className="lp-section-header lp-reveal">
+        <span className="lp-section-tag">Cómo funciona</span>
+        <h2>Acceso simple y seguro, paso a paso</h2>
+      </div>
+      <div className="lp-pasos">
+        <div className="lp-pasos-linea"><div className="lp-pasos-linea-fill" style={{ width: `${Math.max(0, (activos - 1)) / (pasos.length - 1) * 100}%` }} /></div>
+        {pasos.map((p, i) => (
+          <div key={p.t} className={"lp-paso" + (i < activos ? " activo" : "")}>
+            <div className="lp-paso-circle">{i < activos ? p.ic : i + 1}</div>
+            <h4>{p.t}</h4>
+            <p>{p.d}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function Landing({ onEntrar }: { onEntrar: () => void }) {
   const scrolled = useLandingFx();
   const [tema, setTema] = useState<"oscuro" | "claro">("oscuro");
@@ -312,6 +358,9 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
           ))}
         </div>
       </section>
+
+      {/* Cómo funciona el acceso */}
+      <ComoFunciona />
 
       {/* Banda de compromiso */}
       <section className="lp-banda-v2 lp-reveal">
