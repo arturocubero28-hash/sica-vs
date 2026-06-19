@@ -224,6 +224,26 @@ function ComoFunciona() {
   );
 }
 
+// Fondo del hero: foto real si existe; si no, aurora animada (CSS).
+// Prioridad: /images/hero-residencial.* (foto) > aurora.
+function HeroFondo() {
+  const exts = ["jpg", "jpeg", "jfif", "png", "webp"];
+  const [idx, setIdx] = useState(0);
+  const [hayFoto, setHayFoto] = useState(false);
+  return (
+    <div className={"hero-fondo" + (hayFoto ? " con-foto" : "")} aria-hidden="true">
+      <div className="hero-aurora">
+        <span className="aurora a1" /><span className="aurora a2" /><span className="aurora a3" />
+      </div>
+      <img className={"hero-bg-img" + (hayFoto ? " ok" : "")}
+        src={`/images/hero-residencial.${exts[idx]}`} alt=""
+        onLoad={() => setHayFoto(true)}
+        onError={() => { if (idx < exts.length - 1) setIdx(idx + 1); }} />
+      <div className="hero-fondo-velo" />
+    </div>
+  );
+}
+
 function Landing({ onEntrar }: { onEntrar: () => void }) {
   const scrolled = useLandingFx();
   const [tema, setTema] = useState<"oscuro" | "claro">("oscuro");
@@ -283,12 +303,13 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
 
       {/* Hero */}
       <section className="lp-hero-v2">
+        <HeroFondo />
         <div className="hero-particles" aria-hidden="true">
-          {Array.from({ length: 18 }).map((_, i) => (
+          {Array.from({ length: 26 }).map((_, i) => (
             <span key={i} className="particle" style={{
-              left: `${(i * 5.4 + 3) % 100}%`,
-              animationDelay: `${(i * 1.3) % 20}s`,
-              animationDuration: `${16 + (i % 7) * 2}s`,
+              left: `${(i * 3.7 + 2) % 100}%`,
+              animationDelay: `${(i * 0.9) % 20}s`,
+              animationDuration: `${14 + (i % 7) * 2}s`,
             }} />
           ))}
         </div>

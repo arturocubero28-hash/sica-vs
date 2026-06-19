@@ -1108,11 +1108,52 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   text-align: center;
 }
 
-/* Partículas flotantes del hero */
-.hero-particles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+/* ---- Fondo del hero: aurora animada + foto opcional + velo ---- */
+.hero-fondo { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+.hero-aurora { position: absolute; inset: 0; }
+.aurora {
+  position: absolute; border-radius: 50%; filter: blur(90px); opacity: .3;
+  animation: aurora-move 18s ease-in-out infinite;
+}
+/* En claro la aurora puede ser más presente (fondo claro la tolera) */
+.lp-v2.tema-claro .aurora { opacity: .55; }
+.aurora.a1 { width: 620px; height: 620px; top: -160px; left: 8%;
+  background: radial-gradient(circle, rgba(244,135,35,.5), transparent 70%); animation-delay: 0s; }
+.aurora.a2 { width: 560px; height: 560px; top: 10%; right: 4%;
+  background: radial-gradient(circle, rgba(245,197,24,.4), transparent 70%); animation-delay: -6s; animation-duration: 22s; }
+.aurora.a3 { width: 520px; height: 520px; bottom: -160px; left: 32%;
+  background: radial-gradient(circle, rgba(2,46,69,.35), transparent 70%); animation-delay: -11s; animation-duration: 26s; }
+@keyframes aurora-move {
+  0%, 100% { transform: translate(0,0) scale(1); }
+  33% { transform: translate(40px,-30px) scale(1.08); }
+  66% { transform: translate(-30px,25px) scale(.94); }
+}
+/* Foto de fondo: oculta hasta que carga (entonces .ok) */
+.hero-bg-img { position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: center; opacity: 0; transition: opacity .6s ease; }
+.hero-bg-img.ok { opacity: 1; }
+/* Cuando hay foto, ocultamos la aurora (la foto manda) */
+.hero-fondo.con-foto .hero-aurora { opacity: 0; }
+/* Velo/vignette: en modo claro es suave; con foto se oscurece para leer el texto */
+.hero-fondo-velo { position: absolute; inset: 0; transition: background .4s ease;
+  background: radial-gradient(ellipse 70% 55% at 50% 45%, var(--lp-bg) 0%, transparent 75%); opacity: .7; }
+.hero-fondo.con-foto .hero-fondo-velo { opacity: 1;
+  background: linear-gradient(to bottom, rgba(8,12,20,.35) 0%, rgba(8,12,20,.5) 45%, rgba(8,12,20,.82) 100%);
+}
+/* Si hay foto, el texto del hero va blanco en AMBOS temas (va sobre la foto) */
+.hero-fondo.con-foto ~ .lp-hero-content .lp-hero-title-v2,
+.lp-hero-v2:has(.hero-fondo.con-foto) .lp-hero-title-v2 { color: #fff; }
+.lp-hero-v2:has(.hero-fondo.con-foto) .lp-hero-lead-v2 { color: rgba(255,255,255,.8); }
+.lp-hero-v2:has(.hero-fondo.con-foto) .lp-stats {
+  background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.15); }
+.lp-hero-v2:has(.hero-fondo.con-foto) .lp-stat-label { color: rgba(255,255,255,.7); }
+
+/* Partículas flotantes del hero (más visibles) */
+.hero-particles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
 .particle {
-  position: absolute; bottom: -10px; width: 4px; height: 4px;
-  background: rgba(244,135,35,0.35); border-radius: 50%;
+  position: absolute; bottom: -10px; width: 5px; height: 5px;
+  background: rgba(244,135,35,0.55); border-radius: 50%;
+  box-shadow: 0 0 8px rgba(244,135,35,0.5);
   animation: float-particle 20s infinite linear;
 }
 @keyframes float-particle {
@@ -1122,15 +1163,17 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   100% { transform: translateY(-100vh) translateX(50px); opacity: 0; }
 }
 
-/* Glow pulsante permanente del CTA principal */
-.cta-pulse { animation: cta-glow 2.4s ease-in-out infinite; }
+/* Glow pulsante permanente del CTA principal (más marcado) */
+.cta-pulse { animation: cta-glow 2.2s ease-in-out infinite; }
 @keyframes cta-glow {
-  0%, 100% { box-shadow: 0 8px 32px rgba(244,135,35,0.32), 0 0 0 1px rgba(244,135,35,0.2); }
-  50% { box-shadow: 0 8px 48px rgba(244,135,35,0.5), 0 0 0 1px rgba(244,135,35,0.3); }
+  0%, 100% { box-shadow: 0 8px 32px rgba(244,135,35,0.38), 0 0 0 1px rgba(244,135,35,0.2); }
+  50% { box-shadow: 0 10px 56px rgba(244,135,35,0.62), 0 0 0 1px rgba(244,135,35,0.35); }
 }
 
 .lp-hero-content {
   max-width: 900px;
+  position: relative;
+  z-index: 2;
 }
 
 .pulse-dot {
@@ -1785,7 +1828,7 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orb, .gradient-text, .pulse-dot::after, .particle, .cta-pulse, .lp-banda-v2::before { animation: none !important; }
+  .orb, .gradient-text, .pulse-dot::after, .particle, .cta-pulse, .lp-banda-v2::before, .aurora { animation: none !important; }
   .lp-anim { animation: none; opacity: 1; }
   .lp-reveal { transition: none; opacity: 1; transform: none; }
   .hero-particles { display: none; }
