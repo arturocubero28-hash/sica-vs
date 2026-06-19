@@ -119,23 +119,31 @@ function Login({ onLogin, onRecuperar, onVolver }: { onLogin: (u: Usuario) => vo
 
 // ─── Landing page pública ────────────────────────────────────
 // Hook: revela elementos cuando entran en pantalla (scroll reveal)
-function useReveal() {
+// Hook: revela elementos al hacer scroll + estado del navbar
+function useLandingFx() {
+  const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 30);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+
     const els = document.querySelectorAll(".lp-reveal");
     if (!("IntersectionObserver" in window)) {
       els.forEach(e => e.classList.add("visible"));
-      return;
+    } else {
+      const obs = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("visible"); obs.unobserve(e.target); } });
+      }, { threshold: 0.15 });
+      els.forEach(e => obs.observe(e));
+      return () => { obs.disconnect(); window.removeEventListener("scroll", onScroll); };
     }
-    const obs = new IntersectionObserver((entries) => {
-      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("visible"); obs.unobserve(e.target); } });
-    }, { threshold: 0.15 });
-    els.forEach(e => obs.observe(e));
-    return () => obs.disconnect();
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
+  return scrolled;
 }
 
 function Landing({ onEntrar }: { onEntrar: () => void }) {
-  useReveal();
+  const scrolled = useLandingFx();
   const pilares = [
     { ic: "\u{1F512}", t: "Acceso controlado", d: "Solo entra quien está autorizado. Cada visita se registra y queda identificada en las cuatro entradas de la residencial." },
     { ic: "\u{1F4F9}", t: "Vigilancia 24/7", d: "Cámaras de seguridad en todos los accesos, monitoreadas de forma permanente para tu tranquilidad." },
@@ -149,74 +157,124 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
   ];
 
   return (
-    <div className="lp">
-      <header className="lp-nav lp-anim lp-d1">
-        <div className="lp-brand">
-          <img src="/logo-vs.png" alt="Villas del Sol" />
-          <div>
-            <span className="lp-brand-name">Villas del Sol</span>
-            <span className="lp-brand-sub">San Pedro Sula</span>
+    <div className="lp-v2">
+      {/* Fondo con orbes animados */}
+      <div className="lp-bg">
+        <div className="orb orb-1" /><div className="orb orb-2" />
+        <div className="orb orb-3" /><div className="orb orb-4" />
+        <div className="noise" />
+      </div>
+
+      {/* Navbar flotante */}
+      <nav className={"lp-nav-v2" + (scrolled ? " scrolled" : "")}>
+        <div className="lp-nav-inner">
+          <div className="lp-brand-v2">
+            <div className="lp-brand-glow"><img src="/logo-vs.png" alt="Villas del Sol" /></div>
+            <div className="lp-brand-text">
+              <span className="lp-brand-name">Villas del Sol</span>
+              <span className="lp-brand-sub">San Pedro Sula</span>
+            </div>
           </div>
+          <button className="lp-nav-btn-v2" onClick={onEntrar}>Ingresar</button>
         </div>
-        <button className="lp-nav-btn" onClick={onEntrar}>Ingresar</button>
-      </header>
+      </nav>
 
-      <section className="lp-hero">
-        <div className="lp-hero-eyebrow lp-anim lp-d1">Residencial Villas del Sol</div>
-        <h1 className="lp-hero-title lp-anim lp-d2">
-          Una comunidad <span>segura, ordenada y bien cuidada.</span>
-        </h1>
-        <p className="lp-hero-lead lp-anim lp-d3">
-          En Villas del Sol cada acceso está controlado y vigilado las 24 horas. Vivís tranquilo,
-          sabiendo quién entra y quién sale, en un entorno que cuidamos entre todos.
-        </p>
-        <div className="lp-hero-actions lp-anim lp-d4">
-          <button className="lp-cta" onClick={onEntrar}>Ingresar al portal</button>
-          <span className="lp-hero-note">Acceso para residentes y administración</span>
-        </div>
-      </section>
-
-      <section className="lp-pilares">
-        {pilares.map((p, i) => (
-          <div key={p.t} className={`lp-pilar lp-reveal lp-rev-d${i + 1}`}>
-            <div className="lp-pilar-ic">{p.ic}</div>
-            <h3>{p.t}</h3>
-            <p>{p.d}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="lp-banda lp-reveal">
-        <div className="lp-banda-l">
-          <div className="lp-banda-label">Nuestro compromiso</div>
-          <h2>Cuidamos tu hogar como si fuera el nuestro</h2>
-          <p>
-            La seguridad de tu familia es lo primero. Por eso Villas del Sol cuenta con control de
-            acceso, vigilancia permanente y una administración que está siempre cerca para responder.
+      {/* Hero */}
+      <section className="lp-hero-v2">
+        <div className="lp-hero-content">
+          <div className="lp-hero-eyebrow-v2 lp-anim"><span className="pulse-dot" />Residencial Villas del Sol</div>
+          <h1 className="lp-hero-title-v2 lp-anim" style={{ animationDelay: ".1s" }}>
+            Una comunidad <span className="gradient-text">segura, ordenada y bien cuidada.</span>
+          </h1>
+          <p className="lp-hero-lead-v2 lp-anim" style={{ animationDelay: ".2s" }}>
+            En Villas del Sol cada acceso está controlado y vigilado las 24 horas. Vivís tranquilo,
+            sabiendo quién entra y quién sale, en un entorno que cuidamos entre todos.
           </p>
+          <div className="lp-hero-actions-v2 lp-anim" style={{ animationDelay: ".3s" }}>
+            <button className="lp-cta-v2 lp-cta-primary" onClick={onEntrar}>
+              Ingresar al portal <span className="cta-arrow">→</span>
+            </button>
+            <span className="lp-hero-note-v2">Acceso para residentes y administración</span>
+          </div>
+          <div className="lp-stats lp-anim" style={{ animationDelay: ".4s" }}>
+            <div className="lp-stat"><span className="lp-stat-num">500+</span><span className="lp-stat-label">Familias</span></div>
+            <div className="lp-stat"><span className="lp-stat-num">4</span><span className="lp-stat-label">Accesos</span></div>
+            <div className="lp-stat"><span className="lp-stat-num">24/7</span><span className="lp-stat-label">Monitoreo</span></div>
+          </div>
         </div>
-        <div className="lp-banda-r">
-          {compromisos.map((c, i) => (
-            <div key={c} className={`lp-compromiso lp-reveal lp-rev-d${i + 1}`}>
-              <div className="lp-compromiso-ic">✓</div>
-              <span>{c}</span>
+      </section>
+
+      {/* Pilares */}
+      <section className="lp-pilares-v2">
+        <div className="lp-section-header lp-reveal">
+          <span className="lp-section-tag">Por qué vivir acá</span>
+          <h2>Tu tranquilidad, nuestra prioridad</h2>
+          <p>Todo en Villas del Sol está pensado para que te sientas seguro en casa.</p>
+        </div>
+        <div className="lp-pilares-grid">
+          {pilares.map((p) => (
+            <div key={p.t} className="lp-pilar-v2 lp-reveal">
+              <div className="lp-pilar-glow" />
+              <div className="lp-pilar-content">
+                <div className="lp-pilar-ic-v2">{p.ic}</div>
+                <h3>{p.t}</h3>
+                <p>{p.d}</p>
+                <div className="lp-pilar-line" />
+              </div>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="lp-cierre lp-reveal">
-        <h2>Bienvenido a casa.</h2>
-        <p>Ingresá al portal para gestionar tus visitas y mantenerte al día con la comunidad.</p>
-        <button className="lp-cta" onClick={onEntrar}>Ingresar al portal</button>
+      {/* Banda de compromiso */}
+      <section className="lp-banda-v2 lp-reveal">
+        <div className="lp-banda-glow" />
+        <div className="lp-banda-grid">
+          <div className="lp-banda-info">
+            <div className="lp-banda-tag">Nuestro compromiso</div>
+            <h2>Cuidamos tu hogar como si fuera el nuestro</h2>
+            <p>
+              La seguridad de tu familia es lo primero. Por eso Villas del Sol cuenta con control de
+              acceso, vigilancia permanente y una administración que está siempre cerca para responder.
+            </p>
+            <div className="lp-banda-divider" />
+          </div>
+          <div className="lp-compromisos-grid">
+            {compromisos.map((c) => (
+              <div key={c} className="lp-compromiso-v2">
+                <div className="lp-compromiso-ic-v2">✓</div>
+                <div className="lp-compromiso-text">
+                  <span>{c}</span>
+                  <div className="lp-compromiso-bar" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
-      <footer className="lp-footer">
-        <div className="lp-footer-brand">
-          <img src="/logo-vs.png" alt="Villas del Sol" />
-          <span>Residencial Villas del Sol</span>
+      {/* Cierre */}
+      <section className="lp-cierre-v2 lp-reveal">
+        <div className="lp-cierre-glow" />
+        <div className="lp-cierre-content">
+          <h2>Bienvenido a casa.</h2>
+          <p>Ingresá al portal para gestionar tus visitas y mantenerte al día con la comunidad.</p>
+          <button className="lp-cta-v2 lp-cta-large" onClick={onEntrar}>Ingresar al portal</button>
         </div>
-        <span className="lp-footer-loc">San Pedro Sula, Cortés · Honduras</span>
+      </section>
+
+      {/* Footer */}
+      <footer className="lp-footer-v2">
+        <div className="lp-footer-content">
+          <div className="lp-footer-brand-v2">
+            <img src="/logo-vs.png" alt="Villas del Sol" />
+            <div>
+              <span>Residencial Villas del Sol</span>
+              <span>San Pedro Sula, Cortés · Honduras</span>
+            </div>
+          </div>
+          <span className="lp-footer-year">© 2026 Villas del Sol</span>
+        </div>
       </footer>
     </div>
   );
