@@ -1023,24 +1023,25 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .lp-brand-glow::before {
   content: "";
   position: absolute;
-  inset: -4px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(244,135,35,.4), rgba(245,197,24,.2));
-  filter: blur(12px);
-  opacity: 0;
+  inset: -6px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(244,135,35,.5), rgba(245,197,24,.3));
+  filter: blur(14px);
+  opacity: 0.35;
   transition: opacity 0.3s;
 }
 
 .lp-brand-v2:hover .lp-brand-glow::before {
-  opacity: 1;
+  opacity: 0.7;
 }
 
 .lp-brand-glow img {
-  width: 44px; height: 44px;
-  border-radius: 12px;
+  width: 54px; height: 54px;
+  border-radius: 14px;
   object-fit: cover;
   position: relative;
-  border: 2px solid rgba(255,255,255,0.08);
+  border: 2px solid rgba(244,135,35,0.35);
+  box-shadow: 0 4px 16px rgba(2,46,69,0.18);
 }
 
 .lp-brand-text {
@@ -1136,9 +1137,9 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .hero-fondo.con-foto .hero-aurora { opacity: 0; }
 /* Velo/vignette: en modo claro es suave; con foto se oscurece para leer el texto */
 .hero-fondo-velo { position: absolute; inset: 0; transition: background .4s ease;
-  background: radial-gradient(ellipse 70% 55% at 50% 45%, var(--lp-bg) 0%, transparent 75%); opacity: .7; }
+  background: radial-gradient(ellipse 70% 55% at 50% 45%, var(--lp-bg) 0%, transparent 75%); opacity: .5; }
 .hero-fondo.con-foto .hero-fondo-velo { opacity: 1;
-  background: linear-gradient(to bottom, rgba(8,12,20,.35) 0%, rgba(8,12,20,.5) 45%, rgba(8,12,20,.82) 100%);
+  background: linear-gradient(to bottom, rgba(8,12,20,.18) 0%, rgba(8,12,20,.32) 45%, rgba(8,12,20,.72) 100%);
 }
 /* Si hay foto, el texto del hero va blanco en AMBOS temas (va sobre la foto) */
 .hero-fondo.con-foto ~ .lp-hero-content .lp-hero-title-v2,

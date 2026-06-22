@@ -262,7 +262,7 @@ function HeroFondo() {
 
 function Landing({ onEntrar }: { onEntrar: () => void }) {
   const scrolled = useLandingFx();
-  const [tema, setTema] = useState<"oscuro" | "claro">("oscuro");
+  const [tema, setTema] = useState<"oscuro" | "claro">("claro");
 
   // Prueba varias extensiones (.jpg/.jpeg/.jfif/.png/.webp) y usa la que cargue.
   // Si ninguna existe, muestra un marcador con ícono (nunca imagen rota).
@@ -342,7 +342,6 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
             <button className="lp-cta-v2 lp-cta-primary cta-pulse" onClick={onEntrar}>
               Ingresar al portal <span className="cta-arrow">→</span>
             </button>
-            <span className="lp-hero-note-v2">Acceso para residentes y administración</span>
           </div>
           <div className="lp-stats lp-anim" style={{ animationDelay: ".4s" }}>
             <div className="lp-stat"><span className="lp-stat-num"><Contador valor={500} sufijo="+" /></span><span className="lp-stat-label">Familias</span></div>
