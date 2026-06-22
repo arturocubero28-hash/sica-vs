@@ -230,6 +230,20 @@ function HeroFondo() {
   const exts = ["png", "jpg", "jpeg", "jfif", "webp", "avif", "gif", "bmp"];
   const [idx, setIdx] = useState(0);
   const [hayFoto, setHayFoto] = useState(false);
+
+  // Precarga: empieza a bajar la imagen del hero apenas carga la página,
+  // con prioridad alta, en vez de esperar a renderizar el <img>.
+  useEffect(() => {
+    const href = `/images/hero-residencial.${exts[idx]}`;
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = href;
+    (link as HTMLLinkElement & { fetchPriority?: string }).fetchPriority = "high";
+    document.head.appendChild(link);
+    return () => { link.remove(); };
+  }, [idx]);
+
   return (
     <div className={"hero-fondo" + (hayFoto ? " con-foto" : "")} aria-hidden="true">
       <div className="hero-aurora">
@@ -237,6 +251,8 @@ function HeroFondo() {
       </div>
       <img className={"hero-bg-img" + (hayFoto ? " ok" : "")}
         src={`/images/hero-residencial.${exts[idx]}`} alt=""
+        // @ts-expect-error fetchpriority es válido en HTML aunque el tipo aún no lo liste
+        fetchpriority="high" decoding="async"
         onLoad={() => setHayFoto(true)}
         onError={() => { if (idx < exts.length - 1) setIdx(idx + 1); }} />
       <div className="hero-fondo-velo" />
