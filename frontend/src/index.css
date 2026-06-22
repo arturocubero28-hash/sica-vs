@@ -1052,16 +1052,20 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 .lp-brand-name {
   font-weight: 700;
-  font-size: 17px;
+  font-size: 18px;
   color: var(--lp-text-strong);
   letter-spacing: -0.02em;
+  text-shadow: 0 1px 6px rgba(252,252,251,0.7);
 }
 
 .lp-brand-sub {
   font-size: 12px;
-  color: rgba(255,255,255,0.4);
+  color: var(--lp-text-faint);
   letter-spacing: 0.03em;
+  text-shadow: 0 1px 6px rgba(252,252,251,0.7);
 }
+/* En modo oscuro la sombra del texto va oscura (para que resalte sobre claro de la foto) */
+.lp-v2.tema-claro .lp-brand-name, .lp-v2.tema-claro .lp-brand-sub { text-shadow: 0 1px 6px rgba(255,255,255,0.8); }
 
 .lp-nav-btn-v2 {
   display: flex;
@@ -1823,7 +1827,10 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 @media (max-width: 640px) {
   .lp-hero-v2 { padding: 120px 20px 60px; }
-  .lp-stats { flex-direction: column; gap: 16px; width: 100%; max-width: 280px; }
+  .lp-stats { gap: 6px; padding: 18px 14px; width: 100%; max-width: 360px; justify-content: space-around; }
+  .lp-stat { flex: 1; }
+  .lp-stat-num { font-size: 30px; }
+  .lp-stat-label { font-size: 10px; letter-spacing: 0.08em; }
   .lp-banda-v2 { padding: 50px 28px; margin: 0 16px 60px; }
   .lp-pilar-content { padding: 32px 24px; }
   .lp-footer-content { flex-direction: column; gap: 16px; text-align: center; }
