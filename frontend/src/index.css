@@ -1023,10 +1023,10 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .lp-brand-glow::before {
   content: "";
   position: absolute;
-  inset: -6px;
-  border-radius: 16px;
+  inset: -8px;
+  border-radius: 22px;
   background: linear-gradient(135deg, rgba(244,135,35,.5), rgba(245,197,24,.3));
-  filter: blur(14px);
+  filter: blur(18px);
   opacity: 0.35;
   transition: opacity 0.3s;
 }
@@ -1036,12 +1036,12 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 }
 
 .lp-brand-glow img {
-  width: 54px; height: 54px;
-  border-radius: 14px;
+  width: 80px; height: 80px;
+  border-radius: 18px;
   object-fit: cover;
   position: relative;
   border: 2px solid rgba(244,135,35,0.35);
-  box-shadow: 0 4px 16px rgba(2,46,69,0.18);
+  box-shadow: 0 6px 20px rgba(2,46,69,0.2);
 }
 
 .lp-brand-text {
