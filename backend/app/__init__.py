@@ -195,6 +195,9 @@ def create_app(config_class=Config):
             "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS ultimo_uso TIMESTAMPTZ",
             "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS creada_en TIMESTAMPTZ",
             "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS sign_count BIGINT NOT NULL DEFAULT 0",
+            # Día 19 — Hardware de trancas: relay/GPIO y duración del pulso por acceso físico.
+            "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS relay_pin INTEGER",
+            "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS pulso_ms INTEGER NOT NULL DEFAULT 800",
             # Índices en columnas más consultadas (Día 12 — F5 de la auditoría).
             # Aceleran mora, reportes, caja y dashboard cuando crecen los datos.
             "CREATE INDEX IF NOT EXISTS ix_cuotas_estado ON cuotas (estado)",

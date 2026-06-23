@@ -23,6 +23,21 @@ class AccesoFisico(db.Model):
     nombre = db.Column(db.String(80), nullable=False)
     tipo = db.Column(db.String(20), nullable=False)
     activo = db.Column(db.Boolean, nullable=False, default=True)
+    # Hardware: relay/GPIO que acciona la tranca de este acceso y duración del pulso.
+    # relay_pin = número de pin GPIO de la Raspberry Pi que cierra el contacto seco.
+    # pulso_ms  = milisegundos que dura el pulso (configurable; a confirmar con el ingeniero).
+    relay_pin = db.Column(db.Integer)
+    pulso_ms = db.Column(db.Integer, nullable=False, default=800)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nombre": self.nombre,
+            "tipo": self.tipo,
+            "activo": self.activo,
+            "relay_pin": self.relay_pin,
+            "pulso_ms": self.pulso_ms,
+        }
 
 
 class Visita(db.Model):
