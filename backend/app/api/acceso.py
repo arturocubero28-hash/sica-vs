@@ -9,7 +9,9 @@ Flujo:
   1. La Pi lee el card_uid y envía POST /acceso/validar-tarjeta {card_uid, acceso_id}
   2. El servidor valida en capas: tarjeta existe, activa, cuenta al día,
      y que el tipo de acceso de la tarjeta permita ese acceso físico
-  3. Responde permitir/denegar + motivo
+  3. Responde permitir/denegar + motivo. Si permite y el acceso físico tiene
+     un relay configurado, incluye "orden_pulso" {relay_pin, pulso_ms}: la Pi
+     cierra el contacto seco en ese pin durante esos milisegundos.
   4. Registra el intento como EventoAcceso (origen="residente") para el historial
 
 La lógica de permisos: una tarjeta 'peatonal' (corto alcance) solo abre
@@ -108,6 +110,14 @@ def validar_tarjeta():
             resp["residente"] = f"{residente.usuario.nombre} {residente.usuario.apellido}"
         if tarjeta:
             resp["tipo_acceso"] = tarjeta.tipo_acceso
+        # Orden de pulso para la Raspberry Pi: solo si el acceso está permitido
+        # y este acceso físico tiene un relay configurado. La Pi cierra el
+        # contacto seco en 'relay_pin' durante 'pulso_ms' milisegundos.
+        if permitido and acceso.relay_pin is not None:
+            resp["orden_pulso"] = {
+                "relay_pin": acceso.relay_pin,
+                "pulso_ms": acceso.pulso_ms or 800,
+            }
         return jsonify({"data": resp}), 200
 
     # 1. La tarjeta existe
