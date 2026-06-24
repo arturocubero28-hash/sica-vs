@@ -28,6 +28,9 @@ class AccesoFisico(db.Model):
     # pulso_ms  = milisegundos que dura el pulso (configurable; a confirmar con el ingeniero).
     relay_pin = db.Column(db.Integer)
     pulso_ms = db.Column(db.Integer, nullable=False, default=800)
+    # Punto de acceso (identifica la Raspberry Pi que controla este dispositivo).
+    # Los accesos del mismo punto los maneja la misma Pi. Ej: "Acceso Principal".
+    punto_acceso = db.Column(db.String(80))
 
     def to_dict(self):
         return {
@@ -37,6 +40,7 @@ class AccesoFisico(db.Model):
             "activo": self.activo,
             "relay_pin": self.relay_pin,
             "pulso_ms": self.pulso_ms,
+            "punto_acceso": self.punto_acceso,
         }
 
 

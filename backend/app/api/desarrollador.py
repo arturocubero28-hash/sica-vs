@@ -400,6 +400,10 @@ def configurar_acceso_fisico(usuario_actual, acceso_id):
     if "activo" in body:
         acceso.activo = bool(body["activo"])
 
+    if "punto_acceso" in body:
+        punto = (body["punto_acceso"] or "").strip()
+        acceso.punto_acceso = punto or None
+
     # relay_pin: entero en rango de GPIO de Raspberry Pi (0–40), o null para desconfigurar.
     if "relay_pin" in body:
         pin = body["relay_pin"]
@@ -450,7 +454,8 @@ def crear_acceso_fisico(usuario_actual):
         return jsonify({"error": {"code": "tipo_invalido",
                                   "message": "El tipo debe ser 'vehicular' o 'peatonal'"}}), 400
 
-    acceso = AccesoFisico(nombre=nombre, tipo=tipo, activo=True, pulso_ms=800)
+    acceso = AccesoFisico(nombre=nombre, tipo=tipo, activo=True, pulso_ms=800,
+                          punto_acceso=(body.get("punto_acceso") or "").strip() or None)
     db.session.add(acceso)
     db.session.commit()
     return jsonify({"data": acceso.to_dict()}), 201
