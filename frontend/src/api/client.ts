@@ -674,8 +674,14 @@ export interface AccesoFisicoDTO {
   pulso_ms: number;
 }
 export const devAccesosFisicos = () => request<AccesoFisicoDTO[]>("/dev/accesos-fisicos");
-export const devConfigurarAcceso = (id: number, body: { relay_pin?: number | null; pulso_ms?: number }) =>
+export const devConfigurarAcceso = (id: number, body: { relay_pin?: number | null; pulso_ms?: number; nombre?: string; tipo?: string; activo?: boolean }) =>
   request<AccesoFisicoDTO>(`/dev/accesos-fisicos/${id}`, { method: "PUT", body: JSON.stringify(body) });
+export const devCrearAcceso = (body: { nombre: string; tipo: string }) =>
+  request<AccesoFisicoDTO>("/dev/accesos-fisicos", { method: "POST", body: JSON.stringify(body) });
+export const devHistorialCount = (id: number) =>
+  request<{ eventos: number }>(`/dev/accesos-fisicos/${id}/historial-count`);
+export const devEliminarAcceso = (id: number) =>
+  request<{ eliminado: boolean; eventos_borrados: number }>(`/dev/accesos-fisicos/${id}`, { method: "DELETE" });
 // Intencional: el rol desarrollador se crea una sola vez directo en la BD,
 // no desde la UI. Se mantiene por si a futuro se habilita un flujo de alta.
 export const crearDesarrollador = (body: { nombre: string; apellido: string; email: string }) =>

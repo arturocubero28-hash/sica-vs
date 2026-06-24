@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO } from "../../api/client";
 
 export function PanelDesarrollador() {
   const [m, setM] = useState<DevMetricasDTO | null>(null);
@@ -496,17 +496,26 @@ function PanelSeguridad() {
 function ConfigTrancas() {
   const [accesos, setAccesos] = useState<AccesoFisicoDTO[] | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [edits, setEdits] = useState<Record<number, { relay_pin: string; pulso_ms: string }>>({});
+  const [edits, setEdits] = useState<Record<number, { nombre: string; tipo: string; relay_pin: string; pulso_ms: string }>>({});
   const [guardando, setGuardando] = useState<number | null>(null);
   const [msg, setMsg] = useState<{ id: number; texto: string; ok: boolean } | null>(null);
+  // Alta
+  const [mostrarAlta, setMostrarAlta] = useState(false);
+  const [nuevoNombre, setNuevoNombre] = useState("");
+  const [nuevoTipo, setNuevoTipo] = useState("vehicular");
+  const [creando, setCreando] = useState(false);
+  const [msgAlta, setMsgAlta] = useState("");
+  // Baja
+  const [borrar, setBorrar] = useState<{ acceso: AccesoFisicoDTO; eventos: number } | null>(null);
+  const [borrando, setBorrando] = useState(false);
 
   const cargar = useCallback(() => {
     setCargando(true);
     devAccesosFisicos()
       .then((data) => {
         setAccesos(data);
-        const e: Record<number, { relay_pin: string; pulso_ms: string }> = {};
-        data.forEach((a) => { e[a.id] = { relay_pin: a.relay_pin == null ? "" : String(a.relay_pin), pulso_ms: String(a.pulso_ms) }; });
+        const e: Record<number, { nombre: string; tipo: string; relay_pin: string; pulso_ms: string }> = {};
+        data.forEach((a) => { e[a.id] = { nombre: a.nombre, tipo: a.tipo, relay_pin: a.relay_pin == null ? "" : String(a.relay_pin), pulso_ms: String(a.pulso_ms) }; });
         setEdits(e);
       })
       .catch(() => setAccesos([]))
@@ -515,15 +524,16 @@ function ConfigTrancas() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  function setCampo(id: number, campo: "relay_pin" | "pulso_ms", valor: string) {
+  function setCampo(id: number, campo: "nombre" | "tipo" | "relay_pin" | "pulso_ms", valor: string) {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
   }
 
   async function guardar(a: AccesoFisicoDTO) {
     const ed = edits[a.id];
+    const nombre = ed.nombre.trim();
     const pin = ed.relay_pin.trim();
     const pulso = parseInt(ed.pulso_ms, 10);
-    // Validación en el cliente (el backend revalida igual)
+    if (!nombre) { setMsg({ id: a.id, texto: "El nombre no puede estar vacío", ok: false }); return; }
     if (pin !== "") {
       const p = parseInt(pin, 10);
       if (isNaN(p) || p < 0 || p > 40) { setMsg({ id: a.id, texto: "El pin debe ser un número entre 0 y 40", ok: false }); return; }
@@ -533,6 +543,7 @@ function ConfigTrancas() {
     setMsg(null);
     try {
       const actualizado = await devConfigurarAcceso(a.id, {
+        nombre, tipo: ed.tipo,
         relay_pin: pin === "" ? null : parseInt(pin, 10),
         pulso_ms: pulso,
       });
@@ -545,8 +556,51 @@ function ConfigTrancas() {
     }
   }
 
+  async function alternarActivo(a: AccesoFisicoDTO) {
+    try {
+      const actualizado = await devConfigurarAcceso(a.id, { activo: !a.activo });
+      setAccesos((prev) => prev ? prev.map((x) => x.id === a.id ? actualizado : x) : prev);
+    } catch { /* noop */ }
+  }
+
+  async function crear() {
+    const nombre = nuevoNombre.trim();
+    if (!nombre) { setMsgAlta("El nombre es obligatorio"); return; }
+    setCreando(true);
+    setMsgAlta("");
+    try {
+      await devCrearAcceso({ nombre, tipo: nuevoTipo });
+      setNuevoNombre(""); setNuevoTipo("vehicular"); setMostrarAlta(false);
+      cargar();
+    } catch (err: any) {
+      setMsgAlta(err?.message || "No se pudo crear");
+    } finally {
+      setCreando(false);
+    }
+  }
+
+  async function pedirBorrar(a: AccesoFisicoDTO) {
+    try {
+      const { eventos } = await devHistorialCount(a.id);
+      setBorrar({ acceso: a, eventos });
+    } catch {
+      setBorrar({ acceso: a, eventos: 0 });
+    }
+  }
+
+  async function confirmarBorrar() {
+    if (!borrar) return;
+    setBorrando(true);
+    try {
+      await devEliminarAcceso(borrar.acceso.id);
+      setBorrar(null);
+      cargar();
+    } catch { /* noop */ } finally {
+      setBorrando(false);
+    }
+  }
+
   if (cargando) return <p className="muted" style={{ padding: 20 }}>Cargando trancas…</p>;
-  if (!accesos || accesos.length === 0) return <p className="muted" style={{ padding: 20 }}>No hay accesos físicos registrados todavía.</p>;
 
   return (
     <div className="dev-trancas">
@@ -555,43 +609,109 @@ function ConfigTrancas() {
         El <code>pin GPIO</code> es el pin de la Raspberry Pi que acciona el relay, y el <code>pulso</code> es
         cuántos milisegundos se mantiene el contacto seco. Un valor incorrecto puede impedir que una tranca abra.
       </div>
-      <div className="dev-trancas-grid">
-        {accesos.map((a) => {
-          const ed = edits[a.id] || { relay_pin: "", pulso_ms: "" };
-          const sinConfig = a.relay_pin == null;
-          return (
-            <div key={a.id} className="dev-tranca-card">
-              <div className="dev-tranca-head">
-                <span className="dev-tranca-nombre">{a.nombre}</span>
-                <span className={`dev-tranca-badge ${sinConfig ? "sin" : "ok"}`}>
-                  {sinConfig ? "Sin configurar" : "Configurada"}
-                </span>
+
+      <div className="dev-trancas-barra">
+        <span className="dev-trancas-total">{accesos?.length || 0} acceso(s) registrado(s)</span>
+        <button className="dev-tranca-add" onClick={() => { setMostrarAlta((v) => !v); setMsgAlta(""); }}>
+          {mostrarAlta ? "Cancelar" : "+ Agregar acceso"}
+        </button>
+      </div>
+
+      {mostrarAlta && (
+        <div className="dev-tranca-alta">
+          <div className="dev-tranca-alta-campos">
+            <label>
+              <span>Nombre</span>
+              <input type="text" placeholder="Ej: Entrada Principal Vehicular" maxLength={80}
+                value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} />
+            </label>
+            <label>
+              <span>Tipo</span>
+              <select value={nuevoTipo} onChange={(e) => setNuevoTipo(e.target.value)}>
+                <option value="vehicular">Vehicular</option>
+                <option value="peatonal">Peatonal</option>
+              </select>
+            </label>
+            <button className="dev-tranca-btn" style={{ maxWidth: 140 }} disabled={creando} onClick={crear}>
+              {creando ? "Creando…" : "Crear acceso"}
+            </button>
+          </div>
+          {msgAlta && <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>{msgAlta}</div>}
+        </div>
+      )}
+
+      {(!accesos || accesos.length === 0) ? (
+        <p className="muted" style={{ padding: 20 }}>No hay accesos físicos. Agregá el primero con el botón de arriba.</p>
+      ) : (
+        <div className="dev-trancas-grid">
+          {accesos.map((a) => {
+            const ed = edits[a.id] || { nombre: "", tipo: "vehicular", relay_pin: "", pulso_ms: "" };
+            const sinConfig = a.relay_pin == null;
+            return (
+              <div key={a.id} className={`dev-tranca-card ${!a.activo ? "inactiva" : ""}`}>
+                <div className="dev-tranca-head">
+                  <input className="dev-tranca-nombre-input" value={ed.nombre} maxLength={80}
+                    onChange={(e) => setCampo(a.id, "nombre", e.target.value)} />
+                  <span className={`dev-tranca-badge ${sinConfig ? "sin" : "ok"}`}>
+                    {sinConfig ? "Sin configurar" : "Configurada"}
+                  </span>
+                </div>
+                <div className="dev-tranca-fila">
+                  <select className="dev-tranca-tipo-sel" value={ed.tipo} onChange={(e) => setCampo(a.id, "tipo", e.target.value)}>
+                    <option value="vehicular">Vehicular</option>
+                    <option value="peatonal">Peatonal</option>
+                  </select>
+                  <button className={`dev-tranca-toggle ${a.activo ? "on" : "off"}`} onClick={() => alternarActivo(a)}>
+                    {a.activo ? "Activa" : "Inactiva"}
+                  </button>
+                </div>
+                <div className="dev-tranca-campos">
+                  <label>
+                    <span>Pin GPIO</span>
+                    <input type="number" min={0} max={40} placeholder="—"
+                      value={ed.relay_pin} onChange={(e) => setCampo(a.id, "relay_pin", e.target.value)} />
+                  </label>
+                  <label>
+                    <span>Pulso (ms)</span>
+                    <input type="number" min={100} max={5000} step={50}
+                      value={ed.pulso_ms} onChange={(e) => setCampo(a.id, "pulso_ms", e.target.value)} />
+                  </label>
+                </div>
+                {msg && msg.id === a.id && (
+                  <div className={`dev-tranca-msg ${msg.ok ? "ok" : "err"}`}>{msg.texto}</div>
+                )}
+                <div className="dev-tranca-acciones">
+                  <button className="dev-tranca-btn" disabled={guardando === a.id} onClick={() => guardar(a)}>
+                    {guardando === a.id ? "Guardando…" : "Guardar"}
+                  </button>
+                  <button className="dev-tranca-del" onClick={() => pedirBorrar(a)} title="Eliminar acceso">🗑</button>
+                </div>
               </div>
-              <div className="dev-tranca-tipo">{a.tipo}{a.activo ? "" : " · inactiva"}</div>
-              <div className="dev-tranca-campos">
-                <label>
-                  <span>Pin GPIO</span>
-                  <input type="number" min={0} max={40} placeholder="—"
-                    value={ed.relay_pin}
-                    onChange={(e) => setCampo(a.id, "relay_pin", e.target.value)} />
-                </label>
-                <label>
-                  <span>Pulso (ms)</span>
-                  <input type="number" min={100} max={5000} step={50}
-                    value={ed.pulso_ms}
-                    onChange={(e) => setCampo(a.id, "pulso_ms", e.target.value)} />
-                </label>
+            );
+          })}
+        </div>
+      )}
+
+      {borrar && (
+        <div className="dev-modal-overlay" onClick={() => !borrando && setBorrar(null)}>
+          <div className="dev-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Eliminar acceso</h3>
+            <p>¿Seguro que querés eliminar <strong>{borrar.acceso.nombre}</strong>?</p>
+            {borrar.eventos > 0 && (
+              <div className="dev-tranca-msg err" style={{ marginBottom: 14 }}>
+                ⚠️ Este acceso tiene <strong>{borrar.eventos}</strong> registro(s) en el historial de entradas/salidas.
+                Si lo eliminás, esos registros también se borrarán. Si solo querés dejar de usarlo, mejor marcalo como Inactiva.
               </div>
-              {msg && msg.id === a.id && (
-                <div className={`dev-tranca-msg ${msg.ok ? "ok" : "err"}`}>{msg.texto}</div>
-              )}
-              <button className="dev-tranca-btn" disabled={guardando === a.id} onClick={() => guardar(a)}>
-                {guardando === a.id ? "Guardando…" : "Guardar"}
+            )}
+            <div className="dev-modal-acciones">
+              <button className="ghost" disabled={borrando} onClick={() => setBorrar(null)}>Cancelar</button>
+              <button className="dev-tranca-del-confirm" disabled={borrando} onClick={confirmarBorrar}>
+                {borrando ? "Eliminando…" : "Eliminar"}
               </button>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
