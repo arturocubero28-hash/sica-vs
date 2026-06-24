@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO } from "../../api/client";
 
 export function PanelDesarrollador() {
   const [m, setM] = useState<DevMetricasDTO | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad">("salud");
+  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad" | "trancas">("salud");
   // Filtros de logs
   const [email, setEmail] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -68,6 +68,7 @@ export function PanelDesarrollador() {
         <button className={`hist-tab ${tab === "logs" ? "on" : ""}`} onClick={() => setTab("logs")}>🔍 Logs de auditoría</button>
         <button className={`hist-tab ${tab === "codigo" ? "on" : ""}`} onClick={() => setTab("codigo")}>📊 Métricas de código</button>
         <button className={`hist-tab ${tab === "seguridad" ? "on" : ""}`} onClick={() => setTab("seguridad")}>🛡️ Seguridad</button>
+        <button className={`hist-tab ${tab === "trancas" ? "on" : ""}`} onClick={() => setTab("trancas")}>🚧 Trancas</button>
       </div>
 
       {tab === "salud" && (
@@ -231,6 +232,7 @@ export function PanelDesarrollador() {
 
       {tab === "codigo" && <MetricasCodigo />}
       {tab === "seguridad" && <PanelSeguridad />}
+      {tab === "trancas" && <ConfigTrancas />}
     </div>
   );
 }
@@ -486,6 +488,110 @@ function PanelSeguridad() {
         rate-limit, accesos sin permiso). Los intentos a nivel del servidor (SSH/root) se monitorean
         aparte con herramientas del sistema operativo al desplegar.
       </p>
+    </div>
+  );
+}
+
+
+function ConfigTrancas() {
+  const [accesos, setAccesos] = useState<AccesoFisicoDTO[] | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [edits, setEdits] = useState<Record<number, { relay_pin: string; pulso_ms: string }>>({});
+  const [guardando, setGuardando] = useState<number | null>(null);
+  const [msg, setMsg] = useState<{ id: number; texto: string; ok: boolean } | null>(null);
+
+  const cargar = useCallback(() => {
+    setCargando(true);
+    devAccesosFisicos()
+      .then((data) => {
+        setAccesos(data);
+        const e: Record<number, { relay_pin: string; pulso_ms: string }> = {};
+        data.forEach((a) => { e[a.id] = { relay_pin: a.relay_pin == null ? "" : String(a.relay_pin), pulso_ms: String(a.pulso_ms) }; });
+        setEdits(e);
+      })
+      .catch(() => setAccesos([]))
+      .finally(() => setCargando(false));
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  function setCampo(id: number, campo: "relay_pin" | "pulso_ms", valor: string) {
+    setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
+  }
+
+  async function guardar(a: AccesoFisicoDTO) {
+    const ed = edits[a.id];
+    const pin = ed.relay_pin.trim();
+    const pulso = parseInt(ed.pulso_ms, 10);
+    // Validación en el cliente (el backend revalida igual)
+    if (pin !== "") {
+      const p = parseInt(pin, 10);
+      if (isNaN(p) || p < 0 || p > 40) { setMsg({ id: a.id, texto: "El pin debe ser un número entre 0 y 40", ok: false }); return; }
+    }
+    if (isNaN(pulso) || pulso < 100 || pulso > 5000) { setMsg({ id: a.id, texto: "El pulso debe estar entre 100 y 5000 ms", ok: false }); return; }
+    setGuardando(a.id);
+    setMsg(null);
+    try {
+      const actualizado = await devConfigurarAcceso(a.id, {
+        relay_pin: pin === "" ? null : parseInt(pin, 10),
+        pulso_ms: pulso,
+      });
+      setAccesos((prev) => prev ? prev.map((x) => x.id === a.id ? actualizado : x) : prev);
+      setMsg({ id: a.id, texto: "Guardado correctamente", ok: true });
+    } catch (err: any) {
+      setMsg({ id: a.id, texto: err?.message || "No se pudo guardar", ok: false });
+    } finally {
+      setGuardando(null);
+    }
+  }
+
+  if (cargando) return <p className="muted" style={{ padding: 20 }}>Cargando trancas…</p>;
+  if (!accesos || accesos.length === 0) return <p className="muted" style={{ padding: 20 }}>No hay accesos físicos registrados todavía.</p>;
+
+  return (
+    <div className="dev-trancas">
+      <div className="dev-trancas-aviso">
+        <strong>⚠️ Configuración sensible.</strong> Estos valores controlan el hardware físico de las trancas.
+        El <code>pin GPIO</code> es el pin de la Raspberry Pi que acciona el relay, y el <code>pulso</code> es
+        cuántos milisegundos se mantiene el contacto seco. Un valor incorrecto puede impedir que una tranca abra.
+      </div>
+      <div className="dev-trancas-grid">
+        {accesos.map((a) => {
+          const ed = edits[a.id] || { relay_pin: "", pulso_ms: "" };
+          const sinConfig = a.relay_pin == null;
+          return (
+            <div key={a.id} className="dev-tranca-card">
+              <div className="dev-tranca-head">
+                <span className="dev-tranca-nombre">{a.nombre}</span>
+                <span className={`dev-tranca-badge ${sinConfig ? "sin" : "ok"}`}>
+                  {sinConfig ? "Sin configurar" : "Configurada"}
+                </span>
+              </div>
+              <div className="dev-tranca-tipo">{a.tipo}{a.activo ? "" : " · inactiva"}</div>
+              <div className="dev-tranca-campos">
+                <label>
+                  <span>Pin GPIO</span>
+                  <input type="number" min={0} max={40} placeholder="—"
+                    value={ed.relay_pin}
+                    onChange={(e) => setCampo(a.id, "relay_pin", e.target.value)} />
+                </label>
+                <label>
+                  <span>Pulso (ms)</span>
+                  <input type="number" min={100} max={5000} step={50}
+                    value={ed.pulso_ms}
+                    onChange={(e) => setCampo(a.id, "pulso_ms", e.target.value)} />
+                </label>
+              </div>
+              {msg && msg.id === a.id && (
+                <div className={`dev-tranca-msg ${msg.ok ? "ok" : "err"}`}>{msg.texto}</div>
+              )}
+              <button className="dev-tranca-btn" disabled={guardando === a.id} onClick={() => guardar(a)}>
+                {guardando === a.id ? "Guardando…" : "Guardar"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -2708,3 +2708,43 @@ table.data tbody tr:hover td { background: #f1f6fd; }
 /* Cerrar: discreta pero reconocible (acción final, poco frecuente) */
 .caja-accion-cerrar { background: #fff; color: #c2410c; border-color: #f0d0bc; }
 .caja-accion-cerrar:hover { background: #fef5f0; border-color: #e8b896; transform: translateY(-1px); }
+
+/* ── Panel dev: configuración de trancas ── */
+.dev-trancas { padding: 4px 0; }
+.dev-trancas-aviso {
+  background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px;
+  padding: 12px 16px; font-size: 13px; color: #7c2d12; line-height: 1.5; margin-bottom: 18px;
+}
+.dev-trancas-aviso code {
+  background: #ffedd5; padding: 1px 6px; border-radius: 5px; font-size: 12px; color: #9a3412;
+}
+.dev-trancas-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px;
+}
+.dev-tranca-card {
+  background: #fff; border: 1px solid var(--borde, #e3e9f2); border-radius: 14px; padding: 18px;
+  box-shadow: 0 2px 10px rgba(2,46,69,.04);
+}
+.dev-tranca-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.dev-tranca-nombre { font-weight: 700; font-size: 15px; color: #022E45; }
+.dev-tranca-badge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.dev-tranca-badge.ok { background: #dcfce7; color: #166534; }
+.dev-tranca-badge.sin { background: #fef3c7; color: #92400e; }
+.dev-tranca-tipo { font-size: 12px; color: #6b7280; text-transform: capitalize; margin-bottom: 14px; }
+.dev-tranca-campos { display: flex; gap: 12px; margin-bottom: 12px; }
+.dev-tranca-campos label { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.dev-tranca-campos label span { font-size: 11px; font-weight: 600; color: #4b5563; text-transform: uppercase; letter-spacing: 0.04em; }
+.dev-tranca-campos input {
+  width: 100%; padding: 9px 10px; border: 1px solid var(--borde, #e3e9f2); border-radius: 9px;
+  font-size: 14px; color: #022E45; background: #fff;
+}
+.dev-tranca-campos input:focus { outline: none; border-color: #F48723; box-shadow: 0 0 0 3px rgba(244,135,35,.15); }
+.dev-tranca-msg { font-size: 12.5px; padding: 7px 10px; border-radius: 8px; margin-bottom: 10px; }
+.dev-tranca-msg.ok { background: #dcfce7; color: #166534; }
+.dev-tranca-msg.err { background: #fee2e2; color: #991b1b; }
+.dev-tranca-btn {
+  width: 100%; padding: 10px; border: none; border-radius: 10px; background: #F48723; color: #fff;
+  font-weight: 600; font-size: 14px; cursor: pointer; transition: all .2s;
+}
+.dev-tranca-btn:hover:not(:disabled) { background: #e07b18; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(244,135,35,.25); }
+.dev-tranca-btn:disabled { opacity: .6; cursor: default; }

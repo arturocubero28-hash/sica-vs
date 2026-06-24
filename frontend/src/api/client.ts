@@ -663,6 +663,19 @@ export const devLogs = (params?: { email?: string; endpoint?: string; errores?: 
   if (params?.pagina) q.set("pagina", String(params.pagina));
   return request<any>(`/dev/logs?${q.toString()}`);
 };
+
+// Configuración de hardware de las trancas (solo desarrollador)
+export interface AccesoFisicoDTO {
+  id: number;
+  nombre: string;
+  tipo: string;
+  activo: boolean;
+  relay_pin: number | null;
+  pulso_ms: number;
+}
+export const devAccesosFisicos = () => request<AccesoFisicoDTO[]>("/dev/accesos-fisicos");
+export const devConfigurarAcceso = (id: number, body: { relay_pin?: number | null; pulso_ms?: number }) =>
+  request<AccesoFisicoDTO>(`/dev/accesos-fisicos/${id}`, { method: "PUT", body: JSON.stringify(body) });
 // Intencional: el rol desarrollador se crea una sola vez directo en la BD,
 // no desde la UI. Se mantiene por si a futuro se habilita un flujo de alta.
 export const crearDesarrollador = (body: { nombre: string; apellido: string; email: string }) =>
