@@ -10,7 +10,7 @@ from flask import Blueprint, request, jsonify
 
 from app.extensions import db
 from app.models.auditoria import LogAuditoria
-from app.models.visita import AccesoFisico
+from app.models.visita import AccesoFisico, EventoAcceso
 from app.auth.security import roles_required
 
 dev_bp = Blueprint("desarrollador", __name__)
@@ -379,6 +379,27 @@ def configurar_acceso_fisico(usuario_actual, acceso_id):
 
     body = request.get_json(silent=True) or {}
 
+    # Datos del acceso (nombre, tipo, activo)
+    if "nombre" in body:
+        nombre = (body["nombre"] or "").strip()
+        if not nombre:
+            return jsonify({"error": {"code": "nombre_requerido",
+                                      "message": "El nombre no puede estar vacío"}}), 400
+        if len(nombre) > 80:
+            return jsonify({"error": {"code": "nombre_largo",
+                                      "message": "El nombre no puede superar 80 caracteres"}}), 400
+        acceso.nombre = nombre
+
+    if "tipo" in body:
+        tipo = (body["tipo"] or "").strip().lower()
+        if tipo not in ("vehicular", "peatonal"):
+            return jsonify({"error": {"code": "tipo_invalido",
+                                      "message": "El tipo debe ser 'vehicular' o 'peatonal'"}}), 400
+        acceso.tipo = tipo
+
+    if "activo" in body:
+        acceso.activo = bool(body["activo"])
+
     # relay_pin: entero en rango de GPIO de Raspberry Pi (0–40), o null para desconfigurar.
     if "relay_pin" in body:
         pin = body["relay_pin"]
@@ -409,3 +430,57 @@ def configurar_acceso_fisico(usuario_actual, acceso_id):
 
     db.session.commit()
     return jsonify({"data": acceso.to_dict()})
+
+
+@dev_bp.post("/accesos-fisicos")
+@roles_required("desarrollador")
+def crear_acceso_fisico(usuario_actual):
+    """Crea un nuevo acceso físico (tranca o torniquete)."""
+    body = request.get_json(silent=True) or {}
+    nombre = (body.get("nombre") or "").strip()
+    tipo = (body.get("tipo") or "").strip().lower()
+
+    if not nombre:
+        return jsonify({"error": {"code": "nombre_requerido",
+                                  "message": "El nombre es obligatorio"}}), 400
+    if len(nombre) > 80:
+        return jsonify({"error": {"code": "nombre_largo",
+                                  "message": "El nombre no puede superar 80 caracteres"}}), 400
+    if tipo not in ("vehicular", "peatonal"):
+        return jsonify({"error": {"code": "tipo_invalido",
+                                  "message": "El tipo debe ser 'vehicular' o 'peatonal'"}}), 400
+
+    acceso = AccesoFisico(nombre=nombre, tipo=tipo, activo=True, pulso_ms=800)
+    db.session.add(acceso)
+    db.session.commit()
+    return jsonify({"data": acceso.to_dict()}), 201
+
+
+@dev_bp.get("/accesos-fisicos/<int:acceso_id>/historial-count")
+@roles_required("desarrollador")
+def historial_count_acceso(usuario_actual, acceso_id):
+    """Devuelve cuántos eventos de acceso tiene un acceso (para avisar antes de borrar)."""
+    acceso = AccesoFisico.query.get(acceso_id)
+    if not acceso:
+        return jsonify({"error": {"code": "no_encontrado",
+                                  "message": "Acceso físico no encontrado"}}), 404
+    n = EventoAcceso.query.filter_by(acceso_id=acceso_id).count()
+    return jsonify({"data": {"eventos": n}})
+
+
+@dev_bp.delete("/accesos-fisicos/<int:acceso_id>")
+@roles_required("desarrollador")
+def eliminar_acceso_fisico(usuario_actual, acceso_id):
+    """Elimina un acceso físico. Si tiene historial, también borra sus eventos
+    (el cliente ya advirtió cuántos son antes de confirmar)."""
+    acceso = AccesoFisico.query.get(acceso_id)
+    if not acceso:
+        return jsonify({"error": {"code": "no_encontrado",
+                                  "message": "Acceso físico no encontrado"}}), 404
+
+    eventos = EventoAcceso.query.filter_by(acceso_id=acceso_id).count()
+    if eventos:
+        EventoAcceso.query.filter_by(acceso_id=acceso_id).delete()
+    db.session.delete(acceso)
+    db.session.commit()
+    return jsonify({"data": {"eliminado": True, "eventos_borrados": eventos}})
