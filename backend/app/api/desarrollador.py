@@ -10,6 +10,7 @@ from flask import Blueprint, request, jsonify
 
 from app.extensions import db
 from app.models.auditoria import LogAuditoria
+from app.models.visita import AccesoFisico
 from app.auth.security import roles_required
 
 dev_bp = Blueprint("desarrollador", __name__)
@@ -351,3 +352,60 @@ def metricas_seguridad(usuario_actual):
         "ataques_privilegiados": ataques_priv,
         "timeline_7d": timeline,
     }})
+
+
+# ───────────────────────────────────────────────────────────────────
+# Configuración de hardware de las trancas (relay/GPIO)
+# Sensible: solo el rol 'desarrollador' puede ver y cambiar esto, ya que
+# un valor mal puesto puede dejar una tranca sin abrir o accionando de más.
+# ───────────────────────────────────────────────────────────────────
+
+@dev_bp.get("/accesos-fisicos")
+@roles_required("desarrollador")
+def listar_accesos_fisicos(usuario_actual):
+    """Lista los accesos físicos con su configuración de relay y pulso."""
+    accesos = AccesoFisico.query.order_by(AccesoFisico.id).all()
+    return jsonify({"data": [a.to_dict() for a in accesos]})
+
+
+@dev_bp.put("/accesos-fisicos/<int:acceso_id>")
+@roles_required("desarrollador")
+def configurar_acceso_fisico(usuario_actual, acceso_id):
+    """Actualiza el relay_pin y/o pulso_ms de un acceso físico."""
+    acceso = AccesoFisico.query.get(acceso_id)
+    if not acceso:
+        return jsonify({"error": {"code": "no_encontrado",
+                                  "message": "Acceso físico no encontrado"}}), 404
+
+    body = request.get_json(silent=True) or {}
+
+    # relay_pin: entero en rango de GPIO de Raspberry Pi (0–40), o null para desconfigurar.
+    if "relay_pin" in body:
+        pin = body["relay_pin"]
+        if pin is None or pin == "":
+            acceso.relay_pin = None
+        else:
+            try:
+                pin = int(pin)
+            except (TypeError, ValueError):
+                return jsonify({"error": {"code": "pin_invalido",
+                                          "message": "El pin debe ser un número entero"}}), 400
+            if pin < 0 or pin > 40:
+                return jsonify({"error": {"code": "pin_fuera_rango",
+                                          "message": "El pin GPIO debe estar entre 0 y 40"}}), 400
+            acceso.relay_pin = pin
+
+    # pulso_ms: entero positivo en rango sensato (100–5000 ms).
+    if "pulso_ms" in body:
+        try:
+            pulso = int(body["pulso_ms"])
+        except (TypeError, ValueError):
+            return jsonify({"error": {"code": "pulso_invalido",
+                                      "message": "El pulso debe ser un número entero"}}), 400
+        if pulso < 100 or pulso > 5000:
+            return jsonify({"error": {"code": "pulso_fuera_rango",
+                                      "message": "El pulso debe estar entre 100 y 5000 ms"}}), 400
+        acceso.pulso_ms = pulso
+
+    db.session.commit()
+    return jsonify({"data": acceso.to_dict()})
