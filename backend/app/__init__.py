@@ -56,6 +56,7 @@ def create_app(config_class=Config):
     from app.models.token_revocado import TokenRevocado  # noqa: F401  blacklist JWT
     from app.models.sesion_activa import SesionActiva  # noqa: F401  sesiones/dispositivos
     from app.models.credencial_webauthn import CredencialWebAuthn  # noqa: F401  biometría WebAuthn
+    from app.models.dispositivo import Dispositivo  # noqa: F401  Raspberry Pi de accesos
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp

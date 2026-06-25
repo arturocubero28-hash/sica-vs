@@ -31,6 +31,7 @@ from flask import Blueprint, request, jsonify, current_app
 from app.extensions import db, limiter
 from app.models.cuenta import Tarjeta, Cuenta
 from app.models.visita import EventoAcceso, AccesoFisico
+from app.services.permisos import motivo_denegacion
 
 acceso_bp = Blueprint("acceso", __name__)
 
@@ -125,22 +126,11 @@ def validar_tarjeta():
     if not tarjeta:
         return responder(False, "Tarjeta no registrada")
 
-    # 2. La tarjeta está activa
-    if tarjeta.estado != "activa":
-        return responder(False, "Tarjeta dada de baja o inactiva", tarjeta, tarjeta.residente)
-
-    # 3. La cuenta no está bloqueada por mora ni dada de baja
-    cuenta = Cuenta.query.get(tarjeta.cuenta_id)
-    if not cuenta or not cuenta.activa:
-        return responder(False, "La cuenta no está activa", tarjeta, tarjeta.residente)
-    if cuenta.bloqueada:
-        return responder(False, "Cuenta bloqueada por mora", tarjeta, tarjeta.residente)
-
-    # 4. El tipo de acceso de la tarjeta permite este acceso físico.
-    #    Regla: peatonal solo abre accesos peatonales; vehicular abre ambos.
-    if tarjeta.tipo_acceso == "peatonal" and acceso.tipo == "vehicular":
-        return responder(False, "Tarjeta peatonal: no habilitada para acceso vehicular",
-                         tarjeta, tarjeta.residente)
+    # 2-4. Permiso (tarjeta activa, cuenta activa/sin mora, tipo compatible).
+    #      Fuente única de verdad: app.services.permisos
+    motivo = motivo_denegacion(tarjeta, acceso)
+    if motivo:
+        return responder(False, motivo, tarjeta, tarjeta.residente)
 
     # Todo en orden: acceso permitido
     return responder(True, "Acceso permitido", tarjeta, tarjeta.residente)
