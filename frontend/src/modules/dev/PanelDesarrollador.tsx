@@ -771,10 +771,19 @@ function ConfigPis() {
   const [creando, setCreando] = useState(false);
   // token recién generado para mostrar una vez
   const [tokenNuevo, setTokenNuevo] = useState<{ nombre: string; token: string } | null>(null);
+  // puntos de acceso existentes (sacados de las trancas) para el desplegable
+  const [puntos, setPuntos] = useState<string[]>([]);
 
   const cargar = useCallback(() => {
     setCargando(true);
-    devDispositivos().then(setPis).catch(() => setPis([])).finally(() => setCargando(false));
+    Promise.all([devDispositivos(), devAccesosFisicos()])
+      .then(([disp, accesos]) => {
+        setPis(disp);
+        const ps = Array.from(new Set(accesos.map((a) => a.punto_acceso).filter(Boolean))) as string[];
+        setPuntos(ps);
+      })
+      .catch(() => setPis([]))
+      .finally(() => setCargando(false));
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -837,13 +846,20 @@ function ConfigPis() {
             </label>
             <label>
               <span>Punto de acceso</span>
-              <input type="text" placeholder="Ej: Acceso Principal" maxLength={80}
-                value={nuevoPunto} onChange={(e) => setNuevoPunto(e.target.value)} />
+              <select className="dev-tranca-tipo-sel" value={nuevoPunto} onChange={(e) => setNuevoPunto(e.target.value)}>
+                <option value="">— Elegí un punto —</option>
+                {puntos.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
             </label>
             <button className="dev-tranca-btn" style={{ maxWidth: 160 }} disabled={creando} onClick={crear}>
               {creando ? "Creando…" : "Crear Pi"}
             </button>
           </div>
+          {puntos.length === 0 && (
+            <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>
+              No hay puntos de acceso todavía. Primero creá trancas con su punto en la pestaña 🚧 Trancas.
+            </div>
+          )}
         </div>
       )}
 
