@@ -683,6 +683,26 @@ export const devHistorialCount = (id: number) =>
   request<{ eventos: number }>(`/dev/accesos-fisicos/${id}/historial-count`);
 export const devEliminarAcceso = (id: number) =>
   request<{ eliminado: boolean; eventos_borrados: number }>(`/dev/accesos-fisicos/${id}`, { method: "DELETE" });
+
+// Dispositivos (Raspberry Pi)
+export interface DispositivoDTO {
+  id: string;
+  nombre: string;
+  punto_acceso: string | null;
+  activo: boolean;
+  ultima_sync: string | null;
+  created_at: string | null;
+  token?: string;
+}
+export const devDispositivos = () => request<DispositivoDTO[]>("/dev/dispositivos");
+export const devCrearDispositivo = (body: { nombre: string; punto_acceso?: string }) =>
+  request<DispositivoDTO>("/dev/dispositivos", { method: "POST", body: JSON.stringify(body) });
+export const devActualizarDispositivo = (id: string, body: { nombre?: string; punto_acceso?: string; activo?: boolean }) =>
+  request<DispositivoDTO>(`/dev/dispositivos/${id}`, { method: "PUT", body: JSON.stringify(body) });
+export const devRegenerarToken = (id: string) =>
+  request<DispositivoDTO>(`/dev/dispositivos/${id}/regenerar-token`, { method: "POST" });
+export const devEliminarDispositivo = (id: string) =>
+  request<{ eliminado: boolean }>(`/dev/dispositivos/${id}`, { method: "DELETE" });
 // Intencional: el rol desarrollador se crea una sola vez directo en la BD,
 // no desde la UI. Se mantiene por si a futuro se habilita un flujo de alta.
 export const crearDesarrollador = (body: { nombre: string; apellido: string; email: string }) =>

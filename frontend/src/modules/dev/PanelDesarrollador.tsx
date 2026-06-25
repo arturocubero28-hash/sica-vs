@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO } from "../../api/client";
 
 export function PanelDesarrollador() {
   const [m, setM] = useState<DevMetricasDTO | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad" | "trancas">("salud");
+  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad" | "trancas" | "pis">("salud");
   // Filtros de logs
   const [email, setEmail] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -69,6 +69,7 @@ export function PanelDesarrollador() {
         <button className={`hist-tab ${tab === "codigo" ? "on" : ""}`} onClick={() => setTab("codigo")}>📊 Métricas de código</button>
         <button className={`hist-tab ${tab === "seguridad" ? "on" : ""}`} onClick={() => setTab("seguridad")}>🛡️ Seguridad</button>
         <button className={`hist-tab ${tab === "trancas" ? "on" : ""}`} onClick={() => setTab("trancas")}>🚧 Trancas</button>
+        <button className={`hist-tab ${tab === "pis" ? "on" : ""}`} onClick={() => setTab("pis")}>📡 Raspberry Pi</button>
       </div>
 
       {tab === "salud" && (
@@ -233,6 +234,7 @@ export function PanelDesarrollador() {
       {tab === "codigo" && <MetricasCodigo />}
       {tab === "seguridad" && <PanelSeguridad />}
       {tab === "trancas" && <ConfigTrancas />}
+      {tab === "pis" && <ConfigPis />}
     </div>
   );
 }
@@ -747,6 +749,137 @@ function ConfigTrancas() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function ConfigPis() {
+  const [pis, setPis] = useState<DispositivoDTO[] | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [mostrarAlta, setMostrarAlta] = useState(false);
+  const [nuevoNombre, setNuevoNombre] = useState("");
+  const [nuevoPunto, setNuevoPunto] = useState("");
+  const [creando, setCreando] = useState(false);
+  // token recién generado para mostrar una vez
+  const [tokenNuevo, setTokenNuevo] = useState<{ nombre: string; token: string } | null>(null);
+
+  const cargar = useCallback(() => {
+    setCargando(true);
+    devDispositivos().then(setPis).catch(() => setPis([])).finally(() => setCargando(false));
+  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  async function crear() {
+    if (!nuevoNombre.trim()) return;
+    setCreando(true);
+    try {
+      const d = await devCrearDispositivo({ nombre: nuevoNombre.trim(), punto_acceso: nuevoPunto.trim() });
+      if (d.token) setTokenNuevo({ nombre: d.nombre, token: d.token });
+      setNuevoNombre(""); setNuevoPunto(""); setMostrarAlta(false);
+      cargar();
+    } catch { /* noop */ } finally { setCreando(false); }
+  }
+
+  async function alternarActivo(d: DispositivoDTO) {
+    try { await devActualizarDispositivo(d.id, { activo: !d.activo }); cargar(); } catch { /* noop */ }
+  }
+
+  async function regenerar(d: DispositivoDTO) {
+    if (!confirm(`¿Regenerar el token de "${d.nombre}"? El token anterior dejará de funcionar y habrá que actualizarlo en la Pi.`)) return;
+    try {
+      const actualizado = await devRegenerarToken(d.id);
+      if (actualizado.token) setTokenNuevo({ nombre: actualizado.nombre, token: actualizado.token });
+    } catch { /* noop */ }
+  }
+
+  async function eliminar(d: DispositivoDTO) {
+    if (!confirm(`¿Eliminar la Pi "${d.nombre}"? Dejará de poder sincronizar.`)) return;
+    try { await devEliminarDispositivo(d.id); cargar(); } catch { /* noop */ }
+  }
+
+  function copiar(texto: string) {
+    navigator.clipboard?.writeText(texto);
+  }
+
+  if (cargando) return <p className="muted" style={{ padding: 20 }}>Cargando dispositivos…</p>;
+
+  return (
+    <div className="dev-trancas">
+      <div className="dev-trancas-aviso">
+        <strong>📡 Raspberry Pi de los accesos.</strong> Cada punto de acceso tiene su propia Pi, que descarga
+        su copia de residentes con permiso y valida localmente. Cada Pi se identifica con un <code>token</code> único
+        y secreto. El <code>punto de acceso</code> debe coincidir con el de las trancas de ese punto.
+      </div>
+
+      <div className="dev-trancas-barra">
+        <span className="dev-trancas-total">{pis?.length || 0} dispositivo(s)</span>
+        <button className="dev-tranca-add" onClick={() => setMostrarAlta((v) => !v)}>
+          {mostrarAlta ? "Cancelar" : "+ Agregar Raspberry Pi"}
+        </button>
+      </div>
+
+      {mostrarAlta && (
+        <div className="dev-tranca-alta">
+          <div className="dev-tranca-alta-campos">
+            <label>
+              <span>Nombre</span>
+              <input type="text" placeholder="Ej: Pi Acceso Principal" maxLength={80}
+                value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} />
+            </label>
+            <label>
+              <span>Punto de acceso</span>
+              <input type="text" placeholder="Ej: Acceso Principal" maxLength={80}
+                value={nuevoPunto} onChange={(e) => setNuevoPunto(e.target.value)} />
+            </label>
+            <button className="dev-tranca-btn" style={{ maxWidth: 160 }} disabled={creando} onClick={crear}>
+              {creando ? "Creando…" : "Crear Pi"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tokenNuevo && (
+        <div className="dev-modal-overlay" onClick={() => setTokenNuevo(null)}>
+          <div className="dev-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Token de {tokenNuevo.nombre}</h3>
+            <p>Copiá este token y configuralo en la Raspberry Pi. <strong>No se vuelve a mostrar</strong> por seguridad. Si lo perdés, podés regenerarlo (y actualizarlo en la Pi).</p>
+            <div className="dev-token-box">
+              <code>{tokenNuevo.token}</code>
+              <button className="dev-tranca-btn" style={{ maxWidth: 110 }} onClick={() => copiar(tokenNuevo.token)}>Copiar</button>
+            </div>
+            <div className="dev-modal-acciones">
+              <button className="dev-tranca-del-confirm" style={{ background: "#022E45" }} onClick={() => setTokenNuevo(null)}>Ya lo copié</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(!pis || pis.length === 0) ? (
+        <p className="muted" style={{ padding: 20 }}>No hay Raspberry Pi registradas. Agregá la primera con el botón de arriba.</p>
+      ) : (
+        <div className="dev-trancas-grid">
+          {pis.map((d) => (
+            <div key={d.id} className={`dev-tranca-card ${!d.activo ? "inactiva" : ""}`}>
+              <div className="dev-tranca-head">
+                <span className="dev-tranca-nombre">{d.nombre}</span>
+                <span className={`dev-tranca-badge ${d.activo ? "ok" : "sin"}`}>{d.activo ? "Activa" : "Revocada"}</span>
+              </div>
+              <div className="dev-pi-info">
+                <div><span>Punto:</span> {d.punto_acceso || <em className="muted">sin asignar</em>}</div>
+                <div><span>Última sincronización:</span> {d.ultima_sync ? new Date(d.ultima_sync).toLocaleString() : "nunca"}</div>
+              </div>
+              <div className="dev-pi-acciones">
+                <button className="dev-tranca-toggle on" onClick={() => regenerar(d)} title="Generar un token nuevo">🔑 Token</button>
+                <button className={`dev-tranca-toggle ${d.activo ? "off" : "on"}`} onClick={() => alternarActivo(d)}>
+                  {d.activo ? "Revocar" : "Reactivar"}
+                </button>
+                <button className="dev-tranca-del" onClick={() => eliminar(d)} title="Eliminar">🗑</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

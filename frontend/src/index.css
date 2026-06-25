@@ -2820,3 +2820,17 @@ table.data tbody tr:hover td { background: #f1f6fd; }
   width: 100%; padding: 8px 10px; border: 1px solid var(--borde, #e3e9f2); border-radius: 9px; font-size: 13.5px; color: #022E45; background: #fff;
 }
 .dev-tranca-punto input:focus { outline: none; border-color: #F48723; box-shadow: 0 0 0 3px rgba(244,135,35,.15); }
+
+/* ── Panel dev: Raspberry Pi ── */
+.dev-pi-info { font-size: 13px; color: #4b5563; margin-bottom: 14px; line-height: 1.7; }
+.dev-pi-info span { font-weight: 600; color: #022E45; }
+.dev-pi-info em { font-style: italic; }
+.dev-pi-acciones { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dev-pi-acciones .dev-tranca-toggle { cursor: pointer; border: none; }
+.dev-token-box {
+  display: flex; gap: 10px; align-items: center; background: #0f2433; border-radius: 10px;
+  padding: 12px 14px; margin: 14px 0;
+}
+.dev-token-box code {
+  flex: 1; color: #7ee787; font-size: 12.5px; word-break: break-all; font-family: 'Courier New', monospace;
+}
