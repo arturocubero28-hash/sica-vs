@@ -498,7 +498,7 @@ function PanelSeguridad() {
 function ConfigTrancas() {
   const [accesos, setAccesos] = useState<AccesoFisicoDTO[] | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [edits, setEdits] = useState<Record<number, { nombre: string; tipo: string; relay_pin: string; pulso_ms: string; punto_acceso: string }>>({});
+  const [edits, setEdits] = useState<Record<number, { nombre: string; tipo: string; relay_pin: string; pulso_ms: string; punto_acceso: string; direccion: string }>>({});
   const [guardando, setGuardando] = useState<number | null>(null);
   const [msg, setMsg] = useState<{ id: number; texto: string; ok: boolean } | null>(null);
   // Alta
@@ -517,8 +517,8 @@ function ConfigTrancas() {
     devAccesosFisicos()
       .then((data) => {
         setAccesos(data);
-        const e: Record<number, { nombre: string; tipo: string; relay_pin: string; pulso_ms: string; punto_acceso: string }> = {};
-        data.forEach((a) => { e[a.id] = { nombre: a.nombre, tipo: a.tipo, relay_pin: a.relay_pin == null ? "" : String(a.relay_pin), pulso_ms: String(a.pulso_ms), punto_acceso: a.punto_acceso || "" }; });
+        const e: Record<number, { nombre: string; tipo: string; relay_pin: string; pulso_ms: string; punto_acceso: string; direccion: string }> = {};
+        data.forEach((a) => { e[a.id] = { nombre: a.nombre, tipo: a.tipo, relay_pin: a.relay_pin == null ? "" : String(a.relay_pin), pulso_ms: String(a.pulso_ms), punto_acceso: a.punto_acceso || "", direccion: a.direccion || "entrada" }; });
         setEdits(e);
       })
       .catch(() => setAccesos([]))
@@ -527,7 +527,7 @@ function ConfigTrancas() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  function setCampo(id: number, campo: "nombre" | "tipo" | "relay_pin" | "pulso_ms" | "punto_acceso", valor: string) {
+  function setCampo(id: number, campo: "nombre" | "tipo" | "relay_pin" | "pulso_ms" | "punto_acceso" | "direccion", valor: string) {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
   }
 
@@ -547,7 +547,7 @@ function ConfigTrancas() {
     try {
       const actualizado = await devConfigurarAcceso(a.id, {
         nombre, tipo: ed.tipo,
-        punto_acceso: ed.punto_acceso.trim(),
+        punto_acceso: ed.punto_acceso.trim(), direccion: ed.direccion,
         relay_pin: pin === "" ? null : parseInt(pin, 10),
         pulso_ms: pulso,
       });
@@ -696,6 +696,12 @@ function ConfigTrancas() {
                       <button className={`dev-tranca-toggle ${a.activo ? "on" : "off"}`} onClick={() => alternarActivo(a)}>
                         {a.activo ? "Activa" : "Inactiva"}
                       </button>
+                    </div>
+                    <div className="dev-tranca-dir">
+                      <button className={`dev-dir-btn ${ed.direccion === "entrada" ? "sel-ent" : ""}`}
+                        onClick={() => setCampo(a.id, "direccion", "entrada")}>↓ Entrada</button>
+                      <button className={`dev-dir-btn ${ed.direccion === "salida" ? "sel-sal" : ""}`}
+                        onClick={() => setCampo(a.id, "direccion", "salida")}>↑ Salida</button>
                     </div>
                     <label className="dev-tranca-punto">
                       <span>Punto de acceso (Raspberry Pi)</span>

@@ -673,9 +673,10 @@ export interface AccesoFisicoDTO {
   relay_pin: number | null;
   pulso_ms: number;
   punto_acceso: string | null;
+  direccion: string;
 }
 export const devAccesosFisicos = () => request<AccesoFisicoDTO[]>("/dev/accesos-fisicos");
-export const devConfigurarAcceso = (id: number, body: { relay_pin?: number | null; pulso_ms?: number; nombre?: string; tipo?: string; activo?: boolean; punto_acceso?: string }) =>
+export const devConfigurarAcceso = (id: number, body: { relay_pin?: number | null; pulso_ms?: number; nombre?: string; tipo?: string; activo?: boolean; punto_acceso?: string; direccion?: string }) =>
   request<AccesoFisicoDTO>(`/dev/accesos-fisicos/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const devCrearAcceso = (body: { nombre: string; tipo: string; punto_acceso?: string }) =>
   request<AccesoFisicoDTO>("/dev/accesos-fisicos", { method: "POST", body: JSON.stringify(body) });

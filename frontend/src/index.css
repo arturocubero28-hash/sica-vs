@@ -2834,3 +2834,13 @@ table.data tbody tr:hover td { background: #f1f6fd; }
 .dev-token-box code {
   flex: 1; color: #7ee787; font-size: 12.5px; word-break: break-all; font-family: 'Courier New', monospace;
 }
+
+/* ── Selector de dirección de la tranca (entrada/salida) ── */
+.dev-tranca-dir { display: flex; gap: 8px; margin-bottom: 12px; }
+.dev-dir-btn {
+  flex: 1; padding: 8px; border-radius: 9px; border: 1.5px solid var(--borde, #e3e9f2);
+  background: #fff; color: #6b7280; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s;
+}
+.dev-dir-btn:hover { border-color: #cbd5e1; }
+.dev-dir-btn.sel-ent { background: #dcfce7; border-color: #1d8a4a; color: #166534; }
+.dev-dir-btn.sel-sal { background: #fff7ed; border-color: #F48723; color: #9a3412; }
