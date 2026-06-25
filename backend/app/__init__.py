@@ -203,6 +203,9 @@ def create_app(config_class=Config):
             "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS punto_acceso VARCHAR(80)",
             # Día 21 — Dirección fija de la tranca (entrada/salida) como estándar.
             "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS direccion VARCHAR(10) NOT NULL DEFAULT 'entrada'",
+            # Día 22 — Idempotencia de eventos reportados por la Pi.
+            "ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS id_externo VARCHAR(80)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_eventos_id_externo ON eventos_acceso (id_externo) WHERE id_externo IS NOT NULL",
             # Índices en columnas más consultadas (Día 12 — F5 de la auditoría).
             # Aceleran mora, reportes, caja y dashboard cuando crecen los datos.
             "CREATE INDEX IF NOT EXISTS ix_cuotas_estado ON cuotas (estado)",

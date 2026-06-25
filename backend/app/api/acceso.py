@@ -196,3 +196,93 @@ def sincronizar():
         "accesos": [a.to_dict() for a in accesos],
         "tarjetas": tarjetas_out,
     }})
+
+
+@acceso_bp.post("/reportar")
+@limiter.limit("60 per minute")
+def reportar_eventos():
+    """
+    La Raspberry Pi reporta aquí los accesos que registró localmente.
+
+    Se autentica con su token (X-Device-Token). Acepta una lista de eventos
+    (la Pi puede acumular varios si estuvo sin conexión y mandarlos juntos).
+
+    Cada evento del cuerpo:
+      - id_externo: identificador único generado por la Pi (idempotencia)
+      - card_uid:   tarjeta que pasó
+      - acceso_id:  id de la tranca por la que pasó (define la dirección)
+      - ocurrido_en: ISO 8601, cuándo pasó realmente (opcional; default ahora)
+
+    La dirección NO la manda la Pi: la pone el servidor según la tranca, en
+    coherencia con el estándar de dirección fija por tranca.
+
+    Devuelve cuántos se guardaron y cuántos se ignoraron por duplicado.
+    """
+    disp = _dispositivo_actual()
+    if not disp:
+        return _err("dispositivo_no_autorizado",
+                    "Dispositivo no autorizado o revocado", 401)
+
+    body = request.get_json(silent=True) or {}
+    eventos = body.get("eventos")
+    if not isinstance(eventos, list):
+        return _err("formato_invalido",
+                    "Se espera un objeto con la lista 'eventos'", 400)
+
+    guardados = 0
+    duplicados = 0
+    ignorados = 0
+
+    for ev in eventos:
+        id_externo = (ev.get("id_externo") or "").strip()
+        if not id_externo:
+            ignorados += 1
+            continue
+
+        # Idempotencia: si ya existe ese id_externo, no se vuelve a registrar.
+        if EventoAcceso.query.filter_by(id_externo=id_externo).first():
+            duplicados += 1
+            continue
+
+        acceso = AccesoFisico.query.get(ev.get("acceso_id")) if ev.get("acceso_id") else None
+        if not acceso:
+            ignorados += 1
+            continue
+
+        # Seguridad: la Pi solo puede reportar trancas de su propio punto.
+        if disp.punto_acceso and acceso.punto_acceso and acceso.punto_acceso != disp.punto_acceso:
+            ignorados += 1
+            continue
+
+        tarjeta = Tarjeta.query.filter_by(card_uid=(ev.get("card_uid") or "")).first()
+
+        # Cuándo ocurrió realmente (lo que reporta la Pi), no cuándo se recibió.
+        ocurrido = None
+        if ev.get("ocurrido_en"):
+            try:
+                ocurrido = dt.datetime.fromisoformat(ev["ocurrido_en"].replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                ocurrido = None
+
+        evento = EventoAcceso(
+            origen="residente",
+            direccion=acceso.direccion or "entrada",   # la define la tranca
+            acceso_id=acceso.id,
+            tarjeta_id=tarjeta.id if tarjeta else None,
+            residente_id=tarjeta.residente_id if tarjeta and tarjeta.residente_id else None,
+            ocurrido_en=ocurrido or dt.datetime.utcnow(),
+            sincronizado=True,
+            id_externo=id_externo,
+        )
+        db.session.add(evento)
+        guardados += 1
+
+    disp.ultima_sync = dt.datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({"data": {
+        "guardados": guardados,
+        "duplicados": duplicados,
+        "ignorados": ignorados,
+        "recibidos": len(eventos),
+    }})

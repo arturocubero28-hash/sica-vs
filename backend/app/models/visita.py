@@ -155,6 +155,10 @@ class EventoAcceso(db.Model):
     placa_vehiculo = db.Column(db.String(20))
     ocurrido_en = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     sincronizado = db.Column(db.Boolean, nullable=False, default=True)
+    # Identificador único que genera la Raspberry Pi para cada evento. Permite
+    # ignorar duplicados si la Pi reenvía eventos tras estar sin conexión
+    # (idempotencia). NULL para eventos creados directo en el servidor.
+    id_externo = db.Column(db.String(80), unique=True)
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
 
     guardia = db.relationship("Usuario", foreign_keys=[guardia_id], lazy="joined")
