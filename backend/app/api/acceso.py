@@ -31,7 +31,8 @@ from flask import Blueprint, request, jsonify, current_app
 from app.extensions import db, limiter
 from app.models.cuenta import Tarjeta, Cuenta
 from app.models.visita import EventoAcceso, AccesoFisico
-from app.services.permisos import motivo_denegacion
+from app.models.dispositivo import Dispositivo
+from app.services.permisos import motivo_denegacion, tarjetas_con_permiso
 
 acceso_bp = Blueprint("acceso", __name__)
 
@@ -53,6 +54,20 @@ def _dispositivo_autorizado():
     if not token or not esperado:
         return False
     return hmac.compare_digest(token, esperado)
+
+
+def _dispositivo_actual():
+    """
+    Identifica la Pi por su token individual (header X-Device-Token) contra la
+    tabla de dispositivos. Devuelve el Dispositivo si el token es válido y está
+    activo, o None. Es la forma nueva (por-Pi); _dispositivo_autorizado() es el
+    fallback legacy del token compartido.
+    """
+    token = request.headers.get("X-Device-Token", "")
+    if not token:
+        return None
+    disp = Dispositivo.query.filter_by(token=token, activo=True).first()
+    return disp
 
 
 @acceso_bp.post("/validar-tarjeta")
@@ -134,3 +149,55 @@ def validar_tarjeta():
 
     # Todo en orden: acceso permitido
     return responder(True, "Acceso permitido", tarjeta, tarjeta.residente)
+
+
+@acceso_bp.get("/sincronizar")
+@limiter.limit("30 per minute")
+def sincronizar():
+    """
+    La Raspberry Pi descarga aquí su copia local para validar accesos sin
+    depender de internet en cada lectura.
+
+    Se autentica con su token individual (header X-Device-Token). Devuelve solo
+    lo de SU punto de acceso (deducido del token, no del cuerpo, para que no se
+    pueda falsificar):
+      - tarjetas: las que tienen permiso vigente (card_uid, tipo_acceso, nombre)
+      - accesos:  las trancas de su punto, con relay_pin y pulso_ms
+      - generado_en: sello de tiempo para que la Pi sepa si su copia está al día
+    """
+    disp = _dispositivo_actual()
+    if not disp:
+        return _err("dispositivo_no_autorizado",
+                    "Dispositivo no autorizado o revocado", 401)
+
+    # Trancas del punto de esta Pi (si la Pi no tiene punto, no devuelve trancas)
+    accesos_q = AccesoFisico.query.filter_by(activo=True)
+    if disp.punto_acceso:
+        accesos_q = accesos_q.filter_by(punto_acceso=disp.punto_acceso)
+    accesos = accesos_q.all()
+
+    # Tarjetas con permiso vigente (fuente única de verdad). Para el modelo de
+    # copia local, la Pi recibe la lista completa de quién puede entrar; la
+    # compatibilidad de tipo (peatonal/vehicular) la resuelve la Pi por tranca.
+    tarjetas = tarjetas_con_permiso()
+    tarjetas_out = []
+    for t in tarjetas:
+        nombre = None
+        if t.residente and t.residente.usuario:
+            nombre = f"{t.residente.usuario.nombre} {t.residente.usuario.apellido}"
+        tarjetas_out.append({
+            "card_uid": t.card_uid,
+            "tipo_acceso": t.tipo_acceso,
+            "residente": nombre,
+        })
+
+    # Registrar la última sincronización de esta Pi
+    disp.ultima_sync = dt.datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({"data": {
+        "punto_acceso": disp.punto_acceso,
+        "generado_en": dt.datetime.utcnow().isoformat() + "Z",
+        "accesos": [a.to_dict() for a in accesos],
+        "tarjetas": tarjetas_out,
+    }})

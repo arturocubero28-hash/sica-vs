@@ -11,6 +11,7 @@ from flask import Blueprint, request, jsonify
 from app.extensions import db
 from app.models.auditoria import LogAuditoria
 from app.models.visita import AccesoFisico, EventoAcceso
+from app.models.dispositivo import Dispositivo, generar_token
 from app.auth.security import roles_required
 
 dev_bp = Blueprint("desarrollador", __name__)
@@ -489,3 +490,79 @@ def eliminar_acceso_fisico(usuario_actual, acceso_id):
     db.session.delete(acceso)
     db.session.commit()
     return jsonify({"data": {"eliminado": True, "eventos_borrados": eventos}})
+
+
+# ───────────────────────────────────────────────────────────────────
+# Gestión de dispositivos (Raspberry Pi)
+# Cada Pi tiene su token individual. El token solo se muestra al crear o al
+# regenerar (no en los listados), porque es secreto.
+# ───────────────────────────────────────────────────────────────────
+
+@dev_bp.get("/dispositivos")
+@roles_required("desarrollador")
+def listar_dispositivos(usuario_actual):
+    disps = Dispositivo.query.order_by(Dispositivo.id).all()
+    return jsonify({"data": [d.to_dict() for d in disps]})
+
+
+@dev_bp.post("/dispositivos")
+@roles_required("desarrollador")
+def crear_dispositivo(usuario_actual):
+    body = request.get_json(silent=True) or {}
+    nombre = (body.get("nombre") or "").strip()
+    punto = (body.get("punto_acceso") or "").strip() or None
+    if not nombre:
+        return jsonify({"error": {"code": "nombre_requerido",
+                                  "message": "El nombre es obligatorio"}}), 400
+    disp = Dispositivo(nombre=nombre, punto_acceso=punto, token=generar_token(), activo=True)
+    db.session.add(disp)
+    db.session.commit()
+    # Al crear, se devuelve el token UNA vez (anótalo, no se vuelve a mostrar)
+    return jsonify({"data": disp.to_dict(incluir_token=True)}), 201
+
+
+@dev_bp.put("/dispositivos/<uuid:disp_uuid>")
+@roles_required("desarrollador")
+def actualizar_dispositivo(usuario_actual, disp_uuid):
+    disp = Dispositivo.query.filter_by(uuid_publico=disp_uuid).first()
+    if not disp:
+        return jsonify({"error": {"code": "no_encontrado",
+                                  "message": "Dispositivo no encontrado"}}), 404
+    body = request.get_json(silent=True) or {}
+    if "nombre" in body:
+        nombre = (body["nombre"] or "").strip()
+        if not nombre:
+            return jsonify({"error": {"code": "nombre_requerido",
+                                      "message": "El nombre no puede estar vacío"}}), 400
+        disp.nombre = nombre
+    if "punto_acceso" in body:
+        disp.punto_acceso = (body["punto_acceso"] or "").strip() or None
+    if "activo" in body:
+        disp.activo = bool(body["activo"])
+    db.session.commit()
+    return jsonify({"data": disp.to_dict()})
+
+
+@dev_bp.post("/dispositivos/<uuid:disp_uuid>/regenerar-token")
+@roles_required("desarrollador")
+def regenerar_token_dispositivo(usuario_actual, disp_uuid):
+    """Genera un token nuevo (el anterior deja de servir). Se muestra una vez."""
+    disp = Dispositivo.query.filter_by(uuid_publico=disp_uuid).first()
+    if not disp:
+        return jsonify({"error": {"code": "no_encontrado",
+                                  "message": "Dispositivo no encontrado"}}), 404
+    disp.token = generar_token()
+    db.session.commit()
+    return jsonify({"data": disp.to_dict(incluir_token=True)})
+
+
+@dev_bp.delete("/dispositivos/<uuid:disp_uuid>")
+@roles_required("desarrollador")
+def eliminar_dispositivo(usuario_actual, disp_uuid):
+    disp = Dispositivo.query.filter_by(uuid_publico=disp_uuid).first()
+    if not disp:
+        return jsonify({"error": {"code": "no_encontrado",
+                                  "message": "Dispositivo no encontrado"}}), 404
+    db.session.delete(disp)
+    db.session.commit()
+    return jsonify({"data": {"eliminado": True}})
