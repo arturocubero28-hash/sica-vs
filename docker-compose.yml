@@ -91,5 +91,19 @@ services:
     depends_on:
       - backend
 
+  # ---- Simulador de Raspberry Pi (para probar accesos sin el hardware) ----
+  # Opcional: arranca solo con  docker compose --profile sim up pi-simulador
+  # Antes, creá una Pi en el panel dev y poné su token en DEVICE_TOKEN.
+  pi-simulador:
+    build: ./pi-simulador
+    container_name: sicavs_pi_sim
+    profiles: ["sim"]
+    environment:
+      API_URL: http://backend:5000/api/v1
+      DEVICE_TOKEN: ${PI_TOKEN:-}
+      SYNC_SEGUNDOS: 30
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
