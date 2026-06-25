@@ -937,3 +937,7 @@ export const eliminarCredencialHuella = (id: number) =>
 /** ¿El navegador soporta WebAuthn? */
 export const soportaHuella = () =>
   typeof window !== "undefined" && !!window.PublicKeyCredential;
+
+/** Estadísticas públicas para la landing (sin login). */
+export const estadisticasPublicas = () =>
+  request<{ familias: number }>("/publico/estadisticas");

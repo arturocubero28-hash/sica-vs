@@ -3,7 +3,7 @@ import {
   login, getMe, logout, getToken, setToken,
   activarCuenta, solicitarRecuperacion, restablecerPassword, cambiarPassword,
   contarPagosPendientes, misEdificios,
-  loginConHuella, soportaHuella,
+  loginConHuella, soportaHuella, estadisticasPublicas,
   type Usuario, type Rol,
 } from "./api/client";
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
@@ -157,6 +157,7 @@ function Contador({ valor, sufijo = "" }: { valor: number; sufijo?: string }) {
     if (!el) return;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (reduce || !("IntersectionObserver" in window)) { setN(valor); return; }
+    hecho.current = false;  // permite re-animar si el valor llega async (ej. conteo del backend)
     const obs = new IntersectionObserver((entries) => {
       entries.forEach(e => {
         if (e.isIntersecting && !hecho.current) {
@@ -263,6 +264,11 @@ function HeroFondo() {
 function Landing({ onEntrar }: { onEntrar: () => void }) {
   const scrolled = useLandingFx();
   const [tema, setTema] = useState<"oscuro" | "claro">("claro");
+  // Cantidad real de familias (unidades activas). Si falla, cae a un valor neutro.
+  const [familias, setFamilias] = useState<number | null>(null);
+  useEffect(() => {
+    estadisticasPublicas().then((d) => setFamilias(d.familias)).catch(() => setFamilias(null));
+  }, []);
 
   // Prueba varias extensiones (.jpg/.jpeg/.jfif/.png/.webp) y usa la que cargue.
   // Si ninguna existe, muestra un marcador con ícono (nunca imagen rota).
@@ -344,7 +350,7 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
             </button>
           </div>
           <div className="lp-stats lp-anim" style={{ animationDelay: ".4s" }}>
-            <div className="lp-stat"><span className="lp-stat-num"><Contador valor={500} sufijo="+" /></span><span className="lp-stat-label">Familias</span></div>
+            <div className="lp-stat"><span className="lp-stat-num"><Contador valor={familias ?? 0} sufijo="+" /></span><span className="lp-stat-label">Familias</span></div>
             <div className="lp-stat"><span className="lp-stat-num"><Contador valor={4} /></span><span className="lp-stat-label">Accesos</span></div>
             <div className="lp-stat"><span className="lp-stat-num">24/7</span><span className="lp-stat-label">Monitoreo</span></div>
           </div>

@@ -72,6 +72,9 @@ def create_app(config_class=Config):
     from app.api.dashboard import dashboard_bp
     app.register_blueprint(dashboard_bp, url_prefix="/api/v1/dashboard")
 
+    from app.api.publico import publico_bp
+    app.register_blueprint(publico_bp, url_prefix="/api/v1/publico")
+
     from app.api.cuotas import cuotas_bp
     app.register_blueprint(cuotas_bp, url_prefix="/api/v1/cuotas")
 
@@ -215,6 +218,12 @@ def create_app(config_class=Config):
             "CREATE INDEX IF NOT EXISTS ix_visitas_estado ON visitas (estado)",
             "CREATE INDEX IF NOT EXISTS ix_visitas_cuenta_id ON visitas (cuenta_id)",
             "CREATE INDEX IF NOT EXISTS ix_eventos_acceso_visita_id ON eventos_acceso (visita_id)",
+            # Día 22 — Índices para los historiales de acceso (escalan con muchos
+            # registros). Los historiales filtran por origen y ordenan por fecha.
+            "CREATE INDEX IF NOT EXISTS ix_eventos_origen_fecha ON eventos_acceso (origen, ocurrido_en DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_eventos_acceso_id ON eventos_acceso (acceso_id)",
+            "CREATE INDEX IF NOT EXISTS ix_eventos_tarjeta_id ON eventos_acceso (tarjeta_id)",
+            "CREATE INDEX IF NOT EXISTS ix_eventos_residente_id ON eventos_acceso (residente_id)",
         ]
         for sql in columnas:
             try:
