@@ -9,7 +9,7 @@ import datetime as dt
 from flask import Blueprint, jsonify, current_app, request
 
 from app.extensions import db
-from app.models.visita import Visita, EventoAcceso
+from app.models.visita import Visita, EventoAcceso, AccesoFisico
 from app.models.cuenta import Cuenta, Unidad, Residente
 from app.auth.security import roles_required, token_required
 
