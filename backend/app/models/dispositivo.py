@@ -24,7 +24,7 @@ def generar_token():
 
 
 class Dispositivo(db.Model):
-    __tablename__ = "dispositivos"
+    __tablename__ = "dispositivos_pi"
 
     id = db.Column(db.BigInteger, primary_key=True)
     uuid_publico = db.Column(PG_UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
