@@ -940,4 +940,4 @@ export const soportaHuella = () =>
 
 /** Estadísticas públicas para la landing (sin login). */
 export const estadisticasPublicas = () =>
-  request<{ familias: number }>("/publico/estadisticas");
+  request<{ familias: number; accesos: number }>("/publico/estadisticas");

@@ -264,10 +264,13 @@ function HeroFondo() {
 function Landing({ onEntrar }: { onEntrar: () => void }) {
   const scrolled = useLandingFx();
   const [tema, setTema] = useState<"oscuro" | "claro">("claro");
-  // Cantidad real de familias (unidades activas). Si falla, cae a un valor neutro.
+  // Cantidad real de familias (unidades activas) y accesos (trancas activas).
   const [familias, setFamilias] = useState<number | null>(null);
+  const [accesos, setAccesos] = useState<number | null>(null);
   useEffect(() => {
-    estadisticasPublicas().then((d) => setFamilias(d.familias)).catch(() => setFamilias(null));
+    estadisticasPublicas()
+      .then((d) => { setFamilias(d.familias); setAccesos(d.accesos); })
+      .catch(() => { setFamilias(null); setAccesos(null); });
   }, []);
 
   // Prueba varias extensiones (.jpg/.jpeg/.jfif/.png/.webp) y usa la que cargue.
@@ -351,7 +354,7 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
           </div>
           <div className="lp-stats lp-anim" style={{ animationDelay: ".4s" }}>
             <div className="lp-stat"><span className="lp-stat-num"><Contador valor={familias ?? 0} sufijo="+" /></span><span className="lp-stat-label">Familias</span></div>
-            <div className="lp-stat"><span className="lp-stat-num"><Contador valor={4} /></span><span className="lp-stat-label">Accesos</span></div>
+            <div className="lp-stat"><span className="lp-stat-num"><Contador valor={accesos ?? 0} /></span><span className="lp-stat-label">Accesos</span></div>
             <div className="lp-stat"><span className="lp-stat-num">24/7</span><span className="lp-stat-label">Monitoreo</span></div>
           </div>
         </div>
