@@ -201,6 +201,8 @@ def create_app(config_class=Config):
             "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS pulso_ms INTEGER NOT NULL DEFAULT 800",
             # Día 20 — Soporte multi-Pi: punto de acceso que identifica la Raspberry Pi.
             "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS punto_acceso VARCHAR(80)",
+            # Día 21 — Dirección fija de la tranca (entrada/salida) como estándar.
+            "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS direccion VARCHAR(10) NOT NULL DEFAULT 'entrada'",
             # Índices en columnas más consultadas (Día 12 — F5 de la auditoría).
             # Aceleran mora, reportes, caja y dashboard cuando crecen los datos.
             "CREATE INDEX IF NOT EXISTS ix_cuotas_estado ON cuotas (estado)",

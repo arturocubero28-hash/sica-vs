@@ -405,6 +405,13 @@ def configurar_acceso_fisico(usuario_actual, acceso_id):
         punto = (body["punto_acceso"] or "").strip()
         acceso.punto_acceso = punto or None
 
+    if "direccion" in body:
+        direccion = (body["direccion"] or "").strip().lower()
+        if direccion not in ("entrada", "salida"):
+            return jsonify({"error": {"code": "direccion_invalida",
+                                      "message": "La dirección debe ser 'entrada' o 'salida'"}}), 400
+        acceso.direccion = direccion
+
     # relay_pin: entero en rango de GPIO de Raspberry Pi (0–40), o null para desconfigurar.
     if "relay_pin" in body:
         pin = body["relay_pin"]

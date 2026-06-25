@@ -31,6 +31,10 @@ class AccesoFisico(db.Model):
     # Punto de acceso (identifica la Raspberry Pi que controla este dispositivo).
     # Los accesos del mismo punto los maneja la misma Pi. Ej: "Acceso Principal".
     punto_acceso = db.Column(db.String(80))
+    # Dirección fija de la tranca: "entrada" o "salida". Cada punto tiene una
+    # tranca de entrada y una de salida; la dirección del evento la define por
+    # qué tranca pasó la tarjeta (no se adivina). Default "entrada".
+    direccion = db.Column(db.String(10), nullable=False, default="entrada")
 
     def to_dict(self):
         return {
@@ -41,6 +45,7 @@ class AccesoFisico(db.Model):
             "relay_pin": self.relay_pin,
             "pulso_ms": self.pulso_ms,
             "punto_acceso": self.punto_acceso,
+            "direccion": self.direccion,
         }
 
 

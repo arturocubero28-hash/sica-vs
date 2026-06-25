@@ -95,19 +95,14 @@ def validar_tarjeta():
 
     def responder(permitido, motivo, tarjeta=None, residente=None):
         """Registra el evento y arma la respuesta."""
-        # Dirección: alterna entrada/salida según el último evento de la tarjeta
-        direccion = "entrada"
-        if tarjeta:
-            ultimo = (EventoAcceso.query
-                      .filter_by(tarjeta_id=tarjeta.id)
-                      .order_by(EventoAcceso.ocurrido_en.desc())
-                      .first())
-            if ultimo and ultimo.direccion == "entrada":
-                direccion = "salida"
+        # Dirección: la define la tranca (cada tranca es de entrada o de salida).
+        # Ya no se adivina alternando: es un estándar del sistema tener una
+        # tranca por dirección en cada punto.
+        direccion = acceso.direccion or "entrada"
 
         evento = EventoAcceso(
             origen="residente",
-            direccion=direccion if permitido else "entrada",
+            direccion=direccion,
             acceso_id=acceso.id,
             tarjeta_id=tarjeta.id if tarjeta else None,
             residente_id=residente.id if residente else None,
