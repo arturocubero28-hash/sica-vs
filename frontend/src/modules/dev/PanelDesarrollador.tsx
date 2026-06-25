@@ -776,14 +776,16 @@ function ConfigPis() {
 
   const cargar = useCallback(() => {
     setCargando(true);
-    Promise.all([devDispositivos(), devAccesosFisicos()])
-      .then(([disp, accesos]) => {
-        setPis(disp);
+    // Cargar dispositivos y puntos por separado: si una falla, la otra igual
+    // funciona (ej. si la tabla de dispositivos aún no existe, los puntos se
+    // cargan igual desde los accesos).
+    devDispositivos().then(setPis).catch(() => setPis([])).finally(() => setCargando(false));
+    devAccesosFisicos()
+      .then((accesos) => {
         const ps = Array.from(new Set(accesos.map((a) => a.punto_acceso).filter(Boolean))) as string[];
         setPuntos(ps);
       })
-      .catch(() => setPis([]))
-      .finally(() => setCargando(false));
+      .catch(() => setPuntos([]));
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
 
