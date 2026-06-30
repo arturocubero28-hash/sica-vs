@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { misCuotas, subirComprobante, subirComprobanteAbono,
+import { misCuotas, subirComprobante, subirComprobanteAbono, urlReciboPDF,
   type CuotaDTO, type AbonoArregloDTO } from "../../api/client";
-import { AlertTriangle, Paperclip, Handshake } from "lucide-react";
+import { AlertTriangle, Paperclip, Handshake, Receipt } from "lucide-react";
 
 const estadoLabel: Record<string, string> = {
   pendiente: "Pendiente", en_revision: "En revisión", pagada: "Pagada", vencida: "Vencida",
@@ -150,7 +150,21 @@ function CuotaCard({ cuota, onPagar }: { cuota: CuotaDTO; onPagar?: () => void }
         </div>
       )}
       {cuota.estado === "pagada" && (
-        <div className="cuota-ok">✓ Pago aprobado por la administración</div>
+        <div className="cuota-pagada-info">
+          <div className="cuota-ok" style={{ marginBottom: cuota.pago ? 8 : 0 }}>
+            ✓ Pago aprobado
+            {cuota.pago?.revisado_en && (
+              <span className="muted small"> · {new Date(cuota.pago.revisado_en).toLocaleDateString("es-HN")}</span>
+            )}
+          </div>
+          {cuota.pago?.id && (
+            <a className="cuota-btn-recibo" href={urlReciboPDF(cuota.pago.id)}
+              target="_blank" rel="noreferrer">
+              <Receipt size={16} /> Ver recibo
+              {cuota.pago.numero_recibo ? ` REC-${String(cuota.pago.numero_recibo).padStart(6, "0")}` : ""}
+            </a>
+          )}
+        </div>
       )}
     </div>
   );

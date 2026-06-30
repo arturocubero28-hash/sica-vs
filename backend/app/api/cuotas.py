@@ -48,6 +48,24 @@ def mis_cuotas(usuario_actual):
         .all()
     )
 
+    # Serializar cuotas; para las pagadas, adjuntar el pago aprobado (con su
+    # número de recibo y fecha) para que el residente pueda ver/descargar el
+    # recibo desde el histórico.
+    cuotas_dict = []
+    for c in cuotas:
+        d = c.to_dict()
+        if c.estado == "pagada":
+            pago_ap = (c.pagos.filter_by(estado="aprobado")
+                       .order_by(Pago.revisado_en.desc()).first())
+            if pago_ap:
+                d["pago"] = {
+                    "id": str(pago_ap.uuid_publico),
+                    "numero_recibo": pago_ap.numero_recibo,
+                    "metodo": pago_ap.metodo,
+                    "revisado_en": pago_ap.revisado_en.isoformat() if pago_ap.revisado_en else None,
+                }
+        cuotas_dict.append(d)
+
     # Si la cuenta tiene un arreglo de pago activo, incluir sus abonos para que
     # el residente pueda pagarlos por comprobante desde la app (igual que una
     # cuota). Las cuotas originales quedan "en_arreglo" (congeladas); lo que se
@@ -70,7 +88,7 @@ def mis_cuotas(usuario_actual):
             })
 
     return jsonify({"data": {
-        "cuotas": [c.to_dict() for c in cuotas],
+        "cuotas": cuotas_dict,
         "arreglo": ({"id": str(arreglo.uuid_publico),
                      "saldo_pendiente": arreglo.saldo_pendiente(),
                      "abonos": abonos} if arreglo else None),

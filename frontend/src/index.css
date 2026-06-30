@@ -2893,3 +2893,13 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 /* ── Chip de abono de arreglo en Caja (distinto de cuota normal) ── */
 .caja-cuota-chip.arreglo { border-color: #7c3aed; color: #7c3aed; }
 .caja-cuota-chip.arreglo.on { background: #7c3aed; color: #fff; }
+
+/* ── Botón "Ver recibo" en el histórico del residente ── */
+.cuota-pagada-info { display: flex; flex-direction: column; }
+.cuota-btn-recibo {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px 14px; border: 1.5px solid #022E45; border-radius: 10px;
+  color: #022E45; font-weight: 600; font-size: 13.5px; text-decoration: none;
+  transition: background .15s, color .15s;
+}
+.cuota-btn-recibo:hover { background: #022E45; color: #fff; }

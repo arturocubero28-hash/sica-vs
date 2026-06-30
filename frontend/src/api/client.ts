@@ -290,6 +290,7 @@ export interface CuotaDTO {
   monto: number; fecha_vencimiento: string; estado: string;
   created_at: string; pagos?: PagoDTO[];
   pago_rechazado?: boolean; nota_rechazo?: string; en_revision?: boolean;
+  pago?: { id: string; numero_recibo?: number; metodo: string; revisado_en?: string };
 }
 export interface PagoDTO {
   id: string; cuota_id: string; monto: number; metodo: string;
