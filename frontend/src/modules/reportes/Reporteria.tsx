@@ -4,6 +4,10 @@ import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos, rep
   type ReporteCajaDTO, type ReporteAccesosDTO, type ReporteInventarioDTO, type ReporteEjecutivoDTO } from "../../api/client";
 import { L } from "../../utils/formato";
 import { GraficoBarras, GraficoDona, GraficoLinea, GraficoBarrasCant, GraficoBarrasHoriz } from "./Graficos";
+import {
+  Star, DollarSign, FileText, Landmark, ShieldCheck, Ticket,
+  Download, ArrowRight, Banknote, CreditCard, Globe, PartyPopper, Footprints, Car,
+} from "lucide-react";
 
 // Devuelve [primerDía, últimoDía] del mes actual en formato YYYY-MM-DD,
 // para inicializar los filtros de fecha de los reportes con el mes corriente.
@@ -26,22 +30,22 @@ export function Reporteria() {
     <div className="reporteria">
       <div className="historial-tabs" style={{ marginBottom: 14 }}>
         <button className={`htab ${tab === "ejecutivo" ? "activo" : ""}`} onClick={() => setTab("ejecutivo")}>
-          ⭐ Resumen ejecutivo
+          <Star size={15} /> Resumen ejecutivo
         </button>
         <button className={`htab ${tab === "financiero" ? "activo" : ""}`} onClick={() => setTab("financiero")}>
-          💰 Financiero
+          <DollarSign size={15} /> Financiero
         </button>
         <button className={`htab ${tab === "mora" ? "activo" : ""}`} onClick={() => setTab("mora")}>
-          📋 Mora y cartera
+          <FileText size={15} /> Mora y cartera
         </button>
         <button className={`htab ${tab === "caja" ? "activo" : ""}`} onClick={() => setTab("caja")}>
-          🏦 Caja y arqueo
+          <Landmark size={15} /> Caja y arqueo
         </button>
         <button className={`htab ${tab === "accesos" ? "activo" : ""}`} onClick={() => setTab("accesos")}>
-          🛡️ Accesos y seguridad
+          <ShieldCheck size={15} /> Accesos y seguridad
         </button>
         <button className={`htab ${tab === "inventario" ? "activo" : ""}`} onClick={() => setTab("inventario")}>
-          🎟️ Inventario
+          <Ticket size={15} /> Inventario
         </button>
       </div>
       {tab === "ejecutivo" && <ReporteEjecutivoVista />}
@@ -190,10 +194,10 @@ function ReporteFinancieroVista() {
             </>
           )}
 
-          <button className="ghost mini" onClick={() => cargar()}>Ver →</button>
+          <button className="ghost mini" onClick={() => cargar()}>Ver</button>
           <div className="reporte-export">
-            <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
-            <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
+            <button className="ghost mini" onClick={exportarPDF}><Download size={14} /> PDF</button>
+            <button className="ghost mini" onClick={exportarExcel}><Download size={14} /> Excel</button>
           </div>
         </div>
       </div>
@@ -277,28 +281,28 @@ function ReporteFinancieroVista() {
           <p className="muted small">Desglose de los {L(data.total_recaudado)} recaudados en {data.mes_label}.</p>
           <div className="metodo-grid">
             <div className="metodo-item">
-              <span className="metodo-icon" style={{ background: "#e6f7ee", color: "#1d8a4a" }}>💵</span>
+              <span className="metodo-icon" style={{ background: "#e6f7ee", color: "#1d8a4a" }}></span>
               <div className="metodo-info">
                 <span className="muted small">Efectivo (ventanilla)</span>
                 <b>{L(data.recaudado_por_metodo.efectivo)}</b>
               </div>
             </div>
             <div className="metodo-item">
-              <span className="metodo-icon" style={{ background: "#fff3e6", color: "#9a6700" }}>💳</span>
+              <span className="metodo-icon" style={{ background: "#fff3e6", color: "#9a6700" }}><CreditCard size={16} /></span>
               <div className="metodo-info">
                 <span className="muted small">Tarjeta POS</span>
                 <b>{L(data.recaudado_por_metodo.tarjeta_pos)}</b>
               </div>
             </div>
             <div className="metodo-item">
-              <span className="metodo-icon" style={{ background: "#e6f0fa", color: "#044a6e" }}>🏦</span>
+              <span className="metodo-icon" style={{ background: "#e6f0fa", color: "#044a6e" }}><Landmark size={16} /></span>
               <div className="metodo-info">
                 <span className="muted small">Transferencia (aprobada)</span>
                 <b>{L(data.recaudado_por_metodo.transferencia)}</b>
               </div>
             </div>
             <div className="metodo-item">
-              <span className="metodo-icon" style={{ background: "#f3e8fc", color: "#7c3aed" }}>🌐</span>
+              <span className="metodo-icon" style={{ background: "#f3e8fc", color: "#7c3aed" }}><Globe size={16} /></span>
               <div className="metodo-info">
                 <span className="muted small">Pago en línea (plataforma)</span>
                 <b>{L(data.recaudado_por_metodo.linea)}</b>
@@ -363,7 +367,7 @@ function ReporteFinancieroVista() {
       <div className="dash-card">
         <h3 style={{ color: "#c81e1e" }}>Cuentas en mora ({data.morosos.length})</h3>
         {data.morosos.length === 0 ? (
-          <p className="muted">Ninguna cuenta en mora este mes. 🎉</p>
+          <p className="muted">Ninguna cuenta en mora este mes.</p>
         ) : (
           <div className="scroll-x">
             <table className="data">
@@ -520,8 +524,8 @@ function ReporteMoraPorCasa() {
         <div className="reporte-controles">
           <input className="periodo-select" placeholder="Buscar casa o titular"
             value={buscar} onChange={e => setBuscar(e.target.value)} style={{ minWidth: 160 }} />
-          <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
-          <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
+          <button className="ghost mini" onClick={exportarPDF}><Download size={14} /> PDF</button>
+          <button className="ghost mini" onClick={exportarExcel}><Download size={14} /> Excel</button>
         </div>
       </div>
 
@@ -561,7 +565,7 @@ function ReporteMoraPorCasa() {
       {casasFiltradas.length === 0 ? (
         <div className="dash-card">
           <p className="muted">{data.casas.length === 0
-            ? "🎉 Ninguna casa tiene cuotas pendientes."
+            ? "Ninguna casa tiene cuotas pendientes."
             : "No hay casas que coincidan con la búsqueda."}</p>
         </div>
       ) : (
@@ -699,8 +703,8 @@ function ReporteCajaVista() {
         <button className="cuota-btn-pagar" style={{ maxWidth: 130 }} onClick={cargar}>Aplicar</button>
         {data && data.total_sesiones > 0 && (
           <div className="rep-export">
-            <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
-            <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
+            <button className="ghost mini" onClick={exportarPDF}><Download size={14} /> PDF</button>
+            <button className="ghost mini" onClick={exportarExcel}><Download size={14} /> Excel</button>
           </div>
         )}
       </div>
@@ -852,8 +856,8 @@ function ReporteAccesosVista() {
         <button className="cuota-btn-pagar" style={{ maxWidth: 130 }} onClick={cargar}>Aplicar</button>
         {data && data.total_visitas > 0 && (
           <div className="rep-export">
-            <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
-            <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
+            <button className="ghost mini" onClick={exportarPDF}><Download size={14} /> PDF</button>
+            <button className="ghost mini" onClick={exportarExcel}><Download size={14} /> Excel</button>
           </div>
         )}
       </div>
@@ -998,8 +1002,8 @@ function ReporteInventarioVista() {
         <button className="cuota-btn-pagar" style={{ maxWidth: 130 }} onClick={cargar}>Aplicar</button>
         {data && (
           <div className="rep-export">
-            <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
-            <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
+            <button className="ghost mini" onClick={exportarPDF}><Download size={14} /> PDF</button>
+            <button className="ghost mini" onClick={exportarExcel}><Download size={14} /> Excel</button>
           </div>
         )}
       </div>
@@ -1027,7 +1031,7 @@ function ReporteInventarioVista() {
                       <td>{t.nombre}</td>
                       <td>
                         <span className={`pill ${t.tipo_acceso === "peatonal" ? "" : "green"}`}>
-                          {t.tipo_acceso === "peatonal" ? "🚶 Corto" : "🚗 Largo"}
+                          {t.tipo_acceso === "peatonal" ? "Corto" : "Largo"}
                         </span>
                       </td>
                       <td>{L(t.precio)}</td>
@@ -1110,7 +1114,7 @@ function ReporteEjecutivoVista() {
     <>
       <div className="dash-header-pro">
         <div>
-          <h2 className="dash-titulo">⭐ Resumen ejecutivo</h2>
+          <h2 className="dash-titulo"><Star size={15} /> Resumen ejecutivo</h2>
           <span className="muted">{data?.mes_label || "—"}</span>
         </div>
         <div className="reporte-controles">
@@ -1120,8 +1124,8 @@ function ReporteEjecutivoVista() {
           <select className="periodo-select" value={anio} onChange={e => setAnio(Number(e.target.value))}>
             {anios.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
-          <button className="ghost mini" onClick={() => cargar()}>Ver →</button>
-          <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
+          <button className="ghost mini" onClick={() => cargar()}>Ver</button>
+          <button className="ghost mini" onClick={exportarPDF}><Download size={14} /> PDF</button>
         </div>
       </div>
 

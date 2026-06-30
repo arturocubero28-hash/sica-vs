@@ -1,5 +1,11 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
+  LayoutDashboard, Video, Building2, Users, ScrollText, CreditCard, Receipt,
+  Handshake, TrendingUp, Ticket, Megaphone, User, Settings, Monitor, Home,
+  QrCode, ClipboardList, Shield, Building, Sun, Moon, Menu as MenuIcon,
+  Fingerprint, ArrowRight, ArrowLeft, Check, type LucideIcon,
+} from "lucide-react";
+import {
   login, getMe, logout, getToken, setToken,
   activarCuenta, solicitarRecuperacion, restablecerPassword, cambiarPassword,
   contarPagosPendientes, misEdificios,
@@ -106,8 +112,9 @@ function Login({ onLogin, onRecuperar, onVolver }: { onLogin: (u: Usuario) => vo
         {error && <div className="error">{error}</div>}
         <button onClick={entrar} disabled={enviando}>{enviando ? "Entrando…" : "Iniciar sesión"}</button>
         {soportaHuella() && (
-          <button className="ghost" onClick={entrarConHuella} disabled={conHuella}>
-            {conHuella ? "Esperando huella…" : "🔐 Ingresar con huella / Face ID"}
+          <button className="ghost" onClick={entrarConHuella} disabled={conHuella} style={{ display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+            <Fingerprint size={18} />
+            {conHuella ? "Esperando huella…" : "Ingresar con huella / Face ID"}
           </button>
         )}
         <button className="link-btn" onClick={onRecuperar}>¿Olvidaste tu contraseña?</button>
@@ -319,7 +326,7 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
           <div className="lp-nav-acciones">
             <button className="lp-tema-btn" onClick={() => setTema(t => t === "oscuro" ? "claro" : "oscuro")}
               aria-label="Cambiar tema" title={tema === "oscuro" ? "Modo claro" : "Modo oscuro"}>
-              {tema === "oscuro" ? "☀️" : "🌙"}
+              {tema === "oscuro" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
             <button className="lp-nav-btn-v2" onClick={onEntrar}>Ingresar</button>
           </div>
@@ -428,7 +435,7 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
           <div className="lp-compromisos-grid">
             {compromisos.map((c) => (
               <div key={c} className="lp-compromiso-v2">
-                <div className="lp-compromiso-ic-v2">✓</div>
+                <div className="lp-compromiso-ic-v2"><Check size={18} /></div>
                 <div className="lp-compromiso-text">
                   <span>{c}</span>
                   <div className="lp-compromiso-bar" />
@@ -629,52 +636,52 @@ function AdminView({ seccion }: { seccion: string }) {
 }
 
 // ─── Dashboard con sidebar moderno ───────────────────────────
-type NavItem = { id: string; label: string; icon: string };
+type NavItem = { id: string; label: string; icon: LucideIcon };
 
 function navParaRol(rol: Rol): NavItem[] {
   if (rol === "admin" || rol === "super_admin") {
     return [
-      { id: "dashboard", label: "Dashboard", icon: "📊" },
-      { id: "monitoreo", label: "Monitoreo", icon: "📹" },
-      { id: "casas", label: "Casas y residentes", icon: "🏘️" },
-      { id: "usuarios", label: "Usuarios", icon: "👥" },
-      { id: "historial", label: "Historial", icon: "📜" },
-      { id: "pagos", label: "Revisión de pagos", icon: "💳" },
-      { id: "caja", label: "Supervisión de caja", icon: "🧾" },
-      { id: "arreglos", label: "Arreglos de pago", icon: "🤝" },
-      { id: "reportes", label: "Reportería", icon: "📈" },
-      { id: "inventario", label: "Inventario de tarjetas", icon: "🎟️" },
-      { id: "comunicados", label: "Comunicados", icon: "📣" },
-      { id: "perfil", label: "Mi perfil", icon: "👤" },
+      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { id: "monitoreo", label: "Monitoreo", icon: Video },
+      { id: "casas", label: "Casas y residentes", icon: Building2 },
+      { id: "usuarios", label: "Usuarios", icon: Users },
+      { id: "historial", label: "Historial", icon: ScrollText },
+      { id: "pagos", label: "Revisión de pagos", icon: CreditCard },
+      { id: "caja", label: "Supervisión de caja", icon: Receipt },
+      { id: "arreglos", label: "Arreglos de pago", icon: Handshake },
+      { id: "reportes", label: "Reportería", icon: TrendingUp },
+      { id: "inventario", label: "Inventario de tarjetas", icon: Ticket },
+      { id: "comunicados", label: "Comunicados", icon: Megaphone },
+      { id: "perfil", label: "Mi perfil", icon: User },
     ];
   }
   if (rol === "cajero") {
     return [
-      { id: "caja", label: "Caja", icon: "🧾" },
-      { id: "arreglos", label: "Arreglos de pago", icon: "🤝" },
-      { id: "perfil", label: "Mi perfil", icon: "⚙️" },
+      { id: "caja", label: "Caja", icon: Receipt },
+      { id: "arreglos", label: "Arreglos de pago", icon: Handshake },
+      { id: "perfil", label: "Mi perfil", icon: Settings },
     ];
   }
   if (rol === "desarrollador") {
     return [
-      { id: "dev", label: "Sistema", icon: "🖥️" },
-      { id: "caja", label: "Supervisión de caja", icon: "🧾" },
-      { id: "perfil", label: "Mi perfil", icon: "⚙️" },
+      { id: "dev", label: "Sistema", icon: Monitor },
+      { id: "caja", label: "Supervisión de caja", icon: Receipt },
+      { id: "perfil", label: "Mi perfil", icon: Settings },
     ];
   }
   if (rol === "residente") {
     return [
-      { id: "home", label: "Inicio", icon: "🏠" },
-      { id: "qr", label: "Generar QR", icon: "🎫" },
-      { id: "historial", label: "Mis visitas", icon: "📋" },
-      { id: "cuotas", label: "Mis cuotas", icon: "💳" },
-      { id: "cuenta", label: "Mi cuenta", icon: "👤" },
-      { id: "perfil", label: "Mi perfil", icon: "⚙️" },
+      { id: "home", label: "Inicio", icon: Home },
+      { id: "qr", label: "Generar QR", icon: QrCode },
+      { id: "historial", label: "Mis visitas", icon: ClipboardList },
+      { id: "cuotas", label: "Mis cuotas", icon: CreditCard },
+      { id: "cuenta", label: "Mi cuenta", icon: User },
+      { id: "perfil", label: "Mi perfil", icon: Settings },
     ];
   }
   return [
-    { id: "guardia", label: "Caseta", icon: "🛡️" },
-    { id: "perfil", label: "Mi perfil", icon: "⚙️" },
+    { id: "guardia", label: "Caseta", icon: Shield },
+    { id: "perfil", label: "Mi perfil", icon: Settings },
   ];
 }
 
@@ -695,7 +702,7 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
     ? (() => {
         const items = [...navBase];
         const idx = items.findIndex(i => i.id === "perfil");
-        const item = { id: "edificio", label: "Mi edificio", icon: "🏢" };
+        const item = { id: "edificio", label: "Mi edificio", icon: Building };
         if (idx >= 0) items.splice(idx, 0, item); else items.push(item);
         return items;
       })()
@@ -747,7 +754,7 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
               className={`nav-item ${seccion === item.id ? "on" : ""}`}
               onClick={() => { setSeccion(item.id); setMenuAbierto(false); }}
             >
-              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-icon"><item.icon size={18} /></span>
               <span className="nav-label">{item.label}</span>
               {item.id === "pagos" && pagosBadge > 0 && (
                 <span className="nav-badge">{pagosBadge}</span>
@@ -774,7 +781,7 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
       {/* Área principal */}
       <div className="main-area">
         <header className="topbar">
-          <button className="hamburger" onClick={() => setMenuAbierto(true)} aria-label="Menú">☰</button>
+          <button className="hamburger" onClick={() => setMenuAbierto(true)} aria-label="Menú"><MenuIcon size={22} /></button>
           <b className="topbar-title">{nav.find(n => n.id === seccion)?.label}</b>
           <div className="user-avatar small">{iniciales}</div>
         </header>
@@ -805,7 +812,7 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
             onClick={() => setSeccion(item.id)}
           >
             <span className="bottom-icon" style={{ position: "relative" }}>
-              {item.icon}
+              <item.icon size={20} />
               {item.id === "pagos" && pagosBadge > 0 && (
                 <span className="bottom-badge">{pagosBadge}</span>
               )}
