@@ -569,3 +569,90 @@ def reporte_inventario(usuario_actual):
         "tipos": filas,
         "generado": dt.date.today().isoformat(),
     }})
+
+
+@reportes_bp.get("/ejecutivo")
+@roles_required("admin", "super_admin")
+def reporte_ejecutivo(usuario_actual):
+    """
+    Resumen ejecutivo del mes: los KPIs clave en un solo lugar, pensado para
+    imprimir y llevar a la junta de la residencial.
+
+    Incluye: cobranza del mes, cartera vencida, morosidad, accesos del mes y
+    tasa de recuperación de mora.
+    """
+    from sqlalchemy import func
+    from app.models.visita import EventoAcceso
+
+    hoy = dt.date.today()
+    anio = int(request.args.get("anio", hoy.year))
+    mes = int(request.args.get("mes", hoy.month))
+    ini_mes = dt.date(anio, mes, 1)
+    fin_mes = dt.date(anio + (mes // 12), (mes % 12) + 1, 1) - dt.timedelta(days=1)
+    meses_es = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    mes_label = f"{meses_es[mes]} {anio}"
+
+    # ── Cobranza del mes (cuotas cuyo periodo es este mes) ──
+    cuotas_mes = Cuota.query.filter(Cuota.periodo == ini_mes).all()
+    total_esperado = sum(float(c.monto) for c in cuotas_mes)
+    total_recaudado = sum(float(c.monto) for c in cuotas_mes if c.estado == "pagada")
+    pct_cobranza = round((total_recaudado / total_esperado * 100), 1) if total_esperado else 0.0
+
+    # ── Cartera vencida total (todas las cuotas no pagadas ya vencidas) ──
+    cuotas_vencidas = (Cuota.query
+                       .filter(Cuota.estado != "pagada", Cuota.fecha_vencimiento < hoy)
+                       .all())
+    cartera_vencida = sum(float(c.monto) for c in cuotas_vencidas)
+    casas_en_mora = len({c.cuenta_id for c in cuotas_vencidas})
+
+    # ── Morosidad: % de cuentas activas con al menos una cuota vencida ──
+    cuentas_activas = Cuenta.query.filter_by(activa=True).count()
+    pct_morosidad = round((casas_en_mora / cuentas_activas * 100), 1) if cuentas_activas else 0.0
+
+    # ── Accesos del mes (eventos de residentes) ──
+    ini_dt = dt.datetime.combine(ini_mes, dt.time.min).replace(tzinfo=dt.timezone.utc)
+    fin_dt = dt.datetime.combine(fin_mes, dt.time.max).replace(tzinfo=dt.timezone.utc)
+    accesos_mes = (EventoAcceso.query
+                   .filter(EventoAcceso.ocurrido_en >= ini_dt,
+                           EventoAcceso.ocurrido_en <= fin_dt)
+                   .count())
+
+    # ── Tasa de recuperación de mora ──
+    # De los pagos aprobados este mes, cuántos correspondían a cuotas que ya
+    # estaban vencidas al momento de pagar (= recuperación de cartera vieja).
+    fecha_sql = func.coalesce(Pago.revisado_en, Pago.created_at)
+    pagos_mes = (Pago.query
+                 .filter(Pago.estado == "aprobado",
+                         fecha_sql >= ini_dt, fecha_sql <= fin_dt,
+                         Pago.cuota_id.isnot(None))
+                 .all())
+    recuperado = 0.0
+    total_pagado_mes = 0.0
+    for p in pagos_mes:
+        monto = float(p.monto)
+        total_pagado_mes += monto
+        cuota = Cuota.query.get(p.cuota_id)
+        if cuota:
+            f = p.revisado_en or p.created_at
+            fecha_pago = f.date() if f else hoy
+            if cuota.fecha_vencimiento < fecha_pago:
+                recuperado += monto
+    pct_recuperacion = round((recuperado / total_pagado_mes * 100), 1) if total_pagado_mes else 0.0
+
+    return jsonify({"data": {
+        "mes_label": mes_label,
+        "anio": anio, "mes": mes,
+        "total_esperado": round(total_esperado, 2),
+        "total_recaudado": round(total_recaudado, 2),
+        "total_pendiente": round(total_esperado - total_recaudado, 2),
+        "pct_cobranza": pct_cobranza,
+        "cartera_vencida": round(cartera_vencida, 2),
+        "casas_en_mora": casas_en_mora,
+        "cuentas_activas": cuentas_activas,
+        "pct_morosidad": pct_morosidad,
+        "accesos_mes": accesos_mes,
+        "recuperado_mora": round(recuperado, 2),
+        "pct_recuperacion": pct_recuperacion,
+        "generado": dt.datetime.utcnow().isoformat() + "Z",
+    }})

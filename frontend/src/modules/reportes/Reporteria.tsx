@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos, reporteInventario,
+import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos, reporteInventario, reporteEjecutivo,
   type ReporteFinancieroDTO, type MoraPorCasaDTO, type CasaMoraDTO,
-  type ReporteCajaDTO, type ReporteAccesosDTO, type ReporteInventarioDTO } from "../../api/client";
+  type ReporteCajaDTO, type ReporteAccesosDTO, type ReporteInventarioDTO, type ReporteEjecutivoDTO } from "../../api/client";
 import { L } from "../../utils/formato";
-import { GraficoBarras, GraficoDona, GraficoLinea, GraficoBarrasCant } from "./Graficos";
+import { GraficoBarras, GraficoDona, GraficoLinea, GraficoBarrasCant, GraficoBarrasHoriz } from "./Graficos";
 
 // Devuelve [primerDía, últimoDía] del mes actual en formato YYYY-MM-DD,
 // para inicializar los filtros de fecha de los reportes con el mes corriente.
@@ -21,10 +21,13 @@ function rangoMesActual(): [string, string] {
 }
 
 export function Reporteria() {
-  const [tab, setTab] = useState<"financiero" | "mora" | "caja" | "accesos" | "inventario">("financiero");
+  const [tab, setTab] = useState<"ejecutivo" | "financiero" | "mora" | "caja" | "accesos" | "inventario">("ejecutivo");
   return (
     <div className="reporteria">
       <div className="historial-tabs" style={{ marginBottom: 14 }}>
+        <button className={`htab ${tab === "ejecutivo" ? "activo" : ""}`} onClick={() => setTab("ejecutivo")}>
+          ⭐ Resumen ejecutivo
+        </button>
         <button className={`htab ${tab === "financiero" ? "activo" : ""}`} onClick={() => setTab("financiero")}>
           💰 Financiero
         </button>
@@ -41,6 +44,7 @@ export function Reporteria() {
           🎟️ Inventario
         </button>
       </div>
+      {tab === "ejecutivo" && <ReporteEjecutivoVista />}
       {tab === "financiero" && <ReporteFinancieroVista />}
       {tab === "mora" && <ReporteMoraPorCasa />}
       {tab === "caja" && <ReporteCajaVista />}
@@ -543,6 +547,14 @@ function ReporteMoraPorCasa() {
               { nombre: "90+ días", valor: data.aging.d_90_mas, color: "#c81e1e" },
             ]} />
           </div>
+          {data.casas.length > 0 && (
+            <div className="graficos-grid uno">
+              <GraficoBarrasHoriz titulo="Top 10 deudores (mayor deuda)" datos={
+                [...data.casas].sort((a, b) => b.total_adeudado - a.total_adeudado).slice(0, 10)
+                  .map(c => ({ nombre: `${c.unidad} · ${c.titular}`, valor: c.total_adeudado }))
+              } />
+            </div>
+          )}
         </>
       )}
 
@@ -1035,5 +1047,131 @@ function ReporteInventarioVista() {
         </>
       )}
     </div>
+  );
+}
+
+
+function ReporteEjecutivoVista() {
+  const hoy = new Date();
+  const fmtL = (n: number) => new Intl.NumberFormat("es-HN", { style: "currency", currency: "HNL", maximumFractionDigits: 0 }).format(n);
+  const [mes, setMes] = useState(hoy.getMonth() + 1);
+  const [anio, setAnio] = useState(hoy.getFullYear());
+  const [data, setData] = useState<ReporteEjecutivoDTO | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  const anios = [hoy.getFullYear(), hoy.getFullYear() - 1, hoy.getFullYear() - 2];
+
+  function cargar() {
+    setCargando(true);
+    reporteEjecutivo(anio, mes).then(setData).catch(() => {}).finally(() => setCargando(false));
+  }
+  useEffect(() => { cargar(); }, []);
+
+  async function exportarPDF() {
+    if (!data) return;
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF();
+    // Encabezado
+    doc.setFillColor(2, 46, 69); doc.rect(0, 0, 210, 30, "F");
+    doc.setTextColor(255); doc.setFontSize(18);
+    doc.text("Resumen Ejecutivo", 14, 14);
+    doc.setFontSize(11); doc.text("Residencial Villas del Sol", 14, 22);
+    doc.setTextColor(244, 135, 35); doc.setFontSize(12);
+    doc.text(data.mes_label, 196, 22, { align: "right" });
+
+    let y = 44;
+    const kpi = (titulo: string, valor: string, sub?: string) => {
+      doc.setTextColor(107, 114, 128); doc.setFontSize(10); doc.text(titulo, 16, y);
+      doc.setTextColor(2, 46, 69); doc.setFontSize(17); doc.text(valor, 16, y + 8);
+      if (sub) { doc.setTextColor(107, 114, 128); doc.setFontSize(8); doc.text(sub, 16, y + 14); }
+      y += 24;
+    };
+    doc.setFontSize(13); doc.setTextColor(2, 46, 69);
+    doc.text("Cobranza del mes", 14, y); y += 8;
+    kpi("Recaudado", fmtL(data.total_recaudado), `de ${fmtL(data.total_esperado)} esperado`);
+    kpi("Cobranza", `${data.pct_cobranza}%`, `Pendiente: ${fmtL(data.total_pendiente)}`);
+
+    y += 2; doc.setFontSize(13); doc.text("Cartera y morosidad", 14, y); y += 8;
+    kpi("Cartera vencida", fmtL(data.cartera_vencida), `${data.casas_en_mora} casas en mora`);
+    kpi("Morosidad", `${data.pct_morosidad}%`, `de ${data.cuentas_activas} cuentas activas`);
+    kpi("Recuperación de mora", `${data.pct_recuperacion}%`, `${fmtL(data.recuperado_mora)} recuperado este mes`);
+
+    y += 2; doc.setFontSize(13); doc.text("Operación", 14, y); y += 8;
+    kpi("Accesos registrados", String(data.accesos_mes), "entradas y salidas del mes");
+
+    doc.setTextColor(150); doc.setFontSize(8);
+    doc.text(`Generado: ${new Date(data.generado).toLocaleString("es-HN")}`, 14, 285);
+    doc.save(`resumen-ejecutivo-${anio}-${String(mes).padStart(2, "0")}.pdf`);
+  }
+
+  return (
+    <>
+      <div className="dash-header-pro">
+        <div>
+          <h2 className="dash-titulo">⭐ Resumen ejecutivo</h2>
+          <span className="muted">{data?.mes_label || "—"}</span>
+        </div>
+        <div className="reporte-controles">
+          <select className="periodo-select" value={mes} onChange={e => setMes(Number(e.target.value))}>
+            {meses.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+          <select className="periodo-select" value={anio} onChange={e => setAnio(Number(e.target.value))}>
+            {anios.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <button className="ghost mini" onClick={() => cargar()}>Ver →</button>
+          <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
+        </div>
+      </div>
+
+      {cargando ? <p className="muted" style={{ padding: 20 }}>Cargando…</p> : !data ? (
+        <div className="dash-card"><p className="muted">No se pudo cargar el resumen.</p></div>
+      ) : (
+        <>
+          <h3 className="rep-subtitulo">Cobranza del mes</h3>
+          <div className="ejec-grid">
+            <div className="ejec-kpi verde">
+              <span className="ejec-kpi-label">Recaudado</span>
+              <span className="ejec-kpi-valor">{L(data.total_recaudado)}</span>
+              <span className="ejec-kpi-sub">de {L(data.total_esperado)} esperado</span>
+            </div>
+            <div className={`ejec-kpi ${data.pct_cobranza >= 70 ? "verde" : "rojo"}`}>
+              <span className="ejec-kpi-label">Cobranza</span>
+              <span className="ejec-kpi-valor">{data.pct_cobranza}%</span>
+              <span className="ejec-kpi-sub">Pendiente: {L(data.total_pendiente)}</span>
+            </div>
+          </div>
+
+          <h3 className="rep-subtitulo">Cartera y morosidad</h3>
+          <div className="ejec-grid tres">
+            <div className="ejec-kpi naranja">
+              <span className="ejec-kpi-label">Cartera vencida</span>
+              <span className="ejec-kpi-valor">{L(data.cartera_vencida)}</span>
+              <span className="ejec-kpi-sub">{data.casas_en_mora} casas en mora</span>
+            </div>
+            <div className={`ejec-kpi ${data.pct_morosidad <= 20 ? "verde" : "rojo"}`}>
+              <span className="ejec-kpi-label">Morosidad</span>
+              <span className="ejec-kpi-valor">{data.pct_morosidad}%</span>
+              <span className="ejec-kpi-sub">de {data.cuentas_activas} cuentas activas</span>
+            </div>
+            <div className="ejec-kpi azul">
+              <span className="ejec-kpi-label">Recuperación de mora</span>
+              <span className="ejec-kpi-valor">{data.pct_recuperacion}%</span>
+              <span className="ejec-kpi-sub">{L(data.recuperado_mora)} recuperado</span>
+            </div>
+          </div>
+
+          <h3 className="rep-subtitulo">Operación</h3>
+          <div className="ejec-grid">
+            <div className="ejec-kpi azul">
+              <span className="ejec-kpi-label">Accesos registrados</span>
+              <span className="ejec-kpi-valor">{data.accesos_mes}</span>
+              <span className="ejec-kpi-sub">entradas y salidas del mes</span>
+            </div>
+          </div>
+        </>
+      )}
+    </>
   );
 }

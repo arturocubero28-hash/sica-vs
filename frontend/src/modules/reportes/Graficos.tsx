@@ -113,7 +113,27 @@ export function GraficoLinea({ titulo, datos }: {
   );
 }
 
-/** Barras simples por categoría no monetaria (ej. accesos por hora). */
+/** Barras horizontales para rankings (ej. top deudores), con nombres largos. */
+export function GraficoBarrasHoriz({ titulo, datos }: {
+  titulo?: string;
+  datos: { nombre: string; valor: number }[];
+}) {
+  return (
+    <div className="grafico-card">
+      {titulo && <h4 className="grafico-titulo">{titulo}</h4>}
+      <ResponsiveContainer width="100%" height={Math.max(220, datos.length * 36)}>
+        <BarChart data={datos} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" horizontal={false} />
+          <XAxis type="number" tickFormatter={fmtCorto} tick={{ fontSize: 11, fill: "#9ca3af" }} />
+          <YAxis type="category" dataKey="nombre" width={150} tick={{ fontSize: 11, fill: "#6b7280" }} />
+          <Tooltip formatter={(v: number) => fmtLps(v)} {...cajaTooltip} />
+          <Bar dataKey="valor" fill="#c81e1e" radius={[0, 6, 6, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export function GraficoBarrasCant({ titulo, datos, color = AZUL }: {
   titulo?: string;
   datos: { nombre: string; valor: number }[];

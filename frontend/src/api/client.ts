@@ -891,6 +891,21 @@ export const reporteInventario = (desde?: string, hasta?: string) => {
   return request<ReporteInventarioDTO>(`/reportes/inventario${qs ? "?" + qs : ""}`);
 };
 
+// ── Reporte ejecutivo (resumen del mes) ──────────────────────────────────
+export interface ReporteEjecutivoDTO {
+  mes_label: string; anio: number; mes: number;
+  total_esperado: number; total_recaudado: number; total_pendiente: number; pct_cobranza: number;
+  cartera_vencida: number; casas_en_mora: number; cuentas_activas: number; pct_morosidad: number;
+  accesos_mes: number; recuperado_mora: number; pct_recuperacion: number; generado: string;
+}
+export const reporteEjecutivo = (anio?: number, mes?: number) => {
+  const q = new URLSearchParams();
+  if (anio) q.set("anio", String(anio));
+  if (mes) q.set("mes", String(mes));
+  const qs = q.toString();
+  return request<ReporteEjecutivoDTO>(`/reportes/ejecutivo${qs ? "?" + qs : ""}`);
+};
+
 // ── Login biométrico (WebAuthn / huella) ──────────────────────────────────
 export interface CredencialWebAuthnDTO {
   id: number; nombre_dispositivo: string; creada_en: string; ultimo_uso?: string | null;
