@@ -3,6 +3,7 @@ import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos, rep
   type ReporteFinancieroDTO, type MoraPorCasaDTO, type CasaMoraDTO,
   type ReporteCajaDTO, type ReporteAccesosDTO, type ReporteInventarioDTO } from "../../api/client";
 import { L } from "../../utils/formato";
+import { GraficoBarras, GraficoDona, GraficoLinea, GraficoBarrasCant } from "./Graficos";
 
 // Devuelve [primerDía, últimoDía] del mes actual en formato YYYY-MM-DD,
 // para inicializar los filtros de fecha de los reportes con el mes corriente.
@@ -238,6 +239,31 @@ function ReporteFinancieroVista() {
           <div className="cobranza-fill" style={{ width: `${data.pct_cobranza}%` }} />
         </div>
       </div>
+      )}
+
+      {/* Gráficos */}
+      {!esRango && (
+        <div className="graficos-grid">
+          <GraficoBarras titulo="Esperado · Recaudado · Pendiente" datos={[
+            { nombre: "Esperado", valor: data.total_esperado, color: "#044a6e" },
+            { nombre: "Recaudado", valor: data.total_recaudado, color: "#1d8a4a" },
+            { nombre: "Pendiente", valor: data.total_pendiente, color: "#F48723" },
+          ]} />
+          {data.recaudado_por_metodo && (
+            <GraficoDona titulo="Recaudado por método de pago" datos={[
+              { nombre: "Efectivo", valor: data.recaudado_por_metodo.efectivo },
+              { nombre: "Tarjeta/POS", valor: data.recaudado_por_metodo.tarjeta_pos },
+              { nombre: "Transferencia", valor: data.recaudado_por_metodo.transferencia },
+              { nombre: "En línea", valor: data.recaudado_por_metodo.linea },
+            ]} />
+          )}
+        </div>
+      )}
+      {!esRango && data.tendencia && data.tendencia.length > 0 && (
+        <div className="graficos-grid uno">
+          <GraficoLinea titulo="Recaudación últimos meses (esperado vs recaudado)"
+            datos={data.tendencia.map(t => ({ nombre: t.mes_label, esperado: t.esperado, recaudado: t.recaudado }))} />
+        </div>
       )}
 
       {/* Desglose de lo recaudado por método de pago */}
@@ -508,6 +534,14 @@ function ReporteMoraPorCasa() {
             <div className="rep-kpi"><span>31 – 60 días</span><b>{L(data.aging.d_31_60)}</b></div>
             <div className="rep-kpi"><span>61 – 90 días</span><b>{L(data.aging.d_61_90)}</b></div>
             <div className="rep-kpi rep-kpi-alerta"><span>90+ días (difícil cobro)</span><b>{L(data.aging.d_90_mas)}</b></div>
+          </div>
+          <div className="graficos-grid uno">
+            <GraficoBarras titulo="Cartera vencida por antigüedad" datos={[
+              { nombre: "1–30 días", valor: data.aging.d_1_30, color: "#1d8a4a" },
+              { nombre: "31–60 días", valor: data.aging.d_31_60, color: "#d89000" },
+              { nombre: "61–90 días", valor: data.aging.d_61_90, color: "#F48723" },
+              { nombre: "90+ días", valor: data.aging.d_90_mas, color: "#c81e1e" },
+            ]} />
           </div>
         </>
       )}
@@ -826,6 +860,16 @@ function ReporteAccesosVista() {
             <div className="lista-card"><p className="muted">No hay visitas registradas en este período.</p></div>
           ) : (
             <>
+              <div className="graficos-grid">
+                <GraficoBarrasCant titulo="Accesos por hora del día"
+                  datos={data.horas_pico.map(h => ({ nombre: h.hora, valor: h.cantidad }))} color="#022E45" />
+                <GraficoDona titulo="Visitas por tipo" money={false} datos={[
+                  { nombre: "Únicas", valor: data.por_tipo.unica },
+                  { nombre: "Recurrentes", valor: data.por_tipo.recurrente },
+                  { nombre: "Repartidores", valor: data.por_tipo.repartidor },
+                ]} />
+              </div>
+
               <h3 className="rep-subtitulo">Horas con más accesos</h3>
               <div className="lista-card">
                 {data.horas_pico.length === 0 ? <p className="muted">Sin entradas registradas.</p> : (
