@@ -179,6 +179,7 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
   const [enlace, setEnlace] = useState<{ email: string; url: string } | null>(null);
   const [nuevaUnidadTipo, setNuevaUnidadTipo] = useState<"casa" | "edificio">("casa");
   const [nuevaUnidadId, setNuevaUnidadId] = useState("");
+  const [creandoUnidad, setCreandoUnidad] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [mostrarSug, setMostrarSug] = useState(false);
   // Modo de selección de unidad: "nueva" (crear) es lo más común al dar de alta
@@ -206,7 +207,8 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
   const esEdificio = unidadSel?.tipo === "edificio";
 
   async function crearUnidadInline() {
-    if (!nuevaUnidadId.trim()) return;
+    if (!nuevaUnidadId.trim() || creandoUnidad) return;
+    setCreandoUnidad(true);
     try {
       const u = await crearUnidad({ tipo: nuevaUnidadTipo, identificador: nuevaUnidadId.trim() });
       await recargarUnidades();
@@ -214,6 +216,7 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
       setNuevaUnidadId("");
       setMsg({ tipo: "ok", texto: `Unidad "${u.identificador}" creada` });
     } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+    finally { setCreandoUnidad(false); }
   }
 
   async function validarCodigo() {
@@ -357,7 +360,7 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
                   value={nuevaUnidadId}
                   onChange={(e) => setNuevaUnidadId(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && crearUnidadInline()} />
-                <button className="mini" onClick={crearUnidadInline} disabled={!nuevaUnidadId.trim()}>
+                <button className="mini" onClick={crearUnidadInline} disabled={!nuevaUnidadId.trim() || creandoUnidad}>
                   Crear
                 </button>
               </div>
@@ -763,6 +766,7 @@ function GestionTarifas() {
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
   const [editando, setEditando] = useState<number | null>(null);
   const [editMonto, setEditMonto] = useState("");
+  const [creandoTarifa, setCreandoTarifa] = useState(false);
 
   function cargar() {
     setCargando(true);
@@ -771,10 +775,12 @@ function GestionTarifas() {
   useEffect(() => { cargar(); }, []);
 
   async function crear() {
+    if (creandoTarifa) return;
     setMsg(null);
     const m = parseFloat(monto);
     if (!nombre.trim()) { setMsg({ tipo: "err", texto: "Indicá el nombre de la tarifa" }); return; }
     if (isNaN(m) || m < 0) { setMsg({ tipo: "err", texto: "Monto inválido" }); return; }
+    setCreandoTarifa(true);
     try {
       await crearTarifa({ nombre: nombre.trim(), monto: m, descripcion: descripcion.trim() || undefined });
       setNombre(""); setMonto(""); setDescripcion("");
@@ -782,6 +788,7 @@ function GestionTarifas() {
       cargar();
       setTimeout(() => setMsg(null), 3000);
     } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+    finally { setCreandoTarifa(false); }
   }
 
   async function guardarEdicion(id: number) {
@@ -814,7 +821,7 @@ function GestionTarifas() {
         </div>
         <input placeholder="Descripción (opcional)" value={descripcion}
           onChange={e => setDescripcion(e.target.value)} style={{ marginTop: 8 }} />
-        <button className="mini" onClick={crear} style={{ marginTop: 8 }}>+ Crear tarifa</button>
+        <button className="mini" onClick={crear} disabled={creandoTarifa} style={{ marginTop: 8 }}>{creandoTarifa ? "Creando…" : "+ Crear tarifa"}</button>
       </div>
 
       {msg && <div className={msg.tipo === "ok" ? "cuota-ok" : "error"} style={{ marginTop: 10 }}>{msg.texto}</div>}
