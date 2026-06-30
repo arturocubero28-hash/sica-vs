@@ -329,6 +329,8 @@ class ArregloPago(db.Model):
 
     # Política de incumplimiento
     dias_gracia         = db.Column(db.Integer, nullable=False, default=15)
+    # Intervalo entre abonos, en días (configurable al crear el arreglo)
+    intervalo_dias      = db.Column(db.Integer, nullable=False, default=30)
 
     # Estado del arreglo: activo | completado | incumplido | cancelado
     estado              = db.Column(db.String(20), nullable=False, default="activo")
@@ -348,9 +350,13 @@ class ArregloPago(db.Model):
     cuotas  = db.relationship("Cuota", backref="arreglo", lazy="select")
 
     def total_abonado(self):
-        """Suma del abono inicial + todos los abonos pagados."""
-        pagados = sum(float(a.monto) for a in self.abonos if a.estado == "pagado")
-        return float(self.abono_inicial) + pagados
+        """Suma de todos los abonos pagados.
+
+        Nota: desde el Día 24 la prima (abono_inicial) se registra como el
+        primer AbonoArreglo, así que ya está incluida en la suma de abonos
+        pagados. No se suma aparte para no contarla doble.
+        """
+        return sum(float(a.monto) for a in self.abonos if a.estado == "pagado")
 
     def saldo_pendiente(self):
         """Lo que falta por pagar de la deuda total."""
@@ -376,6 +382,7 @@ class ArregloPago(db.Model):
             "num_abonos":       self.num_abonos,
             "monto_por_abono":  float(self.monto_por_abono),
             "dias_gracia":      self.dias_gracia,
+            "intervalo_dias":   self.intervalo_dias,
             "total_abonado":    round(self.total_abonado(), 2),
             "saldo_pendiente":  self.saldo_pendiente(),
             "abonos_pagados":   self.abonos_pagados(),

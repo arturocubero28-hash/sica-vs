@@ -210,6 +210,8 @@ def create_app(config_class=Config):
             "ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS id_externo VARCHAR(80)",
             # Día 24 — vincular un pago a un abono de arreglo (prima/abonos)
             "ALTER TABLE pagos ADD COLUMN IF NOT EXISTS abono_id BIGINT REFERENCES abonos_arreglo(id)",
+            # Día 24 — intervalo configurable entre abonos del arreglo
+            "ALTER TABLE arreglos_pago ADD COLUMN IF NOT EXISTS intervalo_dias INTEGER NOT NULL DEFAULT 30",
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_eventos_id_externo ON eventos_acceso (id_externo) WHERE id_externo IS NOT NULL",
             # Índices en columnas más consultadas (Día 12 — F5 de la auditoría).
             # Aceleran mora, reportes, caja y dashboard cuando crecen los datos.

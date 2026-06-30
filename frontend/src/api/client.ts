@@ -831,7 +831,7 @@ export const cuotasPendientesCuenta = (cuentaUuid: string) =>
 
 export const crearArreglo = (body: {
   cuenta_id: string; cuotas: string[]; abono_inicial: number;
-  num_abonos: number; dias_gracia: number; primer_vencimiento?: string; nota?: string;
+  num_abonos: number; dias_gracia: number; intervalo_dias?: number; nota?: string;
 }) => request<ArregloDTO>("/arreglos", { method: "POST", body: JSON.stringify(body) });
 
 export const cobrarAbono = (arregloUuid: string, abonoUuid: string, metodo: string, referencia?: string) =>

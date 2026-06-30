@@ -5,7 +5,7 @@ import {
   type ArregloDTO, type Cuenta, type CuotaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
-import { AlertTriangle, Landmark } from "lucide-react";
+import { AlertTriangle, Landmark, Info } from "lucide-react";
 
 const ESTADO_PILL: Record<string, string> = {
   activo: "green", completado: "", incumplido: "red", cancelado: "amber",
@@ -102,7 +102,7 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
   const [abonoInicial, setAbonoInicial] = useState(0);
   const [numAbonos, setNumAbonos] = useState(3);
   const [diasGracia, setDiasGracia] = useState(15);
-  const [primerVenc, setPrimerVenc] = useState("");
+  const [intervaloDias, setIntervaloDias] = useState(30);
   const [nota, setNota] = useState("");
   const [msg, setMsg] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -134,7 +134,7 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
       await crearArreglo({
         cuenta_id: cuentaId, cuotas: seleccionadas, abono_inicial: abonoInicial,
         num_abonos: numAbonos, dias_gracia: diasGracia,
-        primer_vencimiento: primerVenc || undefined, nota,
+        intervalo_dias: intervaloDias, nota,
       });
       onCreado();
     } catch (e) { setMsg((e as Error).message); }
@@ -182,6 +182,12 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
         <>
           <div className="campo-grupo" style={{ marginTop: 14 }}>
             <label className="campo-label">3. Condiciones del plan</label>
+
+            <div className="info-box">
+              <Info size={15} />
+              <span>El <b>abono inicial (prima)</b> es el primer pago del arreglo. Se cobra hoy: el cajero lo cobra en ventanilla o el residente sube su comprobante desde la app. Dejalo en 0 si no hay prima.</span>
+            </div>
+
             <div className="row">
               <div style={{ flex: 1 }}>
                 <span className="muted small">Abono inicial (prima)</span>
@@ -194,31 +200,44 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
                   onChange={e => setNumAbonos(Number(e.target.value))} />
               </div>
             </div>
+
+            <div className="info-box">
+              <Info size={15} />
+              <span>El <b>intervalo</b> define cada cuántos días vence un abono (ej. 30 = mensual, 15 = quincenal). Los <b>días de gracia</b> son la tolerancia tras el vencimiento antes de marcar el arreglo como incumplido.</span>
+            </div>
+
             <div className="row">
+              <div style={{ flex: 1 }}>
+                <span className="muted small">Cada cuántos días (intervalo)</span>
+                <input type="number" min={1} max={90} value={intervaloDias}
+                  onChange={e => setIntervaloDias(Number(e.target.value))} />
+              </div>
               <div style={{ flex: 1 }}>
                 <span className="muted small">Días de gracia por abono</span>
                 <input type="number" min={1} max={90} value={diasGracia}
                   onChange={e => setDiasGracia(Number(e.target.value))} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <span className="muted small">Primer vencimiento (opcional)</span>
-                <input type="date" value={primerVenc} onChange={e => setPrimerVenc(e.target.value)} />
               </div>
             </div>
             <input placeholder="Nota / observación (opcional)" value={nota}
               onChange={e => setNota(e.target.value)} style={{ marginTop: 8 }} />
           </div>
 
+          <div className="info-box warn">
+            <Info size={15} />
+            <span>Si el residente no paga un abono dentro de los días de gracia, el arreglo se marca <b>incumplido</b>: las cuotas vuelven a mora y la cuenta se bloquea (no podrá ingresar por los accesos). Lo ya abonado no se pierde.</span>
+          </div>
+
           {/* Resumen financiero en vivo */}
           <div className="arreglo-resumen">
             <div className="arreglo-resumen-row"><span>Deuda total</span><b>{L(deudaTotal)}</b></div>
-            <div className="arreglo-resumen-row"><span>Abono inicial</span><b>− {L(abonoInicial)}</b></div>
+            <div className="arreglo-resumen-row"><span>Abono inicial (prima, vence hoy)</span><b>{L(abonoInicial)}</b></div>
             <div className="arreglo-resumen-row total"><span>Saldo a financiar</span><b>{L(saldoFinanciado)}</b></div>
             <div className="arreglo-resumen-row destacado">
               <span>{numAbonos} abonos de</span><b>{L(montoPorAbono)}</b>
             </div>
             <p className="muted small" style={{ marginTop: 6 }}>
               Sin recargo: solo se difiere la deuda. El último abono ajusta el redondeo.
+              {abonoInicial > 0 && " La prima es el primer abono a cobrar (vence hoy)."}
             </p>
           </div>
         </>

@@ -147,15 +147,13 @@ def crear_arreglo(usuario_actual):
     # Monto por abono: dividir parejo, y el último abono absorbe el redondeo
     monto_base = _money(saldo_financiado / num_abonos)
 
-    # Fecha del primer vencimiento
-    pv = data.get("primer_vencimiento")
-    if pv:
-        try:
-            primer_venc = dt.date.fromisoformat(pv)
-        except ValueError:
-            primer_venc = dt.date.today() + dt.timedelta(days=30)
-    else:
-        primer_venc = dt.date.today() + dt.timedelta(days=30)
+    # Intervalo entre abonos (en días). Configurable; default 30 (mensual aprox).
+    try:
+        intervalo_dias = int(data.get("intervalo_dias") or 30)
+    except (TypeError, ValueError):
+        intervalo_dias = 30
+    if intervalo_dias < 1 or intervalo_dias > 90:
+        intervalo_dias = 30
 
     # ── Crear el arreglo ──────────────────────────────────────────────────
     arreglo = ArregloPago(
@@ -166,6 +164,7 @@ def crear_arreglo(usuario_actual):
         num_abonos=num_abonos,
         monto_por_abono=monto_base,
         dias_gracia=dias_gracia,
+        intervalo_dias=intervalo_dias,
         estado="activo",
         creado_por=usuario_actual.id,
         nota=(data.get("nota") or "")[:500],
@@ -178,66 +177,45 @@ def crear_arreglo(usuario_actual):
         c.estado = "en_arreglo"
         c.arreglo_id = arreglo.id
 
-    # Generar el calendario de abonos
+    # ── Generar el calendario de abonos ───────────────────────────────────
+    # Numeración: si hay prima, es el abono #1 (vence hoy, a cobrar ya); los
+    # abonos del saldo financiado siguen después con el intervalo configurado.
+    hoy = dt.date.today()
+    numero = 1
+
+    # La PRIMA es el primer abono (vence hoy). NO se auto-cobra: la cobra el
+    # cajero o el residente la paga por comprobante, igual que los demás.
+    if abono_inicial > 0:
+        db.session.add(AbonoArreglo(
+            arreglo_id=arreglo.id,
+            numero=numero,
+            monto=abono_inicial,
+            fecha_pactada=hoy,
+            estado="pendiente",
+        ))
+        numero += 1
+
+    # Abonos del saldo financiado, espaciados por intervalo_dias
     acumulado = Decimal("0.00")
     for i in range(1, num_abonos + 1):
         if i < num_abonos:
             monto_abono = monto_base
             acumulado += monto_base
         else:
-            # El último abono absorbe la diferencia de redondeo
             monto_abono = _money(saldo_financiado - acumulado)
-        # Vencimiento: cada mes a partir del primero
-        mes = primer_venc.month - 1 + (i - 1)
-        anio = primer_venc.year + mes // 12
-        mes = mes % 12 + 1
-        dia = min(primer_venc.day, 28)  # evitar problemas con febrero
-        fecha_abono = dt.date(anio, mes, dia)
+        fecha_abono = hoy + dt.timedelta(days=intervalo_dias * i)
         db.session.add(AbonoArreglo(
             arreglo_id=arreglo.id,
-            numero=i,
+            numero=numero,
             monto=monto_abono,
             fecha_pactada=fecha_abono,
             estado="pendiente",
         ))
+        numero += 1
 
     # Reactivar el acceso de la cuenta (el arreglo restaura el servicio)
     cuenta.estado = "al_dia"
     cuenta.bloqueada = False
-
-    db.session.flush()
-
-    # ── Contabilizar la PRIMA (abono inicial) ────────────────────────────
-    # La prima es dinero que el residente entrega al momento de negociar el
-    # arreglo. Debe registrarse como un Pago real (aprobado, fecha de hoy)
-    # para que entre a caja y a los reportes financieros. Sin esto, la prima
-    # quedaba solo como un número en el arreglo y nunca se contabilizaba.
-    if abono_inicial > 0:
-        # Vincular a la sesión de caja abierta de quien crea el arreglo (si la hay)
-        sesion_id = None
-        try:
-            from app.models.caja import SesionCaja
-            ses = SesionCaja.query.filter_by(cajero_id=usuario_actual.id, estado="abierta").first()
-            if ses:
-                sesion_id = ses.id
-        except Exception:
-            pass
-        pago_prima = Pago(
-            cuota_id=None,
-            cuenta_id=cuenta.id,
-            subido_por=usuario_actual.id,
-            metodo=(data.get("metodo_prima") if data.get("metodo_prima") in METODOS_VENTANILLA else "efectivo"),
-            monto=abono_inicial,
-            referencia=f"Prima/abono inicial arreglo de pago",
-            estado="aprobado",
-            revisado_por=usuario_actual.id,
-            revisado_en=dt.datetime.now(dt.timezone.utc),
-            sesion_caja_id=sesion_id,
-        )
-        db.session.add(pago_prima)
-        db.session.flush()
-        from app.api.recibos import asignar_recibo
-        asignar_recibo(pago_prima)
 
     db.session.commit()
     return jsonify({"data": arreglo.to_dict(con_detalle=True)}), 201
