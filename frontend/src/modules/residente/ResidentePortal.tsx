@@ -130,6 +130,7 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
   const [modo, setModo] = useState("libre");
   const [resultado, setResultado] = useState<VisitaDTO | null>(null);
   const [error, setError] = useState("");
+  const [enviando, setEnviando] = useState(false);
 
   const titulos: Record<string, string> = {
     unica: "Visita única",
@@ -139,8 +140,10 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
 
   async function generar() {
     setError("");
+    if (enviando) return;   // evita doble envío si ya está creando
     if (!nombre.trim()) { setError("El nombre es obligatorio"); return; }
     if (tipo === "recurrente" && !validoHasta) { setError("Indica hasta cuándo es válido"); return; }
+    setEnviando(true);
     try {
       const v = await crearVisita({
         tipo, nombre_visitante: nombre, documento_id: documento || undefined,
@@ -151,6 +154,7 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
       });
       setResultado(v);
     } catch (e) { setError((e as Error).message); }
+    finally { setEnviando(false); }
   }
 
   if (resultado) {
@@ -233,7 +237,7 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
       )}
 
       {error && <div className="error">{error}</div>}
-      <button onClick={generar}>Generar código QR</button>
+      <button onClick={generar} disabled={enviando}>{enviando ? "Generando…" : "Generar código QR"}</button>
     </div>
   );
 }

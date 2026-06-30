@@ -106,6 +106,19 @@ def crear_visita(usuario_actual):
 
     ahora = dt.datetime.utcnow()
 
+    # Red de seguridad anti-duplicado: si esta cuenta acaba de crear una visita
+    # idéntica (mismo tipo y nombre) en los últimos 10 segundos, devolver esa
+    # misma en vez de crear otra. Evita duplicados por doble clic o reintento.
+    reciente = (Visita.query
+                .filter(Visita.cuenta_id == cuenta.id,
+                        Visita.tipo == tipo,
+                        Visita.nombre_visitante == nombre,
+                        Visita.created_at >= ahora - dt.timedelta(seconds=10))
+                .order_by(Visita.created_at.desc())
+                .first())
+    if reciente:
+        return jsonify({"data": reciente.to_dict()}), 200
+
     # Calcular vigencia según tipo
     if tipo == "unica":
         valido_hasta = ahora + dt.timedelta(hours=24)
