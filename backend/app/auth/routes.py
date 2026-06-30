@@ -13,6 +13,7 @@ import jwt
 from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db, limiter
+from app.config import Config
 from app.models.usuario import Usuario
 from app.auth.security import generar_token, token_required, revocar_token
 
@@ -60,7 +61,7 @@ def _verificar_token_temporal(token_str, proposito_esperado):
 
 # ── Login ──────────────────────────────────────────────────────
 @auth_bp.post("/login")
-@limiter.limit("5 per 15 minutes")
+@limiter.limit(lambda: Config.LOGIN_RATE_LIMIT)
 def login():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()

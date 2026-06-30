@@ -41,6 +41,10 @@ class Config:
     # Entorno: 'development' (default) o 'production'
     ENV = os.environ.get("SICAVS_ENV", "development")
 
+    # Límite de intentos de login. Estricto en producción (frena fuerza bruta);
+    # relajado en desarrollo para no estorbar durante las pruebas.
+    LOGIN_RATE_LIMIT = "5 per 15 minutes" if ENV == "production" else "100 per minute"
+
     # Token que usan los dispositivos de acceso (Raspberry Pi) para autenticarse
     # al validar tarjetas. En producción debe setearse a un valor secreto.
     DEVICE_TOKEN = os.environ.get("DEVICE_TOKEN", "sicavs-device-dev")
