@@ -2889,3 +2889,7 @@ table.data tbody tr:hover td { background: #f1f6fd; }
 button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide {
   vertical-align: middle;
 }
+
+/* ── Chip de abono de arreglo en Caja (distinto de cuota normal) ── */
+.caja-cuota-chip.arreglo { border-color: #7c3aed; color: #7c3aed; }
+.caja-cuota-chip.arreglo.on { background: #7c3aed; color: #fff; }

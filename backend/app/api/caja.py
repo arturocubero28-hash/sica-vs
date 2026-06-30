@@ -328,6 +328,27 @@ def buscar_cuenta(usuario_actual):
         for q2 in cuotas:
             cuotas_por_cuenta.setdefault(q2.cuenta_id, []).append(q2)
 
+    # Precargar abonos pendientes de arreglos ACTIVOS de esas cuentas, para que
+    # el cajero pueda cobrarlos junto con las cuotas normales (mismo flujo).
+    from app.models.cuenta import ArregloPago, AbonoArreglo
+    abonos_por_cuenta = {}
+    if cuenta_ids:
+        arreglos_act = (ArregloPago.query
+                        .filter(ArregloPago.cuenta_id.in_(cuenta_ids),
+                                ArregloPago.estado == "activo").all())
+        for arr in arreglos_act:
+            pend = [a for a in arr.abonos if a.estado in ("pendiente", "vencido")]
+            for a in sorted(pend, key=lambda x: x.numero):
+                abonos_por_cuenta.setdefault(arr.cuenta_id, []).append({
+                    "arreglo_id": str(arr.uuid_publico),
+                    "abono_id": str(a.uuid_publico),
+                    "numero": a.numero,
+                    "total_abonos": arr.num_abonos,
+                    "monto": float(a.monto),
+                    "fecha_pactada": a.fecha_pactada.isoformat(),
+                    "estado": a.estado,
+                })
+
     resultados = []
     for c in cuentas:
         identificador = c.unidad.identificador if c.unidad else ""
@@ -351,6 +372,7 @@ def buscar_cuenta(usuario_actual):
                 "monto": float(q2.monto),
                 "estado": q2.estado,
             } for q2 in pendientes],
+            "abonos_arreglo": abonos_por_cuenta.get(c.id, []),
         })
     return jsonify({"data": resultados})
 

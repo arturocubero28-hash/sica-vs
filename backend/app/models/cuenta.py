@@ -270,6 +270,7 @@ class Pago(db.Model):
     id                   = db.Column(db.BigInteger, primary_key=True)
     uuid_publico         = _uuid_col()
     cuota_id             = db.Column(db.BigInteger, db.ForeignKey("cuotas.id"), nullable=True)
+    abono_id             = db.Column(db.BigInteger, db.ForeignKey("abonos_arreglo.id"), nullable=True)
     cuenta_id            = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False, index=True)
     subido_por           = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
     metodo               = db.Column(db.String(20), nullable=False, default="transferencia")

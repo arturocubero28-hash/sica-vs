@@ -300,8 +300,34 @@ export interface PagoAdminDTO extends PagoDTO {
   unidad: string; periodo: string; mes_label: string;
 }
 
-export const misCuotas = () => request<CuotaDTO[]>("/cuotas/mias");
+export interface AbonoArregloDTO {
+  abono_id: string; arreglo_id: string; numero: number; total_abonos: number;
+  monto: number; fecha_pactada: string; estado: string;
+}
+export interface MisCuotasDTO {
+  cuotas: CuotaDTO[];
+  arreglo: { id: string; saldo_pendiente: number; abonos: AbonoArregloDTO[] } | null;
+}
+export const misCuotas = () => request<MisCuotasDTO>("/cuotas/mias");
 export const detalleCuota = (uuid: string) => request<CuotaDTO>(`/cuotas/mias/${uuid}`);
+
+export async function subirComprobanteAbono(
+  abonoUuid: string, archivo: File, monto: number, referencia: string
+): Promise<PagoDTO> {
+  const token = getToken();
+  const form = new FormData();
+  form.append("comprobante", archivo);
+  form.append("monto", String(monto));
+  form.append("referencia", referencia);
+  const res = await fetch(`${API_URL}/cuotas/abonos/${abonoUuid}/pagar`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || "Error al subir comprobante");
+  return json.data;
+}
 
 export async function subirComprobante(
   cuotaUuid: string, archivo: File, monto: number, referencia: string
@@ -572,10 +598,15 @@ export const editarUsuario = (uuid: string, body: {
 
 // ── CAJA ──────────────────────────────────────────────────────────────────────
 export interface CuotaPendienteCaja { cuota_id: string; mes_label: string; monto: number; estado: string; }
+export interface AbonoCajaDTO {
+  arreglo_id: string; abono_id: string; numero: number; total_abonos: number;
+  monto: number; fecha_pactada: string; estado: string;
+}
 export interface CuentaCajaDTO {
   cuenta_id: string; identificador: string; titular: string;
   residentes?: { id: string; nombre: string }[];
   cuotas_pendientes: CuotaPendienteCaja[];
+  abonos_arreglo?: AbonoCajaDTO[];
 }
 export interface SesionCajaDTO {
   id: string; estado: string; cajero: string; monto_inicial: number;

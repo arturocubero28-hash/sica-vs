@@ -205,6 +205,40 @@ def crear_arreglo(usuario_actual):
     cuenta.estado = "al_dia"
     cuenta.bloqueada = False
 
+    db.session.flush()
+
+    # ── Contabilizar la PRIMA (abono inicial) ────────────────────────────
+    # La prima es dinero que el residente entrega al momento de negociar el
+    # arreglo. Debe registrarse como un Pago real (aprobado, fecha de hoy)
+    # para que entre a caja y a los reportes financieros. Sin esto, la prima
+    # quedaba solo como un número en el arreglo y nunca se contabilizaba.
+    if abono_inicial > 0:
+        # Vincular a la sesión de caja abierta de quien crea el arreglo (si la hay)
+        sesion_id = None
+        try:
+            from app.models.caja import SesionCaja
+            ses = SesionCaja.query.filter_by(cajero_id=usuario_actual.id, estado="abierta").first()
+            if ses:
+                sesion_id = ses.id
+        except Exception:
+            pass
+        pago_prima = Pago(
+            cuota_id=None,
+            cuenta_id=cuenta.id,
+            subido_por=usuario_actual.id,
+            metodo=(data.get("metodo_prima") if data.get("metodo_prima") in METODOS_VENTANILLA else "efectivo"),
+            monto=abono_inicial,
+            referencia=f"Prima/abono inicial arreglo de pago",
+            estado="aprobado",
+            revisado_por=usuario_actual.id,
+            revisado_en=dt.datetime.now(dt.timezone.utc),
+            sesion_caja_id=sesion_id,
+        )
+        db.session.add(pago_prima)
+        db.session.flush()
+        from app.api.recibos import asignar_recibo
+        asignar_recibo(pago_prima)
+
     db.session.commit()
     return jsonify({"data": arreglo.to_dict(con_detalle=True)}), 201
 
@@ -213,9 +247,14 @@ def crear_arreglo(usuario_actual):
 # Cobrar un abono (en ventanilla)
 # ─────────────────────────────────────────────────────────────────────────────
 @arreglos_bp.post("/<uuid>/abonos/<abono_uuid>/cobrar")
-@roles_required("cajero", "admin", "super_admin")
+@roles_required("cajero", "super_admin")
 def cobrar_abono(usuario_actual, uuid, abono_uuid):
-    """Registra el pago de un abono. Body: { metodo, referencia }"""
+    """Registra el pago de un abono EN VENTANILLA (solo cajero).
+
+    El admin no cobra: solo crea y visualiza arreglos. Los abonos se cobran
+    desde Caja (cajero) o los paga el residente por comprobante (luego el
+    admin lo aprueba, igual que una cuota normal).
+    """
     arreglo = ArregloPago.query.filter_by(uuid_publico=uuid).first()
     if not arreglo:
         return _err("no_encontrado", "Arreglo no encontrado", 404)

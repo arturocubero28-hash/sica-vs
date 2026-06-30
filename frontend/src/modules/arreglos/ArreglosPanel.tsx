@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import {
-  listarArreglos, detalleArreglo, crearArreglo, cobrarAbono, cancelarArreglo,
+  listarArreglos, detalleArreglo, crearArreglo, cancelarArreglo,
   listarCuentas, cuotasPendientesCuenta,
   type ArregloDTO, type Cuenta, type CuotaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Landmark } from "lucide-react";
 
 const ESTADO_PILL: Record<string, string> = {
   activo: "green", completado: "", incumplido: "red", cancelado: "amber",
@@ -236,18 +236,7 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
 function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
   arreglo: ArregloDTO; onCerrar: () => void; onCambio: (a: ArregloDTO) => void;
 }) {
-  const [cobrando, setCobrando] = useState<string | null>(null);
-  const [metodo, setMetodo] = useState("efectivo");
   const [msg, setMsg] = useState("");
-
-  async function cobrar(abonoId: string) {
-    setCobrando(abonoId); setMsg("");
-    try {
-      const actualizado = await cobrarAbono(arreglo.id, abonoId, metodo);
-      onCambio(actualizado);
-    } catch (e) { setMsg((e as Error).message); }
-    finally { setCobrando(null); }
-  }
 
   async function cancelar() {
     const motivo = prompt("Motivo de la cancelación del arreglo:");
@@ -291,17 +280,14 @@ function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
         {/* Calendario de abonos */}
         <div className="sub" style={{ marginTop: 12 }}>Calendario de abonos</div>
         {arreglo.estado === "activo" && (
-          <div className="row" style={{ alignItems: "center", margin: "6px 0" }}>
-            <span className="muted small">Cobrar con:</span>
-            <select className="periodo-select" value={metodo} onChange={e => setMetodo(e.target.value)}>
-              <option value="efectivo">Efectivo</option>
-              <option value="tarjeta_pos">Tarjeta POS</option>
-            </select>
+          <div className="nota" style={{ marginTop: 6 }}>
+            <Landmark size={15} /> Los abonos se cobran en <b>Caja</b> (cajero) o el residente
+            los paga subiendo su comprobante desde la app. El administrador solo crea y supervisa el arreglo.
           </div>
         )}
         <div className="scroll-x">
           <table className="data">
-            <thead><tr><th>#</th><th>Vence</th><th>Monto</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>#</th><th>Vence</th><th>Monto</th><th>Estado</th></tr></thead>
             <tbody>
               {(arreglo.abonos || []).map(ab => (
                 <tr key={ab.id}>
@@ -312,13 +298,6 @@ function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
                     {ab.estado === "pagado" ? <span className="pill green">Pagado</span>
                       : ab.estado === "vencido" ? <span className="pill red">Vencido</span>
                       : <span className="pill amber">Pendiente</span>}
-                  </td>
-                  <td>
-                    {arreglo.estado === "activo" && ab.estado !== "pagado" && (
-                      <button className="mini" onClick={() => cobrar(ab.id)} disabled={cobrando === ab.id}>
-                        {cobrando === ab.id ? "…" : "Cobrar"}
-                      </button>
-                    )}
                   </td>
                 </tr>
               ))}

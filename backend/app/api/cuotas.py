@@ -47,7 +47,34 @@ def mis_cuotas(usuario_actual):
         .order_by(Cuota.periodo.desc())
         .all()
     )
-    return jsonify({"data": [c.to_dict() for c in cuotas]})
+
+    # Si la cuenta tiene un arreglo de pago activo, incluir sus abonos para que
+    # el residente pueda pagarlos por comprobante desde la app (igual que una
+    # cuota). Las cuotas originales quedan "en_arreglo" (congeladas); lo que se
+    # paga ahora son los abonos del calendario.
+    from app.models.cuenta import ArregloPago
+    arreglo = ArregloPago.query.filter_by(
+        cuenta_id=residente.cuenta_id, estado="activo"
+    ).first()
+    abonos = []
+    if arreglo:
+        for a in sorted(arreglo.abonos, key=lambda x: x.numero):
+            abonos.append({
+                "abono_id": str(a.uuid_publico),
+                "arreglo_id": str(arreglo.uuid_publico),
+                "numero": a.numero,
+                "total_abonos": arreglo.num_abonos,
+                "monto": float(a.monto),
+                "fecha_pactada": a.fecha_pactada.isoformat(),
+                "estado": a.estado,
+            })
+
+    return jsonify({"data": {
+        "cuotas": [c.to_dict() for c in cuotas],
+        "arreglo": ({"id": str(arreglo.uuid_publico),
+                     "saldo_pendiente": arreglo.saldo_pendiente(),
+                     "abonos": abonos} if arreglo else None),
+    }})
 
 
 # ── RESIDENTE: detalle de una cuota ──────────────────────────────────────────
@@ -122,7 +149,54 @@ def subir_comprobante(usuario_actual, uuid_cuota):
     return jsonify({"data": pago.to_dict()}), 201
 
 
-# ── ADMIN: servir imagen del comprobante ──────────────────────────────────────
+# ── RESIDENTE: subir comprobante de un ABONO de arreglo ───────────────────────
+@cuotas_bp.post("/abonos/<uuid_abono>/pagar")
+@token_required
+def subir_comprobante_abono(usuario_actual, uuid_abono):
+    """El residente sube el comprobante de un abono de su arreglo de pago.
+    Crea un Pago en revisión vinculado al abono; el admin lo aprueba luego."""
+    from app.models.cuenta import AbonoArreglo, ArregloPago
+    residente = Residente.query.filter_by(usuario_id=usuario_actual.id, activo=True).first()
+    if not residente:
+        return jsonify({"error": {"code": "SIN_CUENTA", "message": "No tenés cuenta asociada"}}), 404
+
+    abono = AbonoArreglo.query.filter_by(uuid_publico=uuid_abono).first()
+    if not abono:
+        return jsonify({"error": {"code": "NO_ENCONTRADO", "message": "Abono no encontrado"}}), 404
+    arreglo = ArregloPago.query.get(abono.arreglo_id)
+    if not arreglo or arreglo.cuenta_id != residente.cuenta_id:
+        return jsonify({"error": {"code": "NO_ENCONTRADO", "message": "Abono no encontrado"}}), 404
+    if abono.estado == "pagado":
+        return jsonify({"error": {"code": "YA_PAGADO", "message": "Ese abono ya está pagado"}}), 400
+
+    if "comprobante" not in request.files:
+        return jsonify({"error": {"code": "SIN_ARCHIVO", "message": "Adjuntá el comprobante"}}), 400
+    try:
+        monto = float(request.form.get("monto", ""))
+        if monto <= 0:
+            raise ValueError
+    except ValueError:
+        return jsonify({"error": {"code": "MONTO_INVALIDO", "message": "Indicá un monto válido"}}), 400
+
+    referencia = request.form.get("referencia", "")[:120]
+    nombre_archivo, error = guardar_imagen_segura(
+        request.files["comprobante"], _carpeta_comprobantes(), EXT_DOCUMENTO)
+    if error:
+        return jsonify({"error": {"code": "FORMATO_INVALIDO", "message": error}}), 400
+
+    pago = Pago(
+        cuota_id=None,
+        abono_id=abono.id,
+        cuenta_id=residente.cuenta_id,
+        subido_por=usuario_actual.id,
+        monto=monto,
+        referencia=referencia or f"Abono {abono.numero}/{arreglo.num_abonos}",
+        comprobante_archivo=nombre_archivo,
+        estado="en_revision",
+    )
+    db.session.add(pago)
+    db.session.commit()
+    return jsonify({"data": pago.to_dict()}), 201
 @cuotas_bp.get("/comprobantes/<nombre_archivo>")
 @roles_required("admin", "super_admin", "cajero", "desarrollador")
 def ver_comprobante(usuario_actual, nombre_archivo):
@@ -197,17 +271,36 @@ def revisar_pago(usuario_actual, uuid_pago):
     pago.revisado_en = dt.datetime.utcnow()
 
     if accion == "aprobar":
-        pago.cuota.estado = "pagada"
-        # Desbloqueo automático de la cuenta
         cuenta = pago.cuenta
-        cuenta.estado = "al_dia"
-        cuenta.bloqueada = False
+        if pago.abono_id:
+            # Pago de un abono de arreglo: marcar el abono pagado y, si se
+            # completó el arreglo, pasar las cuotas congeladas a pagadas.
+            from app.models.cuenta import AbonoArreglo, ArregloPago
+            abono = AbonoArreglo.query.get(pago.abono_id)
+            if abono:
+                abono.estado = "pagado"
+                abono.pagado_en = dt.datetime.utcnow()
+                abono.pago_id = pago.id
+                arr = ArregloPago.query.get(abono.arreglo_id)
+                if arr and not [a for a in arr.abonos if a.estado in ("pendiente", "vencido")]:
+                    arr.estado = "completado"
+                    arr.completado_en = dt.datetime.utcnow()
+                    arr.motivo_cierre = "Todos los abonos pagados"
+                    for c in arr.cuotas:
+                        c.estado = "pagada"
+        elif pago.cuota:
+            pago.cuota.estado = "pagada"
+        # Desbloqueo automático de la cuenta
+        if cuenta:
+            cuenta.estado = "al_dia"
+            cuenta.bloqueada = False
         # Asignar número de recibo
         from app.api.recibos import asignar_recibo
         asignar_recibo(pago)
     else:
         # Rechazado: la cuota vuelve a pendiente para que el residente reintente
-        pago.cuota.estado = "pendiente"
+        if pago.cuota:
+            pago.cuota.estado = "pendiente"
 
     db.session.commit()
     return jsonify({"data": pago.to_dict()})

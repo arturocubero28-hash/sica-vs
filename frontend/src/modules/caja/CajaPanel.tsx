@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   estadoCaja, abrirCaja, saldoApertura, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
   reportarDescuadre, solicitarSalida, solicitarIngreso, urlConstanciaCaja, urlReciboPDF,
-  listarTiposTarjeta, venderTarjetaCaja,
+  listarTiposTarjeta, venderTarjetaCaja, cobrarAbono,
   type SesionCajaDTO, type CuentaCajaDTO, type TipoTarjetaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
@@ -171,7 +171,7 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState<CuentaCajaDTO[]>([]);
   const [buscando, setBuscando] = useState(false);
-  const [seleccion, setSeleccion] = useState<{ cuotaId: string; label: string; monto: number } | null>(null);
+  const [seleccion, setSeleccion] = useState<{ cuotaId?: string; arregloId?: string; abonoId?: string; label: string; monto: number } | null>(null);
   const [metodo, setMetodo] = useState("efectivo");
   const [referencia, setReferencia] = useState("");
   const [pagaCon, setPagaCon] = useState("");
@@ -192,10 +192,18 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
     if (!seleccion) return;
     setMsg("");
     try {
-      const res = await registrarPagoCaja({ cuota_id: seleccion.cuotaId, metodo, referencia });
+      let reciboUuid = "", reciboNum: number | undefined;
+      if (seleccion.abonoId && seleccion.arregloId) {
+        // Cobro de un abono de arreglo de pago
+        await cobrarAbono(seleccion.arregloId, seleccion.abonoId, metodo, referencia);
+        // El abono no devuelve un pago con recibo directo; mostramos confirmación simple
+      } else if (seleccion.cuotaId) {
+        const res = await registrarPagoCaja({ cuota_id: seleccion.cuotaId, metodo, referencia });
+        reciboUuid = res.pago.id; reciboNum = res.pago.numero_recibo;
+      }
       const vueltoFinal = metodo === "efectivo" && montoPagaCon > 0 ? vuelto : 0;
       setUltimoRecibo({
-        uuid: res.pago.id, numero: res.pago.numero_recibo,
+        uuid: reciboUuid, numero: reciboNum,
         label: seleccion.label, monto: seleccion.monto, vuelto: vueltoFinal,
       });
       setMsg("");
@@ -244,7 +252,7 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
           <div className="caja-resultado-head">
             <b>{c.identificador}</b> · {c.titular}
           </div>
-          {c.cuotas_pendientes.length === 0 ? (
+          {c.cuotas_pendientes.length === 0 && (!c.abonos_arreglo || c.abonos_arreglo.length === 0) ? (
             <span className="muted small">Sin cuotas pendientes</span>
           ) : (
             <div className="caja-cuotas">
@@ -253,6 +261,13 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
                   className={`caja-cuota-chip ${seleccion?.cuotaId === q.cuota_id ? "on" : ""}`}
                   onClick={() => setSeleccion({ cuotaId: q.cuota_id, label: `${c.identificador} · ${q.mes_label}`, monto: q.monto })}>
                   {q.mes_label} — {L(q.monto)}
+                </button>
+              ))}
+              {(c.abonos_arreglo || []).map(a => (
+                <button key={a.abono_id}
+                  className={`caja-cuota-chip arreglo ${seleccion?.abonoId === a.abono_id ? "on" : ""}`}
+                  onClick={() => setSeleccion({ arregloId: a.arreglo_id, abonoId: a.abono_id, label: `${c.identificador} · Abono ${a.numero}/${a.total_abonos}`, monto: a.monto })}>
+                  Abono {a.numero}/{a.total_abonos} — {L(a.monto)}
                 </button>
               ))}
             </div>
