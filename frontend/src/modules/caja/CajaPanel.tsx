@@ -7,6 +7,7 @@ import {
 } from "../../api/client";
 import { L } from "../../utils/formato";
 import { LectorTarjeta } from "../unidades/LectorTarjeta";
+import { AlertTriangle, Banknote, CreditCard, FileText, LockOpen, Receipt, Ticket } from "lucide-react";
 
 export function CajaPanel() {
   const [sesion, setSesion] = useState<SesionCajaDTO | null>(null);
@@ -33,11 +34,11 @@ export function CajaPanel() {
         </div>
         <div className="caja-acciones">
           <button className="caja-accion-primaria" onClick={() => setVendiendo(true)}>
-            <span className="caja-accion-icono">🎟️</span> Vender tarjeta
+            <span className="caja-accion-icono"><Ticket size={16} /></span> Vender tarjeta
           </button>
           <a className="caja-accion-secundaria" href={urlConstanciaCaja(sesion.id)}
             target="_blank" rel="noreferrer">
-            <span className="caja-accion-icono">📄</span> Constancia
+            <span className="caja-accion-icono"><FileText size={16} /></span> Constancia
           </a>
           <button className="caja-accion-cerrar" onClick={() => setCerrando(true)}>
             Cerrar caja
@@ -134,7 +135,7 @@ function AbrirCaja({ onAbierta }: { onAbierta: () => void }) {
   return (
     <div className="caja-abrir">
       <div className="dash-card" style={{ maxWidth: 460, margin: "0 auto" }}>
-        <div className="caja-abrir-icon">🔓</div>
+        <div className="caja-abrir-icon"><LockOpen size={16} /></div>
         <h2 style={{ textAlign: "center", color: "var(--marca-azul)" }}>Abrir caja</h2>
         {cargando ? (
           <p className="muted" style={{ textAlign: "center" }}>Calculando fondo de apertura…</p>
@@ -205,7 +206,7 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
 
   return (
     <div className="dash-card pos-cobro-card">
-      <h3 className="pos-cobro-titulo">💵 Cobrar en ventanilla</h3>
+      <h3 className="pos-cobro-titulo"><Banknote size={16} /> Cobrar en ventanilla</h3>
       <div className="caja-buscar-row pos-buscar">
         <input placeholder="Buscar casa o titular…" value={busqueda} autoFocus
           onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === "Enter" && buscar()} />
@@ -231,7 +232,7 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
           <div className="recibo-cobro-acciones">
             <a className="cuota-btn-pagar" href={urlReciboPDF(ultimoRecibo.uuid)} target="_blank" rel="noreferrer"
               style={{ textDecoration: "none", textAlign: "center" }}>
-              🧾 Imprimir recibo
+              <Receipt size={16} /> Imprimir recibo
             </a>
             <button className="ghost" onClick={() => setUltimoRecibo(null)}>Cobrar otro</button>
           </div>
@@ -409,7 +410,7 @@ function CerrarCaja({ sesion, onCancelar, onCerrada }: {
 
         {sesion.salidas_pendientes && sesion.salidas_pendientes > 0 && (
           <div className="arqueo-dif alerta" style={{ marginBottom: 10 }}>
-            ⚠️ Tenés {sesion.salidas_pendientes} salida(s)/ingreso(s) sin autorizar. El arqueo puede no cuadrar.
+            <AlertTriangle size={16} /> Tenés {sesion.salidas_pendientes} salida(s)/ingreso(s) sin autorizar. El arqueo puede no cuadrar.
           </div>
         )}
 
@@ -676,7 +677,7 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
   return (
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body modal-venta" onClick={e => e.stopPropagation()}>
-        <div className="modal-head"><h3>🎟️ Vender tarjeta</h3>
+        <div className="modal-head"><h3><Ticket size={16} /> Vender tarjeta</h3>
           <button className="ghost mini" onClick={onCerrar}>✕</button></div>
 
         {/* Paso 1: tipo de tarjeta */}
@@ -761,9 +762,9 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
           <label className="venta-label">4. Método de cobro</label>
           <div className="caja-cobro-metodo">
             <button type="button" className={metodo === "efectivo" ? "sel" : ""}
-              onClick={() => setMetodo("efectivo")}>💵 Efectivo</button>
+              onClick={() => setMetodo("efectivo")}><Banknote size={16} /> Efectivo</button>
             <button type="button" className={metodo === "tarjeta_pos" ? "sel" : ""}
-              onClick={() => setMetodo("tarjeta_pos")}>💳 POS</button>
+              onClick={() => setMetodo("tarjeta_pos")}><CreditCard size={16} /> POS</button>
           </div>
         </div>
 

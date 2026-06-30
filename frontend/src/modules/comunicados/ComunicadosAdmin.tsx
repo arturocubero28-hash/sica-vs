@@ -3,6 +3,7 @@ import {
   listarComunicados, crearComunicado, eliminarComunicado,
   urlImagenComunicado, type ComunicadoDTO,
 } from "../../api/client";
+import { Image, Megaphone } from "lucide-react";
 
 export function ComunicadosAdmin() {
   const [lista, setLista] = useState<ComunicadoDTO[]>([]);
@@ -33,7 +34,7 @@ export function ComunicadosAdmin() {
         <p className="muted">Cargando…</p>
       ) : lista.length === 0 ? (
         <div className="cuota-vacia">
-          <div className="cuota-vacia-icon">📣</div>
+          <div className="cuota-vacia-icon"><Megaphone size={16} /></div>
           <p>No hay comunicados publicados.</p>
         </div>
       ) : (
@@ -124,7 +125,7 @@ function FormComunicado({ onCerrar, onCreado }: { onCerrar: () => void; onCreado
               {preview
                 ? <img src={preview} alt="Vista previa" className="preview-img" />
                 : <div className="upload-placeholder">
-                    <span className="upload-icon">🖼️</span>
+                    <span className="upload-icon"><Image size={16} /></span>
                     <span>{imagen ? imagen.name : "Toca para adjuntar imagen"}</span>
                     <span className="muted small">PNG, JPG, WEBP o GIF</span>
                   </div>

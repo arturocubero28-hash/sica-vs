@@ -5,6 +5,7 @@ import {
   type MetricasDTO, type VisitaTablaDTO, type VisitaActivaDTO, type CasaMoraDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
+import { Building2, Car, Circle, FileText, PartyPopper, Search, Users } from "lucide-react";
 
 function horaCorta(iso?: string): string {
   if (!iso) return "—";
@@ -59,7 +60,7 @@ export function DashboardAdmin() {
     activa: "green", adentro: "green", salio: "", expirada: "", revocada: "red",
   };
   const estadoLabel: Record<string, string> = {
-    activa: "Activa", adentro: "Adentro 🟢", salio: "Salió ✓",
+    activa: "Activa", adentro: "Adentro <Circle size={16} />", salio: "Salió ✓",
     expirada: "Expirada", revocada: "Cancelada",
   };
 
@@ -83,7 +84,7 @@ export function DashboardAdmin() {
           <span className="hero-valor">{m?.adentro_ahora ?? "—"}</span>
           <span className="hero-hint">Toca para ver el detalle, fotos y filtrar por placa →</span>
         </div>
-        <div className="hero-icon">🚗</div>
+        <div className="hero-icon"><Car size={16} /></div>
       </button>
 
       {/* Métricas secundarias relevantes */}
@@ -129,15 +130,15 @@ export function DashboardAdmin() {
         <div className="padron-titulo muted small">Padrón de la residencial</div>
         <div className="padron-grid">
           <div className="padron-item">
-            <span className="padron-icon">🏘️</span>
+            <span className="padron-icon"><Building2 size={16} /></span>
             <div><b>{m?.total_unidades ?? "—"}</b><span>Casas / Edificios</span></div>
           </div>
           <div className="padron-item">
-            <span className="padron-icon">📄</span>
+            <span className="padron-icon"><FileText size={16} /></span>
             <div><b>{m?.total_cuentas ?? "—"}</b><span>Cuentas</span></div>
           </div>
           <div className="padron-item">
-            <span className="padron-icon">👥</span>
+            <span className="padron-icon"><Users size={16} /></span>
             <div><b>{m?.total_residentes ?? "—"}</b><span>Residentes</span></div>
           </div>
         </div>
@@ -153,7 +154,7 @@ export function DashboardAdmin() {
             {cargandoMora ? (
               <p className="muted">Cargando…</p>
             ) : modalMora.length === 0 ? (
-              <div className="metric-modal-empty">No hay cuentas en mora. 🎉</div>
+              <div className="metric-modal-empty">No hay cuentas en mora. <PartyPopper size={16} /></div>
             ) : (
               <div className="metric-modal-lista">
                 <table className="data">
@@ -210,7 +211,7 @@ function VisitasAdentro({ onVolver, totalEsperado }: { onVolver: () => void; tot
 
       {/* Buscador — caso del carro mal estacionado */}
       <div className="filtro-box">
-        <span className="filtro-icon">🔍</span>
+        <span className="filtro-icon"><Search size={16} /></span>
         <input
           placeholder="Filtrar por placa, nombre, unidad o empresa…"
           value={filtro}
@@ -244,7 +245,7 @@ function VisitasAdentro({ onVolver, totalEsperado }: { onVolver: () => void; tot
                 <span><b>Autorizó QR:</b> {v.residente}</span>
               </div>
               <div className="activa-horas">
-                <span>🟢 Entró: {horaCorta(v.hora_entrada)}</span>
+                <span><Circle size={16} /> Entró: {horaCorta(v.hora_entrada)}</span>
                 <span className="muted small">Ver detalle →</span>
               </div>
             </div>

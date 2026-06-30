@@ -62,7 +62,7 @@ export function UsuariosAdmin() {
 
       <div className="lista-card">
       <div className="casas-filtros">
-        <input className="casas-buscar" placeholder="🔍 Buscar por nombre o correo…"
+        <input className="casas-buscar" placeholder="Buscar por nombre o correo…"
           value={busqueda} onChange={e => setBusqueda(e.target.value)} />
         <select className="periodo-select" value={filtroRol} onChange={e => setFiltroRol(e.target.value)}>
           <option value="">Todos los roles</option>

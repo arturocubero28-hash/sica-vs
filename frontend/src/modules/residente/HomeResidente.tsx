@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { listarComunicados, urlImagenComunicado, type ComunicadoDTO } from "../../api/client";
+import { Megaphone } from "lucide-react";
 
 export function HomeResidente() {
   const [comunicados, setComunicados] = useState<ComunicadoDTO[]>([]);
@@ -21,7 +22,7 @@ export function HomeResidente() {
 
       {comunicados.length === 0 ? (
         <div className="cuota-vacia">
-          <div className="cuota-vacia-icon">📣</div>
+          <div className="cuota-vacia-icon"><Megaphone size={16} /></div>
           <p>No hay comunicados por ahora.</p>
           <p className="muted small">Aquí verás los anuncios de la administración.</p>
         </div>

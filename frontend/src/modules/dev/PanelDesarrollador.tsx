@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO } from "../../api/client";
+import { AlertTriangle, BarChart3, Construction, Key, Lock, Monitor, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
   const [m, setM] = useState<DevMetricasDTO | null>(null);
@@ -64,12 +65,12 @@ export function PanelDesarrollador() {
       </div>
 
       <div className="hist-tabs">
-        <button className={`hist-tab ${tab === "salud" ? "on" : ""}`} onClick={() => setTab("salud")}>🖥️ Salud del sistema</button>
-        <button className={`hist-tab ${tab === "logs" ? "on" : ""}`} onClick={() => setTab("logs")}>🔍 Logs de auditoría</button>
-        <button className={`hist-tab ${tab === "codigo" ? "on" : ""}`} onClick={() => setTab("codigo")}>📊 Métricas de código</button>
-        <button className={`hist-tab ${tab === "seguridad" ? "on" : ""}`} onClick={() => setTab("seguridad")}>🛡️ Seguridad</button>
-        <button className={`hist-tab ${tab === "trancas" ? "on" : ""}`} onClick={() => setTab("trancas")}>🚧 Trancas</button>
-        <button className={`hist-tab ${tab === "pis" ? "on" : ""}`} onClick={() => setTab("pis")}>📡 Raspberry Pi</button>
+        <button className={`hist-tab ${tab === "salud" ? "on" : ""}`} onClick={() => setTab("salud")}><Monitor size={16} /> Salud del sistema</button>
+        <button className={`hist-tab ${tab === "logs" ? "on" : ""}`} onClick={() => setTab("logs")}><Search size={16} /> Logs de auditoría</button>
+        <button className={`hist-tab ${tab === "codigo" ? "on" : ""}`} onClick={() => setTab("codigo")}><BarChart3 size={16} /> Métricas de código</button>
+        <button className={`hist-tab ${tab === "seguridad" ? "on" : ""}`} onClick={() => setTab("seguridad")}><Shield size={16} /> Seguridad</button>
+        <button className={`hist-tab ${tab === "trancas" ? "on" : ""}`} onClick={() => setTab("trancas")}><Construction size={16} /> Trancas</button>
+        <button className={`hist-tab ${tab === "pis" ? "on" : ""}`} onClick={() => setTab("pis")}><Router size={16} /> Raspberry Pi</button>
       </div>
 
       {tab === "salud" && (
@@ -111,7 +112,7 @@ export function PanelDesarrollador() {
             {m.sistema?.error ? (
               <div className="dash-card">
                 <h3>Recursos del servidor</h3>
-                <p className="muted small">⚠️ {m.sistema.error}</p>
+                <p className="muted small"><AlertTriangle size={16} /> {m.sistema.error}</p>
               </div>
             ) : m.sistema?.disco && (
               <div className="dash-card">
@@ -188,7 +189,7 @@ export function PanelDesarrollador() {
           </div>
 
           {cargandoLogs ? <p className="muted">Cargando logs…</p> : logs.length === 0 ? (
-            <div className="cuota-vacia"><div className="cuota-vacia-icon">🔍</div><p>Sin logs que coincidan.</p></div>
+            <div className="cuota-vacia"><div className="cuota-vacia-icon"><Search size={16} /></div><p>Sin logs que coincidan.</p></div>
           ) : (
             <>
               <div className="dash-card" style={{ padding: 0 }}>
@@ -393,7 +394,7 @@ function PanelSeguridad() {
       {/* Nivel de alerta */}
       <div className="dash-card" style={{ borderLeft: `5px solid ${alerta.color}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 28 }}>🛡️</span>
+          <span style={{ fontSize: 28 }}><Shield size={16} /></span>
           <div>
             <div style={{ fontSize: 13, color: "#6b7280" }}>Nivel de alerta de seguridad</div>
             <div style={{ fontSize: 22, fontWeight: 700, color: alerta.color }}>{alerta.txt}</div>
@@ -405,17 +406,17 @@ function PanelSeguridad() {
       {/* Tarjetas resumen */}
       <div className="metric-grid">
         <div className="metric-card rojo">
-          <div className="metric-top"><span className="metric-label">Logins fallidos (24h)</span><span className="metric-icon">⚠</span></div>
+          <div className="metric-top"><span className="metric-label">Logins fallidos (24h)</span><span className="metric-icon"><AlertTriangle size={16} /></span></div>
           <div className="metric-valor" style={{ fontSize: 24 }}>{s.login_fallidos_24h}</div>
           <span className="muted small">{s.login_fallidos_7d} en 7 días</span>
         </div>
         <div className="metric-card naranja">
-          <div className="metric-top"><span className="metric-label">Bloqueos por saturación (24h)</span><span className="metric-icon">🚦</span></div>
+          <div className="metric-top"><span className="metric-label">Bloqueos por saturación (24h)</span><span className="metric-icon"><TrafficCone size={16} /></span></div>
           <div className="metric-valor" style={{ fontSize: 24 }}>{s.bloqueos_saturacion_24h}</div>
           <span className="muted small">{s.bloqueos_saturacion_7d} en 7 días</span>
         </div>
         <div className="metric-card azul">
-          <div className="metric-top"><span className="metric-label">Accesos no autorizados (24h)</span><span className="metric-icon">🔒</span></div>
+          <div className="metric-top"><span className="metric-label">Accesos no autorizados (24h)</span><span className="metric-icon"><Lock size={16} /></span></div>
           <div className="metric-valor" style={{ fontSize: 24 }}>{s.errores_autorizacion_24h}</div>
           <span className="muted small">tokens inválidos / sin permiso</span>
         </div>
@@ -443,7 +444,7 @@ function PanelSeguridad() {
       {/* Ataques a cuentas privilegiadas */}
       {s.ataques_privilegiados.length > 0 && (
         <div className="dash-card" style={{ borderLeft: "5px solid #c81e1e" }}>
-          <h3 style={{ color: "#c81e1e" }}>⚠ Intentos contra cuentas privilegiadas</h3>
+          <h3 style={{ color: "#c81e1e" }}><AlertTriangle size={16} /> Intentos contra cuentas privilegiadas</h3>
           <p className="muted small">Logins fallidos contra cuentas admin/desarrollador en los últimos 7 días. Prestar atención.</p>
           <div className="scroll-x">
             <table className="data">
@@ -463,7 +464,7 @@ function PanelSeguridad() {
       <div className="dash-card">
         <h3>IPs con más logins fallidos (7 días)</h3>
         {s.top_ips.length === 0 ? (
-          <p className="muted">No hay logins fallidos registrados. 👍</p>
+          <p className="muted">No hay logins fallidos registrados. <ThumbsUp size={16} /></p>
         ) : (
           <div className="scroll-x">
             <table className="data">
@@ -622,7 +623,7 @@ function ConfigTrancas() {
   return (
     <div className="dev-trancas">
       <div className="dev-trancas-aviso">
-        <strong>⚠️ Configuración sensible.</strong> Estos valores controlan el hardware físico de las trancas.
+        <strong><AlertTriangle size={16} /> Configuración sensible.</strong> Estos valores controlan el hardware físico de las trancas.
         El <code>pin GPIO</code> es el pin de la Raspberry Pi que acciona el relay, y el <code>pulso</code> es
         cuántos milisegundos se mantiene el contacto seco. Un valor incorrecto puede impedir que una tranca abra.
       </div>
@@ -671,7 +672,7 @@ function ConfigTrancas() {
         grupos.map((g) => (
           <div key={g.punto || "sin-punto"} className="dev-punto-grupo">
             <div className="dev-punto-titulo">
-              <span className="dev-punto-ic">📡</span>
+              <span className="dev-punto-ic"><Router size={16} /></span>
               <span>{g.punto || "Sin punto asignado"}</span>
               <span className="dev-punto-sub">{g.punto ? `Raspberry Pi · ${g.items.length} dispositivo(s)` : `${g.items.length} acceso(s) sin asignar a una Pi`}</span>
             </div>
@@ -727,7 +728,7 @@ function ConfigTrancas() {
                       <button className="dev-tranca-btn" disabled={guardando === a.id} onClick={() => guardar(a)}>
                         {guardando === a.id ? "Guardando…" : "Guardar"}
                       </button>
-                      <button className="dev-tranca-del" onClick={() => pedirBorrar(a)} title="Eliminar acceso">🗑</button>
+                      <button className="dev-tranca-del" onClick={() => pedirBorrar(a)} title="Eliminar acceso"><Trash2 size={16} /></button>
                     </div>
                   </div>
                 );
@@ -744,7 +745,7 @@ function ConfigTrancas() {
             <p>¿Seguro que querés eliminar <strong>{borrar.acceso.nombre}</strong>?</p>
             {borrar.eventos > 0 && (
               <div className="dev-tranca-msg err" style={{ marginBottom: 14 }}>
-                ⚠️ Este acceso tiene <strong>{borrar.eventos}</strong> registro(s) en el historial de entradas/salidas.
+                <AlertTriangle size={16} /> Este acceso tiene <strong>{borrar.eventos}</strong> registro(s) en el historial de entradas/salidas.
                 Si lo eliminás, esos registros también se borrarán. Si solo querés dejar de usarlo, mejor marcalo como Inactiva.
               </div>
             )}
@@ -826,7 +827,7 @@ function ConfigPis() {
   return (
     <div className="dev-trancas">
       <div className="dev-trancas-aviso">
-        <strong>📡 Raspberry Pi de los accesos.</strong> Cada punto de acceso tiene su propia Pi, que descarga
+        <strong><Router size={16} /> Raspberry Pi de los accesos.</strong> Cada punto de acceso tiene su propia Pi, que descarga
         su copia de residentes con permiso y valida localmente. Cada Pi se identifica con un <code>token</code> único
         y secreto. El <code>punto de acceso</code> debe coincidir con el de las trancas de ese punto.
       </div>
@@ -859,7 +860,7 @@ function ConfigPis() {
           </div>
           {puntos.length === 0 && (
             <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>
-              No hay puntos de acceso todavía. Primero creá trancas con su punto en la pestaña 🚧 Trancas.
+              No hay puntos de acceso todavía. Primero creá trancas con su punto en la pestaña <Construction size={16} /> Trancas.
             </div>
           )}
         </div>
@@ -896,11 +897,11 @@ function ConfigPis() {
                 <div><span>Última sincronización:</span> {d.ultima_sync ? new Date(d.ultima_sync).toLocaleString() : "nunca"}</div>
               </div>
               <div className="dev-pi-acciones">
-                <button className="dev-tranca-toggle on" onClick={() => regenerar(d)} title="Generar un token nuevo">🔑 Token</button>
+                <button className="dev-tranca-toggle on" onClick={() => regenerar(d)} title="Generar un token nuevo"><Key size={16} /> Token</button>
                 <button className={`dev-tranca-toggle ${d.activo ? "off" : "on"}`} onClick={() => alternarActivo(d)}>
                   {d.activo ? "Revocar" : "Reactivar"}
                 </button>
-                <button className="dev-tranca-del" onClick={() => eliminar(d)} title="Eliminar">🗑</button>
+                <button className="dev-tranca-del" onClick={() => eliminar(d)} title="Eliminar"><Trash2 size={16} /></button>
               </div>
             </div>
           ))}

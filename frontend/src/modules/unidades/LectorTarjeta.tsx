@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Contact } from "lucide-react";
 
 /**
  * Componente que captura el UID de una tarjeta RFID desde un lector USB.
@@ -61,7 +62,7 @@ export function LectorTarjeta({ onLeida, valor }: {
     <div className="lector-tarjeta">
       {estado === "idle" && !valor && (
         <button className="lector-btn" onClick={activarLector} type="button">
-          📇 Leer tarjeta con el lector
+          <Contact size={16} /> Leer tarjeta con el lector
         </button>
       )}
 

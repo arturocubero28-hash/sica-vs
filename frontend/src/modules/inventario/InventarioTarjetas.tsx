@@ -4,6 +4,7 @@ import {
   type TipoTarjetaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
+import { Car, Footprints } from "lucide-react";
 
 export function InventarioTarjetas() {
   const [tipos, setTipos] = useState<TipoTarjetaDTO[]>([]);
@@ -53,7 +54,7 @@ export function InventarioTarjetas() {
                   <td>{t.nombre}</td>
                   <td>
                     <span className={`pill ${t.tipo_acceso === "peatonal" ? "" : "green"}`}>
-                      {t.tipo_acceso === "peatonal" ? "🚶 Corto alcance" : "🚗 Largo alcance"}
+                      {t.tipo_acceso === "peatonal" ? "<Footprints size={16} /> Corto alcance" : "<Car size={16} /> Largo alcance"}
                     </span>
                   </td>
                   <td>{L(t.precio)}</td>
@@ -116,8 +117,8 @@ function ModalNuevoTipo({ onCerrar, onCreado }: { onCerrar: () => void; onCreado
             <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej. Tarjeta vehicular UHF" /></div>
           <div className="form-field"><label>Tipo de acceso</label>
             <select value={tipoAcceso} onChange={e => setTipoAcceso(e.target.value)}>
-              <option value="vehicular">🚗 Largo alcance (vehicular)</option>
-              <option value="peatonal">🚶 Corto alcance (peatonal)</option>
+              <option value="vehicular"><Car size={16} /> Largo alcance (vehicular)</option>
+              <option value="peatonal"><Footprints size={16} /> Corto alcance (peatonal)</option>
             </select></div>
           <div className="form-field"><label>Precio de venta (L)</label>
             <input type="number" value={precio} onChange={e => setPrecio(e.target.value)} placeholder="0.00" /></div>

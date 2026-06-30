@@ -3,6 +3,7 @@ import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesion
   registrarHuella, listarCredencialesHuella, eliminarCredencialHuella, soportaHuella,
   type Usuario, type SesionDTO, type CredencialWebAuthnDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
+import { Fingerprint } from "lucide-react";
 
 export function MiPerfil() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -218,7 +219,7 @@ function HuellaDigital() {
 
   return (
     <div className="dash-card">
-      <h3>🔐 Ingreso con huella</h3>
+      <h3><Fingerprint size={16} /> Ingreso con huella</h3>
       {!soportado ? (
         <p className="muted small">Este dispositivo o navegador no soporta ingreso con huella.</p>
       ) : (

@@ -6,6 +6,7 @@ import {
   type SesionCajaDTO, type ResumenCajaDTO, type DescuadreDTO, type SalidaCajaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
+import { FileText } from "lucide-react";
 
 export function SupervisionCaja() {
   const [sesiones, setSesiones] = useState<SesionCajaDTO[]>([]);
@@ -202,7 +203,7 @@ export function SupervisionCaja() {
                     <td style={{ display: "flex", gap: 6 }}>
                       <button className="mini" onClick={async () => setDetalle(await detalleSesionCaja(s.id))}>Ver</button>
                       <a className="mini" href={urlConstanciaCaja(s.id)} target="_blank" rel="noreferrer"
-                        style={{ textDecoration: "none" }}>📄 PDF</a>
+                        style={{ textDecoration: "none" }}><FileText size={16} /> PDF</a>
                     </td>
                   </tr>
                 ))}

@@ -7,6 +7,7 @@ import {
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
+import { Building, Car, Footprints, Home, Pencil, User } from "lucide-react";
 
 export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
   const [tab, setTab] = useState<"cuentas" | "nueva" | "tarifas">("cuentas");
@@ -92,7 +93,7 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
       <div className="casas-filtros">
         <input
           className="casas-buscar"
-          placeholder="🔍 Buscar por casa, número o titular…"
+          placeholder="Buscar por casa, número o titular…"
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
         />
@@ -324,14 +325,14 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
                 setNuevaUnidadTipo("casa"); setModoUnidad("nueva");
                 setUnidadId(""); setBusqueda(""); setNuevaUnidadId("");
               }}>
-              🏠 Casa
+              <Home size={16} /> Casa
             </button>
             <button type="button" className={nuevaUnidadTipo === "edificio" ? "on" : ""}
               onClick={() => {
                 setNuevaUnidadTipo("edificio"); setModoUnidad("nueva");
                 setUnidadId(""); setBusqueda(""); setNuevaUnidadId("");
               }}>
-              🏢 Edificio
+              <Building size={16} /> Edificio
             </button>
           </div>
 
@@ -541,7 +542,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         {mostrarAgregar && (
         <div className="agregar-miembro-card">
           <div className="agregar-miembro-head">
-            <span className="agregar-miembro-icon">👤</span>
+            <span className="agregar-miembro-icon"><User size={16} /></span>
             <div>
               <h4>Agregar nuevo miembro</h4>
               <span className="muted small">Registrá un familiar o dependiente de esta casa. Solo el nombre y el correo son obligatorios.</span>
@@ -595,7 +596,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
                 <td>{t.asignada_a}</td>
                 <td>
                   <span className={`pill ${t.tipo_acceso === "peatonal" ? "" : "green"}`}>
-                    {t.tipo_acceso === "peatonal" ? "🚶 Peatonal" : "🚗 Vehicular"}
+                    {t.tipo_acceso === "peatonal" ? "<Footprints size={16} /> Peatonal" : "<Car size={16} /> Vehicular"}
                   </span>
                 </td>
                 <td><span className="pill green">{t.estado}</span></td>
@@ -626,11 +627,11 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
             <span className="muted small">Tipo de acceso:</span>
             <button type="button" className={tipoAcceso === "vehicular" ? "on" : ""}
               onClick={() => setTipoAcceso("vehicular")}>
-              🚗 Vehicular
+              <Car size={16} /> Vehicular
             </button>
             <button type="button" className={tipoAcceso === "peatonal" ? "on" : ""}
               onClick={() => setTipoAcceso("peatonal")}>
-              🚶 Peatonal
+              <Footprints size={16} /> Peatonal
             </button>
           </div>
           <p className="muted small" style={{ margin: "4px 0 8px" }}>
@@ -717,7 +718,7 @@ function FilaResidente({ residente, onActualizado }: {
                 <Dato label="Contacto emergencia" valor={residente.contacto_emergencia_nombre} />
                 <Dato label="Tel. emergencia" valor={residente.contacto_emergencia_telefono} />
               </div>
-              <button className="mini" onClick={() => setEditando(true)}>✏️ Editar información</button>
+              <button className="mini" onClick={() => setEditando(true)}><Pencil size={16} /> Editar información</button>
             </>
           ) : (
             <div className="datos-editar">

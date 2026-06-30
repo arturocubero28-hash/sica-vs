@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { historialAccesos, historialPagos, historialTarjetas, urlFotoGuardia, urlReciboPDF, urlComprobante, type HistorialDTO, type HistorialPagosDTO, type HistorialTarjetasDTO, type EventoHistorialDTO } from "../../api/client";
 import { L } from "../../utils/formato";
+import { Camera, Car, DollarSign, Footprints, IdCard, Paperclip, QrCode, Receipt, ScrollText } from "lucide-react";
 
 export function HistorialAccesos() {
   const [tab, setTab] = useState<"accesos" | "tarjetas" | "pagos">("accesos");
@@ -11,13 +12,13 @@ export function HistorialAccesos() {
 
       <div className="hist-tabs">
         <button className={`hist-tab ${tab === "accesos" ? "on" : ""}`} onClick={() => setTab("accesos")}>
-          🎫 Accesos de visitas
+          <QrCode size={16} /> Accesos de visitas
         </button>
         <button className={`hist-tab ${tab === "tarjetas" ? "on" : ""}`} onClick={() => setTab("tarjetas")}>
-          🪪 Accesos de residentes
+          <IdCard size={16} /> Accesos de residentes
         </button>
         <button className={`hist-tab ${tab === "pagos" ? "on" : ""}`} onClick={() => setTab("pagos")}>
-          💰 Pagos
+          <DollarSign size={16} /> Pagos
         </button>
       </div>
 
@@ -101,7 +102,7 @@ function TabAccesos() {
         <p className="muted">Cargando…</p>
       ) : !data || data.eventos.length === 0 ? (
         <div className="cuota-vacia">
-          <div className="cuota-vacia-icon">📜</div>
+          <div className="cuota-vacia-icon"><ScrollText size={16} /></div>
           <p>No hay eventos que coincidan.</p>
         </div>
       ) : (
@@ -128,7 +129,7 @@ function TabAccesos() {
                       <td className="small">{e.guardia}</td>
                       <td>
                         {tieneFotos(e)
-                          ? <button className="mini" onClick={() => setFotosVer(e)}>📷 Ver</button>
+                          ? <button className="mini" onClick={() => setFotosVer(e)}><Camera size={16} /> Ver</button>
                           : <span className="muted small">—</span>}
                       </td>
                     </tr>
@@ -245,7 +246,7 @@ function TabPagos() {
         <p className="muted">Cargando…</p>
       ) : !data || data.pagos.length === 0 ? (
         <div className="cuota-vacia">
-          <div className="cuota-vacia-icon">💰</div>
+          <div className="cuota-vacia-icon"><DollarSign size={16} /></div>
           <p>No hay pagos que coincidan.</p>
         </div>
       ) : (
@@ -267,11 +268,11 @@ function TabPagos() {
                       <td className="small">{p.cobrado_por}</td>
                       <td>
                         <a className="mini" href={urlReciboPDF(p.id)} target="_blank" rel="noreferrer"
-                          style={{ textDecoration: "none" }}>🧾 Recibo</a>
+                          style={{ textDecoration: "none" }}><Receipt size={16} /> Recibo</a>
                         {p.comprobante_archivo && (
                           <a className="mini ghost" href={urlComprobante(p.comprobante_archivo)}
                             target="_blank" rel="noreferrer"
-                            style={{ textDecoration: "none", marginLeft: 6 }}>📎 Comprobante</a>
+                            style={{ textDecoration: "none", marginLeft: 6 }}><Paperclip size={16} /> Comprobante</a>
                         )}
                       </td>
                     </tr>
@@ -345,7 +346,7 @@ function TabTarjetas() {
                     <td><code>{e.tarjeta}</code></td>
                     <td>
                       <span className={`pill ${e.tipo_acceso === "peatonal" ? "" : "green"}`}>
-                        {e.tipo_acceso === "peatonal" ? "🚶 Peatonal" : "🚗 Vehicular"}
+                        {e.tipo_acceso === "peatonal" ? "<Footprints size={16} /> Peatonal" : "<Car size={16} /> Vehicular"}
                       </span>
                     </td>
                     <td className="small">{e.acceso}</td>

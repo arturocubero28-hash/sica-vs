@@ -3,6 +3,7 @@ import {
   listarCamaras, crearCamara, editarCamara, eliminarCamara, probarCamara,
   urlStreamCamara, type CamaraDTO,
 } from "../../api/client";
+import { AlertTriangle, Settings, Video } from "lucide-react";
 
 const LAYOUTS = [
   { n: 1, label: "1", cols: 1 },
@@ -85,7 +86,7 @@ export function MonitoreoCamaras() {
               </button>
             ))}
           </div>
-          <button className="vms-config-btn" onClick={() => setConfig(true)}>⚙ Configurar</button>
+          <button className="vms-config-btn" onClick={() => setConfig(true)}><Settings size={16} /> Configurar</button>
         </div>
       </div>
 
@@ -111,7 +112,7 @@ export function MonitoreoCamaras() {
                     onDragStart={() => setArrastrando(cam.id)}
                     onDragEnd={() => setArrastrando(null)}
                     title="Arrastrá a una celda de la grilla">
-                    <span className="vms-cam-thumb">📹</span>
+                    <span className="vms-cam-thumb"><Video size={16} /></span>
                     <div className="vms-cam-meta">
                       <span className="vms-cam-nombre">{cam.nombre}</span>
                       <span className="vms-cam-ip">{cam.ip}</span>
@@ -200,7 +201,7 @@ function CamaraTile({ camara, onMaximizar, onQuitar }: {
       <div className="camara-video">
         {error ? (
           <div className="camara-sin-senal">
-            <span className="sin-senal-icon">⚠</span>
+            <span className="sin-senal-icon"><AlertTriangle size={16} /></span>
             <span>Sin señal</span>
             <span className="muted small">{camara.ip}</span>
           </div>

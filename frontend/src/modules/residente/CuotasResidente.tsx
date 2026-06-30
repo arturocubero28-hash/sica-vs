@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { misCuotas, subirComprobante, type CuotaDTO } from "../../api/client";
+import { AlertTriangle, Paperclip } from "lucide-react";
 
 const estadoLabel: Record<string, string> = {
   pendiente: "Pendiente", en_revision: "En revisión", pagada: "Pagada", vencida: "Vencida",
@@ -81,7 +82,7 @@ function CuotaCard({ cuota, onPagar }: { cuota: CuotaDTO; onPagar?: () => void }
       </div>
       <div className="cuota-vence">
         Vence: {new Date(cuota.fecha_vencimiento).toLocaleDateString("es-HN")}
-        {vencida && cuota.estado !== "en_revision" && <span className="mora-tag">⚠ En mora</span>}
+        {vencida && cuota.estado !== "en_revision" && <span className="mora-tag"><AlertTriangle size={16} /> En mora</span>}
       </div>
       {cuota.pago_rechazado && (cuota.estado === "pendiente" || cuota.estado === "vencida") && (
         <div className="cuota-rechazo">
@@ -171,7 +172,7 @@ function FormPago({ cuota, onCerrar, onExito }: {
               {preview
                 ? <img src={preview} alt="Comprobante" className="preview-img" />
                 : <div className="upload-placeholder">
-                    <span className="upload-icon">📎</span>
+                    <span className="upload-icon"><Paperclip size={16} /></span>
                     <span>{archivo ? archivo.name : "Toca para adjuntar"}</span>
                     <span className="muted small">PNG, JPG o PDF</span>
                   </div>

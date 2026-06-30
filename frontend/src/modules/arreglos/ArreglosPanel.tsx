@@ -5,6 +5,7 @@ import {
   type ArregloDTO, type Cuenta, type CuotaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
+import { AlertTriangle } from "lucide-react";
 
 const ESTADO_PILL: Record<string, string> = {
   activo: "green", completado: "", incumplido: "red", cancelado: "amber",
@@ -282,7 +283,7 @@ function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
 
         {arreglo.estado === "incumplido" && (
           <div className="nota" style={{ background: "#fff0f0", borderColor: "#f5a3a3", marginTop: 8 }}>
-            ⚠ {arreglo.motivo_cierre}. Las cuotas volvieron a mora y la cuenta fue bloqueada.
+            <AlertTriangle size={16} /> {arreglo.motivo_cierre}. Las cuotas volvieron a mora y la cuenta fue bloqueada.
             Lo abonado ({L(arreglo.total_abonado)}) quedó acreditado.
           </div>
         )}

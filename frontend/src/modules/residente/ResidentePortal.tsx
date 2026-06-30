@@ -6,6 +6,7 @@ import {
 import { CuotasResidente } from "./CuotasResidente";
 import { HomeResidente } from "./HomeResidente";
 import { MiEdificio } from "./MiEdificio";
+import { Car, Package, RefreshCw, User } from "lucide-react";
 
 // Comparte el QR por WhatsApp (descarga la imagen y abre WhatsApp con mensaje)
 async function compartirWhatsApp(visita: VisitaDTO) {
@@ -97,17 +98,17 @@ function GenerarQR({ bloqueada }: { bloqueada: boolean }) {
     return (
       <div className="qr-cards">
         <div className="qr-card" onClick={() => setTipo("unica")}>
-          <div className="qr-icon">👤</div>
+          <div className="qr-icon"><User size={16} /></div>
           <h3>Visita única</h3>
           <p>Una sola entrada. Ideal para visitas puntuales.</p>
         </div>
         <div className="qr-card" onClick={() => setTipo("recurrente")}>
-          <div className="qr-icon">🔄</div>
+          <div className="qr-icon"><RefreshCw size={16} /></div>
           <h3>Visita recurrente</h3>
           <p>Acceso por un periodo. Para empleadas, familiares frecuentes.</p>
         </div>
         <div className="qr-card" onClick={() => setTipo("repartidor")}>
-          <div className="qr-icon">📦</div>
+          <div className="qr-icon"><Package size={16} /></div>
           <h3>Repartidor</h3>
           <p>Delivery o servicio de envío. Vigencia de 6 horas.</p>
         </div>
@@ -309,7 +310,7 @@ function Historial() {
         <div className="visita-meta">
           <span className="visita-tag">{tipos[v.tipo] || v.tipo}</span>
           {v.documento_id && <span className="muted small">ID: {v.documento_id}</span>}
-          {v.en_vehiculo && v.placa_vehiculo && <span className="muted small">🚗 {v.placa_vehiculo}</span>}
+          {v.en_vehiculo && v.placa_vehiculo && <span className="muted small"><Car size={16} /> {v.placa_vehiculo}</span>}
         </div>
         <div className="visita-fecha muted small">
           {v.created_at ? new Date(v.created_at).toLocaleString() : "—"}

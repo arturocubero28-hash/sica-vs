@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { validarQR, registrarAcceso, type VisitaDTO } from "../../api/client";
+import { AlertTriangle, Camera } from "lucide-react";
 
 export function GuardiaPanel() {
   const [step, setStep] = useState<"scan" | "review" | "done">("scan");
@@ -199,7 +200,7 @@ export function GuardiaPanel() {
 
           {cuentaBloqueada && (
             <div className="aviso-mora">
-              ⚠️ <b>La cuenta del residente tiene mora.</b> El código es válido;
+              <AlertTriangle size={16} /> <b>La cuenta del residente tiene mora.</b> El código es válido;
               queda a tu criterio autorizar el ingreso según las reglas de la residencial.
             </div>
           )}
@@ -225,12 +226,12 @@ export function GuardiaPanel() {
           {error && <div className="error">{error}</div>}
           {direccion === "entrada" && !fotoId && (
             <div className="nota" style={{ background: "#fff7ed", borderColor: "#f5c98a" }}>
-              📷 La foto de identidad es obligatoria para dar acceso.
+              <Camera size={16} /> La foto de identidad es obligatoria para dar acceso.
             </div>
           )}
           {direccion === "entrada" && visita.en_vehiculo && !fotoPlaca && (
             <div className="nota" style={{ background: "#fff7ed", borderColor: "#f5c98a" }}>
-              📷 La foto de la placa es obligatoria para vehículos.
+              <Camera size={16} /> La foto de la placa es obligatoria para vehículos.
             </div>
           )}
           <div className="row-btns">

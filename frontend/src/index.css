@@ -2880,3 +2880,12 @@ table.data tbody tr:hover td { background: #f1f6fd; }
 .bottom-item { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; }
 .metodo-icon { display: inline-flex; align-items: center; justify-content: center; }
 .reporte-controles { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ── Iconos Lucide inline (Tandas C+D): alineación general ── */
+.hero-icon, .padron-icon, .metric-icon, .dev-punto-ic, .cuota-vacia-icon,
+.metric-modal-empty { display: inline-flex; align-items: center; gap: 6px; }
+.hist-tab { display: inline-flex; align-items: center; gap: 6px; }
+/* iconos dentro de botones y títulos quedan centrados verticalmente */
+button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide {
+  vertical-align: middle;
+}
