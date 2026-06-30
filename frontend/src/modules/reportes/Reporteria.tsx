@@ -4,6 +4,21 @@ import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos, rep
   type ReporteCajaDTO, type ReporteAccesosDTO, type ReporteInventarioDTO } from "../../api/client";
 import { L } from "../../utils/formato";
 
+// Devuelve [primerDía, últimoDía] del mes actual en formato YYYY-MM-DD,
+// para inicializar los filtros de fecha de los reportes con el mes corriente.
+function rangoMesActual(): [string, string] {
+  const hoy = new Date();
+  const primero = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const ultimo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+  const fmt = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  };
+  return [fmt(primero), fmt(ultimo)];
+}
+
 export function Reporteria() {
   const [tab, setTab] = useState<"financiero" | "mora" | "caja" | "accesos" | "inventario">("financiero");
   return (
@@ -415,6 +430,47 @@ function ReporteMoraPorCasa() {
     doc.save(`mora-por-casa-${data.generado}.pdf`);
   }
 
+  async function exportarExcel() {
+    if (!data) return;
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+
+    // Hoja 1: resumen + antigüedad de la deuda (aging)
+    const resumen: (string | number)[][] = [
+      ["Reporte de Mora por Casa"],
+      ["Residencial Villas del Sol"],
+      ["Generado", new Date(data.generado).toLocaleDateString("es-HN")],
+      [],
+      ["Total adeudado", data.total_general_adeudado],
+      ["Casas en mora", data.total_casas_mora],
+    ];
+    if (typeof data.pct_morosidad === "number") resumen.push(["% de morosidad", data.pct_morosidad]);
+    if (data.aging) {
+      resumen.push([], ["Antigüedad de la deuda", "Monto"]);
+      resumen.push(["1 – 30 días", data.aging.d_1_30]);
+      resumen.push(["31 – 60 días", data.aging.d_31_60]);
+      resumen.push(["61 – 90 días", data.aging.d_61_90]);
+      resumen.push(["90+ días (difícil cobro)", data.aging.d_90_mas]);
+    }
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
+
+    // Hoja 2: detalle por casa
+    const detalle: (string | number)[][] = [
+      ["Casa", "Titular", "Teléfono", "Meses adeudados", "Días de atraso", "Períodos que debe", "Total adeudado"],
+    ];
+    data.casas.forEach(c => {
+      detalle.push([
+        c.unidad, c.titular, c.telefono || "—",
+        c.cantidad_meses, c.max_dias_atraso,
+        c.meses.map(m => m.mes_label).join(", "),
+        c.total_adeudado,
+      ]);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(detalle), "Detalle por casa");
+
+    XLSX.writeFile(wb, `mora-por-casa-${data.generado}.xlsx`);
+  }
+
   if (cargando) return <p className="muted">Cargando reporte de mora…</p>;
   if (!data) return <p className="muted">No se pudo cargar el reporte.</p>;
 
@@ -435,6 +491,7 @@ function ReporteMoraPorCasa() {
           <input className="periodo-select" placeholder="Buscar casa o titular"
             value={buscar} onChange={e => setBuscar(e.target.value)} style={{ minWidth: 160 }} />
           <button className="ghost mini" onClick={exportarPDF}>⬇ PDF</button>
+          <button className="ghost mini" onClick={exportarExcel}>⬇ Excel</button>
         </div>
       </div>
 
@@ -513,8 +570,9 @@ function ReporteMoraPorCasa() {
 // REPORTE DE CAJA Y ARQUEO (tesorero)
 // ════════════════════════════════════════════════════════════════
 function ReporteCajaVista() {
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  const [ini, fin] = rangoMesActual();
+  const [desde, setDesde] = useState(ini);
+  const [hasta, setHasta] = useState(fin);
   const [data, setData] = useState<ReporteCajaDTO | null>(null);
   const [cargando, setCargando] = useState(true);
 
@@ -663,8 +721,9 @@ function ReporteCajaVista() {
 // REPORTE DE ACCESOS Y SEGURIDAD (administrador)
 // ════════════════════════════════════════════════════════════════
 function ReporteAccesosVista() {
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  const [ini, fin] = rangoMesActual();
+  const [desde, setDesde] = useState(ini);
+  const [hasta, setHasta] = useState(fin);
   const [tipo, setTipo] = useState("");
   const [data, setData] = useState<ReporteAccesosDTO | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -810,8 +869,9 @@ function ReporteAccesosVista() {
 // REPORTE DE INVENTARIO DE TARJETAS (administración)
 // ════════════════════════════════════════════════════════════════
 function ReporteInventarioVista() {
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  const [ini, fin] = rangoMesActual();
+  const [desde, setDesde] = useState(ini);
+  const [hasta, setHasta] = useState(fin);
   const [data, setData] = useState<ReporteInventarioDTO | null>(null);
   const [cargando, setCargando] = useState(true);
 
