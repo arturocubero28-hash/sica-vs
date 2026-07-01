@@ -124,22 +124,40 @@ def crear_unidad(usuario_actual):
 @cuentas_bp.get("/cuentas")
 @roles_required("admin", "super_admin")
 def listar_cuentas(usuario_actual):
-    cuentas = Cuenta.query.order_by(Cuenta.id.desc()).all()
+    # Paginación OPCIONAL y retrocompatible: sin parámetros devuelve la lista
+    # completa (como siempre). Con ?pagina=N devuelve esa página envuelta en un
+    # objeto con metadatos. Pensado para cuando el volumen crezca (multi-
+    # residencial) sin romper el frontend actual.
+    from sqlalchemy import func
+    pagina_arg = request.args.get("pagina")
+
+    base = Cuenta.query.order_by(Cuenta.id.desc())
 
     # Conteo de cuotas pendientes/vencidas por cuenta, en UNA query (evita N+1).
-    # Sirve para que el admin vea de un vistazo qué casas deben sin entrar al detalle.
-    from sqlalchemy import func
     pendientes_raw = (db.session.query(Cuota.cuenta_id, func.count(Cuota.id))
                       .filter(Cuota.estado.notin_(["pagada", "en_arreglo"]))
                       .group_by(Cuota.cuenta_id).all())
     pendientes_por_cuenta = {cid: n for cid, n in pendientes_raw}
 
-    data = []
-    for c in cuentas:
-        d = c.to_dict()
-        d["cuotas_pendientes"] = pendientes_por_cuenta.get(c.id, 0)
-        data.append(d)
-    return jsonify({"data": data})
+    def serializar(cuentas):
+        out = []
+        for c in cuentas:
+            d = c.to_dict()
+            d["cuotas_pendientes"] = pendientes_por_cuenta.get(c.id, 0)
+            out.append(d)
+        return out
+
+    if pagina_arg is not None:
+        pagina = max(1, int(pagina_arg))
+        por_pagina = 50
+        total = base.count()
+        cuentas = base.offset((pagina - 1) * por_pagina).limit(por_pagina).all()
+        return jsonify({"data": serializar(cuentas), "pagina": pagina,
+                        "por_pagina": por_pagina, "total": total,
+                        "total_paginas": (total + por_pagina - 1) // por_pagina})
+
+    # Comportamiento clásico: lista completa
+    return jsonify({"data": serializar(base.all())})
 
 
 @cuentas_bp.post("/cuentas")

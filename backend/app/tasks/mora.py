@@ -28,13 +28,14 @@ def generar_cuotas_mensuales():
         ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
 
         cuentas = Cuenta.query.filter_by(activa=True).all()
+        # Trae de una sola vez los cuenta_id que ya tienen cuota este periodo
+        # (evita una query de existencia por cada cuenta — N+1).
+        ya_tienen = {row[0] for row in db.session.query(Cuota.cuenta_id)
+                     .filter(Cuota.periodo == periodo).all()}
         creadas = 0
 
         for cuenta in cuentas:
-            existe = Cuota.query.filter_by(
-                cuenta_id=cuenta.id, periodo=periodo
-            ).first()
-            if existe:
+            if cuenta.id in ya_tienen:
                 continue
             if not cuenta.tarifa:
                 continue
@@ -79,7 +80,8 @@ def revisar_mora():
         procesadas = 0
 
         cuotas = Cuota.query.filter(
-            Cuota.estado.in_(["pendiente", "vencida"])
+            Cuota.estado.in_(["pendiente", "vencida"]),
+            Cuota.fecha_vencimiento <= hoy,
         ).all()
 
         for cuota in cuotas:

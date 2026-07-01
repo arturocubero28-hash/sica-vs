@@ -377,10 +377,13 @@ def generar_cuotas_manual(usuario_actual):
     periodo = _dt.date(hoy.year, hoy.month, 1)
 
     cuentas = Cuenta.query.filter_by(activa=True).all()
+    # Una sola query trae todos los cuenta_id que YA tienen cuota este periodo,
+    # en vez de una query de existencia por cada cuenta (evita N+1).
+    ya_tienen = {row[0] for row in db.session.query(Cuota.cuenta_id)
+                 .filter(Cuota.periodo == periodo).all()}
     creadas = 0
     for cuenta in cuentas:
-        existe = Cuota.query.filter_by(cuenta_id=cuenta.id, periodo=periodo).first()
-        if existe:
+        if cuenta.id in ya_tienen:
             continue
         if not cuenta.tarifa:
             continue
