@@ -7,7 +7,7 @@ con OpenCV y sirve un stream MJPEG que se muestra en un <img>.
 """
 import time
 
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, current_app
 
 from app.extensions import db
 from app.models.camara import Camara
@@ -102,7 +102,10 @@ def probar_camara(usuario_actual, uuid_camara):
         cap.release()
         return jsonify({"data": {"online": bool(ok)}})
     except Exception as e:
-        return jsonify({"data": {"online": False, "error": str(e)}})
+        # No exponer el detalle del error al cliente (podría revelar IPs,
+        # rutas o versiones internas). Se registra en el log del servidor.
+        current_app.logger.warning("Error al verificar cámara %s: %s", cam.id, e)
+        return jsonify({"data": {"online": False, "error": "No se pudo conectar a la cámara"}})
 
 
 # ── Proxy de video RTSP -> MJPEG ───────────────────────────────────────────────

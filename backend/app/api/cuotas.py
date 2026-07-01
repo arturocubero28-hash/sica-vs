@@ -246,6 +246,13 @@ def subir_comprobante_abono(usuario_actual, uuid_abono):
 @cuotas_bp.get("/comprobantes/<nombre_archivo>")
 @roles_required("admin", "super_admin", "cajero", "desarrollador")
 def ver_comprobante(usuario_actual, nombre_archivo):
+    # Solo se sirve el archivo si corresponde a un comprobante realmente
+    # registrado en un pago. Evita servir archivos arbitrarios de la carpeta
+    # aunque alguien adivine o construya un nombre.
+    existe = Pago.query.filter_by(comprobante_archivo=nombre_archivo).first()
+    if not existe:
+        return jsonify({"error": {"code": "no_encontrado",
+                                  "message": "Comprobante no encontrado"}}), 404
     return servir_archivo_seguro(_carpeta_comprobantes(), nombre_archivo)
 
 
