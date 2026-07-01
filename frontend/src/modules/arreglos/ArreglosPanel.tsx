@@ -256,14 +256,19 @@ function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
   arreglo: ArregloDTO; onCerrar: () => void; onCambio: (a: ArregloDTO) => void;
 }) {
   const [msg, setMsg] = useState("");
+  const [confirmarCancel, setConfirmarCancel] = useState(false);
+  const [motivoCancel, setMotivoCancel] = useState("");
+  const [cancelando, setCancelando] = useState(false);
 
   async function cancelar() {
-    const motivo = prompt("Motivo de la cancelación del arreglo:");
-    if (motivo === null) return;
+    if (!motivoCancel.trim()) { setMsg("Indicá el motivo de la cancelación."); return; }
+    setCancelando(true);
     try {
-      const actualizado = await cancelarArreglo(arreglo.id, motivo);
+      const actualizado = await cancelarArreglo(arreglo.id, motivoCancel.trim());
+      setConfirmarCancel(false);
       onCambio(actualizado);
     } catch (e) { setMsg((e as Error).message); }
+    finally { setCancelando(false); }
   }
 
   return (
@@ -327,9 +332,40 @@ function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
         {msg && <div className="error" style={{ marginTop: 8 }}>{msg}</div>}
 
         {arreglo.estado === "activo" && (
-          <button className="ghost mini" style={{ marginTop: 12, color: "#c81e1e" }} onClick={cancelar}>
+          <button className="ghost mini" style={{ marginTop: 12, color: "#c81e1e" }}
+            onClick={() => { setMotivoCancel(""); setMsg(""); setConfirmarCancel(true); }}>
             Cancelar arreglo
           </button>
+        )}
+
+        {confirmarCancel && (
+          <div className="modal" onClick={() => !cancelando && setConfirmarCancel(false)}>
+            <div className="modal-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
+              <div className="modal-head">
+                <h3>Cancelar arreglo</h3>
+                <button className="ghost mini" onClick={() => setConfirmarCancel(false)} disabled={cancelando}>✕</button>
+              </div>
+              <div className="nota" style={{ background: "#fff0f0", borderColor: "#f5a3a3", marginTop: 4 }}>
+                <AlertTriangle size={16} /> Al cancelar, las cuotas del arreglo vuelven a mora y la
+                cuenta se bloquea de nuevo. Lo ya abonado ({L(arreglo.total_abonado)}) queda acreditado.
+              </div>
+              <label className="campo" style={{ marginTop: 12, display: "block" }}>
+                <span className="muted small">Motivo de la cancelación</span>
+                <textarea value={motivoCancel} onChange={e => setMotivoCancel(e.target.value)}
+                  rows={3} placeholder="Ej. Acordado con el residente, cambio de plan…"
+                  style={{ width: "100%", marginTop: 4 }} autoFocus />
+              </label>
+              {msg && <div className="error" style={{ marginTop: 8 }}>{msg}</div>}
+              <div className="row-btns" style={{ marginTop: 12, justifyContent: "flex-end", gap: 8 }}>
+                <button className="ghost" onClick={() => setConfirmarCancel(false)} disabled={cancelando}>
+                  Volver
+                </button>
+                <button style={{ background: "#c81e1e" }} onClick={cancelar} disabled={cancelando}>
+                  {cancelando ? "Cancelando…" : "Sí, cancelar arreglo"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

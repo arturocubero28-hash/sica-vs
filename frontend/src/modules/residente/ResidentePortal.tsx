@@ -6,7 +6,7 @@ import {
 import { CuotasResidente } from "./CuotasResidente";
 import { HomeResidente } from "./HomeResidente";
 import { MiEdificio } from "./MiEdificio";
-import { Car, Package, RefreshCw, User } from "lucide-react";
+import { Car, Package, RefreshCw, User, AlertTriangle } from "lucide-react";
 
 // Comparte el QR por WhatsApp (descarga la imagen y abre WhatsApp con mensaje)
 async function compartirWhatsApp(visita: VisitaDTO) {
@@ -75,7 +75,14 @@ export function ResidentePortal({ seccion = "home" }: { seccion?: string }) {
   return (
     <div className="card wide">
       {cuenta?.cuenta.bloqueada && (
-        <div className="error">Tu cuenta está bloqueada por mora. No puedes generar códigos QR hasta regularizar tu pago.</div>
+        <div className="banner-bloqueo">
+          <AlertTriangle size={18} />
+          <div>
+            <b>Tu cuenta está bloqueada por mora.</b>
+            <p>No podés generar códigos QR hasta regularizar tu pago. Andá a la sección{" "}
+              <b>Cuotas</b> para ver lo que debés y subir tu comprobante de pago.</p>
+          </div>
+        </div>
       )}
 
       {seccion === "home" && <HomeResidente />}

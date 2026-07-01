@@ -13,6 +13,10 @@ export function PagosAdmin() {
   }, []);
 
   async function revisar(pago: PagoAdminDTO, accion: "aprobar" | "rechazar") {
+    if (accion === "rechazar" && !nota.trim()) {
+      alert("Indicá el motivo del rechazo para que el residente sepa por qué.");
+      return;
+    }
     setProcesando(pago.id);
     try {
       await revisarPago(pago.id, accion, nota);
@@ -102,9 +106,9 @@ export function PagosAdmin() {
             )}
 
             <div className="form-field" style={{ marginTop: 12 }}>
-              <label>Nota para el residente (opcional)</label>
+              <label>Nota para el residente <span className="muted small">(obligatoria si rechazás)</span></label>
               <input
-                type="text" placeholder="Ej. Monto correcto, aprobado"
+                type="text" placeholder="Ej. El comprobante no es legible / el monto no coincide"
                 value={nota} onChange={e => setNota(e.target.value)}
               />
             </div>

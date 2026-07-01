@@ -318,8 +318,17 @@ def revisar_pago(usuario_actual, uuid_pago):
             "error": {"code": "ACCION_INVALIDA", "message": "accion debe ser 'aprobar' o 'rechazar'"}
         }), 400
 
+    nota = (body.get("nota") or "").strip()
+    # Al rechazar, la nota es obligatoria: el residente necesita saber por qué
+    # se rechazó su comprobante para poder corregir y reintentar.
+    if accion == "rechazar" and not nota:
+        return jsonify({
+            "error": {"code": "NOTA_REQUERIDA",
+                      "message": "Indicá el motivo del rechazo para que el residente lo sepa"}
+        }), 400
+
     pago.estado = "aprobado" if accion == "aprobar" else "rechazado"
-    pago.nota_admin = body.get("nota", "")
+    pago.nota_admin = nota
     pago.revisado_por = usuario_actual.id
     pago.revisado_en = dt.datetime.utcnow()
 

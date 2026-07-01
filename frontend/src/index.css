@@ -2967,3 +2967,13 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   content: ""; position: absolute; left: -5px; top: 9px;
   border: 5px solid transparent; border-right-color: #022E45; border-left: none;
 }
+
+/* Banner de cuenta bloqueada por mora (residente) */
+.banner-bloqueo {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #fff0f0; border: 1px solid #f5a3a3; border-radius: 12px;
+  padding: 12px 14px; margin-bottom: 14px; color: #a01818;
+}
+.banner-bloqueo svg { flex-shrink: 0; margin-top: 2px; }
+.banner-bloqueo b { color: #8a1010; }
+.banner-bloqueo p { margin: 3px 0 0; font-size: 13px; line-height: 1.45; color: #a83232; }
