@@ -168,10 +168,15 @@ def crear_cuenta(usuario_actual):
         ident = (nueva.get("identificador") or "").strip()
         tipo = nueva.get("tipo") if nueva.get("tipo") in ("casa", "edificio") else "casa"
         if ident:
-            # Evitar duplicar una unidad con el mismo identificador
             existente = Unidad.query.filter(
                 db.func.lower(Unidad.identificador) == ident.lower()).first()
             if existente:
+                # Un EDIFICIO existente se reutiliza (se le suman apartamentos).
+                # Una CASA no: dos cuentas en la misma casa sería un duplicado.
+                if existente.tipo == "casa" or tipo == "casa":
+                    return _err("duplicado",
+                                f"Ya existe una unidad llamada \"{existente.identificador}\". "
+                                f"Usá otro identificador.", 409)
                 unidad = existente
             else:
                 unidad = Unidad(tipo=tipo, identificador=ident, activa=True)
@@ -201,6 +206,14 @@ def crear_cuenta(usuario_actual):
         return _err("duplicado", f"El apartamento {apartamento} ya existe en esta unidad", 409)
 
     titular_data = data.get("titular") or {}
+
+    # Validar formato del DNI si se proporciona (13 dígitos, formato hondureño)
+    dni_raw = (titular_data.get("dni") or "").strip()
+    if dni_raw:
+        dni_solo_num = dni_raw.replace("-", "").replace(" ", "")
+        if not dni_solo_num.isdigit() or len(dni_solo_num) != 13:
+            return _err("dni_invalido",
+                        "El número de identidad debe tener 13 dígitos (0000-0000-00000)", 400)
 
     # ── Regla anti-mora: una persona con deuda en otra casa no puede darse de
     # alta en una nueva unidad hasta ponerse al día. Se identifica por DNI.

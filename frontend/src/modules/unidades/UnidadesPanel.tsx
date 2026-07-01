@@ -9,6 +9,23 @@ import {
 import { LectorTarjeta } from "./LectorTarjeta";
 import { Building, Car, Footprints, Home, Pencil, User, Plus, Info } from "lucide-react";
 
+/** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
+ *  Solo acepta números y coloca los guiones automáticamente. */
+function formatearDNI(valor: string): string {
+  const soloNums = valor.replace(/\D/g, "").slice(0, 13);
+  const p1 = soloNums.slice(0, 4);
+  const p2 = soloNums.slice(4, 8);
+  const p3 = soloNums.slice(8, 13);
+  let out = p1;
+  if (p2) out += "-" + p2;
+  if (p3) out += "-" + p3;
+  return out;
+}
+/** ¿El DNI está completo (13 dígitos)? */
+function dniCompleto(valor: string): boolean {
+  return valor.replace(/\D/g, "").length === 13;
+}
+
 export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
   const [tab, setTab] = useState<"cuentas" | "tarifas">("cuentas");
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
@@ -259,6 +276,10 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
       setMsg({ tipo: "err", texto: "Completá la casa/edificio, la tarifa, y el nombre y correo del titular" });
       return;
     }
+    if (dni && !dniCompleto(dni)) {
+      setMsg({ tipo: "err", texto: "El número de identidad debe tener 13 dígitos (0000-0000-00000)" });
+      return;
+    }
     try {
       const res = await crearCuenta({
         unidad_id: unidadId || undefined,
@@ -465,7 +486,9 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
             <input placeholder="Teléfono (opcional)" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
           </div>
           <div className="row">
-            <input placeholder="Identidad / DNI" value={dni} onChange={(e) => setDni(e.target.value)} />
+            <input placeholder="Identidad (0000-0000-00000)" value={dni} inputMode="numeric"
+              maxLength={15}
+              onChange={(e) => setDni(formatearDNI(e.target.value))} />
             <input placeholder="RTN (opcional)" value={rtn} onChange={(e) => setRtn(e.target.value)} />
           </div>
           <div className="row">
@@ -609,7 +632,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
             <div className="campo-grupo">
               <label className="campo-label">Información adicional</label>
               <div className="row">
-                <input placeholder="Identidad / DNI" value={mDni} onChange={(e) => setMDni(e.target.value)} />
+                <input placeholder="Identidad (0000-0000-00000)" value={mDni} inputMode="numeric" maxLength={15} onChange={(e) => setMDni(formatearDNI(e.target.value))} />
                 <input placeholder="Profesión" value={mProfesion} onChange={(e) => setMProfesion(e.target.value)} />
               </div>
             </div>
@@ -772,7 +795,7 @@ function FilaResidente({ residente, onActualizado }: {
               </div>
               <div className="row">
                 <input placeholder="Teléfono" value={f.telefono} onChange={e => set("telefono", e.target.value)} />
-                <input placeholder="Identidad / DNI" value={f.dni} onChange={e => set("dni", e.target.value)} />
+                <input placeholder="Identidad (0000-0000-00000)" value={f.dni} inputMode="numeric" maxLength={15} onChange={e => set("dni", formatearDNI(e.target.value))} />
               </div>
               <div className="row">
                 <input placeholder="RTN" value={f.rtn} onChange={e => set("rtn", e.target.value)} />
