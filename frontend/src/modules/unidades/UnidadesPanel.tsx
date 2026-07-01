@@ -7,27 +7,30 @@ import {
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
-import { Building, Car, Footprints, Home, Pencil, User } from "lucide-react";
+import { Building, Car, Footprints, Home, Pencil, User, Plus, Info } from "lucide-react";
 
 export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
-  const [tab, setTab] = useState<"cuentas" | "nueva" | "tarifas">("cuentas");
+  const [tab, setTab] = useState<"cuentas" | "tarifas">("cuentas");
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [seleccionada, setSeleccionada] = useState<Cuenta | null>(null);
+  const [modalNueva, setModalNueva] = useState(false);
 
   async function recargar() { setCuentas(await listarCuentas()); }
   useEffect(() => { recargar(); }, []);
 
   const contenido = (
     <>
-      <div className="tabs">
-        <button className={tab === "cuentas" ? "tab on" : "tab"} onClick={() => setTab("cuentas")}>
-          Lista de casas
-        </button>
-        <button className={tab === "nueva" ? "tab on" : "tab"} onClick={() => setTab("nueva")}>
-          + Dar de alta
-        </button>
-        <button className={tab === "tarifas" ? "tab on" : "tab"} onClick={() => setTab("tarifas")}>
-          Tarifas
+      <div className="unidades-topbar">
+        <div className="tabs" style={{ marginBottom: 0, borderBottom: "none" }}>
+          <button className={tab === "cuentas" ? "tab on" : "tab"} onClick={() => setTab("cuentas")}>
+            Lista de casas
+          </button>
+          <button className={tab === "tarifas" ? "tab on" : "tab"} onClick={() => setTab("tarifas")}>
+            Tarifas
+          </button>
+        </div>
+        <button className="btn-alta" onClick={() => setModalNueva(true)}>
+          <Plus size={17} /> Dar de alta
         </button>
       </div>
 
@@ -35,10 +38,12 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
         <ListaCuentas cuentas={cuentas} onRecargar={recargar} onAbrir={async (c) =>
           setSeleccionada(await detalleCuenta(c.id))} />
       )}
-      {tab === "nueva" && (
-        <FormNuevaCuenta onCreada={async () => { await recargar(); }} />
-      )}
       {tab === "tarifas" && <GestionTarifas />}
+      {modalNueva && (
+        <FormNuevaCuenta
+          onCerrar={() => setModalNueva(false)}
+          onCreada={async () => { await recargar(); }} />
+      )}
       {seleccionada && (
         <DetalleCuenta cuenta={seleccionada} onCerrar={() => setSeleccionada(null)}
           onCambio={async () => setSeleccionada(await detalleCuenta(seleccionada.id))} />
@@ -153,7 +158,7 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
   );
 }
 
-function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
+function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerrar: () => void }) {
   const [unidades, setUnidades] = useState<Unidad[]>([]);
   const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [unidadId, setUnidadId] = useState("");
@@ -276,8 +281,17 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
   }
 
   return (
-    <div className="form">
-      <h3>Dar de alta una casa o apartamento</h3>
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body modal-alta" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-alta-head">
+          <div>
+            <h3>Dar de alta una casa o apartamento</h3>
+            <p className="muted small" style={{ margin: 0 }}>Creá la unidad, asigná su cuota y registrá al titular de la cuenta.</p>
+          </div>
+          <button className="modal-x" onClick={onCerrar} aria-label="Cerrar">✕</button>
+        </div>
+
+        <div className="modal-alta-body">
 
       {/* Resultado: enlace de activación */}
       {enlace && (
@@ -294,9 +308,14 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
 
       {!enlace && (
         <>
-          {/* Código de enrolamiento (inquilino avalado por el dueño del edificio) */}
-          <div className="enrol-box">
-            <div className="sub" style={{ marginTop: 0 }}>¿El inquilino trae un código del dueño del edificio?</div>
+          {/* Código de enrolamiento */}
+          <div className="alta-seccion">
+            <div className="alta-seccion-head">
+              <span className="alta-num">0</span>
+              <b>¿Trae código de enrolamiento?</b>
+              <InfoTip texto="Si un inquilino recibió un código de 6 dígitos del dueño de su edificio, ingresalo aquí: el edificio y apartamento se seleccionan solos. Si es una casa normal o no hay código, salteá este paso." />
+              <span className="muted small" style={{ marginLeft: "auto" }}>Opcional</span>
+            </div>
             <div className="row">
               <input placeholder="Código de 6 dígitos (opcional)" value={codigoEnrol}
                 inputMode="numeric" maxLength={6}
@@ -314,12 +333,14 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
                 {enrolInfo.dueno_nombre ? <span className="muted small"><br/>Avalado por: {enrolInfo.dueno_nombre}</span> : null}
               </div>
             )}
-            <p className="muted small" style={{ marginTop: 6 }}>
-              Si trae código, el edificio se selecciona solo. Si no, continuá normalmente abajo.
-            </p>
           </div>
 
-          <div className="sub">1. Casa o edificio</div>
+          <div className="alta-seccion">
+            <div className="alta-seccion-head">
+              <span className="alta-num">1</span>
+              <b>Casa o edificio</b>
+              <InfoTip texto="Elegí si es una casa independiente o un apartamento dentro de un edificio. Podés crear una unidad nueva, o si es un edificio ya registrado, sumarle un apartamento." />
+            </div>
 
           {/* Primero: tipo de unidad */}
           <div className="seg-toggle">
@@ -397,8 +418,6 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
               <div className="sub">Apartamento</div>
               <input placeholder="Ej. 1A, 2B" value={apartamento}
                 onChange={(e) => setApartamento(e.target.value)} />
-              {/* La casilla de dueño no aplica si llegó con código: ese es un inquilino,
-                  no el dueño (el dueño es quien generó el código) */}
               {!enrolInfo && (
                 <label className="check-dueno">
                   <input type="checkbox" checked={esDuenoEdificio}
@@ -408,8 +427,14 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
               )}
             </>
           )}
+          </div>
 
-          <div className="sub">2. Cuota</div>
+          <div className="alta-seccion">
+            <div className="alta-seccion-head">
+              <span className="alta-num">2</span>
+              <b>Cuota mensual</b>
+              <InfoTip texto="La tarifa define cuánto paga esta casa cada mes. El día de pago es la fecha límite mensual; se autollena con hoy pero podés cambiarlo (máximo 28 para evitar problemas en febrero)." />
+            </div>
           <div className="row">
             <select value={tarifaId} onChange={(e) => setTarifaId(Number(e.target.value))}>
               <option value={0}>— Selecciona tarifa —</option>
@@ -422,9 +447,14 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
                 onChange={(e) => setDiaPago(Number(e.target.value))} />
             </label>
           </div>
-          <span className="muted small">El día de pago se autollenó con hoy; puedes cambiarlo.</span>
+          </div>
 
-          <div className="sub">3. Titular (encargado de la cuenta)</div>
+          <div className="alta-seccion">
+            <div className="alta-seccion-head">
+              <span className="alta-num">3</span>
+              <b>Titular de la cuenta</b>
+              <InfoTip texto="Es la persona responsable de la cuenta (quien paga). Se le creará un acceso en estado pendiente y recibirá un enlace para definir su propia contraseña. Solo el nombre, apellido y correo son obligatorios." />
+            </div>
           <div className="row">
             <input placeholder="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
             <input placeholder="Apellido" value={apellido} onChange={(e) => setApellido(e.target.value)} />
@@ -445,15 +475,25 @@ function FormNuevaCuenta({ onCreada }: { onCreada: () => void }) {
             <input placeholder="Contacto de emergencia (nombre)" value={emergNombre} onChange={(e) => setEmergNombre(e.target.value)} />
             <input placeholder="Contacto de emergencia (teléfono)" value={emergTel} onChange={(e) => setEmergTel(e.target.value)} />
           </div>
-          <div className="nota">
-            Se creará el acceso del titular en estado <b>pendiente</b>. Recibirá un enlace
-            para definir su propia contraseña (la administración nunca conoce las contraseñas).
+          </div>
+
+          <div className="info-box">
+            <Info size={15} />
+            <span>Se creará el acceso del titular en estado <b>pendiente</b>. Recibirá un enlace para definir su propia contraseña — la administración nunca conoce las contraseñas.</span>
           </div>
 
           {msg && <div className={msg.tipo === "ok" ? "ok-box" : "error"}>{msg.texto}</div>}
-          <button onClick={guardar}>Dar de alta cuenta y titular</button>
         </>
       )}
+        </div>
+
+        {!enlace && (
+          <div className="modal-alta-footer">
+            <button className="ghost" onClick={onCerrar}>Cancelar</button>
+            <button onClick={guardar}>Dar de alta cuenta y titular</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -865,5 +905,19 @@ function GestionTarifas() {
           </div>
         )}
     </div>
+  );
+}
+
+/** "i" azul de información con tooltip al pasar el mouse (o tocar en móvil). */
+function InfoTip({ texto }: { texto: string }) {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <span className="infotip"
+      onMouseEnter={() => setAbierto(true)}
+      onMouseLeave={() => setAbierto(false)}
+      onClick={(e) => { e.stopPropagation(); setAbierto(v => !v); }}>
+      <Info size={15} />
+      {abierto && <span className="infotip-bubble">{texto}</span>}
+    </span>
   );
 }

@@ -62,7 +62,8 @@ button.ghost:hover:not(:disabled) { background: #eef4fb; border-color: #b9c6da;
 .tab { background: transparent; color: var(--gris); border: none; border-bottom: 2px solid transparent;
   border-radius: 0; padding: 8px 14px; font-weight: 600; }
 .tab.on { color: var(--azul); border-bottom-color: var(--azul2); }
-.tab:hover { background: transparent; color: var(--azul); }
+.tab:hover:not(:disabled) { background: transparent !important; color: var(--azul);
+  transform: none; box-shadow: none; }
 
 table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.data th { text-align: left; color: var(--gris); font-weight: 600; padding: 10px 12px;
@@ -2912,3 +2913,57 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 }
 .info-box svg { flex-shrink: 0; margin-top: 1px; }
 .info-box.warn { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+
+/* ── Dar de alta: topbar con botón + modal rediseñado ── */
+.unidades-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid #e3e9f2; margin-bottom: 18px; padding-bottom: 2px; gap: 12px; flex-wrap: wrap;
+}
+.btn-alta {
+  display: inline-flex; align-items: center; gap: 7px; background: #F48723; color: #fff;
+  border: none; border-radius: 10px; padding: 9px 18px; font-weight: 700; font-size: 14px;
+  cursor: pointer; white-space: nowrap;
+}
+.btn-alta:hover:not(:disabled) { background: #db7615 !important; transform: translateY(-1px); }
+
+.modal-alta { max-width: 640px; width: 92%; padding: 0; max-height: 90vh; display: flex; flex-direction: column; }
+.modal-alta-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 20px 22px 16px; border-bottom: 1px solid #eef2f7;
+}
+.modal-alta-head h3 { margin: 0 0 3px; color: #022E45; font-size: 18px; }
+.modal-x {
+  background: #f4f7fb !important; border: none; color: #6b7280; width: 32px; height: 32px;
+  border-radius: 8px; font-size: 15px; cursor: pointer; flex-shrink: 0; padding: 0;
+}
+.modal-x:hover:not(:disabled) { background: #e5eaf1 !important; color: #022E45 !important; transform: none; }
+.modal-alta-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+.modal-alta-footer {
+  display: flex; gap: 10px; justify-content: flex-end; padding: 14px 22px;
+  border-top: 1px solid #eef2f7; background: #fafbfd; border-radius: 0 0 16px 16px;
+}
+.modal-alta-footer button { min-width: 120px; }
+
+.alta-seccion {
+  background: #fbfcfe; border: 1px solid #eef2f7; border-radius: 12px;
+  padding: 14px; margin-bottom: 14px;
+}
+.alta-seccion-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.alta-seccion-head b { color: #022E45; font-size: 14.5px; }
+.alta-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%; background: #022E45; color: #fff;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+
+/* "i" azul de info con burbuja */
+.infotip { position: relative; display: inline-flex; align-items: center; color: #2563eb; cursor: help; }
+.infotip-bubble {
+  position: absolute; left: 22px; top: -4px; z-index: 30; width: 240px;
+  background: #022E45; color: #fff; font-size: 12.5px; font-weight: 400; line-height: 1.4;
+  padding: 9px 11px; border-radius: 9px; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+.infotip-bubble::before {
+  content: ""; position: absolute; left: -5px; top: 9px;
+  border: 5px solid transparent; border-right-color: #022E45; border-left: none;
+}
