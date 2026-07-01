@@ -87,6 +87,34 @@ class Cuenta(db.Model):
                 return r
         return None
 
+    def tiene_deuda_vencida(self):
+        """
+        True si la cuenta tiene al menos una cuota vencida sin pagar.
+        Las cuotas congeladas en un arreglo ('en_arreglo') NO cuentan como
+        deuda vencida: el arreglo es el mecanismo activo de pago.
+        """
+        from app.models.cuenta import Cuota
+        hoy = dt.date.today()
+        vencida = (Cuota.query
+                   .filter(Cuota.cuenta_id == self.id,
+                           Cuota.estado.notin_(["pagada", "en_arreglo"]),
+                           Cuota.fecha_vencimiento < hoy)
+                   .first())
+        return vencida is not None
+
+    def intentar_desbloquear(self):
+        """
+        Desbloquea la cuenta SOLO si ya no le quedan cuotas vencidas sin pagar.
+        Se llama después de registrar un pago. Evita el bug de desbloquear una
+        cuenta que pagó una cuota pero aún debe otras. Devuelve True si quedó
+        al día, False si sigue con deuda (y por tanto bloqueada).
+        """
+        if self.tiene_deuda_vencida():
+            return False
+        self.estado = "al_dia"
+        self.bloqueada = False
+        return True
+
     def to_dict(self, detalle=False):
         t = self.titular()
         unidad = None

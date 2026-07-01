@@ -222,10 +222,11 @@ def crear_cuenta(usuario_actual):
         from app.models.usuario import Usuario
         from app.models.cuenta import Residente, Cuota
         dni_norm = dni_titular.replace("-", "").replace(" ", "")
-        # Usuarios con ese DNI (comparando normalizado, sin guiones ni espacios)
-        candidatos = Usuario.query.filter(Usuario.dni.isnot(None)).all()
-        usuarios_dni = [u for u in candidatos
-                        if (u.dni or "").replace("-", "").replace(" ", "") == dni_norm]
+        # Comparación en SQL: se normaliza el DNI almacenado quitando guiones y
+        # espacios y se compara contra el normalizado. Usa el índice de dni.
+        usuarios_dni = (Usuario.query
+                        .filter(db.func.replace(db.func.replace(Usuario.dni, "-", ""), " ", "") == dni_norm)
+                        .all())
         for u_prev in usuarios_dni:
             resids = Residente.query.filter_by(usuario_id=u_prev.id, activo=True).all()
             for r_prev in resids:

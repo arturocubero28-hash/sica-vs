@@ -336,16 +336,23 @@ def revisar_pago(usuario_actual, uuid_pago):
                         c.estado = "pagada"
         elif pago.cuota:
             pago.cuota.estado = "pagada"
-        # Desbloqueo automático de la cuenta
+        # Desbloqueo automático SOLO si ya no quedan cuotas vencidas sin pagar.
+        # (Si el residente pagó una cuota pero aún debe otras, sigue bloqueado.)
         if cuenta:
-            cuenta.estado = "al_dia"
-            cuenta.bloqueada = False
+            cuenta.intentar_desbloquear()
         # Asignar número de recibo
         from app.api.recibos import asignar_recibo
         asignar_recibo(pago)
     else:
-        # Rechazado: la cuota vuelve a pendiente para que el residente reintente
-        if pago.cuota:
+        # Rechazado: lo pendiente vuelve a su estado anterior para que el
+        # residente pueda reintentar el pago desde la app.
+        if pago.abono_id:
+            from app.models.cuenta import AbonoArreglo
+            abono = AbonoArreglo.query.get(pago.abono_id)
+            if abono and abono.estado not in ("pagado",):
+                # Si ya venció su fecha, vuelve a 'vencido'; si no, 'pendiente'.
+                abono.estado = "vencido" if abono.fecha_pactada < dt.date.today() else "pendiente"
+        elif pago.cuota:
             pago.cuota.estado = "pendiente"
 
     db.session.commit()

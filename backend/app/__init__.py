@@ -228,6 +228,11 @@ def create_app(config_class=Config):
             "CREATE INDEX IF NOT EXISTS ix_eventos_acceso_id ON eventos_acceso (acceso_id)",
             "CREATE INDEX IF NOT EXISTS ix_eventos_tarjeta_id ON eventos_acceso (tarjeta_id)",
             "CREATE INDEX IF NOT EXISTS ix_eventos_residente_id ON eventos_acceso (residente_id)",
+            # Día 25 — Índice en dni para la validación anti-moroso en el alta de
+            # cuentas (evita escanear toda la tabla de usuarios).
+            "CREATE INDEX IF NOT EXISTS ix_usuarios_dni ON usuarios (dni)",
+            # Día 25 — La revisión de mora filtra por fecha de vencimiento.
+            "CREATE INDEX IF NOT EXISTS ix_cuotas_vencimiento ON cuotas (fecha_vencimiento)",
         ]
         for sql in columnas:
             try:

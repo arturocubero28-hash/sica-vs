@@ -119,12 +119,13 @@ def registrar_pago(usuario_actual):
     )
     db.session.add(pago)
 
-    # Marcar cuota pagada y desbloquear la cuenta
+    # Marcar cuota pagada y, si ya no quedan cuotas vencidas, desbloquear.
+    # Si aún debe otras cuotas, la cuenta permanece bloqueada (evita que pagar
+    # una sola cuota reactive el acceso teniendo otras vencidas).
     cuota.estado = "pagada"
     cuenta = cuota.cuenta
     if cuenta:
-        cuenta.estado = "al_dia"
-        cuenta.bloqueada = False
+        cuenta.intentar_desbloquear()
 
     # Asignar número de recibo
     from app.api.recibos import asignar_recibo
