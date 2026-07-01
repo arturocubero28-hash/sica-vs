@@ -87,11 +87,39 @@ def mis_cuotas(usuario_actual):
                 "estado": a.estado,
             })
 
+    # Historial de pagos APROBADOS del residente (cuotas normales Y abonos de
+    # arreglo), con su recibo, para la pestaña de historial. Se arma desde los
+    # Pago para incluir todo lo pagado, no solo cuotas.
+    from app.models.cuenta import AbonoArreglo, ArregloPago as _Arr
+    pagos_ap = (Pago.query
+                .filter(Pago.cuenta_id == residente.cuenta_id, Pago.estado == "aprobado")
+                .order_by(Pago.revisado_en.desc().nullslast(), Pago.created_at.desc())
+                .all())
+    historial = []
+    for p in pagos_ap:
+        # Etiqueta de a qué corresponde el pago
+        if p.cuota_id and p.cuota:
+            etiqueta = p.cuota.periodo.strftime("%B %Y")
+        elif p.abono_id:
+            ab = AbonoArreglo.query.get(p.abono_id)
+            etiqueta = f"Abono {ab.numero}" if ab else "Abono de arreglo"
+        else:
+            etiqueta = "Pago"
+        historial.append({
+            "id": str(p.uuid_publico),
+            "etiqueta": etiqueta,
+            "monto": float(p.monto),
+            "metodo": p.metodo,
+            "numero_recibo": p.numero_recibo,
+            "fecha": (p.revisado_en or p.created_at).isoformat(),
+        })
+
     return jsonify({"data": {
         "cuotas": cuotas_dict,
         "arreglo": ({"id": str(arreglo.uuid_publico),
                      "saldo_pendiente": arreglo.saldo_pendiente(),
                      "abonos": abonos} if arreglo else None),
+        "historial": historial,
     }})
 
 

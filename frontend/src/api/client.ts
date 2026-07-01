@@ -305,9 +305,14 @@ export interface AbonoArregloDTO {
   abono_id: string; arreglo_id: string; numero: number; total_abonos: number;
   monto: number; fecha_pactada: string; estado: string;
 }
+export interface PagoHistorialDTO {
+  id: string; etiqueta: string; monto: number; metodo: string;
+  numero_recibo?: number; fecha: string;
+}
 export interface MisCuotasDTO {
   cuotas: CuotaDTO[];
   arreglo: { id: string; saldo_pendiente: number; abonos: AbonoArregloDTO[] } | null;
+  historial: PagoHistorialDTO[];
 }
 export const misCuotas = () => request<MisCuotasDTO>("/cuotas/mias");
 export const detalleCuota = (uuid: string) => request<CuotaDTO>(`/cuotas/mias/${uuid}`);

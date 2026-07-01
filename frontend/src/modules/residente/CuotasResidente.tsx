@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { misCuotas, subirComprobante, subirComprobanteAbono, urlReciboPDF,
-  type CuotaDTO, type AbonoArregloDTO } from "../../api/client";
+  type CuotaDTO, type AbonoArregloDTO, type PagoHistorialDTO } from "../../api/client";
 import { AlertTriangle, Paperclip, Handshake, Receipt } from "lucide-react";
 
 const estadoLabel: Record<string, string> = {
@@ -13,16 +13,21 @@ const estadoColor: Record<string, string> = {
 export function CuotasResidente() {
   const [cuotas, setCuotas] = useState<CuotaDTO[]>([]);
   const [arreglo, setArreglo] = useState<{ id: string; saldo_pendiente: number; abonos: AbonoArregloDTO[] } | null>(null);
+  const [historial, setHistorial] = useState<PagoHistorialDTO[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [tab, setTab] = useState<"pendientes" | "historial">("pendientes");
   const [cuotaPago, setCuotaPago] = useState<CuotaDTO | null>(null);
   const [abonoPago, setAbonoPago] = useState<AbonoArregloDTO | null>(null);
 
   function recargar() {
-    misCuotas().then(d => { setCuotas(d.cuotas); setArreglo(d.arreglo); }).catch(() => {});
+    misCuotas().then(d => {
+      setCuotas(d.cuotas); setArreglo(d.arreglo); setHistorial(d.historial || []);
+    }).catch(() => {});
   }
   useEffect(() => {
-    misCuotas().then(d => { setCuotas(d.cuotas); setArreglo(d.arreglo); })
-      .catch(() => {}).finally(() => setCargando(false));
+    misCuotas().then(d => {
+      setCuotas(d.cuotas); setArreglo(d.arreglo); setHistorial(d.historial || []);
+    }).catch(() => {}).finally(() => setCargando(false));
   }, []);
 
   function onPagoSubido() {
@@ -34,54 +39,75 @@ export function CuotasResidente() {
   if (cargando) return <p className="muted">Cargando cuotas…</p>;
 
   const pendientes = cuotas.filter(c => c.estado !== "pagada" && c.estado !== "en_arreglo");
-  const pagadas = cuotas.filter(c => c.estado === "pagada");
   const abonosPend = arreglo ? arreglo.abonos.filter(a => a.estado !== "pagado") : [];
+  const totalPend = pendientes.length + abonosPend.length;
 
   return (
     <div className="cuotas-wrap">
-      {pendientes.length === 0 && pagadas.length === 0 && !arreglo && (
-        <div className="cuota-vacia">
-          <div className="cuota-vacia-icon">✓</div>
-          <p>No tenés cuotas registradas.</p>
-          <p className="muted small">Las cuotas se generan automáticamente el 1° de cada mes.</p>
-        </div>
+      <div className="hist-tabs">
+        <button className={`hist-tab ${tab === "pendientes" ? "on" : ""}`} onClick={() => setTab("pendientes")}>
+          Cuotas pendientes ({totalPend})
+        </button>
+        <button className={`hist-tab ${tab === "historial" ? "on" : ""}`} onClick={() => setTab("historial")}>
+          Historial de pagos ({historial.length})
+        </button>
+      </div>
+
+      {tab === "pendientes" && (
+        <>
+          {totalPend === 0 && (
+            <div className="cuota-vacia">
+              <div className="cuota-vacia-icon">✓</div>
+              <p>No tenés cuotas pendientes.</p>
+              <p className="muted small">Las cuotas se generan automáticamente el 1° de cada mes.</p>
+            </div>
+          )}
+
+          {/* Cuotas del arreglo de pago, agrupadas */}
+          {arreglo && abonosPend.length > 0 && (
+            <section>
+              <h3 className="cuotas-seccion"><Handshake size={18} /> Arreglo de pago</h3>
+              <p className="muted small" style={{ margin: "0 0 10px" }}>
+                Saldo pendiente: <b>L {arreglo.saldo_pendiente.toFixed(2)}</b>. Pagá cada abono subiendo tu comprobante.
+              </p>
+              <div className="cuota-list">
+                {abonosPend.map(a => (
+                  <AbonoCard key={a.abono_id} abono={a} onPagar={() => setAbonoPago(a)} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Cuotas de mensualidad normales, agrupadas */}
+          {pendientes.length > 0 && (
+            <section>
+              <h3 className="cuotas-seccion" style={{ marginTop: (arreglo && abonosPend.length > 0) ? 24 : 0 }}>
+                Cuotas de mensualidad
+              </h3>
+              <div className="cuota-list">
+                {pendientes.map(c => (
+                  <CuotaCard key={c.id} cuota={c} onPagar={() => setCuotaPago(c)} />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
-      {arreglo && abonosPend.length > 0 && (
-        <section>
-          <h3 className="cuotas-seccion"><Handshake size={18} /> Tu arreglo de pago</h3>
-          <p className="muted small" style={{ margin: "0 0 10px" }}>
-            Saldo pendiente del arreglo: <b>L {arreglo.saldo_pendiente.toFixed(2)}</b>.
-            Pagá cada abono subiendo tu comprobante.
-          </p>
-          <div className="cuota-list">
-            {abonosPend.map(a => (
-              <AbonoCard key={a.abono_id} abono={a} onPagar={() => setAbonoPago(a)} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {pendientes.length > 0 && (
-        <section>
-          <h3 className="cuotas-seccion" style={{ marginTop: arreglo ? 24 : 0 }}>Cuotas pendientes</h3>
-          <div className="cuota-list">
-            {pendientes.map(c => (
-              <CuotaCard key={c.id} cuota={c} onPagar={() => setCuotaPago(c)} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {pagadas.length > 0 && (
-        <section>
-          <h3 className="cuotas-seccion" style={{ marginTop: 24 }}>Historial de pagos</h3>
-          <div className="cuota-list">
-            {pagadas.map(c => (
-              <CuotaCard key={c.id} cuota={c} />
-            ))}
-          </div>
-        </section>
+      {tab === "historial" && (
+        <>
+          {historial.length === 0 ? (
+            <div className="cuota-vacia">
+              <div className="cuota-vacia-icon">🧾</div>
+              <p>Todavía no hay pagos registrados.</p>
+              <p className="muted small">Acá vas a ver todos tus pagos aprobados con su recibo.</p>
+            </div>
+          ) : (
+            <div className="cuota-list">
+              {historial.map(p => <PagoHistorialCard key={p.id} pago={p} />)}
+            </div>
+          )}
+        </>
       )}
 
       {cuotaPago && (
@@ -90,6 +116,29 @@ export function CuotasResidente() {
       {abonoPago && (
         <FormPagoAbono abono={abonoPago} onCerrar={() => setAbonoPago(null)} onExito={onPagoSubido} />
       )}
+    </div>
+  );
+}
+
+function PagoHistorialCard({ pago }: { pago: PagoHistorialDTO }) {
+  const metodoLabel: Record<string, string> = {
+    efectivo: "Efectivo", tarjeta_pos: "Tarjeta POS", transferencia: "Transferencia", linea: "En línea",
+  };
+  return (
+    <div className="cuota-card">
+      <div className="cuota-card-top">
+        <div>
+          <div className="cuota-mes">{pago.etiqueta}</div>
+          <div className="cuota-monto">L {pago.monto.toFixed(2)}</div>
+        </div>
+        <span className="pill green">Pagado</span>
+      </div>
+      <div className="cuota-vence">
+        {new Date(pago.fecha).toLocaleDateString("es-HN")} · {metodoLabel[pago.metodo] || pago.metodo}
+      </div>
+      <a className="cuota-btn-recibo" href={urlReciboPDF(pago.id)} target="_blank" rel="noreferrer">
+        <Receipt size={16} /> Ver recibo{pago.numero_recibo ? ` REC-${String(pago.numero_recibo).padStart(6, "0")}` : ""}
+      </a>
     </div>
   );
 }
