@@ -158,9 +158,27 @@ def crear_cuenta(usuario_actual):
     """
     data = request.get_json(silent=True) or {}
 
-    unidad = Unidad.query.filter_by(uuid_publico=data.get("unidad_id")).first()
+    # La unidad puede venir ya existente (unidad_id) o crearse sobre la marcha
+    # (unidad_nueva: {tipo, identificador}), para no requerir un paso previo.
+    unidad = None
+    if data.get("unidad_id"):
+        unidad = Unidad.query.filter_by(uuid_publico=data.get("unidad_id")).first()
     if not unidad:
-        return _err("unidad_no_encontrada", "La unidad indicada no existe", 404)
+        nueva = data.get("unidad_nueva") or {}
+        ident = (nueva.get("identificador") or "").strip()
+        tipo = nueva.get("tipo") if nueva.get("tipo") in ("casa", "edificio") else "casa"
+        if ident:
+            # Evitar duplicar una unidad con el mismo identificador
+            existente = Unidad.query.filter(
+                db.func.lower(Unidad.identificador) == ident.lower()).first()
+            if existente:
+                unidad = existente
+            else:
+                unidad = Unidad(tipo=tipo, identificador=ident, activa=True)
+                db.session.add(unidad)
+                db.session.flush()
+    if not unidad:
+        return _err("unidad_no_encontrada", "Indicá la casa o edificio a dar de alta", 404)
 
     tarifa = Tarifa.query.get(data.get("tarifa_id"))
     if not tarifa:
@@ -183,6 +201,42 @@ def crear_cuenta(usuario_actual):
         return _err("duplicado", f"El apartamento {apartamento} ya existe en esta unidad", 409)
 
     titular_data = data.get("titular") or {}
+
+    # ── Regla anti-mora: una persona con deuda en otra casa no puede darse de
+    # alta en una nueva unidad hasta ponerse al día. Se identifica por DNI.
+    dni_titular = (titular_data.get("dni") or "").strip()
+    if dni_titular:
+        from app.models.usuario import Usuario
+        from app.models.cuenta import Residente, Cuota
+        dni_norm = dni_titular.replace("-", "").replace(" ", "")
+        # Usuarios con ese DNI (comparando normalizado, sin guiones ni espacios)
+        candidatos = Usuario.query.filter(Usuario.dni.isnot(None)).all()
+        usuarios_dni = [u for u in candidatos
+                        if (u.dni or "").replace("-", "").replace(" ", "") == dni_norm]
+        for u_prev in usuarios_dni:
+            resids = Residente.query.filter_by(usuario_id=u_prev.id, activo=True).all()
+            for r_prev in resids:
+                cuenta_prev = r_prev.cuenta
+                if not cuenta_prev:
+                    continue
+                # ¿Cuenta bloqueada por mora, o con cuotas vencidas sin pagar?
+                tiene_mora = (
+                    getattr(cuenta_prev, "bloqueada", False)
+                    or cuenta_prev.estado in ("moroso", "en_mora")
+                    or Cuota.query.filter(
+                        Cuota.cuenta_id == cuenta_prev.id,
+                        Cuota.estado.notin_(["pagada", "en_arreglo"]),
+                        Cuota.fecha_vencimiento < dt.date.today(),
+                    ).first() is not None
+                )
+                if tiene_mora:
+                    ident_prev = cuenta_prev.unidad.identificador if cuenta_prev.unidad else "otra unidad"
+                    return _err(
+                        "titular_moroso",
+                        f"Esta persona (DNI {dni_titular}) tiene deudas pendientes en "
+                        f"\"{ident_prev}\". Debe ponerse al día antes de registrarse en otra unidad.",
+                        409)
+
     usuario, token_o_error = _crear_usuario_pendiente(
         titular_data.get("nombre"), titular_data.get("apellido"),
         titular_data.get("email"), titular_data.get("telefono"),

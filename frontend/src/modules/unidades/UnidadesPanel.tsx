@@ -251,13 +251,20 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
 
   async function guardar() {
     setMsg(null); setEnlace(null);
-    if (!unidadId || !tarifaId || !nombre || !email) {
-      setMsg({ tipo: "err", texto: "Completa unidad, tarifa, nombre y correo del titular" });
+    // La unidad puede estar ya seleccionada (edificio existente) o ser nueva
+    // (casa/edificio que se escribe en el momento): en ese caso se envía
+    // unidad_nueva y el backend la crea junto con la cuenta.
+    const hayUnidad = unidadId || (modoUnidad === "nueva" && nuevaUnidadId.trim());
+    if (!hayUnidad || !tarifaId || !nombre || !email) {
+      setMsg({ tipo: "err", texto: "Completá la casa/edificio, la tarifa, y el nombre y correo del titular" });
       return;
     }
     try {
       const res = await crearCuenta({
-        unidad_id: unidadId, apartamento: esEdificio ? apartamento : undefined,
+        unidad_id: unidadId || undefined,
+        unidad_nueva: (!unidadId && nuevaUnidadId.trim())
+          ? { tipo: nuevaUnidadTipo, identificador: nuevaUnidadId.trim() } : undefined,
+        apartamento: esEdificio ? apartamento : undefined,
         tarifa_id: tarifaId, dia_pago: diaPago,
         codigo_enrolamiento: codigoEnrol.trim() || undefined,
         es_dueno_edificio: esEdificio && esDuenoEdificio && !enrolInfo,
@@ -376,20 +383,14 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
 
           {modoUnidad === "nueva" ? (
             <div className="crear-unidad-box">
-              <div className="row">
-                <input placeholder={nuevaUnidadTipo === "casa" ? "Identificador (ej. Casa 24)" : "Nombre del edificio (ej. Edificio B)"}
-                  value={nuevaUnidadId}
-                  onChange={(e) => setNuevaUnidadId(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && crearUnidadInline()} />
-                <button className="mini" onClick={crearUnidadInline} disabled={!nuevaUnidadId.trim() || creandoUnidad}>
-                  Crear
-                </button>
-              </div>
-              {unidadId && unidadSel && (
-                <div className="unidad-creada">
-                  ✓ <b>{unidadSel.identificador}</b> {unidadSel.tipo === "edificio" ? "creado" : "creada"} y {unidadSel.tipo === "edificio" ? "seleccionado" : "seleccionada"}
-                </div>
-              )}
+              <input placeholder={nuevaUnidadTipo === "casa" ? "Identificador (ej. Casa 24)" : "Nombre del edificio (ej. Edificio B)"}
+                value={nuevaUnidadId}
+                onChange={(e) => setNuevaUnidadId(e.target.value)} />
+              <p className="muted small" style={{ marginTop: 6 }}>
+                {nuevaUnidadTipo === "casa"
+                  ? "La casa se creará junto con la cuenta al dar de alta."
+                  : "El edificio se creará junto con la cuenta. Indicá el apartamento abajo."}
+              </p>
             </div>
           ) : (
             <div className="search-box">
