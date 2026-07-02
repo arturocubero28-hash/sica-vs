@@ -116,6 +116,7 @@ def mis_cuotas(usuario_actual):
 
     return jsonify({"data": {
         "cuotas": cuotas_dict,
+        "bloqueada": residente.cuenta.bloqueada if residente.cuenta else False,
         "arreglo": ({"id": str(arreglo.uuid_publico),
                      "saldo_pendiente": arreglo.saldo_pendiente(),
                      "abonos": abonos} if arreglo else None),
