@@ -395,7 +395,27 @@ def accesos_recientes(usuario_actual):
     eventos = (EventoAcceso.query
                .order_by(EventoAcceso.ocurrido_en.desc())
                .limit(30).all())
-    return jsonify({"data": [e.to_dict() for e in eventos]})
+    resultado = []
+    for e in eventos:
+        d = e.to_dict()
+        # Enriquecer con nombre del visitante y unidad si viene de una visita
+        if e.visita_id:
+            visita = Visita.query.get(e.visita_id)
+            if visita:
+                d["nombre_visitante"] = visita.nombre_visitante
+                d["tipo_qr"] = visita.tipo
+                if visita.cuenta and visita.cuenta.unidad:
+                    d["unidad"] = visita.cuenta.unidad.identificador
+        elif e.residente_id:
+            from app.models.cuenta import Residente
+            res = Residente.query.get(e.residente_id)
+            if res:
+                d["nombre_visitante"] = f"{res.usuario.nombre} {res.usuario.apellido}"
+                d["tipo_qr"] = "residente"
+                if res.cuenta and res.cuenta.unidad:
+                    d["unidad"] = res.cuenta.unidad.identificador
+        resultado.append(d)
+    return jsonify({"data": resultado})
 
 
 # =====================================================================
