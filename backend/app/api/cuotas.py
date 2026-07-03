@@ -373,10 +373,31 @@ def revisar_pago(usuario_actual, uuid_pago):
             pago.cuota.estado = "pendiente"
 
     db.session.commit()
+
+    # Notificar al residente el resultado de la revisión de su comprobante
+    try:
+        from app.services import notificaciones as _notif
+        if cuenta:
+            monto_txt = f"L {pago.monto:,.2f}"
+            if accion == "aprobar":
+                _notif.notificar_cuenta(
+                    cuenta,
+                    "Pago aprobado ✓",
+                    f"Tu pago de {monto_txt} fue aprobado. ¡Gracias!",
+                    {"tipo": "pago_aprobado"},
+                )
+            else:
+                motivo = f" Motivo: {nota}" if nota else ""
+                _notif.notificar_cuenta(
+                    cuenta,
+                    "Comprobante rechazado",
+                    f"Tu comprobante de {monto_txt} fue rechazado.{motivo}",
+                    {"tipo": "pago_rechazado"},
+                )
+    except Exception:
+        pass  # Nunca romper la aprobación por un fallo de notificación
+
     return jsonify({"data": pago.to_dict()})
-
-
-# ── ADMIN: generar cuotas del mes manualmente (botón en el panel) ─────────────
 @cuotas_bp.post("/generar")
 @roles_required("admin")
 def generar_cuotas_manual(usuario_actual):

@@ -57,6 +57,7 @@ def create_app(config_class=Config):
     from app.models.sesion_activa import SesionActiva  # noqa: F401  sesiones/dispositivos
     from app.models.credencial_webauthn import CredencialWebAuthn  # noqa: F401  biometría WebAuthn
     from app.models.dispositivo import Dispositivo  # noqa: F401  Raspberry Pi de accesos
+    from app.models.dispositivo_movil import DispositivoMovil  # noqa: F401  tokens FCM push
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp
@@ -113,6 +114,15 @@ def create_app(config_class=Config):
 
     from app.api.desarrollador import dev_bp
     app.register_blueprint(dev_bp, url_prefix="/api/v1/dev")
+
+    from app.api.dispositivos import dispositivos_bp
+    app.register_blueprint(dispositivos_bp, url_prefix="/api/v1/dispositivos")
+
+    # Inicializar Firebase Cloud Messaging (notificaciones push).
+    # Si no está configurado (falta el archivo de credenciales), no rompe:
+    # el servicio simplemente omite el envío de notificaciones.
+    from app.services import notificaciones as _notif
+    _notif.inicializar()
 
     # --- Healthcheck y manejo de errores estándar ---
     @app.get("/api/v1/health")

@@ -70,16 +70,29 @@ def guardar_imagen_segura(archivo, carpeta_destino, extensiones=EXT_IMAGEN):
       - El usuario nunca controla la ruta ni el nombre
     """
     if not archivo or not archivo.filename:
-        return None, "No se adjuntó ningún archivo"
+        return None, "No se adjuntó ningún archivo. Seleccioná una foto o PDF del comprobante."
 
     ext = extension_segura(archivo.filename)
     if not ext or ext not in extensiones:
-        permitidas = ", ".join(sorted(extensiones))
-        return None, f"Formato no permitido. Solo se aceptan: {permitidas}"
+        permitidas = ", ".join(sorted(extensiones)).upper()
+        return None, (f"Ese tipo de archivo no se permite. "
+                      f"Subí una imagen o PDF ({permitidas}). "
+                      f"Si es una captura de pantalla, guardala como JPG o PNG.")
 
     # Validar que el contenido real coincida con la extensión
     if not validar_contenido(archivo.stream, ext):
-        return None, "El archivo no es una imagen válida o está corrupto"
+        return None, ("El archivo parece estar dañado o no es una imagen válida. "
+                      "Probá tomar la foto de nuevo o elegir otro archivo.")
+
+    # Validar tamaño máximo (5 MB). Se mide moviendo el cursor al final.
+    archivo.stream.seek(0, os.SEEK_END)
+    tam = archivo.stream.tell()
+    archivo.stream.seek(0)
+    MAX_BYTES = 5 * 1024 * 1024
+    if tam > MAX_BYTES:
+        mb = tam / (1024 * 1024)
+        return None, (f"El archivo pesa {mb:.1f} MB y el máximo es 5 MB. "
+                      f"Reducí la resolución de la foto o comprimila.")
 
     # Nombre generado por el servidor — el usuario NO controla el nombre
     nombre_seguro = f"{uuid_lib.uuid4().hex}.{ext}"

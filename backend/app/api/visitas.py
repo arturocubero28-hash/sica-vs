@@ -377,8 +377,23 @@ def registrar_acceso_visita(usuario_actual):
 
     db.session.commit()
 
-    # TODO: Emitir notificación al residente via SocketIO + Resend
-    # socketio.emit("visita_evento", {...}, room=f"cuenta_{visita.cuenta_id}")
+    # Notificar al residente que autorizó la visita
+    try:
+        from app.services import notificaciones as _notif
+        if visita.cuenta:
+            nombre = visita.nombre_visitante or "Tu visita"
+            if direccion == "entrada":
+                titulo = "Visita ingresó 🚪"
+                cuerpo = f"{nombre} acaba de ingresar a la residencial."
+            else:
+                titulo = "Visita salió"
+                cuerpo = f"{nombre} acaba de salir de la residencial."
+            _notif.notificar_cuenta(
+                visita.cuenta, titulo, cuerpo,
+                {"tipo": "visita_evento", "direccion": direccion},
+            )
+    except Exception:
+        pass  # No romper el registro de acceso por un fallo de notificación
 
     return jsonify({"data": {
         "evento": evento.to_dict(),

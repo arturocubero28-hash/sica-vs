@@ -78,6 +78,7 @@ def revisar_mora():
         hoy = dt.date.today()
         bloqueadas = 0
         procesadas = 0
+        cuentas_bloqueadas = []  # para notificar al final
 
         cuotas = Cuota.query.filter(
             Cuota.estado.in_(["pendiente", "vencida"]),
@@ -94,12 +95,28 @@ def revisar_mora():
                     cuenta.estado = "bloqueada"
                     cuenta.bloqueada = True
                     bloqueadas += 1
+                    cuentas_bloqueadas.append(cuenta)
             elif dias >= 0:
                 cuota.estado = "vencida"
 
             procesadas += 1
 
         db.session.commit()
+
+        # Notificar a las cuentas recién bloqueadas por mora
+        try:
+            from app.services import notificaciones as _notif
+            for cuenta in cuentas_bloqueadas:
+                _notif.notificar_cuenta(
+                    cuenta,
+                    "Cuenta bloqueada por mora",
+                    "Tu cuenta fue bloqueada por cuotas vencidas. "
+                    "Regularizá tu pago para recuperar el acceso.",
+                    {"tipo": "cuenta_bloqueada"},
+                )
+        except Exception:
+            pass
+
         return {"procesadas": procesadas, "cuentas_bloqueadas": bloqueadas}
 
 
