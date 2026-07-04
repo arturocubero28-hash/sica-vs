@@ -38,6 +38,20 @@ def _mi_residente(usuario):
     return Residente.query.filter_by(usuario_id=usuario.id, activo=True).first()
 
 
+def _guardar_foto_multipart(archivo, prefijo):
+    """Guarda una foto subida como multipart (app móvil) y devuelve el nombre."""
+    if not archivo or not archivo.filename:
+        return None
+    try:
+        os.makedirs("/app/uploads", exist_ok=True)
+        nombre = f"{prefijo}_{uuid_lib.uuid4().hex[:12]}.jpg"
+        ruta = f"/app/uploads/{nombre}"
+        archivo.save(ruta)
+        return nombre
+    except Exception:
+        return None
+
+
 def _guardar_foto_base64(b64_data, prefijo):
     """Guarda una foto base64 en /app/uploads y devuelve la ruta."""
     if not b64_data:
@@ -324,11 +338,13 @@ def validar_qr(usuario_actual):
 @roles_required("guardia", "admin", "super_admin")
 def registrar_acceso_visita(usuario_actual):
     """Registra la entrada o salida de una visita.
-    Body:
-      { visita_id (uuid), direccion: "entrada"|"salida", acceso_id: int,
-        foto_identidad?: base64, foto_placa?: base64 }
+    Acepta JSON (web, fotos en base64) o multipart/form-data (app móvil,
+    fotos como archivos). Retrocompatible con ambos.
     """
+    # Leer campos desde JSON o desde form (multipart)
     data = request.get_json(silent=True) or {}
+    if not data:
+        data = request.form.to_dict()
     visita = Visita.query.filter_by(uuid_publico=data.get("visita_id")).first()
     if not visita:
         return jsonify({"error": {"code": "visita_invalida",
@@ -339,20 +355,23 @@ def registrar_acceso_visita(usuario_actual):
         direccion = "entrada"
 
     # La foto de identidad es OBLIGATORIA para registrar una entrada.
-    # En las salidas no se piden fotos (ya se tomaron al entrar).
-    if direccion == "entrada" and not data.get("foto_identidad"):
+    tiene_foto_id = data.get("foto_identidad") or request.files.get("foto_identidad")
+    if direccion == "entrada" and not tiene_foto_id:
         return jsonify({"error": {"code": "foto_requerida",
                                   "message": "La foto de identidad es obligatoria para dar acceso"}}), 400
 
-    # Si la visita es en vehículo, la foto de la placa también es obligatoria.
-    if direccion == "entrada" and visita.en_vehiculo and not data.get("foto_placa"):
+    tiene_foto_pl = data.get("foto_placa") or request.files.get("foto_placa")
+    if direccion == "entrada" and visita.en_vehiculo and not tiene_foto_pl:
         return jsonify({"error": {"code": "foto_placa_requerida",
                                   "message": "La foto de la placa es obligatoria para vehículos"}}), 400
 
-    # Guardar fotos
-    foto_id = _guardar_foto_base64(data.get("foto_identidad"), "id")
-    foto_pl = _guardar_foto_base64(data.get("foto_placa"), "placa")
-    foto_num = _guardar_foto_base64(data.get("foto_numero_asignado"), "numero")
+    # Guardar fotos — acepta multipart (app móvil) o base64 en JSON (web)
+    foto_id = (_guardar_foto_multipart(request.files.get("foto_identidad"), "id")
+               or _guardar_foto_base64(data.get("foto_identidad"), "id"))
+    foto_pl = (_guardar_foto_multipart(request.files.get("foto_placa"), "placa")
+               or _guardar_foto_base64(data.get("foto_placa"), "placa"))
+    foto_num = (_guardar_foto_multipart(request.files.get("foto_numero_asignado"), "numero")
+                or _guardar_foto_base64(data.get("foto_numero_asignado"), "numero"))
 
     evento = EventoAcceso(
         origen="visita",
