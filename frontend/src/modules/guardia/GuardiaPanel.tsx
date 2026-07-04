@@ -9,9 +9,9 @@ export function GuardiaPanel() {
   const [direccion, setDireccion] = useState<"entrada" | "salida">("entrada");
   const [cuentaBloqueada, setCuentaBloqueada] = useState(false);
   const [error, setError] = useState("");
-  const [fotoId, setFotoId] = useState("");
-  const [fotoPlaca, setFotoPlaca] = useState("");
-  const [fotoNumero, setFotoNumero] = useState("");
+  const [fotoId, setFotoId] = useState<Blob | null>(null);
+  const [fotoPlaca, setFotoPlaca] = useState<Blob | null>(null);
+  const [fotoNumero, setFotoNumero] = useState<Blob | null>(null);
   const [procesando, setProcesando] = useState(false);
   const [resultado, setResultado] = useState("");
   const [escaneando, setEscaneando] = useState(false);
@@ -95,20 +95,20 @@ export function GuardiaPanel() {
   function capturarFoto() {
     if (!fotoVideoRef.current) return;
     const video = fotoVideoRef.current;
-    // Limitar a máx 1280px en el lado mayor: de sobra para leer DNI/placas,
-    // y reduce 4-10x el peso de cada foto (sube más rápido en la caseta
-    // y ahorra almacenamiento — son 3 fotos por cada acceso).
-    const MAX_LADO = 1280;
+    const MAX_LADO = 1024;
     const escala = Math.min(1, MAX_LADO / Math.max(video.videoWidth, video.videoHeight));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(video.videoWidth * escala);
     canvas.height = Math.round(video.videoHeight * escala);
     canvas.getContext("2d")!.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-    if (tomandoFoto === "id") setFotoId(dataUrl);
-    else if (tomandoFoto === "placa") setFotoPlaca(dataUrl);
-    else if (tomandoFoto === "numero") setFotoNumero(dataUrl);
-    cerrarCamaraFoto();
+    // Usar toBlob (multipart) en vez de toDataURL (base64) — estándar de la industria
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      if (tomandoFoto === "id") setFotoId(blob);
+      else if (tomandoFoto === "placa") setFotoPlaca(blob);
+      else if (tomandoFoto === "numero") setFotoNumero(blob);
+      cerrarCamaraFoto();
+    }, "image/jpeg", 0.7);
   }
 
   function cerrarCamaraFoto() {
@@ -124,9 +124,9 @@ export function GuardiaPanel() {
     try {
       const r = await registrarAcceso({
         visita_id: visita.id, direccion, acceso_id: 1,
-        foto_identidad: direccion === "entrada" ? (fotoId || undefined) : undefined,
-        foto_placa: direccion === "entrada" ? (fotoPlaca || undefined) : undefined,
-        foto_numero_asignado: direccion === "entrada" ? (fotoNumero || undefined) : undefined,
+        foto_identidad: direccion === "entrada" ? (fotoId ?? undefined) : undefined,
+        foto_placa: direccion === "entrada" ? (fotoPlaca ?? undefined) : undefined,
+        foto_numero_asignado: direccion === "entrada" ? (fotoNumero ?? undefined) : undefined,
       });
       setResultado(r.mensaje);
       setStep("done");
@@ -212,13 +212,13 @@ export function GuardiaPanel() {
           ) : (
             <div className="guardia-fotos">
               <div className="foto-slot" onClick={() => abrirCamaraFoto("id")}>
-                {fotoId ? <img src={fotoId} alt="ID" /> : <span className="foto-icon">Foto identidad</span>}
+                {fotoId ? <img src={URL.createObjectURL(fotoId)} alt="ID" /> : <span className="foto-icon">Foto identidad</span>}
               </div>
               <div className="foto-slot" onClick={() => abrirCamaraFoto("placa")}>
-                {fotoPlaca ? <img src={fotoPlaca} alt="Placa" /> : <span className="foto-icon">Foto placa</span>}
+                {fotoPlaca ? <img src={URL.createObjectURL(fotoPlaca)} alt="Placa" /> : <span className="foto-icon">Foto placa</span>}
               </div>
               <div className="foto-slot" onClick={() => abrirCamaraFoto("numero")}>
-                {fotoNumero ? <img src={fotoNumero} alt="Número" /> : <span className="foto-icon">Foto número asignado</span>}
+                {fotoNumero ? <img src={URL.createObjectURL(fotoNumero)} alt="Número" /> : <span className="foto-icon">Foto número asignado</span>}
               </div>
             </div>
           )}

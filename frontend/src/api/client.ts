@@ -230,11 +230,30 @@ export const validarQR = (token: string) =>
   }>(
     "/visitas/qr/validar", { method: "POST", body: JSON.stringify({ token }) });
 
-export const registrarAcceso = (body: {
+export const registrarAcceso = async (body: {
   visita_id: string; direccion: string; acceso_id?: number;
-  foto_identidad?: string; foto_placa?: string; foto_numero_asignado?: string;
-}) => request<{ evento: object; mensaje: string }>(
-    "/visitas/accesos/visita", { method: "POST", body: JSON.stringify(body) });
+  foto_identidad?: Blob | null;
+  foto_placa?: Blob | null;
+  foto_numero_asignado?: Blob | null;
+}): Promise<{ evento: object; mensaje: string }> => {
+  const form = new FormData();
+  form.append("visita_id", body.visita_id);
+  form.append("direccion", body.direccion);
+  form.append("acceso_id", String(body.acceso_id ?? 1));
+  if (body.foto_identidad) form.append("foto_identidad", body.foto_identidad, "id.jpg");
+  if (body.foto_placa) form.append("foto_placa", body.foto_placa, "placa.jpg");
+  if (body.foto_numero_asignado) form.append("foto_numero_asignado", body.foto_numero_asignado, "numero.jpg");
+
+  const token = getToken();
+  const res = await fetch(`${API_URL}/visitas/accesos/visita`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || "Error al registrar acceso");
+  return json.data;
+};
 
 // URL de la imagen QR (con token en query para autenticación de imagen)
 export function urlImagenQR(visitaId: string): string {
