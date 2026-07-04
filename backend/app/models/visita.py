@@ -78,7 +78,7 @@ class Visita(db.Model):
     residente = db.relationship("Residente", foreign_keys=[generada_por], lazy="joined")
 
     def estado_efectivo(self):
-        """Estado real considerando los eventos de acceso.
+        """Estado real considerando los eventos de acceso y el vencimiento.
         Distingue 'adentro' (último evento fue entrada) y 'salio' (último fue salida),
         que el campo 'estado' por sí solo no refleja."""
         ultimo = None
@@ -93,6 +93,17 @@ class Visita(db.Model):
             ultimo = max(self.eventos, key=_key)
         if ultimo:
             return "adentro" if ultimo.direccion == "entrada" else "salio"
+
+        # Sin eventos: revisar si venció por fecha (visita creada y nunca usada).
+        # Aplica a las visitas únicas/temporales con valido_hasta en el pasado.
+        if self.estado == "activa" and self.valido_hasta:
+            ahora = dt.datetime.now(dt.timezone.utc)
+            vence = self.valido_hasta
+            if vence.tzinfo is None:
+                vence = vence.replace(tzinfo=dt.timezone.utc)
+            if vence < ahora:
+                return "expirada"
+
         return self.estado  # activa, expirada, revocada (aún sin eventos)
 
     def to_dict(self):
@@ -117,7 +128,21 @@ class Visita(db.Model):
                 if self.residente and self.residente.usuario else None
             ),
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "hora_entrada": self._hora_evento("entrada"),
+            "hora_salida": self._hora_evento("salida"),
         }
+
+    def _hora_evento(self, direccion):
+        """Devuelve la hora del primer evento de entrada / último de salida."""
+        eventos = [e for e in self.eventos if e.direccion == direccion]
+        if not eventos:
+            return None
+        # Entrada: la primera; Salida: la última
+        elegido = (min if direccion == "entrada" else max)(
+            eventos,
+            key=lambda e: e.ocurrido_en or dt.datetime.min.replace(tzinfo=dt.timezone.utc),
+        )
+        return elegido.ocurrido_en.isoformat() if elegido.ocurrido_en else None
 
 
 class CodigoQR(db.Model):

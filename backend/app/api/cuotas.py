@@ -158,6 +158,12 @@ def subir_comprobante(usuario_actual, uuid_cuota):
     if cuota.estado == "pagada":
         return jsonify({"error": {"code": "YA_PAGADA", "message": "Esta cuota ya está pagada"}}), 400
 
+    # Evitar doble comprobante: si ya hay uno en revisión, no aceptar otro
+    if cuota.estado == "en_revision":
+        return jsonify({"error": {"code": "YA_EN_REVISION",
+                                  "message": "Ya subiste un comprobante para esta cuota. "
+                                             "Esperá a que la administración lo revise."}}), 409
+
     # Validar archivo
     if "comprobante" not in request.files:
         return jsonify({"error": {"code": "SIN_ARCHIVO", "message": "Adjuntá el comprobante"}}), 400
