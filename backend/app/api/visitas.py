@@ -311,6 +311,12 @@ def validar_qr(usuario_actual):
         return jsonify({"error": {"code": "qr_usado",
                                   "message": "Este código de visita única ya fue utilizado"}}), 400
 
+    # El repartidor también es de un solo uso: entra una vez y sale una vez.
+    # Si ya tiene un ciclo completo (entró y salió), no se puede reutilizar.
+    if visita.tipo == "repartidor" and visita.estado == "usada":
+        return jsonify({"error": {"code": "qr_usado",
+                                  "message": "Este código de repartidor ya fue utilizado"}}), 400
+
     # Estado de la cuenta del residente: si está bloqueada por mora, NO se
     # rechaza la entrada (la mora es del residente, no del visitante), pero se
     # avisa al guardia para que tome la decisión informado.
@@ -391,6 +397,11 @@ def registrar_acceso_visita(usuario_actual):
     if visita.tipo == "unica" and direccion == "entrada":
         visita.estado = "usada"
     # Al registrar salida de visita única, queda como completada (sigue 'usada')
+
+    # El repartidor es de un solo ciclo: al registrar su SALIDA queda usado
+    # y no se puede volver a escanear.
+    if visita.tipo == "repartidor" and direccion == "salida":
+        visita.estado = "usada"
     if visita.qr:
         visita.qr.usos += 1
 
