@@ -412,15 +412,28 @@ def registrar_acceso_visita(usuario_actual):
         from app.services import notificaciones as _notif
         if visita.cuenta_id:
             nombre = visita.nombre_visitante or "Tu visita"
+            tipo = visita.tipo  # unica | recurrente | repartidor
+
             if direccion == "entrada":
-                titulo = "Visita ingresó 🚪"
-                cuerpo = f"{nombre} acaba de ingresar a la residencial."
+                if tipo == "repartidor":
+                    empresa = f" ({visita.empresa})" if visita.empresa else ""
+                    titulo = "Repartidor ingresó 📦"
+                    cuerpo = f"{nombre}{empresa} acaba de ingresar a entregar."
+                else:
+                    titulo = "Visita ingresó 🚪"
+                    cuerpo = f"{nombre} acaba de ingresar a la residencial."
             else:
-                titulo = "Visita salió"
-                cuerpo = f"{nombre} acaba de salir de la residencial."
+                if tipo == "repartidor":
+                    titulo = "Repartidor salió"
+                    cuerpo = f"{nombre} ya completó la entrega y salió."
+                else:
+                    titulo = "Visita salió"
+                    cuerpo = f"{nombre} acaba de salir de la residencial."
+
             _notif.notificar_cuenta_async(
                 visita.cuenta_id, titulo, cuerpo,
-                {"tipo": "visita_evento", "direccion": direccion},
+                {"tipo": "visita_evento", "direccion": direccion,
+                 "tipo_qr": tipo},
             )
     except Exception:
         pass  # No romper el registro de acceso por un fallo de notificación
