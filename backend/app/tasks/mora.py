@@ -8,6 +8,67 @@ import datetime as dt
 from app.tasks.celery_app import celery
 
 
+@celery.task(name="tasks.avisar_cuotas_por_vencer")
+def avisar_cuotas_por_vencer():
+    """Envía un aviso preventivo por notificación push a los residentes cuya
+    cuota vence pronto. Se avisa en dos momentos:
+      - 3 días antes del vencimiento
+      - el mismo día del vencimiento
+
+    Corre una vez al día. Como filtra por fecha exacta (vence en exactamente
+    3 días, o vence hoy), cada cuota recibe como máximo un aviso por momento.
+    """
+    from app.models.cuenta import Cuota
+    from app.services import notificaciones as _notif
+    from flask import has_app_context
+    from app import create_app
+
+    # Si ya hay contexto (llamada desde un endpoint), usarlo; si no (Celery), crear
+    if has_app_context():
+        return _avisar_cuotas_logica(Cuota, _notif)
+    app = create_app()
+    with app.app_context():
+        return _avisar_cuotas_logica(Cuota, _notif)
+
+
+def _avisar_cuotas_logica(Cuota, _notif):
+    hoy = dt.date.today()
+    en_3_dias = hoy + dt.timedelta(days=3)
+
+    cuotas = Cuota.query.filter(
+        Cuota.estado.in_(["pendiente", "vencida"]),
+        Cuota.fecha_vencimiento.in_([hoy, en_3_dias]),
+    ).all()
+
+    avisadas = 0
+    for cuota in cuotas:
+        cuenta = cuota.cuenta
+        if not cuenta:
+            continue
+        dias = (cuota.fecha_vencimiento - hoy).days
+        monto_txt = f"L {float(cuota.monto):,.2f}"
+
+        if dias == 3:
+            titulo = "Tu cuota vence pronto"
+            cuerpo = (f"La cuota de {monto_txt} vence en 3 días. "
+                      f"Pagá a tiempo para evitar el bloqueo por mora.")
+        else:  # dias == 0
+            titulo = "Tu cuota vence hoy"
+            cuerpo = (f"Hoy vence la cuota de {monto_txt}. "
+                      f"Realizá tu pago para mantener tu cuenta al día.")
+
+        try:
+            _notif.notificar_cuenta(
+                cuenta, titulo, cuerpo,
+                {"tipo": "cuota_por_vencer", "dias": str(dias)},
+            )
+            avisadas += 1
+        except Exception:
+            pass
+
+    return {"avisadas": avisadas}
+
+
 # ── Generación automática de cuotas ───────────────────────────────────────────
 @celery.task(name="tasks.generar_cuotas_mensuales")
 def generar_cuotas_mensuales():

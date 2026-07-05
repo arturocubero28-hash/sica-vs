@@ -440,6 +440,16 @@ def generar_cuotas_manual(usuario_actual):
     return jsonify({"data": {"generadas": creadas, "total_cuentas": len(cuentas)}})
 
 
+@cuotas_bp.post("/avisar-vencimiento")
+@roles_required("admin", "super_admin", "desarrollador")
+def avisar_vencimiento_manual(usuario_actual):
+    """Dispara manualmente el aviso de cuotas por vencer (para pruebas, sin
+    esperar al horario de las 8:00 AM)."""
+    from app.tasks.mora import avisar_cuotas_por_vencer
+    resultado = avisar_cuotas_por_vencer()
+    return jsonify({"data": resultado})
+
+
 @cuotas_bp.get("/historial-pagos")
 @roles_required("admin", "super_admin", "desarrollador")
 def historial_pagos(usuario_actual):

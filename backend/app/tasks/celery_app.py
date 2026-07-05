@@ -42,4 +42,8 @@ celery.conf.beat_schedule = {
         "task": "tasks.limpiar_tokens_revocados",
         "schedule": crontab(hour=2, minute=0),
     },
+    "avisar-cuotas-por-vencer": {
+        "task": "tasks.avisar_cuotas_por_vencer",
+        "schedule": crontab(hour=8, minute=0),
+    },
 }
