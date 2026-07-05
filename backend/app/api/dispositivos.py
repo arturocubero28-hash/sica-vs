@@ -65,3 +65,19 @@ def desregistrar(usuario_actual):
             db.session.commit()
 
     return jsonify({"data": {"desregistrado": True}})
+
+
+@dispositivos_bp.post("/probar-notificacion")
+@token_required
+def probar_notificacion(usuario_actual):
+    """Envía una notificación de prueba al usuario actual, sin depender de
+    fechas de cuotas ni eventos reales. Solo para verificar que el flujo
+    Firebase -> token -> teléfono funciona de punta a punta."""
+    from app.services import notificaciones as _notif
+    enviadas = _notif.notificar_usuario(
+        usuario_actual.id,
+        "🔔 Prueba de notificación",
+        "Si ves esto, las notificaciones push de SICA-VS ya están funcionando.",
+        {"tipo": "prueba"},
+    )
+    return jsonify({"data": {"enviadas": enviadas}})
