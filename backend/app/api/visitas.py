@@ -407,12 +407,10 @@ def registrar_acceso_visita(usuario_actual):
 
     db.session.commit()
 
-    # Notificar al residente que autorizó la visita
+    # Notificar al residente que autorizó la visita (async, no bloquea el registro)
     try:
         from app.services import notificaciones as _notif
-        from app.models.cuenta import Cuenta
-        cuenta = Cuenta.query.get(visita.cuenta_id) if visita.cuenta_id else None
-        if cuenta:
+        if visita.cuenta_id:
             nombre = visita.nombre_visitante or "Tu visita"
             if direccion == "entrada":
                 titulo = "Visita ingresó 🚪"
@@ -420,8 +418,8 @@ def registrar_acceso_visita(usuario_actual):
             else:
                 titulo = "Visita salió"
                 cuerpo = f"{nombre} acaba de salir de la residencial."
-            _notif.notificar_cuenta(
-                cuenta, titulo, cuerpo,
+            _notif.notificar_cuenta_async(
+                visita.cuenta_id, titulo, cuerpo,
                 {"tipo": "visita_evento", "direccion": direccion},
             )
     except Exception:

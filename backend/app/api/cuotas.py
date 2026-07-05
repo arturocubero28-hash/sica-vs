@@ -389,22 +389,22 @@ def revisar_pago(usuario_actual, uuid_pago):
 
     db.session.commit()
 
-    # Notificar al residente el resultado de la revisión de su comprobante
+    # Notificar al residente el resultado de la revisión de su comprobante (async)
     try:
         from app.services import notificaciones as _notif
         if cuenta:
             monto_txt = f"L {pago.monto:,.2f}"
             if accion == "aprobar":
-                _notif.notificar_cuenta(
-                    cuenta,
+                _notif.notificar_cuenta_async(
+                    cuenta.id,
                     "Pago aprobado ✓",
                     f"Tu pago de {monto_txt} fue aprobado. ¡Gracias!",
                     {"tipo": "pago_aprobado"},
                 )
             else:
                 motivo = f" Motivo: {nota}" if nota else ""
-                _notif.notificar_cuenta(
-                    cuenta,
+                _notif.notificar_cuenta_async(
+                    cuenta.id,
                     "Comprobante rechazado",
                     f"Tu comprobante de {monto_txt} fue rechazado.{motivo}",
                     {"tipo": "pago_rechazado"},
