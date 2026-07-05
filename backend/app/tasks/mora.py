@@ -120,6 +120,31 @@ def generar_cuotas_mensuales():
 
 
 # ── Revisión diaria de mora ────────────────────────────────────────────────────
+def _mensaje_mora(dias, monto_txt):
+    """Genera el aviso de mora que escala de tono según los días de atraso.
+    Devuelve (titulo, cuerpo)."""
+    if dias == 1:
+        return ("Cuota vencida",
+                f"Tu cuota de {monto_txt} venció ayer. Ponete al día para "
+                f"evitar el bloqueo de tu cuenta.")
+    elif dias == 2:
+        return ("2 días de atraso",
+                f"Llevás 2 días de atraso con {monto_txt}. Mañana tu cuenta "
+                f"será bloqueada si no pagás.")
+    elif dias < 7:
+        return (f"Cuenta bloqueada · {dias} días de mora",
+                f"Tu cuenta está bloqueada por {monto_txt} en mora ({dias} días). "
+                f"Regularizá tu pago para recuperar el acceso.")
+    elif dias < 15:
+        return (f"{dias} días de mora acumulada",
+                f"Ya son {dias} días de atraso ({monto_txt}). Acercate a "
+                f"administración para regularizar tu situación.")
+    else:
+        return (f"Mora crítica · {dias} días",
+                f"Tu cuenta lleva {dias} días de mora ({monto_txt}). "
+                f"Contactá a administración a la brevedad.")
+
+
 @celery.task(name="tasks.revisar_mora")
 def revisar_mora():
     """
@@ -129,6 +154,7 @@ def revisar_mora():
       +1, +2  → notificación de atraso
       +3 o +  → bloquear cuenta (estado='bloqueada', bloqueada=True)
     El desbloqueo ocurre cuando el admin aprueba un pago, no aquí.
+    Además envía un aviso de mora escalonado día a día (ver _mensaje_mora).
     """
     from app import create_app
     from app.extensions import db
@@ -140,6 +166,7 @@ def revisar_mora():
         bloqueadas = 0
         procesadas = 0
         cuentas_bloqueadas = []  # para notificar al final
+        avisos_mora = {}         # cuenta_id -> {cuenta, dias, monto}
 
         cuotas = Cuota.query.filter(
             Cuota.estado.in_(["pendiente", "vencida"]),
@@ -160,6 +187,17 @@ def revisar_mora():
             elif dias >= 0:
                 cuota.estado = "vencida"
 
+            # Aviso de mora ESCALONADO día a día (independiente del bloqueo).
+            # Se acumula por cuenta para no mandar un push por cada cuota.
+            if dias >= 1:
+                avisos_mora.setdefault(cuenta.id, {
+                    "cuenta": cuenta, "dias": dias, "monto": 0.0
+                })
+                # Guardar el mayor atraso y sumar el monto adeudado
+                if dias > avisos_mora[cuenta.id]["dias"]:
+                    avisos_mora[cuenta.id]["dias"] = dias
+                avisos_mora[cuenta.id]["monto"] += float(cuota.monto)
+
             procesadas += 1
 
         db.session.commit()
@@ -178,7 +216,27 @@ def revisar_mora():
         except Exception:
             pass
 
-        return {"procesadas": procesadas, "cuentas_bloqueadas": bloqueadas}
+        # Aviso de mora ESCALONADO: sube de tono según los días de atraso.
+        # Corre cada noche, así que el residente recibe un recordatorio diario
+        # que va escalando mientras no pague.
+        avisados = 0
+        try:
+            from app.services import notificaciones as _notif
+            for info in avisos_mora.values():
+                cuenta = info["cuenta"]
+                dias = info["dias"]
+                monto_txt = f"L {info['monto']:,.2f}"
+                titulo, cuerpo = _mensaje_mora(dias, monto_txt)
+                _notif.notificar_cuenta(
+                    cuenta, titulo, cuerpo,
+                    {"tipo": "mora_diaria", "dias": str(dias)},
+                )
+                avisados += 1
+        except Exception:
+            pass
+
+        return {"procesadas": procesadas, "cuentas_bloqueadas": bloqueadas,
+                "avisos_mora": avisados}
 
 
 # ── Vigilancia de arreglos de pago ────────────────────────────────────────────

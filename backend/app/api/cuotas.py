@@ -450,6 +450,16 @@ def avisar_vencimiento_manual(usuario_actual):
     return jsonify({"data": resultado})
 
 
+@cuotas_bp.post("/revisar-mora")
+@roles_required("admin", "super_admin", "desarrollador")
+def revisar_mora_manual(usuario_actual):
+    """Dispara manualmente la revisión de mora y sus avisos escalonados
+    (para pruebas, sin esperar al horario nocturno)."""
+    from app.tasks.mora import revisar_mora
+    resultado = revisar_mora()
+    return jsonify({"data": resultado})
+
+
 @cuotas_bp.get("/historial-pagos")
 @roles_required("admin", "super_admin", "desarrollador")
 def historial_pagos(usuario_actual):
