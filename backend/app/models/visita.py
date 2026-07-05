@@ -76,6 +76,7 @@ class Visita(db.Model):
     qr = db.relationship("CodigoQR", backref="visita", uselist=False, lazy="joined")
     eventos = db.relationship("EventoAcceso", backref="visita", lazy="select")
     residente = db.relationship("Residente", foreign_keys=[generada_por], lazy="joined")
+    cuenta = db.relationship("Cuenta", foreign_keys=[cuenta_id], lazy="joined")
 
     def estado_efectivo(self):
         """Estado real considerando los eventos de acceso y el vencimiento.

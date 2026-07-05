@@ -410,7 +410,9 @@ def registrar_acceso_visita(usuario_actual):
     # Notificar al residente que autorizó la visita
     try:
         from app.services import notificaciones as _notif
-        if visita.cuenta:
+        from app.models.cuenta import Cuenta
+        cuenta = Cuenta.query.get(visita.cuenta_id) if visita.cuenta_id else None
+        if cuenta:
             nombre = visita.nombre_visitante or "Tu visita"
             if direccion == "entrada":
                 titulo = "Visita ingresó 🚪"
@@ -419,7 +421,7 @@ def registrar_acceso_visita(usuario_actual):
                 titulo = "Visita salió"
                 cuerpo = f"{nombre} acaba de salir de la residencial."
             _notif.notificar_cuenta(
-                visita.cuenta, titulo, cuerpo,
+                cuenta, titulo, cuerpo,
                 {"tipo": "visita_evento", "direccion": direccion},
             )
     except Exception:
