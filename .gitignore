@@ -23,3 +23,8 @@ backend/instance/
 # Archivos temporales de Celery
 backend/celerybeat-schedule
 backend/celerybeat-schedule.db
+
+# Credenciales de Firebase (NUNCA subir a git — contiene llaves privadas)
+firebase-credentials.json
+backend/firebase-credentials.json
+**/firebase-credentials.json
