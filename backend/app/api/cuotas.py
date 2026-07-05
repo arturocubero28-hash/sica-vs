@@ -64,6 +64,13 @@ def mis_cuotas(usuario_actual):
                     "metodo": pago_ap.metodo,
                     "revisado_en": pago_ap.revisado_en.isoformat() if pago_ap.revisado_en else None,
                 }
+        elif c.estado == "pendiente":
+            # Si el último pago fue rechazado, mostrar el motivo para que el
+            # residente sepa por qué y pueda corregir antes de reintentar.
+            pago_rechazado = (c.pagos.filter_by(estado="rechazado")
+                              .order_by(Pago.revisado_en.desc()).first())
+            if pago_rechazado and pago_rechazado.nota_admin:
+                d["nota_admin"] = pago_rechazado.nota_admin
         cuotas_dict.append(d)
 
     # Si la cuenta tiene un arreglo de pago activo, incluir sus abonos para que
@@ -339,8 +346,10 @@ def revisar_pago(usuario_actual, uuid_pago):
     pago.revisado_por = usuario_actual.id
     pago.revisado_en = dt.datetime.utcnow()
 
+    # Obtener la cuenta asociada al pago (necesaria tanto para aprobar como rechazar)
+    cuenta = pago.cuenta
+
     if accion == "aprobar":
-        cuenta = pago.cuenta
         if pago.abono_id:
             # Pago de un abono de arreglo: marcar el abono pagado y, si se
             # completó el arreglo, pasar las cuotas congeladas a pagadas.
