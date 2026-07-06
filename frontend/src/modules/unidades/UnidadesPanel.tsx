@@ -226,7 +226,7 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
   useEffect(() => { recargarUnidades(); }, []);
 
   const unidadSel = unidades.find((u) => u.id === unidadId);
-  const esEdificio = unidadSel?.tipo === "edificio";
+  const esEdificio = unidadSel?.tipo === "edificio" || nuevaUnidadTipo === "edificio";
 
   async function crearUnidadInline() {
     if (!nuevaUnidadId.trim() || creandoUnidad) return;
