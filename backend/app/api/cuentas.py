@@ -69,6 +69,9 @@ def _crear_usuario_pendiente(nombre, apellido, email, telefono=None, extra=None)
         rtn=(extra.get("rtn") or None),
         direccion_exacta=(extra.get("direccion_exacta") or None),
         profesion=(extra.get("profesion") or None),
+        ocupacion=(extra.get("ocupacion") or None),
+        centro_estudios=(extra.get("centro_estudios") or None),
+        lugar_trabajo=(extra.get("lugar_trabajo") or None),
         contacto_emergencia_nombre=(extra.get("contacto_emergencia_nombre") or None),
         contacto_emergencia_telefono=(extra.get("contacto_emergencia_telefono") or None),
         rol="residente",
@@ -197,7 +200,9 @@ def crear_cuenta(usuario_actual):
                                 f"Usá otro identificador.", 409)
                 unidad = existente
             else:
-                unidad = Unidad(tipo=tipo, identificador=ident, activa=True)
+                max_aptos = nueva.get("max_apartamentos")
+                unidad = Unidad(tipo=tipo, identificador=ident, activa=True,
+                                max_apartamentos=int(max_aptos) if max_aptos and tipo == "edificio" else None)
                 db.session.add(unidad)
                 db.session.flush()
     if not unidad:
@@ -217,6 +222,14 @@ def crear_cuenta(usuario_actual):
                     "Para un edificio debes indicar el apartamento (ej. 1A)", 400)
     if unidad.tipo == "casa":
         apartamento = None  # una casa no lleva número de apartamento
+
+    # Validar límite de apartamentos en el edificio (Día 29)
+    if unidad.tipo == "edificio" and unidad.max_apartamentos:
+        aptos_existentes = Cuenta.query.filter_by(unidad_id=unidad.id).count()
+        if aptos_existentes >= unidad.max_apartamentos:
+            return _err("limite_apartamentos",
+                        f"Este edificio ya tiene {aptos_existentes} apartamento(s) "
+                        f"registrado(s) de un máximo de {unidad.max_apartamentos}.", 400)
 
     # evitar duplicado de apartamento en el mismo edificio
     if apartamento and Cuenta.query.filter_by(
@@ -307,6 +320,41 @@ def crear_cuenta(usuario_actual):
 
     db.session.commit()
 
+    # Generar la PRIMERA CUOTA prorrateada (Día 29).
+    # Si la cuenta se crea a mitad de mes, cobra proporcional a los días
+    # restantes hasta el 1 del próximo mes (mes comercial = 30 días).
+    try:
+        from app.models.cuenta import Cuota, ConfigResidencial
+        import calendar
+        hoy = dt.date.today()
+        cfg = ConfigResidencial.get()
+        dia_pago_cfg = cfg.dia_pago  # ej. 1
+
+        # ¿Ya pasó el día de pago de este mes?
+        if hoy.day > dia_pago_cfg:
+            # Prorratear: cobrar desde hoy hasta el próximo día de pago
+            if hoy.month == 12:
+                prox_pago = dt.date(hoy.year + 1, 1, dia_pago_cfg)
+            else:
+                prox_pago = dt.date(hoy.year, hoy.month + 1,
+                                    min(dia_pago_cfg, calendar.monthrange(hoy.year, hoy.month + 1)[1]))
+            dias_restantes = (prox_pago - hoy).days
+            monto_diario = float(tarifa.monto) / 30  # mes comercial
+            monto_prorrateado = round(monto_diario * dias_restantes, 2)
+
+            periodo = dt.date(hoy.year, hoy.month, 1)
+            vencimiento = prox_pago + dt.timedelta(days=cfg.dias_gracia)
+
+            cuota = Cuota(
+                cuenta_id=cuenta.id, periodo=periodo,
+                monto=monto_prorrateado, fecha_vencimiento=vencimiento,
+                estado="pendiente",
+            )
+            db.session.add(cuota)
+            db.session.commit()
+    except Exception:
+        pass  # No romper la creación de cuenta por un error de prorrateo
+
     return jsonify({"data": {
         "cuenta": cuenta.to_dict(detalle=True),
         "activacion": _bloque_activacion(usuario, token_o_error,
@@ -321,6 +369,24 @@ def detalle_cuenta(usuario_actual, cuenta_uuid):
     if not cuenta:
         return _err("no_encontrada", "Cuenta no encontrada", 404)
     return jsonify({"data": cuenta.to_dict(detalle=True)})
+
+
+@cuentas_bp.put("/cuentas/<cuenta_uuid>")
+@roles_required("admin", "super_admin")
+def editar_cuenta(usuario_actual, cuenta_uuid):
+    """Edita campos configurables de una cuenta (ej. habilitar QR recurrente)."""
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+    body = request.get_json(silent=True) or {}
+    if "qr_recurrente_habilitado" in body:
+        cuenta.qr_recurrente_habilitado = bool(body["qr_recurrente_habilitado"])
+    if "dia_pago" in body:
+        dp = int(body["dia_pago"])
+        if 1 <= dp <= 28:
+            cuenta.dia_pago = dp
+    db.session.commit()
+    return jsonify({"data": cuenta.to_dict()})
 
 
 @cuentas_bp.post("/cuentas/<cuenta_uuid>/baja")
@@ -367,6 +433,19 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
     cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
     if not cuenta:
         return _err("no_encontrada", "Cuenta no encontrada", 404)
+
+    # Validar límite de residentes adicionales (Día 29)
+    # Default: casa → 4 extra, apartamento → 1 extra
+    unidad = cuenta.unidad
+    extra_actuales = len([r for r in cuenta.residentes if r.activo]) - 1  # sin contar titular
+    if unidad:
+        max_extra = unidad.max_residentes_extra
+        if max_extra is None:
+            max_extra = 4 if unidad.tipo == "casa" else 1
+        if extra_actuales >= max_extra:
+            return _err("limite_residentes",
+                        f"Esta {unidad.tipo} ya tiene el máximo de {max_extra} "
+                        f"persona(s) adicional(es) al titular.", 400)
 
     data = request.get_json(silent=True) or {}
     usuario, token_o_error = _crear_usuario_pendiente(
@@ -594,3 +673,47 @@ def validar_codigo_enrolamiento(usuario_actual, codigo):
         "nota": cod.nota,
         "dueno_nombre": f"{dueno.nombre} {dueno.apellido}" if dueno else None,
     }})
+
+
+# =====================================================================
+# CONFIGURACIÓN GLOBAL DE LA RESIDENCIAL (Día 29)
+# =====================================================================
+
+@cuentas_bp.get("/config-residencial")
+@roles_required("admin", "super_admin", "desarrollador")
+def leer_config_residencial(usuario_actual):
+    from app.models.cuenta import ConfigResidencial
+    cfg = ConfigResidencial.get()
+    return jsonify({"data": cfg.to_dict()})
+
+
+@cuentas_bp.put("/config-residencial")
+@roles_required("admin", "super_admin")
+def editar_config_residencial(usuario_actual):
+    """Edita día de pago y/o días de gracia. Al cambiar el día de pago,
+    se aplica a TODAS las cuentas activas automáticamente."""
+    from app.models.cuenta import ConfigResidencial, Cuenta
+    cfg = ConfigResidencial.get()
+    body = request.get_json(silent=True) or {}
+
+    cambio_dia = False
+    if "dia_pago" in body:
+        dp = int(body["dia_pago"])
+        if 1 <= dp <= 28:
+            cfg.dia_pago = dp
+            cambio_dia = True
+    if "dias_gracia" in body:
+        dg = int(body["dias_gracia"])
+        if 0 <= dg <= 15:
+            cfg.dias_gracia = dg
+
+    # Si cambió el día de pago, aplicar a TODAS las cuentas activas
+    actualizadas = 0
+    if cambio_dia:
+        cuentas = Cuenta.query.filter_by(activa=True).all()
+        for c in cuentas:
+            c.dia_pago = cfg.dia_pago
+            actualizadas += 1
+
+    db.session.commit()
+    return jsonify({"data": {**cfg.to_dict(), "cuentas_actualizadas": actualizadas}})

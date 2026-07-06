@@ -113,6 +113,17 @@ def crear_visita(usuario_actual):
         return jsonify({"error": {"code": "tipo_invalido",
                                   "message": "El tipo debe ser unica, recurrente o repartidor"}}), 400
 
+    # QR recurrentes: solo si la administración lo habilitó para esta cuenta
+    if tipo == "recurrente":
+        residente = Residente.query.filter_by(
+            usuario_id=usuario_actual.id, activo=True).first()
+        cuenta_res = residente.cuenta if residente else None
+        if not cuenta_res or not cuenta_res.qr_recurrente_habilitado:
+            return jsonify({"error": {"code": "recurrente_no_habilitado",
+                                      "message": "La generación de QR recurrentes no está "
+                                                  "habilitada para tu cuenta. Solicitalo a "
+                                                  "la administración."}}), 403
+
     nombre = (data.get("nombre_visitante") or "").strip()
     if not nombre:
         return jsonify({"error": {"code": "datos_incompletos",

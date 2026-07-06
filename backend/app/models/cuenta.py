@@ -38,6 +38,12 @@ class Unidad(db.Model):
     # Para edificios: el usuario dueño/responsable que avala a sus inquilinos
     propietario_id = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
     activa = db.Column(db.Boolean, nullable=False, default=True)
+    # Límites por unidad (Día 29 — requisito de la administración):
+    # Casa: máx 4 personas adicionales al titular (default)
+    # Apto: máx 1 persona adicional al titular (default)
+    # Edificio: el dueño declara cuántos aptos tiene; no se crean más
+    max_residentes_extra = db.Column(db.Integer)   # null = usar default según tipo
+    max_apartamentos = db.Column(db.Integer)        # solo aplica a edificios
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -50,6 +56,8 @@ class Unidad(db.Model):
             "identificador": self.identificador,
             "direccion_ref": self.direccion_ref,
             "activa": self.activa,
+            "max_residentes_extra": self.max_residentes_extra,
+            "max_apartamentos": self.max_apartamentos,
             "total_cuentas": len(self.cuentas),
         }
         if incluir_cuentas:
@@ -73,6 +81,9 @@ class Cuenta(db.Model):
     estado = db.Column(db.String(20), nullable=False, default="al_dia")
     bloqueada = db.Column(db.Boolean, nullable=False, default=False)
     activa = db.Column(db.Boolean, nullable=False, default=True)   # baja: deja de generar cuotas y accesos
+    # Solo la administración puede habilitar la generación de QR recurrentes
+    # para una cuenta. Por defecto está deshabilitado (Día 29).
+    qr_recurrente_habilitado = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -133,6 +144,7 @@ class Cuenta(db.Model):
             "estado": self.estado,
             "bloqueada": self.bloqueada,
             "activa": self.activa,
+            "qr_recurrente_habilitado": self.qr_recurrente_habilitado,
             "tarifa": self.tarifa.nombre if self.tarifa else None,
             "monto": float(self.tarifa.monto) if self.tarifa else None,
             "titular": t.to_dict() if t else None,
@@ -667,4 +679,33 @@ class VentaTarjeta(db.Model):
             "vendido_por": (f"{self.vendedor.nombre} {self.vendedor.apellido}"
                             if self.vendedor else "—"),
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class ConfigResidencial(db.Model):
+    """
+    Configuración global de la residencial (una sola fila, id=1).
+    Controla parámetros que aplican a todas las cuentas por igual.
+    """
+    __tablename__ = "config_residencial"
+
+    id               = db.Column(db.BigInteger, primary_key=True)
+    dia_pago         = db.Column(db.Integer, nullable=False, default=1)    # día del mes para el cobro
+    dias_gracia      = db.Column(db.Integer, nullable=False, default=7)    # días adicionales antes de bloquear
+    actualizado_en   = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
+
+    @classmethod
+    def get(cls):
+        cfg = cls.query.get(1)
+        if not cfg:
+            cfg = cls(id=1, dia_pago=1, dias_gracia=7)
+            db.session.add(cfg)
+            db.session.commit()
+        return cfg
+
+    def to_dict(self):
+        return {
+            "dia_pago": self.dia_pago,
+            "dias_gracia": self.dias_gracia,
+            "actualizado_en": self.actualizado_en.isoformat() if self.actualizado_en else None,
         }

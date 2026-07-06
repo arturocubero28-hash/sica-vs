@@ -31,6 +31,10 @@ class Usuario(db.Model):
     rtn = db.Column(db.String(20))                        # para recibos SAR (futuro)
     direccion_exacta = db.Column(db.String(255))          # dirección domiciliar completa
     profesion = db.Column(db.String(120))
+    # Información laboral/educativa (requisito de la administración Día 29)
+    ocupacion = db.Column(db.String(20))        # estudiante | profesional | otro
+    centro_estudios = db.Column(db.String(160)) # si es estudiante
+    lugar_trabajo = db.Column(db.String(160))   # si es profesional
     contacto_emergencia_nombre = db.Column(db.String(120))
     contacto_emergencia_telefono = db.Column(db.String(30))
     password_hash = db.Column(db.String(255), nullable=False)
@@ -67,6 +71,9 @@ class Usuario(db.Model):
             "rtn": self.rtn,
             "direccion_exacta": self.direccion_exacta,
             "profesion": self.profesion,
+            "ocupacion": self.ocupacion,
+            "centro_estudios": self.centro_estudios,
+            "lugar_trabajo": self.lugar_trabajo,
             "contacto_emergencia_nombre": self.contacto_emergencia_nombre,
             "contacto_emergencia_telefono": self.contacto_emergencia_telefono,
             "rol": self.rol,

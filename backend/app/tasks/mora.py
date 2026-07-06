@@ -75,12 +75,15 @@ def generar_cuotas_mensuales():
     """
     Genera una cuota por cada cuenta para el mes en curso.
     Usa UNIQUE (cuenta_id, periodo) para evitar duplicados.
-    El vencimiento respeta el dia_pago configurado en cada cuenta.
+    El día de pago y los días de gracia vienen de ConfigResidencial
+    (configuración global del admin). La fecha de vencimiento es
+    dia_pago + dias_gracia (ej. si pago es el 1 y gracia es 7,
+    la cuota vence el 7 del mes).
     """
     import calendar
     from app import create_app
     from app.extensions import db
-    from app.models.cuenta import Cuenta, Cuota
+    from app.models.cuenta import Cuenta, Cuota, ConfigResidencial
 
     app = create_app()
     with app.app_context():
@@ -88,9 +91,9 @@ def generar_cuotas_mensuales():
         periodo = dt.date(hoy.year, hoy.month, 1)
         ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
 
+        cfg = ConfigResidencial.get()
+
         cuentas = Cuenta.query.filter_by(activa=True).all()
-        # Trae de una sola vez los cuenta_id que ya tienen cuota este periodo
-        # (evita una query de existencia por cada cuenta — N+1).
         ya_tienen = {row[0] for row in db.session.query(Cuota.cuenta_id)
                      .filter(Cuota.periodo == periodo).all()}
         creadas = 0
@@ -101,9 +104,10 @@ def generar_cuotas_mensuales():
             if not cuenta.tarifa:
                 continue
 
-            # Vencimiento según el día de pago de la cuenta
-            dia = min(cuenta.dia_pago or 15, ultimo_dia)
-            vencimiento = dt.date(hoy.year, hoy.month, dia)
+            # Fecha de vencimiento = día de pago + días de gracia
+            dia_pago = min(cfg.dia_pago, ultimo_dia)
+            fecha_pago = dt.date(hoy.year, hoy.month, dia_pago)
+            vencimiento = fecha_pago + dt.timedelta(days=cfg.dias_gracia)
 
             cuota = Cuota(
                 cuenta_id=cuenta.id,
@@ -173,11 +177,16 @@ def revisar_mora():
             Cuota.fecha_vencimiento <= hoy,
         ).all()
 
+        # Obtener los días de gracia configurados por la administración
+        from app.models.cuenta import ConfigResidencial
+        cfg = ConfigResidencial.get()
+        dias_gracia = cfg.dias_gracia  # default 7
+
         for cuota in cuotas:
             dias = (hoy - cuota.fecha_vencimiento).days
             cuenta = cuota.cuenta
 
-            if dias >= 3:
+            if dias >= dias_gracia:
                 cuota.estado = "vencida"
                 if not cuenta.bloqueada:
                     cuenta.estado = "bloqueada"

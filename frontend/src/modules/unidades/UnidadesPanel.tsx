@@ -190,6 +190,9 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
   const [rtn, setRtn] = useState("");
   const [direccionExacta, setDireccionExacta] = useState("");
   const [profesion, setProfesion] = useState("");
+  const [ocupacion, setOcupacion] = useState("");
+  const [centroEstudios, setCentroEstudios] = useState("");
+  const [lugarTrabajo, setLugarTrabajo] = useState("");
   const [emergNombre, setEmergNombre] = useState("");
   const [emergTel, setEmergTel] = useState("");
   // Enrolamiento por código (inquilino avalado por el dueño del edificio)
@@ -201,6 +204,7 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
   const [enlace, setEnlace] = useState<{ email: string; url: string } | null>(null);
   const [nuevaUnidadTipo, setNuevaUnidadTipo] = useState<"casa" | "edificio">("casa");
   const [nuevaUnidadId, setNuevaUnidadId] = useState("");
+  const [maxApartamentos, setMaxApartamentos] = useState("");
   const [creandoUnidad, setCreandoUnidad] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [mostrarSug, setMostrarSug] = useState(false);
@@ -284,7 +288,9 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
       const res = await crearCuenta({
         unidad_id: unidadId || undefined,
         unidad_nueva: (!unidadId && nuevaUnidadId.trim())
-          ? { tipo: nuevaUnidadTipo, identificador: nuevaUnidadId.trim() } : undefined,
+          ? { tipo: nuevaUnidadTipo, identificador: nuevaUnidadId.trim(),
+              max_apartamentos: nuevaUnidadTipo === "edificio" && maxApartamentos
+                ? Number(maxApartamentos) : undefined } : undefined,
         apartamento: esEdificio ? apartamento : undefined,
         tarifa_id: tarifaId, dia_pago: diaPago,
         codigo_enrolamiento: codigoEnrol.trim() || undefined,
@@ -292,6 +298,9 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
         titular: {
           nombre, apellido, email, telefono, relacion: "propietario",
           dni, rtn, direccion_exacta: direccionExacta, profesion,
+          ocupacion: ocupacion || undefined,
+          centro_estudios: ocupacion === "estudiante" ? centroEstudios : undefined,
+          lugar_trabajo: ocupacion === "profesional" ? lugarTrabajo : undefined,
           contacto_emergencia_nombre: emergNombre,
           contacto_emergencia_telefono: emergTel,
         },
@@ -412,6 +421,11 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
                   ? "La casa se creará junto con la cuenta al dar de alta."
                   : "El edificio se creará junto con la cuenta. Indicá el apartamento abajo."}
               </p>
+              {nuevaUnidadTipo === "edificio" && (
+                <input type="number" min={1} max={200} placeholder="¿Cuántos apartamentos tiene el edificio?"
+                  value={maxApartamentos} onChange={(e) => setMaxApartamentos(e.target.value)}
+                  style={{ marginTop: 6 }} />
+              )}
             </div>
           ) : (
             <div className="search-box">
@@ -494,6 +508,18 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
           <div className="row">
             <input placeholder="Dirección exacta" value={direccionExacta} onChange={(e) => setDireccionExacta(e.target.value)} />
             <input placeholder="Profesión" value={profesion} onChange={(e) => setProfesion(e.target.value)} />
+            <select value={ocupacion} onChange={(e) => setOcupacion(e.target.value)} style={{ marginTop: 6 }}>
+              <option value="">— Ocupación —</option>
+              <option value="estudiante">Estudiante</option>
+              <option value="profesional">Profesional / Empleado</option>
+              <option value="otro">Otro</option>
+            </select>
+            {ocupacion === "estudiante" && (
+              <input placeholder="Centro de estudios" value={centroEstudios} onChange={(e) => setCentroEstudios(e.target.value)} style={{ marginTop: 6 }} />
+            )}
+            {ocupacion === "profesional" && (
+              <input placeholder="Lugar de trabajo" value={lugarTrabajo} onChange={(e) => setLugarTrabajo(e.target.value)} style={{ marginTop: 6 }} />
+            )}
           </div>
           <div className="row">
             <input placeholder="Contacto de emergencia (nombre)" value={emergNombre} onChange={(e) => setEmergNombre(e.target.value)} />

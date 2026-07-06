@@ -58,6 +58,7 @@ def create_app(config_class=Config):
     from app.models.credencial_webauthn import CredencialWebAuthn  # noqa: F401  biometría WebAuthn
     from app.models.dispositivo import Dispositivo  # noqa: F401  Raspberry Pi de accesos
     from app.models.dispositivo_movil import DispositivoMovil  # noqa: F401  tokens FCM push
+    from app.models.cuenta import ConfigResidencial  # noqa: F401  config global residencial
 
     # --- Registrar blueprints (endpoints) ---
     from app.auth.routes import auth_bp
@@ -248,6 +249,15 @@ def create_app(config_class=Config):
             "ALTER TABLE dispositivos_pi ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) NOT NULL DEFAULT 'acceso'",
             "ALTER TABLE dispositivos_pi ADD COLUMN IF NOT EXISTS ultimo_heartbeat TIMESTAMPTZ",
             "ALTER TABLE camaras ADD COLUMN IF NOT EXISTS dispositivo_id BIGINT REFERENCES dispositivos_pi(id)",
+            # Día 29 — Información laboral/educativa del residente
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS ocupacion VARCHAR(20)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS centro_estudios VARCHAR(160)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS lugar_trabajo VARCHAR(160)",
+            # Día 29 — QR recurrentes bloqueados por defecto
+            "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS qr_recurrente_habilitado BOOLEAN NOT NULL DEFAULT FALSE",
+            # Día 29 — Límites de personas por unidad y aptos por edificio
+            "ALTER TABLE unidades ADD COLUMN IF NOT EXISTS max_residentes_extra INTEGER",
+            "ALTER TABLE unidades ADD COLUMN IF NOT EXISTS max_apartamentos INTEGER",
         ]
         for sql in columnas:
             try:
