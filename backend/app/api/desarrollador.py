@@ -518,10 +518,14 @@ def crear_dispositivo(usuario_actual):
     body = request.get_json(silent=True) or {}
     nombre = (body.get("nombre") or "").strip()
     punto = (body.get("punto_acceso") or "").strip() or None
+    tipo = (body.get("tipo") or "acceso").strip()
+    if tipo not in ("acceso", "camara"):
+        tipo = "acceso"
     if not nombre:
         return jsonify({"error": {"code": "nombre_requerido",
                                   "message": "El nombre es obligatorio"}}), 400
-    disp = Dispositivo(nombre=nombre, punto_acceso=punto, token=generar_token(), activo=True)
+    disp = Dispositivo(nombre=nombre, tipo=tipo, punto_acceso=punto,
+                        token=generar_token(), activo=True)
     db.session.add(disp)
     db.session.commit()
     # Al crear, se devuelve el token UNA vez (anótalo, no se vuelve a mostrar)

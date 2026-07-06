@@ -20,6 +20,10 @@ class Camara(db.Model):
     password     = db.Column(db.String(120))
     ruta_stream  = db.Column(db.String(200), default="/Streaming/Channels/101")
     acceso_id    = db.Column(db.BigInteger, db.ForeignKey("accesos_fisicos.id"))
+    # Qué Raspberry Pi (tipo='camara') expone esta cámara hacia la nube.
+    # NULL = todavía no asignada a un agente (o el backend accede directo,
+    # como en desarrollo/pruebas en la misma LAN).
+    dispositivo_id = db.Column(db.BigInteger, db.ForeignKey("dispositivos_pi.id"))
     activa       = db.Column(db.Boolean, nullable=False, default=True)
     orden        = db.Column(db.Integer, nullable=False, default=0)
     created_at   = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
@@ -42,6 +46,7 @@ class Camara(db.Model):
             "usuario":      self.usuario,
             "ruta_stream":  self.ruta_stream,
             "acceso_id":    self.acceso_id,
+            "dispositivo_id": self.dispositivo_id,
             "activa":       self.activa,
             "orden":        self.orden,
         }

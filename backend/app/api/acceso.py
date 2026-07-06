@@ -32,6 +32,7 @@ from app.extensions import db, limiter
 from app.models.cuenta import Tarjeta, Cuenta
 from app.models.visita import EventoAcceso, AccesoFisico
 from app.models.dispositivo import Dispositivo
+from app.models.camara import Camara
 from app.services.permisos import motivo_denegacion, tarjetas_con_permiso
 
 acceso_bp = Blueprint("acceso", __name__)
@@ -286,3 +287,57 @@ def reportar_eventos():
         "ignorados": ignorados,
         "recibidos": len(eventos),
     }})
+
+
+# =====================================================================
+# AGENTE DE CÁMARAS (Raspberry Pi tipo='camara')
+#
+# Programa separado del agente de accesos (misma tabla dispositivos_pi,
+# mismo mecanismo de token/revocación, pero un ejecutable Python distinto
+# que corre en su propia Pi). Reusa _dispositivo_actual() para autenticarse.
+# =====================================================================
+
+@acceso_bp.get("/camaras/config")
+@limiter.limit("30 per minute")
+def config_camaras_agente():
+    """
+    El agente de cámaras descarga aquí la lista de cámaras que le tocan
+    (las asignadas a su dispositivo_id) con sus credenciales RTSP, para
+    poder conectarse al NVR por su cuenta.
+
+    Se autentica con su token individual (header X-Device-Token), igual
+    que el agente de accesos. Solo devuelve las cámaras asignadas a ESTE
+    dispositivo (no todas las de la residencial).
+    """
+    disp = _dispositivo_actual()
+    if not disp:
+        return _err("dispositivo_no_autorizado",
+                    "Dispositivo no autorizado o revocado", 401)
+    if disp.tipo != "camara":
+        return _err("tipo_incorrecto",
+                    "Este dispositivo no es un agente de cámaras", 403)
+
+    camaras = Camara.query.filter_by(dispositivo_id=disp.id, activa=True).all()
+
+    return jsonify({"data": {
+        "generado_en": dt.datetime.utcnow().isoformat() + "Z",
+        "camaras": [c.to_dict(incluir_credenciales=True) for c in camaras],
+    }})
+
+
+@acceso_bp.post("/camaras/heartbeat")
+@limiter.limit("30 per minute")
+def heartbeat_agente_camaras():
+    """
+    El agente de cámaras llama esto periódicamente (ej. cada 30s) para que
+    el servidor sepa que sigue conectado. El Centro de Monitoreo usa
+    ultimo_heartbeat para mostrar 'agente conectado / desconectado'.
+    """
+    disp = _dispositivo_actual()
+    if not disp:
+        return _err("dispositivo_no_autorizado",
+                    "Dispositivo no autorizado o revocado", 401)
+
+    disp.ultimo_heartbeat = dt.datetime.utcnow()
+    db.session.commit()
+    return jsonify({"data": {"ok": True}})

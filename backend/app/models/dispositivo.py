@@ -29,21 +29,30 @@ class Dispositivo(db.Model):
     id = db.Column(db.BigInteger, primary_key=True)
     uuid_publico = db.Column(PG_UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
     nombre = db.Column(db.String(80), nullable=False)            # "Pi Acceso Principal"
+    # "acceso" (trancas/GPIO) o "camara" (agente de video NVR). Mismo modelo,
+    # mismo token/revocación; el AGENTE (programa Python) que corre en la Pi
+    # es distinto para cada tipo, por simplicidad de mantenimiento en sitio.
+    tipo = db.Column(db.String(20), nullable=False, default="acceso")
     punto_acceso = db.Column(db.String(80))                      # debe coincidir con el de las trancas
     token = db.Column(db.String(64), unique=True, nullable=False, default=generar_token)
     activo = db.Column(db.Boolean, nullable=False, default=True) # revocar = activo False
     # Preparado para SaaS (hoy NULL). No se usa todavía en la lógica.
     residencial_id = db.Column(db.BigInteger)
     ultima_sync = db.Column(db.DateTime(timezone=True))          # cuándo descargó su copia por última vez
+    # Solo aplica a tipo='camara': latido periódico para saber si el agente
+    # de video sigue conectado (distinto de ultima_sync, que es de accesos).
+    ultimo_heartbeat = db.Column(db.DateTime(timezone=True))
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
 
     def to_dict(self, incluir_token=False):
         d = {
             "id": str(self.uuid_publico),
             "nombre": self.nombre,
+            "tipo": self.tipo,
             "punto_acceso": self.punto_acceso,
             "activo": self.activo,
             "ultima_sync": self.ultima_sync.isoformat() if self.ultima_sync else None,
+            "ultimo_heartbeat": self.ultimo_heartbeat.isoformat() if self.ultimo_heartbeat else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         # El token solo se muestra cuando se pide explícitamente (al crear o

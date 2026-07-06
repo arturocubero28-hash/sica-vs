@@ -1,0 +1,31 @@
+# Servicio systemd para el Agente de Cámaras SICA-VS
+#
+# INSTALACIÓN en la Raspberry Pi:
+#   sudo cp agente_camaras.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable agente_camaras
+#   sudo systemctl start agente_camaras
+#
+# VER LOGS EN VIVO:
+#   sudo journalctl -u agente_camaras -f
+#
+# REINICIAR (ej. tras editar config.py):
+#   sudo systemctl restart agente_camaras
+
+[Unit]
+Description=SICA-VS Agente de Camaras
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/agente_camaras
+ExecStart=/usr/bin/python3 /home/pi/agente_camaras/agente_camaras.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

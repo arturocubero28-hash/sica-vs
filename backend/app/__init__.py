@@ -243,6 +243,11 @@ def create_app(config_class=Config):
             "CREATE INDEX IF NOT EXISTS ix_usuarios_dni ON usuarios (dni)",
             # Día 25 — La revisión de mora filtra por fecha de vencimiento.
             "CREATE INDEX IF NOT EXISTS ix_cuotas_vencimiento ON cuotas (fecha_vencimiento)",
+            # Día 29 — Agente de cámaras: distinguir tipo de Pi (acceso/camara)
+            # y su latido de conexión (distinto de ultima_sync, que es de accesos).
+            "ALTER TABLE dispositivos_pi ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) NOT NULL DEFAULT 'acceso'",
+            "ALTER TABLE dispositivos_pi ADD COLUMN IF NOT EXISTS ultimo_heartbeat TIMESTAMPTZ",
+            "ALTER TABLE camaras ADD COLUMN IF NOT EXISTS dispositivo_id BIGINT REFERENCES dispositivos_pi(id)",
         ]
         for sql in columnas:
             try:
