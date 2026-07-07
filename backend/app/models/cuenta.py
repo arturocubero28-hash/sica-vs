@@ -136,11 +136,38 @@ class Cuenta(db.Model):
         except Exception:
             return False
 
+    def es_admin_residente(self):
+        """True si esta cuenta es un apartamento cuyo titular ADEMÁS administra
+        el edificio (el admin que vive ahí). Paga cuota como apartamento, pero
+        tiene funciones de administración del edificio."""
+        try:
+            if not (self.unidad and self.unidad.tipo == "edificio" and self.apartamento):
+                return False
+            prop_id = self.unidad.propietario_id
+            if not prop_id:
+                return False
+            # ¿El titular de esta cuenta es el propietario del edificio?
+            t = self.titular()
+            return bool(t and t.usuario_id == prop_id)
+        except Exception:
+            return False
+
+    def administra_edificio(self):
+        """True si esta cuenta administra el edificio, sea contenedor o
+        admin-residente. Estas cuentas pueden ver los apartamentos, generar
+        códigos de enrolamiento y editar el límite de apartamentos."""
+        return self.es_contenedor_edificio() or self.es_admin_residente()
+
     def tipo_cuenta(self):
-        """Discriminador único para la UI: 'casa' | 'edificio_contenedor' | 'apartamento'."""
+        """Discriminador único para la UI:
+        'casa' | 'edificio_contenedor' | 'edificio_admin' | 'apartamento'."""
         try:
             if self.unidad and self.unidad.tipo == "edificio":
-                return "edificio_contenedor" if self.es_contenedor_edificio() else "apartamento"
+                if self.es_contenedor_edificio():
+                    return "edificio_contenedor"
+                if self.es_admin_residente():
+                    return "edificio_admin"
+                return "apartamento"
         except Exception:
             pass
         return "casa"
@@ -153,6 +180,7 @@ class Cuenta(db.Model):
         except Exception:
             unidad = None
         tc = self.tipo_cuenta()
+        administra = tc in ("edificio_contenedor", "edificio_admin")
         d = {
             "id": str(self.uuid_publico),
             "apartamento": self.apartamento,
@@ -160,10 +188,12 @@ class Cuenta(db.Model):
             "tipo_cuenta": tc,
             "nombre_completo": (
                 f"{unidad} · Administración" if tc == "edificio_contenedor"
-                else (f"{unidad} · Apto {self.apartamento}"
-                      if unidad and self.apartamento else (unidad or "—"))),
+                else (f"{unidad} · Apto {self.apartamento} (Admin)" if tc == "edificio_admin"
+                      else (f"{unidad} · Apto {self.apartamento}"
+                            if unidad and self.apartamento else (unidad or "—")))),
             "es_apartamento": bool(self.apartamento),
             "es_contenedor": tc == "edificio_contenedor",
+            "administra_edificio": administra,
             "dia_pago": self.dia_pago,
             "estado": self.estado,
             "bloqueada": self.bloqueada,
@@ -179,9 +209,9 @@ class Cuenta(db.Model):
         if detalle:
             d["residentes"] = [r.to_dict() for r in self.residentes if r.activo]
             d["tarjetas"] = [x.to_dict() for x in self.tarjetas]
-            # Si es la cuenta contenedora de un edificio, incluir la lista de
-            # apartamentos (cuentas hermanas bajo la misma unidad).
-            if tc == "edificio_contenedor" and self.unidad:
+            # Si esta cuenta administra el edificio (contenedor O admin-residente),
+            # incluir la lista de apartamentos (cuentas hermanas bajo la unidad).
+            if administra and self.unidad:
                 aptos = [c for c in self.unidad.cuentas if c.id != self.id]
                 def _nombre_titular(c):
                     tt = c.titular()

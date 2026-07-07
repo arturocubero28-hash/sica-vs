@@ -3046,3 +3046,10 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   display: inline-block; font-size: 10px; font-weight: 700;
   color: #044a6e; background: #dce9f3; padding: 2px 7px; border-radius: 5px;
 }
+
+/* Banner del administrador que vive en el edificio */
+.banner-admin-edificio {
+  background: #fff8e6; border: 1px solid #f0d98a; border-radius: 10px;
+  padding: 12px 14px; margin: 12px 0; font-size: 13px; line-height: 1.5;
+  color: #6b5800;
+}

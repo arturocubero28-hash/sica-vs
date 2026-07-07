@@ -143,14 +143,18 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
                 const dadaBaja = c.activa === false;
                 const pend = c.cuotas_pendientes || 0;
                 const esContenedor = c.tipo_cuenta === "edificio_contenedor";
+                const esAdminRes = c.tipo_cuenta === "edificio_admin";
                 const esApto = c.tipo_cuenta === "apartamento";
+                const administra = esContenedor || esAdminRes;
                 return (
-                  <tr key={c.id} className={dadaBaja ? "fila-baja" : (esContenedor ? "fila-edificio" : "")}>
+                  <tr key={c.id} className={dadaBaja ? "fila-baja" : (administra ? "fila-edificio" : "")}>
                     <td>
-                      {esContenedor && <span className="badge-edificio">🏢 EDIFICIO</span>}
+                      {administra && <span className="badge-edificio">🏢 EDIFICIO</span>}
                       {esApto && <span className="badge-apto">Apto</span>}
-                      <span style={{ marginLeft: esContenedor || esApto ? 6 : 0 }}>
-                        {c.nombre_completo || c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "Casa")}
+                      <span style={{ marginLeft: administra || esApto ? 6 : 0 }}>
+                        {esAdminRes
+                          ? `${c.identificador} · Apto ${c.apartamento} (Admin)`
+                          : (c.nombre_completo || c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "Casa"))}
                       </span>
                     </td>
                     <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
@@ -696,11 +700,22 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>{cuenta.nombre_completo || (cuenta.apartamento ? `Apartamento ${cuenta.apartamento}` : "Casa")} · {cuenta.tarifa}</h3>
+          <h3>
+            {cuenta.nombre_completo || (cuenta.apartamento ? `Apartamento ${cuenta.apartamento}` : "Casa")}
+            {cuenta.tipo_cuenta !== "edificio_contenedor" && cuenta.tarifa ? ` · ${cuenta.tarifa}` : ""}
+          </h3>
           <button className="ghost mini" onClick={onCerrar}>Cerrar</button>
         </div>
 
         {/* Información general de la cuenta: estado de pago, cuota, unidad */}
+        {cuenta.tipo_cuenta === "edificio_admin" && (
+          <div className="banner-admin-edificio">
+            👑 <b>Administrador del edificio</b> — Esta persona vive en el Apto {cuenta.apartamento} y
+            paga su cuota como cualquier residente, pero además administra el edificio: puede generar
+            códigos para inquilinos y ver todos los apartamentos.
+          </div>
+        )}
+
         <div className="detalle-info-grid">
           <div className="detalle-info-item">
             <span className="muted small">Estado de la cuenta</span>
@@ -775,12 +790,12 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
             </label>
           </div>
 
-          {cuenta.tipo_cuenta === "edificio_contenedor" && (
+          {(cuenta.tipo_cuenta === "edificio_contenedor" || cuenta.tipo_cuenta === "edificio_admin") && (
             <div className="detalle-config-fila" style={{ marginTop: 10 }}>
               <div>
                 <b>Límite de apartamentos</b>
                 <p className="muted small" style={{ margin: "2px 0 0" }}>
-                  Este edificio tiene {(cuenta.apartamentos?.length ?? 0)} apartamento(s) registrado(s).
+                  Este edificio tiene {(cuenta.apartamentos?.length ?? 0) + (cuenta.tipo_cuenta === "edificio_admin" ? 1 : 0)} apartamento(s) registrado(s).
                   Cambiá el máximo si el edificio creció o se ajustó.
                 </p>
               </div>
@@ -796,13 +811,13 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           {msgConfig && <p className="muted small" style={{ marginTop: 6 }}>{msgConfig}</p>}
         </div>
 
-        {/* Lista de apartamentos bajo el edificio (solo en el contenedor) */}
-        {cuenta.tipo_cuenta === "edificio_contenedor" && (
+        {/* Lista de apartamentos bajo el edificio (contenedor o admin-residente) */}
+        {(cuenta.tipo_cuenta === "edificio_contenedor" || cuenta.tipo_cuenta === "edificio_admin") && (
           <>
             <div className="sub">Apartamentos de este edificio ({cuenta.apartamentos?.length ?? 0})</div>
             {(cuenta.apartamentos?.length ?? 0) === 0 ? (
               <p className="muted small" style={{ padding: "8px 0" }}>
-                Todavía no hay apartamentos registrados. Agregalos desde "Dar de alta" →
+                Todavía no hay otros apartamentos registrados. Agregalos desde "Dar de alta" →
                 seleccioná este edificio existente.
               </p>
             ) : (
@@ -829,7 +844,9 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
 
         {/* Residentes: para el contenedor solo el administrador; para casa/apto los residentes */}
         <div className="sub">
-          {cuenta.tipo_cuenta === "edificio_contenedor" ? "Administrador del edificio" : "Residentes de la casa"}
+          {cuenta.tipo_cuenta === "edificio_contenedor" ? "Administrador del edificio"
+            : cuenta.tipo_cuenta === "edificio_admin" ? "Residentes del apartamento del administrador"
+            : "Residentes de la casa"}
         </div>
         <div className="residentes-lista">
           {(cuenta.residentes || []).map((r) => (
