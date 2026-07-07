@@ -208,16 +208,23 @@ def crear_cuenta(usuario_actual):
     if not unidad:
         return _err("unidad_no_encontrada", "Indicá la casa o edificio a dar de alta", 404)
 
-    tarifa = Tarifa.query.get(data.get("tarifa_id"))
-    if not tarifa:
-        return _err("tarifa_invalida", "La tarifa indicada no existe", 400)
+    es_solo_contenedor = data.get("es_solo_contenedor", False)
 
-    dia_pago = data.get("dia_pago")
-    if not isinstance(dia_pago, int) or not (1 <= dia_pago <= 28):
-        return _err("dia_pago_invalido", "El día de pago debe estar entre 1 y 28", 400)
+    tarifa = None
+    dia_pago = 1
+    if es_solo_contenedor:
+        # El edificio como contenedor no paga cuota — la tarifa es opcional
+        pass
+    else:
+        tarifa = Tarifa.query.get(data.get("tarifa_id"))
+        if not tarifa:
+            return _err("tarifa_invalida", "La tarifa indicada no existe", 400)
+        dia_pago = data.get("dia_pago")
+        if not isinstance(dia_pago, int) or not (1 <= dia_pago <= 28):
+            return _err("dia_pago_invalido", "El día de pago debe estar entre 1 y 28", 400)
 
     apartamento = data.get("apartamento")
-    if unidad.tipo == "edificio" and not apartamento:
+    if unidad.tipo == "edificio" and not apartamento and not es_solo_contenedor:
         return _err("apartamento_requerido",
                     "Para un edificio debes indicar el apartamento (ej. 1A)", 400)
     if unidad.tipo == "casa":
@@ -292,8 +299,8 @@ def crear_cuenta(usuario_actual):
 
     # crear la cuenta
     cuenta = Cuenta(
-        unidad_id=unidad.id, apartamento=apartamento,
-        tarifa_id=tarifa.id, dia_pago=dia_pago,
+        unidad_id=unidad.id, apartamento=apartamento if not es_solo_contenedor else None,
+        tarifa_id=tarifa.id if tarifa else None, dia_pago=dia_pago,
     )
     db.session.add(cuenta)
     db.session.flush()
@@ -321,39 +328,37 @@ def crear_cuenta(usuario_actual):
     db.session.commit()
 
     # Generar la PRIMERA CUOTA prorrateada (Día 29).
-    # Si la cuenta se crea a mitad de mes, cobra proporcional a los días
-    # restantes hasta el 1 del próximo mes (mes comercial = 30 días).
-    try:
-        from app.models.cuenta import Cuota, ConfigResidencial
-        import calendar
-        hoy = dt.date.today()
-        cfg = ConfigResidencial.get()
-        dia_pago_cfg = cfg.dia_pago  # ej. 1
+    # Solo si tiene tarifa asignada (las cuentas contenedoras de edificio no pagan).
+    if tarifa:
+        try:
+            from app.models.cuenta import Cuota, ConfigResidencial
+            import calendar
+            hoy = dt.date.today()
+            cfg = ConfigResidencial.get()
+            dia_pago_cfg = cfg.dia_pago
 
-        # ¿Ya pasó el día de pago de este mes?
-        if hoy.day > dia_pago_cfg:
-            # Prorratear: cobrar desde hoy hasta el próximo día de pago
-            if hoy.month == 12:
-                prox_pago = dt.date(hoy.year + 1, 1, dia_pago_cfg)
-            else:
-                prox_pago = dt.date(hoy.year, hoy.month + 1,
-                                    min(dia_pago_cfg, calendar.monthrange(hoy.year, hoy.month + 1)[1]))
-            dias_restantes = (prox_pago - hoy).days
-            monto_diario = float(tarifa.monto) / 30  # mes comercial
-            monto_prorrateado = round(monto_diario * dias_restantes, 2)
+            if hoy.day > dia_pago_cfg:
+                if hoy.month == 12:
+                    prox_pago = dt.date(hoy.year + 1, 1, dia_pago_cfg)
+                else:
+                    prox_pago = dt.date(hoy.year, hoy.month + 1,
+                                        min(dia_pago_cfg, calendar.monthrange(hoy.year, hoy.month + 1)[1]))
+                dias_restantes = (prox_pago - hoy).days
+                monto_diario = float(tarifa.monto) / 30
+                monto_prorrateado = round(monto_diario * dias_restantes, 2)
 
-            periodo = dt.date(hoy.year, hoy.month, 1)
-            vencimiento = prox_pago + dt.timedelta(days=cfg.dias_gracia)
+                periodo = dt.date(hoy.year, hoy.month, 1)
+                vencimiento = prox_pago + dt.timedelta(days=cfg.dias_gracia)
 
-            cuota = Cuota(
-                cuenta_id=cuenta.id, periodo=periodo,
-                monto=monto_prorrateado, fecha_vencimiento=vencimiento,
-                estado="pendiente",
-            )
-            db.session.add(cuota)
-            db.session.commit()
-    except Exception:
-        pass  # No romper la creación de cuenta por un error de prorrateo
+                cuota = Cuota(
+                    cuenta_id=cuenta.id, periodo=periodo,
+                    monto=monto_prorrateado, fecha_vencimiento=vencimiento,
+                    estado="pendiente",
+                )
+                db.session.add(cuota)
+                db.session.commit()
+        except Exception:
+            pass
 
     return jsonify({"data": {
         "cuenta": cuenta.to_dict(detalle=True),

@@ -200,6 +200,7 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
   const [validando, setValidando] = useState(false);
   const [enrolInfo, setEnrolInfo] = useState<{ edificio_nombre: string; apartamento_sugerido?: string | null; dueno_nombre?: string | null } | null>(null);
   const [esDuenoEdificio, setEsDuenoEdificio] = useState(false);
+  const [duenoVive, setDuenoVive] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
   const [enlace, setEnlace] = useState<{ email: string; url: string } | null>(null);
   const [nuevaUnidadTipo, setNuevaUnidadTipo] = useState<"casa" | "edificio">("casa");
@@ -276,7 +277,11 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
     // (casa/edificio que se escribe en el momento): en ese caso se envía
     // unidad_nueva y el backend la crea junto con la cuenta.
     const hayUnidad = unidadId || (modoUnidad === "nueva" && nuevaUnidadId.trim());
-    if (!hayUnidad || !tarifaId || !nombre || !email) {
+    // Si es dueño de edificio que NO vive ahí, la tarifa no es obligatoria
+    // (el edificio es solo un contenedor, los apartamentos pagan cuota)
+    const esDuenoSinVivienda = esEdificio && esDuenoEdificio && !duenoVive && !unidadId;
+    const hayTarifa = esDuenoSinVivienda || !!tarifaId;
+    if (!hayUnidad || !hayTarifa || !nombre || !email) {
       setMsg({ tipo: "err", texto: "Completá la casa/edificio, la tarifa, y el nombre y correo del titular" });
       return;
     }
@@ -291,10 +296,12 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
           ? { tipo: nuevaUnidadTipo, identificador: nuevaUnidadId.trim(),
               max_apartamentos: nuevaUnidadTipo === "edificio" && maxApartamentos
                 ? Number(maxApartamentos) : undefined } : undefined,
-        apartamento: esEdificio ? apartamento : undefined,
-        tarifa_id: tarifaId, dia_pago: diaPago,
+        apartamento: (esEdificio && !esDuenoSinVivienda) ? apartamento : undefined,
+        tarifa_id: esDuenoSinVivienda ? undefined : tarifaId,
+        dia_pago: esDuenoSinVivienda ? 1 : diaPago,
         codigo_enrolamiento: codigoEnrol.trim() || undefined,
         es_dueno_edificio: esEdificio && esDuenoEdificio && !enrolInfo,
+        es_solo_contenedor: esDuenoSinVivienda || undefined,
         titular: {
           nombre, apellido, email, telefono, relacion: "propietario",
           dni, rtn, direccion_exacta: direccionExacta, profesion,
@@ -451,20 +458,37 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
 
           {esEdificio && (
             <>
-              <div className="sub">Apartamento</div>
-              <input placeholder="Ej. 1A, 2B" value={apartamento}
-                onChange={(e) => setApartamento(e.target.value)} />
+              {/* Mostrar apartamento si: es edificio existente (inquilino), o el dueño vive ahí */}
+              {(!esDuenoEdificio || duenoVive || unidadId) && (
+                <>
+                <div className="sub">Apartamento</div>
+                <input placeholder="Ej. 1A, 2B" value={apartamento}
+                  onChange={(e) => setApartamento(e.target.value)} />
+                </>
+              )}
               {!enrolInfo && (
+                <>
                 <label className="check-dueno">
                   <input type="checkbox" checked={esDuenoEdificio}
                     onChange={e => setEsDuenoEdificio(e.target.checked)} />
                   <span>Este titular es el <b>dueño del edificio</b> (podrá generar códigos para sus inquilinos)</span>
                 </label>
+                {esDuenoEdificio && (
+                  <label className="check-dueno" style={{ marginTop: 6 }}>
+                    <input type="checkbox" checked={duenoVive}
+                      onChange={e => setDuenoVive(e.target.checked)} />
+                    <span>El dueño <b>vive</b> en el edificio (se le asigna un apartamento con cuota)</span>
+                  </label>
+                )}
+                </>
               )}
             </>
           )}
           </div>
 
+          {/* Sección de cuota: se oculta si es dueño de edificio que NO vive ahí
+              (el edificio no genera cuota propia; los apartamentos sí) */}
+          {!(esEdificio && esDuenoEdificio && !duenoVive && !unidadId) && (
           <div className="alta-seccion">
             <div className="alta-seccion-head">
               <span className="alta-num">2</span>
@@ -484,6 +508,7 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
             </label>
           </div>
           </div>
+          )}
 
           <div className="alta-seccion">
             <div className="alta-seccion-head">
