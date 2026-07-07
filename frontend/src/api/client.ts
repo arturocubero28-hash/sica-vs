@@ -115,13 +115,21 @@ export interface TarjetaDTO {
   id: string; card_uid: string; etiqueta?: string; estado: string; asignada_a: string;
   tipo_acceso?: "vehicular" | "peatonal";
 }
+export interface CuotaResumen {
+  periodo: string; monto: number; estado: string; fecha_vencimiento: string;
+}
+export interface UnidadDetalle {
+  id: string; tipo: "casa" | "edificio"; identificador: string;
+  max_apartamentos?: number | null; max_residentes_extra?: number | null; total_cuentas: number;
+}
 export interface Cuenta {
   id: string; apartamento?: string; identificador?: string; nombre_completo?: string;
   es_apartamento?: boolean; dia_pago: number; estado: string;
   bloqueada: boolean; activa?: boolean; tarifa: string; monto: number;
   titular?: ResidenteDTO; total_residentes: number; total_tarjetas: number;
-  cuotas_pendientes?: number;
+  cuotas_pendientes?: number; qr_recurrente_habilitado?: boolean; created_at?: string;
   residentes?: ResidenteDTO[]; tarjetas?: TarjetaDTO[];
+  unidad?: UnidadDetalle; cuotas_recientes?: CuotaResumen[];
 }
 
 export const listarUnidades = () => request<Unidad[]>("/unidades");
@@ -1035,3 +1043,8 @@ export const toggleQrRecurrente = (cuentaUuid: string, habilitado: boolean) =>
   request<object>(
     `/unidades/cuentas/${cuentaUuid}`,
     { method: "PUT", body: JSON.stringify({ qr_recurrente_habilitado: habilitado }) });
+
+export const editarUnidad = (unidadUuid: string, body: { max_apartamentos?: number | null; max_residentes_extra?: number | null }) =>
+  request<UnidadDetalle>(
+    `/unidades/unidades/${unidadUuid}`,
+    { method: "PUT", body: JSON.stringify(body) });

@@ -150,10 +150,31 @@ class Cuenta(db.Model):
             "titular": t.to_dict() if t else None,
             "total_residentes": len([r for r in self.residentes if r.activo]),
             "total_tarjetas": len([x for x in self.tarjetas if x.estado == "activa"]),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if detalle:
             d["residentes"] = [r.to_dict() for r in self.residentes if r.activo]
             d["tarjetas"] = [x.to_dict() for x in self.tarjetas]
+            # Info de la unidad (para edificios: límite de apartamentos editable)
+            if self.unidad:
+                d["unidad"] = {
+                    "id": str(self.unidad.uuid_publico),
+                    "tipo": self.unidad.tipo,
+                    "identificador": self.unidad.identificador,
+                    "max_apartamentos": self.unidad.max_apartamentos,
+                    "max_residentes_extra": self.unidad.max_residentes_extra,
+                    "total_cuentas": len(self.unidad.cuentas),
+                }
+            # Resumen de cuotas (para ver el estado de pago sin abrir otra pantalla)
+            from app.models.cuenta import Cuota
+            cuotas = (Cuota.query.filter_by(cuenta_id=self.id)
+                      .order_by(Cuota.fecha_vencimiento.desc()).limit(6).all())
+            d["cuotas_recientes"] = [{
+                "periodo": c.periodo.isoformat() if c.periodo else None,
+                "monto": float(c.monto),
+                "estado": c.estado,
+                "fecha_vencimiento": c.fecha_vencimiento.isoformat() if c.fecha_vencimiento else None,
+            } for c in cuotas]
         return d
 
 

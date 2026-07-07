@@ -60,7 +60,7 @@ export function DashboardAdmin() {
     activa: "green", adentro: "green", salio: "", expirada: "", revocada: "red",
   };
   const estadoLabel: Record<string, string> = {
-    activa: "Activa", adentro: "Adentro <Circle size={16} />", salio: "Salió ✓",
+    activa: "Activa", adentro: "Adentro 🟢", salio: "Salió ✓",
     expirada: "Expirada", revocada: "Cancelada",
   };
 

@@ -403,6 +403,25 @@ def editar_cuenta(usuario_actual, cuenta_uuid):
     return jsonify({"data": cuenta.to_dict()})
 
 
+@cuentas_bp.put("/unidades/<unidad_uuid>")
+@roles_required("admin", "super_admin")
+def editar_unidad(usuario_actual, unidad_uuid):
+    """Edita campos configurables de una unidad (ej. cuántos apartamentos
+    puede tener un edificio, o el límite de residentes extra)."""
+    unidad = Unidad.query.filter_by(uuid_publico=unidad_uuid).first()
+    if not unidad:
+        return _err("no_encontrada", "Unidad no encontrada", 404)
+    body = request.get_json(silent=True) or {}
+    if "max_apartamentos" in body:
+        val = body["max_apartamentos"]
+        unidad.max_apartamentos = int(val) if val not in (None, "") else None
+    if "max_residentes_extra" in body:
+        val = body["max_residentes_extra"]
+        unidad.max_residentes_extra = int(val) if val not in (None, "") else None
+    db.session.commit()
+    return jsonify({"data": unidad.to_dict()})
+
+
 @cuentas_bp.post("/cuentas/<cuenta_uuid>/baja")
 @roles_required("admin", "super_admin")
 def dar_baja_cuenta(usuario_actual, cuenta_uuid):

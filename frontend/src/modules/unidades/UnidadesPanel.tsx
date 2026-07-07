@@ -3,7 +3,7 @@ import {
   listarCuentas, listarUnidades, listarTarifas, crearUnidad, crearCuenta,
   detalleCuenta, agregarMiembro, asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
   crearTarifa, editarTarifa, desactivarTarifa,
-  validarCodigoEnrolamiento,
+  validarCodigoEnrolamiento, toggleQrRecurrente, editarUnidad,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
@@ -598,6 +598,11 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   { cuenta: Cuenta; onCerrar: () => void; onCambio: () => void }) {
   const [cardUid, setCardUid] = useState("");
   const [etiqueta, setEtiqueta] = useState("");
+  const [qrRecurrente, setQrRecurrente] = useState(cuenta.qr_recurrente_habilitado ?? false);
+  const [guardandoQr, setGuardandoQr] = useState(false);
+  const [maxAptos, setMaxAptos] = useState(cuenta.unidad?.max_apartamentos?.toString() ?? "");
+  const [guardandoAptos, setGuardandoAptos] = useState(false);
+  const [msgConfig, setMsgConfig] = useState("");
   // Tipo de acceso de la tarjeta. Si la cuenta es un apartamento, se sugiere
   // peatonal (común en estudiantes); si es casa, vehicular.
   const [tipoAcceso, setTipoAcceso] = useState<"vehicular" | "peatonal">(
@@ -614,6 +619,32 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   const [msg, setMsg] = useState("");
   const [miembroEnlace, setMiembroEnlace] = useState<{ email: string; url: string } | null>(null);
   const [mostrarAgregar, setMostrarAgregar] = useState(false);
+
+  async function guardarQrRecurrente(valor: boolean) {
+    setGuardandoQr(true); setMsgConfig("");
+    try {
+      await toggleQrRecurrente(cuenta.id, valor);
+      setQrRecurrente(valor);
+      setMsgConfig("✓ Guardado");
+      onCambio();
+      setTimeout(() => setMsgConfig(""), 2500);
+    } catch (e) { setMsgConfig((e as Error).message); }
+    finally { setGuardandoQr(false); }
+  }
+
+  async function guardarMaxAptos() {
+    if (!cuenta.unidad) return;
+    setGuardandoAptos(true); setMsgConfig("");
+    try {
+      await editarUnidad(cuenta.unidad.id, {
+        max_apartamentos: maxAptos.trim() ? Number(maxAptos) : null,
+      });
+      setMsgConfig("✓ Límite actualizado");
+      onCambio();
+      setTimeout(() => setMsgConfig(""), 2500);
+    } catch (e) { setMsgConfig((e as Error).message); }
+    finally { setGuardandoAptos(false); }
+  }
 
   async function addTarjeta() {
     if (!cardUid.trim()) return;
@@ -655,6 +686,96 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         <div className="modal-head">
           <h3>{cuenta.nombre_completo || (cuenta.apartamento ? `Apartamento ${cuenta.apartamento}` : "Casa")} · {cuenta.tarifa}</h3>
           <button className="ghost mini" onClick={onCerrar}>Cerrar</button>
+        </div>
+
+        {/* Información general de la cuenta: estado de pago, cuota, unidad */}
+        <div className="detalle-info-grid">
+          <div className="detalle-info-item">
+            <span className="muted small">Estado de la cuenta</span>
+            <span className={`pill ${cuenta.bloqueada ? "red" : "green"}`}>
+              {cuenta.bloqueada ? "Bloqueada por mora" : "Al día"}
+            </span>
+          </div>
+          <div className="detalle-info-item">
+            <span className="muted small">Tarifa mensual</span>
+            <b>{cuenta.tarifa ? `${cuenta.tarifa} — L ${cuenta.monto}` : "Sin tarifa (contenedor)"}</b>
+          </div>
+          <div className="detalle-info-item">
+            <span className="muted small">Día de pago</span>
+            <b>{cuenta.dia_pago ? `Día ${cuenta.dia_pago}` : "—"}</b>
+          </div>
+          <div className="detalle-info-item">
+            <span className="muted small">Unidad</span>
+            <b>{cuenta.unidad?.identificador || cuenta.identificador} ({cuenta.unidad?.tipo === "edificio" ? "Edificio" : "Casa"})</b>
+          </div>
+          {cuenta.created_at && (
+            <div className="detalle-info-item">
+              <span className="muted small">Cuenta creada</span>
+              <b>{new Date(cuenta.created_at).toLocaleDateString("es-HN")}</b>
+            </div>
+          )}
+        </div>
+
+        {/* Últimas cuotas: historial rápido sin salir de este modal */}
+        {cuenta.cuotas_recientes && cuenta.cuotas_recientes.length > 0 && (
+          <>
+            <div className="sub">Últimas cuotas</div>
+            <div className="scroll-x"><table className="data">
+              <thead><tr><th>Período</th><th>Monto</th><th>Vence</th><th>Estado</th></tr></thead>
+              <tbody>
+                {cuenta.cuotas_recientes.map((c, i) => (
+                  <tr key={i}>
+                    <td>{new Date(c.periodo).toLocaleDateString("es-HN", { month: "short", year: "numeric" })}</td>
+                    <td>L {c.monto.toFixed(2)}</td>
+                    <td>{new Date(c.fecha_vencimiento).toLocaleDateString("es-HN")}</td>
+                    <td>
+                      <span className={`pill ${c.estado === "pagada" ? "green" : c.estado === "vencida" ? "red" : ""}`}>
+                        {c.estado}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>
+          </>
+        )}
+
+        {/* Configuraciones: QR recurrente + límite de apartamentos (solo edificios) */}
+        <div className="sub">Configuración</div>
+        <div className="detalle-config-box">
+          <div className="detalle-config-fila">
+            <div>
+              <b>QR recurrente</b>
+              <p className="muted small" style={{ margin: "2px 0 0" }}>
+                Permite a los residentes de esta cuenta generar códigos QR de visita recurrente.
+              </p>
+            </div>
+            <label className="switch">
+              <input type="checkbox" checked={qrRecurrente} disabled={guardandoQr}
+                onChange={(e) => guardarQrRecurrente(e.target.checked)} />
+              <span className="switch-slider" />
+            </label>
+          </div>
+
+          {cuenta.unidad?.tipo === "edificio" && (
+            <div className="detalle-config-fila" style={{ marginTop: 10 }}>
+              <div>
+                <b>Límite de apartamentos</b>
+                <p className="muted small" style={{ margin: "2px 0 0" }}>
+                  Este edificio tiene {cuenta.unidad.total_cuentas} apartamento(s) registrado(s) de un
+                  máximo declarado. Cambialo si el edificio creció o se ajustó.
+                </p>
+              </div>
+              <div className="row" style={{ maxWidth: 160 }}>
+                <input type="number" min={1} max={200} placeholder="Sin límite"
+                  value={maxAptos} onChange={(e) => setMaxAptos(e.target.value)} />
+                <button className="mini" onClick={guardarMaxAptos} disabled={guardandoAptos}>
+                  {guardandoAptos ? "…" : "Guardar"}
+                </button>
+              </div>
+            </div>
+          )}
+          {msgConfig && <p className="muted small" style={{ marginTop: 6 }}>{msgConfig}</p>}
         </div>
 
         <div className="sub">Residentes de la casa</div>
@@ -735,7 +856,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
                 <td>{t.asignada_a}</td>
                 <td>
                   <span className={`pill ${t.tipo_acceso === "peatonal" ? "" : "green"}`}>
-                    {t.tipo_acceso === "peatonal" ? "<Footprints size={16} /> Peatonal" : "<Car size={16} /> Vehicular"}
+                    {t.tipo_acceso === "peatonal" ? "🚶 Peatonal" : "🚗 Vehicular"}
                   </span>
                 </td>
                 <td><span className="pill green">{t.estado}</span></td>
