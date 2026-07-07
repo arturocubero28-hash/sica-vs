@@ -258,6 +258,9 @@ def create_app(config_class=Config):
             # Día 29 — Límites de personas por unidad y aptos por edificio
             "ALTER TABLE unidades ADD COLUMN IF NOT EXISTS max_residentes_extra INTEGER",
             "ALTER TABLE unidades ADD COLUMN IF NOT EXISTS max_apartamentos INTEGER",
+            # Día 29 (fix) — edificios contenedor sin cuota: tarifa/dia_pago opcionales
+            "ALTER TABLE cuentas ALTER COLUMN tarifa_id DROP NOT NULL",
+            "ALTER TABLE cuentas ALTER COLUMN dia_pago DROP NOT NULL",
         ]
         for sql in columnas:
             try:

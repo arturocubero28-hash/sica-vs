@@ -338,25 +338,34 @@ def crear_cuenta(usuario_actual):
             dia_pago_cfg = cfg.dia_pago
 
             if hoy.day > dia_pago_cfg:
-                if hoy.month == 12:
-                    prox_pago = dt.date(hoy.year + 1, 1, dia_pago_cfg)
-                else:
-                    prox_pago = dt.date(hoy.year, hoy.month + 1,
-                                        min(dia_pago_cfg, calendar.monthrange(hoy.year, hoy.month + 1)[1]))
-                dias_restantes = (prox_pago - hoy).days
-                monto_diario = float(tarifa.monto) / 30
-                monto_prorrateado = round(monto_diario * dias_restantes, 2)
+                # Mes comercial de 30 días SIEMPRE, también para contar los días
+                # restantes (no calendario real). Así en meses de 31 días (como
+                # julio) no se cobran de más. Ej: hoy es el 7, día de pago es el 1
+                # → quedan 30-7=23 días comerciales, no los 25 días reales hasta
+                # el 1 de agosto.
+                efectivo_dia = min(hoy.day, 30)
+                posicion_en_ciclo = ((efectivo_dia - dia_pago_cfg) % 30) + 1  # 1..30
+                dias_restantes = 30 - posicion_en_ciclo
 
-                periodo = dt.date(hoy.year, hoy.month, 1)
-                vencimiento = prox_pago + dt.timedelta(days=cfg.dias_gracia)
+                if dias_restantes > 0:
+                    monto_diario = float(tarifa.monto) / 30
+                    monto_prorrateado = round(monto_diario * dias_restantes, 2)
 
-                cuota = Cuota(
-                    cuenta_id=cuenta.id, periodo=periodo,
-                    monto=monto_prorrateado, fecha_vencimiento=vencimiento,
-                    estado="pendiente",
-                )
-                db.session.add(cuota)
-                db.session.commit()
+                    if hoy.month == 12:
+                        prox_pago = dt.date(hoy.year + 1, 1, dia_pago_cfg)
+                    else:
+                        prox_pago = dt.date(hoy.year, hoy.month + 1,
+                                            min(dia_pago_cfg, calendar.monthrange(hoy.year, hoy.month + 1)[1]))
+                    periodo = dt.date(hoy.year, hoy.month, 1)
+                    vencimiento = prox_pago + dt.timedelta(days=cfg.dias_gracia)
+
+                    cuota = Cuota(
+                        cuenta_id=cuenta.id, periodo=periodo,
+                        monto=monto_prorrateado, fecha_vencimiento=vencimiento,
+                        estado="pendiente",
+                    )
+                    db.session.add(cuota)
+                    db.session.commit()
         except Exception:
             pass
 

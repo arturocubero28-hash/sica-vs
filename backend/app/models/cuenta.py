@@ -75,8 +75,8 @@ class Cuenta(db.Model):
     uuid_publico = _uuid_col()
     unidad_id = db.Column(db.BigInteger, db.ForeignKey("unidades.id"), nullable=False)
     apartamento = db.Column(db.String(40))                 # NULL si es casa; "1A" si es apto
-    tarifa_id = db.Column(db.BigInteger, db.ForeignKey("tarifas.id"), nullable=False)
-    dia_pago = db.Column(db.SmallInteger, nullable=False)   # 1..28
+    tarifa_id = db.Column(db.BigInteger, db.ForeignKey("tarifas.id"), nullable=True)
+    dia_pago = db.Column(db.SmallInteger, nullable=True)   # 1..28 (null = cuenta contenedora sin cuota)
     fecha_alta = db.Column(db.Date, nullable=False, default=dt.date.today)
     estado = db.Column(db.String(20), nullable=False, default="al_dia")
     bloqueada = db.Column(db.Boolean, nullable=False, default=False)

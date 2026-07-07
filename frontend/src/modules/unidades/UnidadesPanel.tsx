@@ -351,6 +351,13 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
 
       {!enlace && (
         <>
+          {msg && (
+            <div className={msg.tipo === "ok" ? "ok-box" : "error"}
+              style={{ position: "sticky", top: 8, zIndex: 20, marginBottom: 14,
+                       boxShadow: "0 2px 10px rgba(0,0,0,0.12)" }}>
+              {msg.tipo === "err" ? "⚠ " : "✓ "}{msg.texto}
+            </div>
+          )}
           {/* Código de enrolamiento */}
           <div className="alta-seccion">
             <div className="alta-seccion-head">
@@ -572,8 +579,6 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
             <Info size={15} />
             <span>Se creará el acceso del titular en estado <b>pendiente</b>. Recibirá un enlace para definir su propia contraseña — la administración nunca conoce las contraseñas.</span>
           </div>
-
-          {msg && <div className={msg.tipo === "ok" ? "ok-box" : "error"}>{msg.texto}</div>}
         </>
       )}
         </div>
