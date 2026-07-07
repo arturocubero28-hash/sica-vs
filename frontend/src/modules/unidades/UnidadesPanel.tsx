@@ -199,7 +199,6 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
   const [codigoEnrol, setCodigoEnrol] = useState("");
   const [validando, setValidando] = useState(false);
   const [enrolInfo, setEnrolInfo] = useState<{ edificio_nombre: string; apartamento_sugerido?: string | null; dueno_nombre?: string | null } | null>(null);
-  const [esDuenoEdificio, setEsDuenoEdificio] = useState(false);
   const [duenoVive, setDuenoVive] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
   const [enlace, setEnlace] = useState<{ email: string; url: string } | null>(null);
@@ -279,7 +278,7 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
     const hayUnidad = unidadId || (modoUnidad === "nueva" && nuevaUnidadId.trim());
     // Si es dueño de edificio que NO vive ahí, la tarifa no es obligatoria
     // (el edificio es solo un contenedor, los apartamentos pagan cuota)
-    const esDuenoSinVivienda = esEdificio && esDuenoEdificio && !duenoVive && !unidadId;
+    const esDuenoSinVivienda = esEdificio && modoUnidad === "nueva" && !duenoVive;
     const hayTarifa = esDuenoSinVivienda || !!tarifaId;
     if (!hayUnidad || !hayTarifa || !nombre || !email) {
       setMsg({ tipo: "err", texto: "Completá la casa/edificio, la tarifa, y el nombre y correo del titular" });
@@ -300,7 +299,7 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
         tarifa_id: esDuenoSinVivienda ? undefined : tarifaId,
         dia_pago: esDuenoSinVivienda ? 1 : diaPago,
         codigo_enrolamiento: codigoEnrol.trim() || undefined,
-        es_dueno_edificio: esEdificio && esDuenoEdificio && !enrolInfo,
+        es_dueno_edificio: esEdificio && modoUnidad === "nueva" && !enrolInfo,
         es_solo_contenedor: esDuenoSinVivienda || undefined,
         titular: {
           nombre, apellido, email, telefono, relacion: "propietario",
@@ -426,69 +425,86 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
               <p className="muted small" style={{ marginTop: 6 }}>
                 {nuevaUnidadTipo === "casa"
                   ? "La casa se creará junto con la cuenta al dar de alta."
-                  : "El edificio se creará junto con la cuenta. Indicá el apartamento abajo."}
+                  : "Primero se crea el edificio; luego registrás sus apartamentos uno por uno."}
               </p>
+
               {nuevaUnidadTipo === "edificio" && (
-                <input type="number" min={1} max={200} placeholder="¿Cuántos apartamentos tiene el edificio?"
-                  value={maxApartamentos} onChange={(e) => setMaxApartamentos(e.target.value)}
-                  style={{ marginTop: 6 }} />
+                <>
+                  <div className="sub" style={{ marginTop: 14 }}>¿Cuántos apartamentos tiene?</div>
+                  <input type="number" min={1} max={200} placeholder="Ej. 12"
+                    value={maxApartamentos} onChange={(e) => setMaxApartamentos(e.target.value)} />
+
+                  {!enrolInfo && (
+                    <>
+                      <div className="sub" style={{ marginTop: 14 }}>Esta cuenta que estás creando es de...</div>
+                      <div className="radio-cards">
+                        <label className={`radio-card ${!duenoVive ? "on" : ""}`}>
+                          <input type="radio" name="dueno-vive" checked={!duenoVive}
+                            onChange={() => setDuenoVive(false)} />
+                          <div>
+                            <b>El administrador del edificio</b>
+                            <span className="muted small">No vive aquí. Solo gestiona el edificio y genera códigos para los inquilinos. No paga cuota.</span>
+                          </div>
+                        </label>
+                        <label className={`radio-card ${duenoVive ? "on" : ""}`}>
+                          <input type="radio" name="dueno-vive" checked={duenoVive}
+                            onChange={() => setDuenoVive(true)} />
+                          <div>
+                            <b>El administrador, que también vive aquí</b>
+                            <span className="muted small">Además de administrar, ocupa un apartamento y paga su cuota como los demás.</span>
+                          </div>
+                        </label>
+                      </div>
+
+                      {duenoVive && (
+                        <>
+                          <div className="sub" style={{ marginTop: 14 }}>¿Cuál apartamento ocupa?</div>
+                          <input placeholder="Ej. 1A, 2B" value={apartamento}
+                            onChange={(e) => setApartamento(e.target.value)} />
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
               )}
             </div>
           ) : (
-            <div className="search-box">
-              <input
-                placeholder="Buscar el edificio existente…"
-                value={busqueda}
-                onChange={e => { setBusqueda(e.target.value); setMostrarSug(true); setUnidadId(""); }}
-                onFocus={() => setMostrarSug(true)}
-                onBlur={() => setTimeout(() => setMostrarSug(false), 150)}
-              />
-              {mostrarSug && sugerenciasEdificios.length > 0 && (
-                <div className="search-dropdown">
-                  {sugerenciasEdificios.map(u => (
-                    <div key={u.id} className="search-option" onMouseDown={() => seleccionarUnidad(u)}>
-                      <b>{u.identificador}</b> <span className="muted small">({u.tipo})</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {unidadId && <span className="pill green" style={{position:'absolute',right:10,top:10}}>✓ seleccionado</span>}
-            </div>
-          )}
-
-          {esEdificio && (
-            <>
-              {/* Mostrar apartamento si: es edificio existente (inquilino), o el dueño vive ahí */}
-              {(!esDuenoEdificio || duenoVive || unidadId) && (
-                <>
-                <div className="sub">Apartamento</div>
-                <input placeholder="Ej. 1A, 2B" value={apartamento}
-                  onChange={(e) => setApartamento(e.target.value)} />
-                </>
-              )}
-              {!enrolInfo && (
-                <>
-                <label className="check-dueno">
-                  <input type="checkbox" checked={esDuenoEdificio}
-                    onChange={e => setEsDuenoEdificio(e.target.checked)} />
-                  <span>Este titular es el <b>dueño del edificio</b> (podrá generar códigos para sus inquilinos)</span>
-                </label>
-                {esDuenoEdificio && (
-                  <label className="check-dueno" style={{ marginTop: 6 }}>
-                    <input type="checkbox" checked={duenoVive}
-                      onChange={e => setDuenoVive(e.target.checked)} />
-                    <span>El dueño <b>vive</b> en el edificio (se le asigna un apartamento con cuota)</span>
-                  </label>
+            <div className="crear-unidad-box">
+              <div className="search-box">
+                <input
+                  placeholder="Buscar el edificio existente…"
+                  value={busqueda}
+                  onChange={e => { setBusqueda(e.target.value); setMostrarSug(true); setUnidadId(""); }}
+                  onFocus={() => setMostrarSug(true)}
+                  onBlur={() => setTimeout(() => setMostrarSug(false), 150)}
+                />
+                {mostrarSug && sugerenciasEdificios.length > 0 && (
+                  <div className="search-dropdown">
+                    {sugerenciasEdificios.map(u => (
+                      <div key={u.id} className="search-option" onMouseDown={() => seleccionarUnidad(u)}>
+                        <b>{u.identificador}</b> <span className="muted small">({u.tipo})</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
+                {unidadId && <span className="pill green" style={{position:'absolute',right:10,top:10}}>✓ seleccionado</span>}
+              </div>
+
+              {/* Al agregar a un edificio existente, el apartamento siempre es necesario */}
+              {(unidadId || enrolInfo) && (
+                <>
+                  <div className="sub" style={{ marginTop: 14 }}>Apartamento</div>
+                  <input placeholder="Ej. 1A, 2B" value={apartamento}
+                    onChange={(e) => setApartamento(e.target.value)} />
                 </>
               )}
-            </>
+            </div>
           )}
           </div>
 
-          {/* Sección de cuota: se oculta si es dueño de edificio que NO vive ahí
-              (el edificio no genera cuota propia; los apartamentos sí) */}
-          {!(esEdificio && esDuenoEdificio && !duenoVive && !unidadId) && (
+          {/* Sección de cuota: se oculta solo cuando es el administrador de un
+              edificio NUEVO que no vive ahí (el edificio no genera cuota propia) */}
+          {!(esEdificio && modoUnidad === "nueva" && !duenoVive) && (
           <div className="alta-seccion">
             <div className="alta-seccion-head">
               <span className="alta-num">2</span>
