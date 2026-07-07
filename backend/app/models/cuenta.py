@@ -126,6 +126,25 @@ class Cuenta(db.Model):
         self.bloqueada = False
         return True
 
+    def es_contenedor_edificio(self):
+        """True si esta cuenta es la cuenta 'raíz' de un edificio (el
+        administrador que no vive ahí): unidad tipo edificio, sin apartamento
+        propio y sin tarifa. Es un contenedor de otros apartamentos, no paga cuota."""
+        try:
+            return (self.unidad and self.unidad.tipo == "edificio"
+                    and not self.apartamento and not self.tarifa_id)
+        except Exception:
+            return False
+
+    def tipo_cuenta(self):
+        """Discriminador único para la UI: 'casa' | 'edificio_contenedor' | 'apartamento'."""
+        try:
+            if self.unidad and self.unidad.tipo == "edificio":
+                return "edificio_contenedor" if self.es_contenedor_edificio() else "apartamento"
+        except Exception:
+            pass
+        return "casa"
+
     def to_dict(self, detalle=False):
         t = self.titular()
         unidad = None
@@ -133,13 +152,18 @@ class Cuenta(db.Model):
             unidad = self.unidad.identificador if self.unidad else None
         except Exception:
             unidad = None
+        tc = self.tipo_cuenta()
         d = {
             "id": str(self.uuid_publico),
             "apartamento": self.apartamento,
             "identificador": unidad,
-            "nombre_completo": (f"{unidad} · Apto {self.apartamento}"
-                                if unidad and self.apartamento else (unidad or "—")),
+            "tipo_cuenta": tc,
+            "nombre_completo": (
+                f"{unidad} · Administración" if tc == "edificio_contenedor"
+                else (f"{unidad} · Apto {self.apartamento}"
+                      if unidad and self.apartamento else (unidad or "—"))),
             "es_apartamento": bool(self.apartamento),
+            "es_contenedor": tc == "edificio_contenedor",
             "dia_pago": self.dia_pago,
             "estado": self.estado,
             "bloqueada": self.bloqueada,
@@ -155,6 +179,24 @@ class Cuenta(db.Model):
         if detalle:
             d["residentes"] = [r.to_dict() for r in self.residentes if r.activo]
             d["tarjetas"] = [x.to_dict() for x in self.tarjetas]
+            # Si es la cuenta contenedora de un edificio, incluir la lista de
+            # apartamentos (cuentas hermanas bajo la misma unidad).
+            if tc == "edificio_contenedor" and self.unidad:
+                aptos = [c for c in self.unidad.cuentas if c.id != self.id]
+                def _nombre_titular(c):
+                    tt = c.titular()
+                    if tt and tt.usuario:
+                        return f"{tt.usuario.nombre} {tt.usuario.apellido}"
+                    return "—"
+                d["apartamentos"] = [{
+                    "id": str(c.uuid_publico),
+                    "apartamento": c.apartamento,
+                    "titular": _nombre_titular(c),
+                    "estado": c.estado,
+                    "bloqueada": c.bloqueada,
+                    "tarifa": c.tarifa.nombre if c.tarifa else None,
+                    "monto": float(c.tarifa.monto) if c.tarifa else None,
+                } for c in sorted(aptos, key=lambda x: x.apartamento or "")]
             # Info de la unidad (para edificios: límite de apartamentos editable)
             if self.unidad:
                 d["unidad"] = {

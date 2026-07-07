@@ -3034,3 +3034,15 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 .switch input:checked + .switch-slider { background-color: var(--azul2, #044a6e); }
 .switch input:checked + .switch-slider::before { transform: translateX(18px); }
 .switch input:disabled + .switch-slider { opacity: 0.6; cursor: not-allowed; }
+
+/* Distinción visual: cuenta contenedora de edificio vs apartamentos */
+.fila-edificio { background: #f0f6fb; }
+.fila-edificio:hover { background: #e6f0f8; }
+.badge-edificio {
+  display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 0.5px;
+  color: #fff; background: #044a6e; padding: 2px 7px; border-radius: 5px;
+}
+.badge-apto {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  color: #044a6e; background: #dce9f3; padding: 2px 7px; border-radius: 5px;
+}

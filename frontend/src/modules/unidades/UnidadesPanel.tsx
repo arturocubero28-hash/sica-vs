@@ -142,20 +142,32 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
               {filtradas.map((c) => {
                 const dadaBaja = c.activa === false;
                 const pend = c.cuotas_pendientes || 0;
+                const esContenedor = c.tipo_cuenta === "edificio_contenedor";
+                const esApto = c.tipo_cuenta === "apartamento";
                 return (
-                  <tr key={c.id} className={dadaBaja ? "fila-baja" : ""}>
-                    <td>{c.nombre_completo || c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "Casa")}</td>
-                    <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
-                    <td>{c.tarifa} (L {c.monto})</td>
-                    <td>{c.dia_pago}</td>
+                  <tr key={c.id} className={dadaBaja ? "fila-baja" : (esContenedor ? "fila-edificio" : "")}>
                     <td>
-                      {pend === 0
+                      {esContenedor && <span className="badge-edificio">🏢 EDIFICIO</span>}
+                      {esApto && <span className="badge-apto">Apto</span>}
+                      <span style={{ marginLeft: esContenedor || esApto ? 6 : 0 }}>
+                        {c.nombre_completo || c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "Casa")}
+                      </span>
+                    </td>
+                    <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
+                    <td>{esContenedor ? <span className="muted small">No paga cuota</span> : `${c.tarifa} (L ${c.monto})`}</td>
+                    <td>{esContenedor ? "—" : c.dia_pago}</td>
+                    <td>
+                      {esContenedor
+                        ? <span className="muted">—</span>
+                        : pend === 0
                         ? <span className="pill green">Al día</span>
                         : <span className="pill red">{pend} pend.</span>}
                     </td>
                     <td>
                       {dadaBaja
                         ? <span className="pill" style={{ background: "#6b7280", color: "#fff" }}>Baja</span>
+                        : esContenedor
+                        ? <span className="pill" style={{ background: "#044a6e", color: "#fff" }}>Administración</span>
                         : <span className={c.bloqueada ? "pill red" : "pill green"}>{c.bloqueada ? "Bloqueada" : c.estado}</span>}
                     </td>
                     <td style={{ display: "flex", gap: 6 }}>
@@ -692,18 +704,24 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         <div className="detalle-info-grid">
           <div className="detalle-info-item">
             <span className="muted small">Estado de la cuenta</span>
-            <span className={`pill ${cuenta.bloqueada ? "red" : "green"}`}>
-              {cuenta.bloqueada ? "Bloqueada por mora" : "Al día"}
-            </span>
+            {cuenta.tipo_cuenta === "edificio_contenedor"
+              ? <span className="pill" style={{ background: "#044a6e", color: "#fff" }}>Administración del edificio</span>
+              : <span className={`pill ${cuenta.bloqueada ? "red" : "green"}`}>
+                  {cuenta.bloqueada ? "Bloqueada por mora" : "Al día"}
+                </span>}
           </div>
-          <div className="detalle-info-item">
-            <span className="muted small">Tarifa mensual</span>
-            <b>{cuenta.tarifa ? `${cuenta.tarifa} — L ${cuenta.monto}` : "Sin tarifa (contenedor)"}</b>
-          </div>
-          <div className="detalle-info-item">
-            <span className="muted small">Día de pago</span>
-            <b>{cuenta.dia_pago ? `Día ${cuenta.dia_pago}` : "—"}</b>
-          </div>
+          {cuenta.tipo_cuenta !== "edificio_contenedor" && (
+            <>
+              <div className="detalle-info-item">
+                <span className="muted small">Tarifa mensual</span>
+                <b>{cuenta.tarifa ? `${cuenta.tarifa} — L ${cuenta.monto}` : "Sin tarifa"}</b>
+              </div>
+              <div className="detalle-info-item">
+                <span className="muted small">Día de pago</span>
+                <b>{cuenta.dia_pago ? `Día ${cuenta.dia_pago}` : "—"}</b>
+              </div>
+            </>
+          )}
           <div className="detalle-info-item">
             <span className="muted small">Unidad</span>
             <b>{cuenta.unidad?.identificador || cuenta.identificador} ({cuenta.unidad?.tipo === "edificio" ? "Edificio" : "Casa"})</b>
@@ -716,8 +734,8 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           )}
         </div>
 
-        {/* Últimas cuotas: historial rápido sin salir de este modal */}
-        {cuenta.cuotas_recientes && cuenta.cuotas_recientes.length > 0 && (
+        {/* Últimas cuotas: historial rápido (no aplica al contenedor de edificio) */}
+        {cuenta.tipo_cuenta !== "edificio_contenedor" && cuenta.cuotas_recientes && cuenta.cuotas_recientes.length > 0 && (
           <>
             <div className="sub">Últimas cuotas</div>
             <div className="scroll-x"><table className="data">
@@ -757,13 +775,13 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
             </label>
           </div>
 
-          {cuenta.unidad?.tipo === "edificio" && (
+          {cuenta.tipo_cuenta === "edificio_contenedor" && (
             <div className="detalle-config-fila" style={{ marginTop: 10 }}>
               <div>
                 <b>Límite de apartamentos</b>
                 <p className="muted small" style={{ margin: "2px 0 0" }}>
-                  Este edificio tiene {cuenta.unidad.total_cuentas} apartamento(s) registrado(s) de un
-                  máximo declarado. Cambialo si el edificio creció o se ajustó.
+                  Este edificio tiene {(cuenta.apartamentos?.length ?? 0)} apartamento(s) registrado(s).
+                  Cambiá el máximo si el edificio creció o se ajustó.
                 </p>
               </div>
               <div className="row" style={{ maxWidth: 160 }}>
@@ -778,7 +796,41 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           {msgConfig && <p className="muted small" style={{ marginTop: 6 }}>{msgConfig}</p>}
         </div>
 
-        <div className="sub">Residentes de la casa</div>
+        {/* Lista de apartamentos bajo el edificio (solo en el contenedor) */}
+        {cuenta.tipo_cuenta === "edificio_contenedor" && (
+          <>
+            <div className="sub">Apartamentos de este edificio ({cuenta.apartamentos?.length ?? 0})</div>
+            {(cuenta.apartamentos?.length ?? 0) === 0 ? (
+              <p className="muted small" style={{ padding: "8px 0" }}>
+                Todavía no hay apartamentos registrados. Agregalos desde "Dar de alta" →
+                seleccioná este edificio existente.
+              </p>
+            ) : (
+              <div className="scroll-x"><table className="data">
+                <thead><tr><th>Apartamento</th><th>Titular</th><th>Tarifa</th><th>Estado</th></tr></thead>
+                <tbody>
+                  {cuenta.apartamentos!.map((a) => (
+                    <tr key={a.id}>
+                      <td><b>{a.apartamento || "—"}</b></td>
+                      <td>{a.titular}</td>
+                      <td>{a.tarifa ? `${a.tarifa} (L ${a.monto})` : "—"}</td>
+                      <td>
+                        <span className={`pill ${a.bloqueada ? "red" : "green"}`}>
+                          {a.bloqueada ? "Bloqueada" : a.estado}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table></div>
+            )}
+          </>
+        )}
+
+        {/* Residentes: para el contenedor solo el administrador; para casa/apto los residentes */}
+        <div className="sub">
+          {cuenta.tipo_cuenta === "edificio_contenedor" ? "Administrador del edificio" : "Residentes de la casa"}
+        </div>
         <div className="residentes-lista">
           {(cuenta.residentes || []).map((r) => (
             <FilaResidente key={r.id} residente={r} onActualizado={onCambio} />

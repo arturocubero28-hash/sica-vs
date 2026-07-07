@@ -122,14 +122,20 @@ export interface UnidadDetalle {
   id: string; tipo: "casa" | "edificio"; identificador: string;
   max_apartamentos?: number | null; max_residentes_extra?: number | null; total_cuentas: number;
 }
+export interface ApartamentoResumen {
+  id: string; apartamento?: string; titular: string; estado: string;
+  bloqueada: boolean; tarifa?: string | null; monto?: number | null;
+}
 export interface Cuenta {
   id: string; apartamento?: string; identificador?: string; nombre_completo?: string;
-  es_apartamento?: boolean; dia_pago: number; estado: string;
+  es_apartamento?: boolean; es_contenedor?: boolean; tipo_cuenta?: "casa" | "edificio_contenedor" | "apartamento";
+  dia_pago: number; estado: string;
   bloqueada: boolean; activa?: boolean; tarifa: string; monto: number;
   titular?: ResidenteDTO; total_residentes: number; total_tarjetas: number;
   cuotas_pendientes?: number; qr_recurrente_habilitado?: boolean; created_at?: string;
   residentes?: ResidenteDTO[]; tarjetas?: TarjetaDTO[];
   unidad?: UnidadDetalle; cuotas_recientes?: CuotaResumen[];
+  apartamentos?: ApartamentoResumen[];
 }
 
 export const listarUnidades = () => request<Unidad[]>("/unidades");
