@@ -2977,3 +2977,15 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 .banner-bloqueo svg { flex-shrink: 0; margin-top: 2px; }
 .banner-bloqueo b { color: #8a1010; }
 .banner-bloqueo p { margin: 3px 0 0; font-size: 13px; line-height: 1.45; color: #a83232; }
+
+/* Pestañas tipo botón (usadas en Mi Perfil → Configuraciones) */
+.tab-btn {
+  padding: 10px 22px; border: 1px solid var(--borde); background: var(--fondo);
+  color: var(--gris); cursor: pointer; font-size: 14px; font-weight: 600;
+  transition: all 0.15s;
+}
+.tab-btn:first-child { border-radius: 10px 0 0 10px; }
+.tab-btn:last-child  { border-radius: 0 10px 10px 0; border-left: 0; }
+.tab-btn.active { background: var(--azul); color: #fff; border-color: var(--azul); }
+.tab-btn:hover:not(.active) { background: var(--gris-cl); }
+.ok { color: var(--verde); } .err { color: var(--rojo); }

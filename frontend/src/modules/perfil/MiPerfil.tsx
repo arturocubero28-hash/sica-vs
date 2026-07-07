@@ -1,15 +1,19 @@
 import { useState, useEffect } from "react";
 import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesiones,
   registrarHuella, listarCredencialesHuella, eliminarCredencialHuella, soportaHuella,
-  type Usuario, type SesionDTO, type CredencialWebAuthnDTO } from "../../api/client";
+  getConfigResidencial, setConfigResidencial,
+  type Usuario, type SesionDTO, type CredencialWebAuthnDTO, type ConfigResidencial } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
 import { Fingerprint } from "lucide-react";
 
 export function MiPerfil() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  const [tab, setTab] = useState<"perfil" | "config">("perfil");
   useEffect(() => { getMe().then(setUsuario).catch(() => {}); }, []);
 
   if (!usuario) return <p className="muted">Cargando…</p>;
+
+  const esAdmin = ["admin", "super_admin"].includes(usuario.rol);
 
   const rolLabel: Record<string, string> = {
     admin: "Administrador", super_admin: "Super Admin", guardia: "Guardia", residente: "Residente",
@@ -19,23 +23,35 @@ export function MiPerfil() {
     <div className="perfil">
       <div className="dash-head"><h2>Mi perfil</h2></div>
 
-      <div className="perfil-datos">
-        <div className="perfil-avatar">
-          {(usuario.nombre?.[0] || "") + (usuario.apellido?.[0] || "")}
+      {esAdmin && (
+        <div className="tab-bar" style={{ display: "flex", gap: 0, marginBottom: 18 }}>
+          <button className={`tab-btn ${tab === "perfil" ? "active" : ""}`}
+            onClick={() => setTab("perfil")}>Mi perfil</button>
+          <button className={`tab-btn ${tab === "config" ? "active" : ""}`}
+            onClick={() => setTab("config")}>⚙ Configuraciones</button>
         </div>
-        <div>
-          <div className="perfil-nombre">{usuario.nombre} {usuario.apellido}</div>
-          <div className="muted">{usuario.email}</div>
-          <span className="pill" style={{ marginTop: 6, display: "inline-block" }}>
-            {rolLabel[usuario.rol] || usuario.rol}
-          </span>
-        </div>
-      </div>
+      )}
 
-      <DatosForm usuario={usuario} />
-      <PasswordForm />
-      <HuellaDigital />
-      <SesionesForm />
+      {tab === "perfil" && <>
+        <div className="perfil-datos">
+          <div className="perfil-avatar">
+            {(usuario.nombre?.[0] || "") + (usuario.apellido?.[0] || "")}
+          </div>
+          <div>
+            <div className="perfil-nombre">{usuario.nombre} {usuario.apellido}</div>
+            <div className="muted">{usuario.email}</div>
+            <span className="pill" style={{ marginTop: 6, display: "inline-block" }}>
+              {rolLabel[usuario.rol] || usuario.rol}
+            </span>
+          </div>
+        </div>
+        <DatosForm usuario={usuario} />
+        <PasswordForm />
+        <HuellaDigital />
+        <SesionesForm />
+      </>}
+
+      {tab === "config" && esAdmin && <ConfigPanel />}
     </div>
   );
 }
@@ -255,6 +271,120 @@ function HuellaDigital() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+
+// ── Configuración global de la residencial (solo admin) ──────────────────────
+
+function ConfigPanel() {
+  const [cfg, setCfg] = useState<ConfigResidencial | null>(null);
+  const [diaPago, setDiaPago] = useState(1);
+  const [diasGracia, setDiasGracia] = useState(7);
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getConfigResidencial().then((c) => {
+      setCfg(c);
+      setDiaPago(c.dia_pago);
+      setDiasGracia(c.dias_gracia);
+    }).catch(() => setError("No se pudo cargar la configuración"));
+  }, []);
+
+  async function guardar() {
+    setGuardando(true);
+    setMsg("");
+    setError("");
+    try {
+      const res = await setConfigResidencial({ dia_pago: diaPago, dias_gracia: diasGracia });
+      setCfg({ dia_pago: res.dia_pago, dias_gracia: res.dias_gracia, actualizado_en: res.actualizado_en ?? null });
+      const n = res.cuentas_actualizadas ?? 0;
+      setMsg(n > 0
+        ? `✓ Configuración guardada. Se actualizaron ${n} cuenta(s).`
+        : "✓ Configuración guardada.");
+    } catch (e: any) {
+      setError(e.message || "Error al guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (!cfg) return <p className="muted">Cargando configuración…</p>;
+
+  return (
+    <div>
+      <div className="dash-card">
+        <h3>📅 Cobro mensual</h3>
+        <p className="muted small" style={{ marginBottom: 12 }}>
+          Estos valores aplican a <b>todas las cuentas</b> de la residencial.
+          Si cambiás el día de pago, se actualiza automáticamente en todas.
+        </p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 420 }}>
+          <div>
+            <label className="small muted" style={{ display: "block", marginBottom: 4 }}>
+              Día de pago del mes
+            </label>
+            <select value={diaPago} onChange={(e) => setDiaPago(Number(e.target.value))}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)" }}>
+              {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+                <option key={d} value={d}>Día {d}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="small muted" style={{ display: "block", marginBottom: 4 }}>
+              Días de gracia después del vencimiento
+            </label>
+            <select value={diasGracia} onChange={(e) => setDiasGracia(Number(e.target.value))}
+              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)" }}>
+              {Array.from({ length: 16 }, (_, i) => i).map(d => (
+                <option key={d} value={d}>{d} día{d !== 1 ? "s" : ""}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="muted small" style={{ marginTop: 12, padding: "10px 14px",
+          background: "var(--fondo)", borderRadius: 10, border: "1px solid var(--borde)" }}>
+          <b>Ejemplo con la configuración actual:</b><br/>
+          La cuota se genera el <b>día {diaPago}</b> de cada mes.
+          El residente tiene hasta el <b>día {Math.min(diaPago + diasGracia, 28)}</b> para pagar.
+          Si no paga, su cuenta se bloquea automáticamente por mora.
+        </div>
+
+        <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={guardar} disabled={guardando}
+            style={{ padding: "10px 24px" }}>
+            {guardando ? "Guardando…" : "Guardar configuración"}
+          </button>
+          {msg && <span className="ok" style={{ fontSize: 13 }}>{msg}</span>}
+          {error && <span className="err" style={{ fontSize: 13 }}>{error}</span>}
+        </div>
+
+        {cfg.actualizado_en && (
+          <p className="muted small" style={{ marginTop: 8 }}>
+            Última actualización: {new Date(cfg.actualizado_en).toLocaleString("es-HN")}
+          </p>
+        )}
+      </div>
+
+      <div className="dash-card" style={{ marginTop: 16 }}>
+        <h3>ℹ️ Sobre estas configuraciones</h3>
+        <div className="muted small" style={{ lineHeight: 1.6 }}>
+          <p><b>Día de pago:</b> Es el día del mes en que se genera la cuota a cada cuenta.
+          Al cambiarlo, se actualiza en todas las cuentas activas de forma inmediata.</p>
+          <p><b>Días de gracia:</b> Después del día de pago, el residente tiene esta cantidad
+          de días adicionales para pagar sin que su cuenta se bloquee. Si al vencer los días
+          de gracia no ha pagado, la cuenta se bloquea automáticamente por mora.</p>
+          <p><b>Prorrateo:</b> Cuando se da de alta una cuenta nueva a mitad de mes, la primera
+          cuota se calcula proporcionalmente (los días restantes del mes, usando mes comercial
+          de 30 días).</p>
+        </div>
+      </div>
     </div>
   );
 }

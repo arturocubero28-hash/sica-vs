@@ -1013,3 +1013,25 @@ export const soportaHuella = () =>
 /** Estadísticas públicas para la landing (sin login). */
 export const estadisticasPublicas = () =>
   request<{ familias: number; accesos: number }>("/publico/estadisticas");
+
+// ── Configuración global de la residencial (admin) ──────────────────────────
+
+export interface ConfigResidencial {
+  dia_pago: number;
+  dias_gracia: number;
+  actualizado_en: string | null;
+}
+
+export const getConfigResidencial = () =>
+  request<ConfigResidencial>("/unidades/config-residencial");
+
+export const setConfigResidencial = (body: Partial<ConfigResidencial>) =>
+  request<ConfigResidencial & { cuentas_actualizadas?: number }>(
+    "/unidades/config-residencial", { method: "PUT", body: JSON.stringify(body) });
+
+// ── Toggle de QR recurrente por cuenta (admin) ──────────────────────────────
+
+export const toggleQrRecurrente = (cuentaUuid: string, habilitado: boolean) =>
+  request<object>(
+    `/unidades/cuentas/${cuentaUuid}`,
+    { method: "PUT", body: JSON.stringify({ qr_recurrente_habilitado: habilitado }) });
