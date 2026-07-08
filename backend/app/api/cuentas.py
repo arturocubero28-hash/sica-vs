@@ -706,6 +706,7 @@ def apartamentos_del_edificio(usuario_actual, edificio_uuid):
     return jsonify({"data": [c.to_dict() for c in cuentas]})
 
 
+@cuentas_bp.get("/mis-edificios")
 @token_required
 def mis_edificios(usuario_actual):
     """Edificios de los que el usuario actual es dueño (para su portal)."""
