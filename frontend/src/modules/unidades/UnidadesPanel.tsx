@@ -5,10 +5,11 @@ import {
   asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
   crearTarifa, editarTarifa, desactivarTarifa,
   validarCodigoEnrolamiento, toggleQrRecurrente, editarUnidad,
-  type Cuenta, type Unidad, type Tarifa, type ResidenteDTO,
+  listarSolicitudesBaja, resolverSolicitudBaja,
+  type Cuenta, type Unidad, type Tarifa, type ResidenteDTO, type SolicitudBajaDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
-import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle } from "lucide-react";
+import { AlertTriangle, Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle } from "lucide-react";
 
 /** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
  *  Solo acepta números y coloca los guiones automáticamente. */
@@ -79,6 +80,19 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todas");
   const [procesando, setProcesando] = useState<string | null>(null);
+  const [solicitudes, setSolicitudes] = useState<SolicitudBajaDTO[]>([]);
+
+  useEffect(() => {
+    listarSolicitudesBaja("pendiente").then(setSolicitudes).catch(() => {});
+  }, [cuentas]); // re-fetch when cuentas change
+
+  async function resolverBaja(id: string, accion: string, respuesta?: string) {
+    try {
+      await resolverSolicitudBaja(id, accion, respuesta);
+      setSolicitudes(prev => prev.filter(s => s.id !== id));
+      if (accion === "aprobar") onRecargar();
+    } catch (e) { alert((e as Error).message); }
+  }
 
   async function baja(c: Cuenta) {
     const nombre = c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "esta casa");
@@ -115,6 +129,36 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
 
   return (
     <div>
+      {/* ── Solicitudes de baja pendientes ── */}
+      {solicitudes.length > 0 && (
+        <div className="solicitudes-baja-banner">
+          <div className="solicitudes-baja-head">
+            <AlertTriangle size={18} />
+            <b>{solicitudes.length} solicitud{solicitudes.length > 1 ? "es" : ""} de baja pendiente{solicitudes.length > 1 ? "s" : ""}</b>
+          </div>
+          {solicitudes.map(s => (
+            <div key={s.id} className="solicitud-baja-card">
+              <div className="solicitud-baja-info">
+                <span><b>{s.edificio} · Apto {s.apartamento}</b> — {s.titular}</span>
+                <span className="muted small">Solicitó: {s.solicitada_por} · {new Date(s.created_at).toLocaleDateString("es-HN")}</span>
+                <span className="muted small">Motivo: {s.motivo}</span>
+                <span className="muted small">Desocupación: {new Date(s.fecha_desocupacion).toLocaleDateString("es-HN")}</span>
+              </div>
+              <div className="solicitud-baja-acciones">
+                <button className="btn-tabla btn-tabla-ok" onClick={() => {
+                  if (confirm(`¿Aprobar la baja de Apto ${s.apartamento} en ${s.edificio}?\n\nSe dará de baja la cuenta de ${s.titular}.`))
+                    resolverBaja(s.id, "aprobar");
+                }}>✓ Aprobar</button>
+                <button className="btn-tabla btn-tabla-baja" onClick={() => {
+                  const motivo = prompt("Motivo del rechazo:");
+                  if (motivo) resolverBaja(s.id, "rechazar", motivo);
+                }}>✕ Rechazar</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Buscador y filtros */}
       <div className="casas-filtros">
         <input

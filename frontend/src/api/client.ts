@@ -173,6 +173,18 @@ export const darBajaCuenta = (id: string) =>
 export const reactivarCuenta = (id: string) =>
   request<Cuenta>(`/unidades/cuentas/${id}/reactivar`, { method: "POST" });
 
+export interface SolicitudBajaDTO {
+  id: string; cuenta_id: string; apartamento: string; edificio: string;
+  titular: string; solicitada_por: string; motivo: string;
+  fecha_desocupacion: string; estado: string; respuesta_admin?: string;
+  created_at: string; resuelto_en?: string;
+}
+export const listarSolicitudesBaja = (estado = "pendiente") =>
+  request<SolicitudBajaDTO[]>(`/unidades/solicitudes-baja?estado=${estado}`);
+export const resolverSolicitudBaja = (id: string, accion: string, respuesta?: string) =>
+  request<SolicitudBajaDTO>(`/unidades/solicitudes-baja/${id}/resolver`,
+    { method: "POST", body: JSON.stringify({ accion, respuesta }) });
+
 export const crearUnidad = (body: { tipo: string; identificador: string; direccion_ref?: string }) =>
   request<Unidad>("/unidades", { method: "POST", body: JSON.stringify(body) });
 

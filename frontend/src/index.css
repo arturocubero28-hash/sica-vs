@@ -3198,3 +3198,25 @@ input.input-error, select.input-error, textarea.input-error {
 
 /* Wrapper que preserva el layout .row y permite mostrar el error debajo del input */
 .campo-con-error { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+
+/* ── Solicitudes de baja ── */
+.solicitudes-baja-banner {
+  background: #fffbeb; border: 1.5px solid #f59e0b; border-radius: 12px;
+  padding: 14px; margin-bottom: 14px;
+}
+.solicitudes-baja-head {
+  display: flex; align-items: center; gap: 8px;
+  color: #92400e; font-size: 14px; margin-bottom: 10px;
+}
+.solicitud-baja-card {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  padding: 12px; background: #fff; border-radius: 10px; border: 1px solid #fde68a;
+  margin-bottom: 8px;
+}
+.solicitud-baja-card:last-child { margin-bottom: 0; }
+.solicitud-baja-info {
+  display: flex; flex-direction: column; gap: 2px; font-size: 13px;
+}
+.solicitud-baja-acciones {
+  display: flex; gap: 6px; flex-shrink: 0;
+}

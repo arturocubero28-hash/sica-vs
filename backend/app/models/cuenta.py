@@ -802,3 +802,41 @@ class ConfigResidencial(db.Model):
             "dias_gracia": self.dias_gracia,
             "actualizado_en": self.actualizado_en.isoformat() if self.actualizado_en else None,
         }
+
+
+# ---------------------------------------------------------------------
+# SOLICITUD DE BAJA: un admin de edificio pide dar de baja a un inquilino
+# ---------------------------------------------------------------------
+class SolicitudBaja(db.Model):
+    __tablename__ = "solicitudes_baja"
+
+    id             = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico   = _uuid_col()
+    cuenta_id      = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
+    solicitada_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
+    motivo         = db.Column(db.Text, nullable=False)
+    fecha_desocupacion = db.Column(db.Date, nullable=False)
+    estado         = db.Column(db.String(20), nullable=False, default="pendiente")  # pendiente | aprobada | rechazada
+    respuesta_admin = db.Column(db.Text)
+    created_at     = db.Column(db.DateTime(timezone=True), default=_now)
+    resuelto_en    = db.Column(db.DateTime(timezone=True))
+
+    cuenta   = db.relationship("Cuenta", lazy="joined")
+    usuario  = db.relationship("Usuario", lazy="joined")
+
+    def to_dict(self):
+        c = self.cuenta
+        return {
+            "id": str(self.uuid_publico),
+            "cuenta_id": str(c.uuid_publico) if c else None,
+            "apartamento": c.apartamento if c else None,
+            "edificio": c.unidad.identificador if c and c.unidad else None,
+            "titular": c.nombre_completo if c else None,
+            "solicitada_por": f"{self.usuario.nombre} {self.usuario.apellido}" if self.usuario else None,
+            "motivo": self.motivo,
+            "fecha_desocupacion": self.fecha_desocupacion.isoformat() if self.fecha_desocupacion else None,
+            "estado": self.estado,
+            "respuesta_admin": self.respuesta_admin,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "resuelto_en": self.resuelto_en.isoformat() if self.resuelto_en else None,
+        }

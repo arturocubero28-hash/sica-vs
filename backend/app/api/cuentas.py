@@ -25,7 +25,7 @@ from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db
 from app.models.usuario import Usuario
-from app.models.cuenta import Unidad, Cuenta, Residente, Tarjeta, Tarifa, CodigoEnrolamiento, Cuota
+from app.models.cuenta import Unidad, Cuenta, Residente, Tarjeta, Tarifa, CodigoEnrolamiento, Cuota, SolicitudBaja
 from app.auth.security import roles_required, token_required
 
 cuentas_bp = Blueprint("cuentas", __name__)
@@ -232,7 +232,8 @@ def crear_cuenta(usuario_actual):
 
     # Validar límite de apartamentos en el edificio (Día 29)
     if unidad.tipo == "edificio" and unidad.max_apartamentos:
-        aptos_existentes = Cuenta.query.filter_by(unidad_id=unidad.id).count()
+        aptos_existentes = Cuenta.query.filter_by(unidad_id=unidad.id).filter(
+            Cuenta.tipo_cuenta != "edificio_contenedor").count()
         if aptos_existentes >= unidad.max_apartamentos:
             return _err("limite_apartamentos",
                         f"Este edificio ya tiene {aptos_existentes} apartamento(s) "
@@ -738,6 +739,21 @@ def generar_codigo_enrolamiento(usuario_actual):
     if edificio.propietario_id != usuario_actual.id and usuario_actual.rol not in ("admin", "super_admin"):
         return _err("sin_permiso", "No sos el dueño de este edificio", 403)
 
+    # Validar límite de apartamentos
+    if edificio.max_apartamentos:
+        aptos_existentes = Cuenta.query.filter_by(unidad_id=edificio.id).filter(
+            Cuenta.tipo_cuenta != "edificio_contenedor").count()
+        # También contar códigos activos pendientes de usar
+        codigos_activos = CodigoEnrolamiento.query.filter_by(
+            unidad_id=edificio.id, estado="activo").count()
+        ocupados = aptos_existentes + codigos_activos
+        if ocupados >= edificio.max_apartamentos:
+            return _err("limite_apartamentos",
+                        f"Este edificio ya tiene {aptos_existentes} apartamento(s) registrado(s) "
+                        f"y {codigos_activos} código(s) pendiente(s), de un máximo de "
+                        f"{edificio.max_apartamentos}. Solicitá a la administración dar de baja "
+                        f"una cuenta antes de generar un nuevo código.", 400)
+
     # Generar código numérico único de 6 dígitos
     import random
     for _ in range(20):
@@ -848,3 +864,98 @@ def editar_config_residencial(usuario_actual):
 
     db.session.commit()
     return jsonify({"data": {**cfg.to_dict(), "cuentas_actualizadas": actualizadas}})
+
+# =====================================================================
+# SOLICITUDES DE BAJA (admin de edificio pide dar de baja a un inquilino)
+# =====================================================================
+@cuentas_bp.post("/solicitudes-baja")
+@token_required
+def crear_solicitud_baja(usuario_actual):
+    """Un admin de edificio solicita dar de baja a una cuenta de inquilino."""
+    data = request.get_json(silent=True) or {}
+    cuenta_uuid = data.get("cuenta_id")
+    motivo = (data.get("motivo") or "").strip()
+    fecha_des = data.get("fecha_desocupacion")
+
+    if not cuenta_uuid or not motivo or not fecha_des:
+        return _err("datos_incompletos",
+                     "Completá el motivo y la fecha de desocupación.", 400)
+
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+
+    # Verificar que el solicitante es el dueño del edificio de esta cuenta
+    if cuenta.unidad:
+        if (cuenta.unidad.propietario_id != usuario_actual.id
+                and usuario_actual.rol not in ("admin", "super_admin")):
+            return _err("sin_permiso", "No tenés permiso para solicitar esta baja.", 403)
+
+    # La cuenta debe estar al día
+    if cuenta.bloqueada:
+        return _err("cuenta_con_deuda",
+                     "La cuenta tiene deuda pendiente. Debe estar al día para solicitar la baja.", 400)
+
+    # No duplicar solicitudes pendientes
+    existente = SolicitudBaja.query.filter_by(
+        cuenta_id=cuenta.id, estado="pendiente").first()
+    if existente:
+        return _err("ya_solicitada", "Ya existe una solicitud de baja pendiente para esta cuenta.", 400)
+
+    solicitud = SolicitudBaja(
+        cuenta_id=cuenta.id,
+        solicitada_por=usuario_actual.id,
+        motivo=motivo,
+        fecha_desocupacion=dt.date.fromisoformat(fecha_des),
+    )
+    db.session.add(solicitud)
+    db.session.commit()
+    return jsonify({"data": solicitud.to_dict()}), 201
+
+
+@cuentas_bp.get("/solicitudes-baja")
+@roles_required("admin", "super_admin")
+def listar_solicitudes_baja(usuario_actual):
+    """Lista todas las solicitudes de baja (para el panel admin)."""
+    estado = request.args.get("estado", "pendiente")
+    q = SolicitudBaja.query
+    if estado != "todas":
+        q = q.filter_by(estado=estado)
+    solicitudes = q.order_by(SolicitudBaja.created_at.desc()).all()
+    return jsonify({"data": [s.to_dict() for s in solicitudes]})
+
+
+@cuentas_bp.post("/solicitudes-baja/<solicitud_uuid>/resolver")
+@roles_required("admin", "super_admin")
+def resolver_solicitud_baja(usuario_actual, solicitud_uuid):
+    """El admin aprueba o rechaza una solicitud de baja."""
+    data = request.get_json(silent=True) or {}
+    accion = data.get("accion")  # "aprobar" o "rechazar"
+    respuesta = (data.get("respuesta") or "").strip()
+
+    solicitud = SolicitudBaja.query.filter_by(uuid_publico=solicitud_uuid).first()
+    if not solicitud:
+        return _err("no_encontrada", "Solicitud no encontrada", 404)
+    if solicitud.estado != "pendiente":
+        return _err("ya_resuelta", "Esta solicitud ya fue resuelta.", 400)
+
+    if accion == "aprobar":
+        # Dar de baja la cuenta
+        cuenta = solicitud.cuenta
+        if cuenta.bloqueada:
+            return _err("cuenta_con_deuda",
+                         "No se puede dar de baja: la cuenta tiene deuda pendiente.", 400)
+        cuenta.activa = False
+        solicitud.estado = "aprobada"
+    elif accion == "rechazar":
+        if not respuesta:
+            return _err("respuesta_requerida",
+                         "Indicá el motivo del rechazo.", 400)
+        solicitud.estado = "rechazada"
+    else:
+        return _err("accion_invalida", "La acción debe ser 'aprobar' o 'rechazar'.", 400)
+
+    solicitud.respuesta_admin = respuesta or None
+    solicitud.resuelto_en = dt.datetime.utcnow()
+    db.session.commit()
+    return jsonify({"data": solicitud.to_dict()})
