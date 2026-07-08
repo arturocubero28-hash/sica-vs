@@ -155,7 +155,7 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
       const v = await crearVisita({
         tipo, nombre_visitante: nombre, documento_id: documento || undefined,
         telefono: telefono || undefined, empresa: tipo === "repartidor" ? empresa : undefined,
-        placa_vehiculo: placa || undefined, en_vehiculo: enVehiculo,
+        en_vehiculo: enVehiculo,
         valido_hasta: tipo === "recurrente" ? new Date(validoHasta).toISOString() : undefined,
         modo_recurrencia: tipo === "recurrente" ? modo : undefined,
       });
@@ -229,7 +229,7 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
         <input type="checkbox" checked={enVehiculo} onChange={e => setEnVehiculo(e.target.checked)} />
         Viene en vehículo
       </label>
-      {enVehiculo && <input placeholder="Placa del vehículo" value={placa} onChange={e => setPlaca(e.target.value)} />}
+      {enVehiculo && <span className="muted small" style={{ display: "block", marginTop: 4 }}>El guardia le pedirá el número de placa al visitante al momento de ingresar.</span>}
 
       {tipo === "recurrente" && (
         <>
