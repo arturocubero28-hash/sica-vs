@@ -3036,19 +3036,55 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 .switch input:disabled + .switch-slider { opacity: 0.6; cursor: not-allowed; }
 
 /* Distinción visual: cuenta contenedora de edificio vs apartamentos */
+/* ── Filas por tipo ── */
 .fila-edificio { background: #f0f6fb; }
 .fila-edificio:hover { background: #e6f0f8; }
-.badge-edificio {
-  display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 0.5px;
-  color: #fff; background: #044a6e; padding: 2px 7px; border-radius: 5px;
+.fila-apto { background: #faf8ff; }
+.fila-apto:hover { background: #f3eefe; }
+
+/* ── Celda de identificador ── */
+.id-cell { display: flex; align-items: center; gap: 8px; }
+.id-nombre { font-weight: 500; }
+.apto-num { color: #6b5fad; font-weight: 600; }
+
+/* ── Badges de tipo: casa, edificio, apartamento ── */
+.badge-tipo {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.5px;
+  padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+  flex-shrink: 0;
 }
-.badge-apto {
-  display: inline-block; font-size: 10px; font-weight: 700;
-  color: #044a6e; background: #dce9f3; padding: 2px 7px; border-radius: 5px;
+.badge-tipo--casa {
+  color: #166534; background: #dcfce7;
 }
+.badge-tipo--edificio {
+  color: #fff; background: #044a6e;
+}
+.badge-tipo--apto {
+  color: #5b21b6; background: #ede9fe;
+}
+
+/* ── Badge inline "Admin" para edificio_admin ── */
+.badge-admin-inline {
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 10px; font-weight: 700;
+  color: #92400e; background: #fef3c7; padding: 1px 6px; border-radius: 5px;
+  margin-left: 4px; vertical-align: middle;
+}
+
+/* ── Icono tipo en el modal de detalle ── */
+.modal-head-titulo { display: flex; align-items: center; gap: 8px; }
+.modal-tipo-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+}
+.modal-tipo-icon--casa { background: #dcfce7; color: #166534; }
+.modal-tipo-icon--edificio { background: #dbeafe; color: #1e40af; }
+.modal-tipo-icon--apto { background: #ede9fe; color: #5b21b6; }
 
 /* Banner del administrador que vive en el edificio */
 .banner-admin-edificio {
+  display: flex; align-items: flex-start; gap: 8px;
   background: #fff8e6; border: 1px solid #f0d98a; border-radius: 10px;
   padding: 12px 14px; margin: 12px 0; font-size: 13px; line-height: 1.5;
   color: #6b5800;

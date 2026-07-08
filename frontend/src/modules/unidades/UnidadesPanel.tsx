@@ -7,7 +7,7 @@ import {
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
-import { Building, Car, Footprints, Home, Pencil, User, Plus, Info } from "lucide-react";
+import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users } from "lucide-react";
 
 /** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
  *  Solo acepta números y coloca los guiones automáticamente. */
@@ -106,6 +106,9 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
     if (filtroEstado === "bloqueadas" && !c.bloqueada) return false;
     if (filtroEstado === "al_dia" && (c.bloqueada || c.estado !== "al_dia")) return false;
     if (filtroEstado === "mora" && !c.bloqueada) return false;
+    if (filtroEstado === "solo_casas" && c.tipo_cuenta !== "casa" && c.tipo_cuenta !== undefined) return false;
+    if (filtroEstado === "solo_edificios" && c.tipo_cuenta !== "edificio_contenedor" && c.tipo_cuenta !== "edificio_admin") return false;
+    if (filtroEstado === "solo_aptos" && c.tipo_cuenta !== "apartamento") return false;
     return true;
   });
 
@@ -125,11 +128,15 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
           <option value="baja">Dadas de baja</option>
           <option value="al_dia">Al día</option>
           <option value="mora">En mora / bloqueadas</option>
+          <option disabled>──────────</option>
+          <option value="solo_casas">🏠 Solo casas</option>
+          <option value="solo_edificios">🏢 Solo edificios</option>
+          <option value="solo_aptos">🚪 Solo apartamentos</option>
         </select>
       </div>
 
       <div className="casas-contador muted small">
-        {filtradas.length} de {cuentas.length} {cuentas.length === 1 ? "casa" : "casas"}
+        {filtradas.length} de {cuentas.length} {cuentas.length === 1 ? "cuenta" : "cuentas"}
       </div>
 
       {filtradas.length === 0 ? (
@@ -147,15 +154,24 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
                 const esApto = c.tipo_cuenta === "apartamento";
                 const administra = esContenedor || esAdminRes;
                 return (
-                  <tr key={c.id} className={dadaBaja ? "fila-baja" : (administra ? "fila-edificio" : "")}>
+                  <tr key={c.id} className={dadaBaja ? "fila-baja" : (administra ? "fila-edificio" : (esApto ? "fila-apto" : ""))}>
                     <td>
-                      {administra && <span className="badge-edificio">🏢 EDIFICIO</span>}
-                      {esApto && <span className="badge-apto">Apto</span>}
-                      <span style={{ marginLeft: administra || esApto ? 6 : 0 }}>
-                        {esAdminRes
-                          ? `${c.identificador} · Apto ${c.apartamento} (Admin)`
-                          : (c.nombre_completo || c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "Casa"))}
-                      </span>
+                      <div className="id-cell">
+                        {administra ? (
+                          <span className="badge-tipo badge-tipo--edificio"><Building size={13} /> EDIFICIO</span>
+                        ) : esApto ? (
+                          <span className="badge-tipo badge-tipo--apto"><DoorOpen size={13} /> APTO</span>
+                        ) : (
+                          <span className="badge-tipo badge-tipo--casa"><Home size={13} /> CASA</span>
+                        )}
+                        <span className="id-nombre">
+                          {esAdminRes
+                            ? <>{c.identificador} · <span className="apto-num">Apto {c.apartamento}</span> <span className="badge-admin-inline"><Crown size={11} /> Admin</span></>
+                            : esApto
+                            ? <>{c.identificador} · <span className="apto-num">Apto {c.apartamento}</span></>
+                            : (c.nombre_completo || c.identificador || "Casa")}
+                        </span>
+                      </div>
                     </td>
                     <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
                     <td>{esContenedor ? <span className="muted small">No paga cuota</span> : `${c.tarifa} (L ${c.monto})`}</td>
@@ -700,7 +716,12 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>
+          <h3 className="modal-head-titulo">
+            {cuenta.tipo_cuenta === "edificio_contenedor" || cuenta.tipo_cuenta === "edificio_admin"
+              ? <span className="modal-tipo-icon modal-tipo-icon--edificio"><Building size={20} /></span>
+              : cuenta.tipo_cuenta === "apartamento"
+              ? <span className="modal-tipo-icon modal-tipo-icon--apto"><DoorOpen size={20} /></span>
+              : <span className="modal-tipo-icon modal-tipo-icon--casa"><Home size={20} /></span>}
             {cuenta.nombre_completo || (cuenta.apartamento ? `Apartamento ${cuenta.apartamento}` : "Casa")}
             {cuenta.tipo_cuenta !== "edificio_contenedor" && cuenta.tarifa ? ` · ${cuenta.tarifa}` : ""}
           </h3>
@@ -710,7 +731,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         {/* Información general de la cuenta: estado de pago, cuota, unidad */}
         {cuenta.tipo_cuenta === "edificio_admin" && (
           <div className="banner-admin-edificio">
-            👑 <b>Administrador del edificio</b> — Esta persona vive en el Apto {cuenta.apartamento} y
+            <Crown size={16} style={{ flexShrink: 0 }} /> <b>Administrador del edificio</b> — Esta persona vive en el Apto {cuenta.apartamento} y
             paga su cuota como cualquier residente, pero además administra el edificio: puede generar
             códigos para inquilinos y ver todos los apartamentos.
           </div>
@@ -739,7 +760,10 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           )}
           <div className="detalle-info-item">
             <span className="muted small">Unidad</span>
-            <b>{cuenta.unidad?.identificador || cuenta.identificador} ({cuenta.unidad?.tipo === "edificio" ? "Edificio" : "Casa"})</b>
+            <b style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              {cuenta.unidad?.tipo === "edificio" ? <Building size={14} /> : <Home size={14} />}
+              {cuenta.unidad?.identificador || cuenta.identificador} ({cuenta.unidad?.tipo === "edificio" ? "Edificio" : "Casa"})
+            </b>
           </div>
           {cuenta.created_at && (
             <div className="detalle-info-item">
@@ -843,7 +867,8 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         )}
 
         {/* Residentes: para el contenedor solo el administrador; para casa/apto los residentes */}
-        <div className="sub">
+        <div className="sub" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <Users size={15} />
           {cuenta.tipo_cuenta === "edificio_contenedor" ? "Administrador del edificio"
             : cuenta.tipo_cuenta === "edificio_admin" ? "Residentes del apartamento del administrador"
             : "Residentes de la casa"}
