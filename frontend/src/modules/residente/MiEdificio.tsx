@@ -28,6 +28,8 @@ export function MiEdificio() {
 
   async function generar() {
     if (!edificioSel) { setMsg({ tipo: "err", texto: "Elegí el edificio" }); return; }
+    if (!apartamento.trim()) { setMsg({ tipo: "err", texto: "El número de apartamento es obligatorio" }); return; }
+    if (!nota.trim()) { setMsg({ tipo: "err", texto: "El nombre del inquilino es obligatorio" }); return; }
     setGenerando(true); setMsg(null);
     try {
       await generarCodigoEnrolamiento({
@@ -86,12 +88,12 @@ export function MiEdificio() {
         )}
         <div className="row">
           <div className="form-field" style={{ flex: 1 }}>
-            <label>Apartamento (opcional)</label>
+            <label>Apartamento *</label>
             <input placeholder="Ej. 3B" value={apartamento} onChange={e => setApartamento(e.target.value)} />
           </div>
           <div className="form-field" style={{ flex: 2 }}>
-            <label>Nota (opcional)</label>
-            <input placeholder="Ej. Familia López, inquilino nuevo" value={nota} onChange={e => setNota(e.target.value)} />
+            <label>Nombre del inquilino *</label>
+            <input placeholder="Ej. Familia López" value={nota} onChange={e => setNota(e.target.value)} />
           </div>
         </div>
         <button className="cuota-btn-pagar" onClick={generar} disabled={generando}>
@@ -128,7 +130,7 @@ export function MiEdificio() {
       {/* Códigos ya usados */}
       {usados.length > 0 && (
         <div className="dash-card">
-          <h3>Inquilinos ya enrolados ({usados.length})</h3>
+          <h3>Historial de enrolamiento ({usados.length})</h3>
           <div className="scroll-x">
             <table className="data">
               <thead><tr><th>Código</th><th>Apartamento</th><th>Nota</th><th>Enrolado</th></tr></thead>

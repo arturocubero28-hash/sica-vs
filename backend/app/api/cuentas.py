@@ -723,6 +723,14 @@ def generar_codigo_enrolamiento(usuario_actual):
     para que su inquilino se enrole en la oficina de administración."""
     data = request.get_json(silent=True) or {}
     edificio_uuid = data.get("edificio_id")
+    apartamento = (data.get("apartamento") or "").strip()
+    nota = (data.get("nota") or "").strip()
+
+    if not apartamento:
+        return _err("apartamento_requerido", "El número de apartamento es obligatorio.", 400)
+    if not nota:
+        return _err("nota_requerida", "El nombre del inquilino es obligatorio.", 400)
+
     edificio = Unidad.query.filter_by(uuid_publico=edificio_uuid, tipo="edificio").first()
     if not edificio:
         return _err("edificio_invalido", "Edificio no encontrado", 404)
@@ -741,8 +749,8 @@ def generar_codigo_enrolamiento(usuario_actual):
 
     cod = CodigoEnrolamiento(
         codigo=codigo, unidad_id=edificio.id, generado_por=usuario_actual.id,
-        apartamento_sugerido=(data.get("apartamento") or "").strip() or None,
-        nota=(data.get("nota") or "").strip() or None,
+        apartamento_sugerido=apartamento,
+        nota=nota,
         estado="activo",
     )
     db.session.add(cod)
