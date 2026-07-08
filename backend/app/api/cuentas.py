@@ -232,16 +232,16 @@ def crear_cuenta(usuario_actual):
 
     # Validar límite de apartamentos en el edificio (Día 29)
     if unidad.tipo == "edificio" and unidad.max_apartamentos:
-        aptos_existentes = Cuenta.query.filter_by(unidad_id=unidad.id).filter(
+        aptos_existentes = Cuenta.query.filter_by(unidad_id=unidad.id, activa=True).filter(
             Cuenta.tipo_cuenta != "edificio_contenedor").count()
         if aptos_existentes >= unidad.max_apartamentos:
             return _err("limite_apartamentos",
                         f"Este edificio ya tiene {aptos_existentes} apartamento(s) "
                         f"registrado(s) de un máximo de {unidad.max_apartamentos}.", 400)
 
-    # evitar duplicado de apartamento en el mismo edificio
+    # evitar duplicado de apartamento en el mismo edificio (solo cuentas activas)
     if apartamento and Cuenta.query.filter_by(
-            unidad_id=unidad.id, apartamento=apartamento).first():
+            unidad_id=unidad.id, apartamento=apartamento, activa=True).first():
         return _err("duplicado", f"El apartamento {apartamento} ya existe en esta unidad", 409)
 
     titular_data = data.get("titular") or {}
@@ -843,7 +843,7 @@ def generar_codigo_enrolamiento(usuario_actual):
 
     # Validar límite de apartamentos
     if edificio.max_apartamentos:
-        aptos_existentes = Cuenta.query.filter_by(unidad_id=edificio.id).filter(
+        aptos_existentes = Cuenta.query.filter_by(unidad_id=edificio.id, activa=True).filter(
             Cuenta.tipo_cuenta != "edificio_contenedor").count()
         # También contar códigos activos pendientes de usar
         codigos_activos = CodigoEnrolamiento.query.filter_by(
