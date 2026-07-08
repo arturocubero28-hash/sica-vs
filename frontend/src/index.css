@@ -3245,3 +3245,35 @@ input.input-error, select.input-error, textarea.input-error {
 .pill-estado { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 8px; margin-top: 2px; }
 .pill-estado--ok { color: #166534; background: #dcfce7; }
 .pill-estado--mora { color: #991b1b; background: #fee2e2; }
+
+/* ── Pestaña Solicitudes de baja ── */
+.tab-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; margin-left: 6px;
+  background: #dc2626; color: #fff; font-size: 11px; font-weight: 700;
+  border-radius: 9px; vertical-align: middle;
+}
+.solicitudes-grid { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.solicitud-card {
+  border: 1px solid #e5e9f0; border-radius: 12px; padding: 14px;
+  background: #fff;
+}
+.solicitud-card--pendiente { border-left: 4px solid #f59e0b; }
+.solicitud-card--aprobada { border-left: 4px solid #16a34a; opacity: 0.75; }
+.solicitud-card--rechazada { border-left: 4px solid #dc2626; opacity: 0.75; }
+.solicitud-card-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 10px;
+}
+.solicitud-card-body {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px 16px; margin-bottom: 10px;
+}
+.solicitud-card-acciones {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding-top: 10px; border-top: 1px solid #f1f5f9;
+}
+.btn-tabla-editar {
+  color: #6b21a8 !important; border-color: #e9d5ff !important; background: #faf5ff !important;
+}
+.btn-tabla-editar:hover:not(:disabled) { background: #f3e8ff !important; color: #581c87 !important; box-shadow: none !important; transform: none !important; }

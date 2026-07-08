@@ -188,6 +188,10 @@ export const listarSolicitudesBaja = (estado = "pendiente") =>
 export const resolverSolicitudBaja = (id: string, accion: string, respuesta?: string) =>
   request<SolicitudBajaDTO>(`/unidades/solicitudes-baja/${id}/resolver`,
     { method: "POST", body: JSON.stringify({ accion, respuesta }) });
+export const nivelarSaldo = (cuentaId: string, fechaDesocupacion: string) =>
+  request<{ message: string; ajustes: { periodo: string; accion: string; dias_ocupados?: number; monto_original: number; monto_final: number }[] }>(
+    `/unidades/cuentas/${cuentaId}/nivelar-saldo`,
+    { method: "POST", body: JSON.stringify({ fecha_desocupacion: fechaDesocupacion }) });
 
 export const crearUnidad = (body: { tipo: string; identificador: string; direccion_ref?: string }) =>
   request<Unidad>("/unidades", { method: "POST", body: JSON.stringify(body) });

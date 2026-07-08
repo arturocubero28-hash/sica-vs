@@ -426,19 +426,121 @@ def editar_unidad(usuario_actual, unidad_uuid):
 @cuentas_bp.post("/cuentas/<cuenta_uuid>/baja")
 @roles_required("admin", "super_admin")
 def dar_baja_cuenta(usuario_actual, cuenta_uuid):
-    """Da de baja una cuenta: deja de generar cuotas y se desactivan sus accesos."""
+    """Da de baja una cuenta. Requisito universal: saldo en 0 (sin cuotas
+    pendientes). Al ejecutar: desactiva accesos (usuarios → no pueden crear QR)
+    y desactiva todas las tarjetas de proximidad."""
     cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
     if not cuenta:
         return _err("no_encontrada", "Cuenta no encontrada", 404)
 
+    # ── REQUISITO: saldo en 0 — sin cuotas pendientes ni parciales ──
+    cuotas_pendientes = Cuota.query.filter(
+        Cuota.cuenta_id == cuenta.id,
+        Cuota.estado.in_(["pendiente", "parcial", "vencida", "en_arreglo"]),
+    ).all()
+    if cuotas_pendientes:
+        total_pendiente = sum(float(c.monto) - float(c.monto_pagado or 0) for c in cuotas_pendientes)
+        return _err("saldo_pendiente",
+                     f"No se puede dar de baja: la cuenta tiene {len(cuotas_pendientes)} cuota(s) "
+                     f"pendiente(s) por L {total_pendiente:.2f}. El saldo debe estar en 0. "
+                     f"Podés usar 'Nivelar saldo' para prorratear la última cuota.", 400)
+
     cuenta.activa = False
     cuenta.estado = "baja"
-    # Desactivar el acceso de todos los residentes de la cuenta
+
+    # ── Suspender acceso a crear QR: desactivar usuarios ──
     for r in cuenta.residentes:
         if r.usuario:
             r.usuario.activo = False
+
+    # ── Desactivar TODAS las tarjetas de la cuenta ──
+    tarjetas_desactivadas = 0
+    for t in Tarjeta.query.filter_by(cuenta_id=cuenta.id).all():
+        if t.estado == "activa":
+            t.estado = "desactivada"
+            t.fecha_baja = dt.date.today()
+            tarjetas_desactivadas += 1
+
     db.session.commit()
-    return jsonify({"data": cuenta.to_dict()})
+    d = cuenta.to_dict()
+    d["tarjetas_desactivadas"] = tarjetas_desactivadas
+    return jsonify({"data": d})
+
+
+@cuentas_bp.post("/cuentas/<cuenta_uuid>/nivelar-saldo")
+@roles_required("admin", "super_admin")
+def nivelar_saldo(usuario_actual, cuenta_uuid):
+    """Prorratea la última cuota pendiente según la fecha de desocupación.
+    Ej: cuota completa generada el 1 (30 días comerciales), se va el 15
+    → la cuota se recalcula para cobrar solo 15 días. Si la fecha de
+    desocupación es anterior al inicio del período, la cuota se anula."""
+    data = request.get_json(silent=True) or {}
+    fecha_str = data.get("fecha_desocupacion")
+    if not fecha_str:
+        return _err("fecha_requerida", "Indicá la fecha de desocupación.", 400)
+    try:
+        fecha_des = dt.date.fromisoformat(fecha_str)
+    except ValueError:
+        return _err("fecha_invalida", "Formato de fecha inválido (YYYY-MM-DD).", 400)
+
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+
+    # Buscar cuotas pendientes/parciales ordenadas por período
+    cuotas = (Cuota.query.filter(
+        Cuota.cuenta_id == cuenta.id,
+        Cuota.estado.in_(["pendiente", "parcial", "vencida"]))
+        .order_by(Cuota.periodo.asc()).all())
+
+    if not cuotas:
+        return _err("sin_cuotas", "No hay cuotas pendientes que nivelar. El saldo ya está en 0.", 400)
+
+    from app.models.cuenta import ConfigResidencial
+    cfg = ConfigResidencial.get()
+    dia_pago_cfg = cfg.dia_pago
+
+    ajustes = []
+    for cuota in cuotas:
+        periodo = cuota.periodo  # primer día del mes del período
+        # Inicio real del ciclo: día de pago del mes del período
+        inicio_ciclo = dt.date(periodo.year, periodo.month, min(dia_pago_cfg, 28))
+
+        if fecha_des < inicio_ciclo:
+            # Se fue antes de que empezara este ciclo → anular la cuota
+            monto_original = float(cuota.monto)
+            cuota.monto = float(cuota.monto_pagado or 0)  # dejarla en lo ya pagado
+            cuota.estado = "pagada" if cuota.monto > 0 else "anulada"
+            ajustes.append({
+                "periodo": periodo.isoformat(),
+                "accion": "anulada",
+                "monto_original": monto_original,
+                "monto_final": float(cuota.monto),
+            })
+        else:
+            # Días ocupados dentro del ciclo (mes comercial 30 días)
+            dias_ocupados = min((fecha_des - inicio_ciclo).days + 1, 30)
+            monto_original = float(cuota.monto)
+            monto_diario = monto_original / 30
+            monto_nivelado = round(monto_diario * dias_ocupados, 2)
+            pagado = float(cuota.monto_pagado or 0)
+
+            cuota.monto = max(monto_nivelado, pagado)  # nunca menos de lo ya pagado
+            if pagado >= cuota.monto:
+                cuota.estado = "pagada"
+            ajustes.append({
+                "periodo": periodo.isoformat(),
+                "accion": "prorrateada",
+                "dias_ocupados": dias_ocupados,
+                "monto_original": monto_original,
+                "monto_final": float(cuota.monto),
+            })
+
+    db.session.commit()
+    return jsonify({"data": {
+        "message": f"Saldo nivelado al {fecha_des.isoformat()}",
+        "ajustes": ajustes,
+    }})
 
 
 @cuentas_bp.post("/cuentas/<cuenta_uuid>/reactivar")
@@ -940,12 +1042,35 @@ def resolver_solicitud_baja(usuario_actual, solicitud_uuid):
         return _err("ya_resuelta", "Esta solicitud ya fue resuelta.", 400)
 
     if accion == "aprobar":
-        # Dar de baja la cuenta
+        # Dar de baja la cuenta — mismas validaciones universales que /baja
         cuenta = solicitud.cuenta
-        if cuenta.bloqueada:
-            return _err("cuenta_con_deuda",
-                         "No se puede dar de baja: la cuenta tiene deuda pendiente.", 400)
+
+        # REQUISITO: saldo en 0
+        cuotas_pendientes = Cuota.query.filter(
+            Cuota.cuenta_id == cuenta.id,
+            Cuota.estado.in_(["pendiente", "parcial", "vencida", "en_arreglo"]),
+        ).all()
+        if cuotas_pendientes:
+            total = sum(float(c.monto) - float(c.monto_pagado or 0) for c in cuotas_pendientes)
+            return _err("saldo_pendiente",
+                         f"No se puede aprobar: la cuenta tiene {len(cuotas_pendientes)} cuota(s) "
+                         f"pendiente(s) por L {total:.2f}. Usá 'Nivelar saldo' y registrá el pago "
+                         f"antes de aprobar la baja.", 400)
+
         cuenta.activa = False
+        cuenta.estado = "baja"
+
+        # Suspender acceso a crear QR: desactivar usuarios de la cuenta
+        for r in cuenta.residentes:
+            if r.usuario:
+                r.usuario.activo = False
+
+        # Desactivar todas las tarjetas
+        for t in Tarjeta.query.filter_by(cuenta_id=cuenta.id).all():
+            if t.estado == "activa":
+                t.estado = "desactivada"
+                t.fecha_baja = dt.date.today()
+
         solicitud.estado = "aprobada"
     elif accion == "rechazar":
         if not respuesta:

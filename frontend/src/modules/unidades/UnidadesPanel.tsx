@@ -5,11 +5,11 @@ import {
   asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
   crearTarifa, editarTarifa, desactivarTarifa,
   validarCodigoEnrolamiento, toggleQrRecurrente, editarUnidad,
-  listarSolicitudesBaja, resolverSolicitudBaja,
+  listarSolicitudesBaja, resolverSolicitudBaja, nivelarSaldo,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO, type SolicitudBajaDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
-import { AlertTriangle, Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle } from "lucide-react";
+import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle } from "lucide-react";
 
 /** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
  *  Solo acepta números y coloca los guiones automáticamente. */
@@ -29,13 +29,17 @@ function dniCompleto(valor: string): boolean {
 }
 
 export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
-  const [tab, setTab] = useState<"cuentas" | "tarifas">("cuentas");
+  const [tab, setTab] = useState<"cuentas" | "tarifas" | "solicitudes">("cuentas");
   const [cuentas, setCuentas] = useState<Cuenta[]>([]);
   const [seleccionada, setSeleccionada] = useState<Cuenta | null>(null);
   const [modalNueva, setModalNueva] = useState(false);
+  const [numSolicitudes, setNumSolicitudes] = useState(0);
 
   async function recargar() { setCuentas(await listarCuentas()); }
   useEffect(() => { recargar(); }, []);
+  useEffect(() => {
+    listarSolicitudesBaja("pendiente").then(s => setNumSolicitudes(s.length)).catch(() => {});
+  }, [tab, cuentas]);
 
   const contenido = (
     <>
@@ -46,6 +50,10 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
           </button>
           <button className={tab === "tarifas" ? "tab on" : "tab"} onClick={() => setTab("tarifas")}>
             Tarifas
+          </button>
+          <button className={tab === "solicitudes" ? "tab on" : "tab"} onClick={() => setTab("solicitudes")}>
+            Solicitudes de baja
+            {numSolicitudes > 0 && <span className="tab-badge">{numSolicitudes}</span>}
           </button>
         </div>
         <button className="btn-alta" onClick={() => setModalNueva(true)}>
@@ -58,6 +66,7 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
           setSeleccionada(await detalleCuenta(c.id))} />
       )}
       {tab === "tarifas" && <GestionTarifas />}
+      {tab === "solicitudes" && <SolicitudesBajaPanel onCambio={recargar} />}
       {modalNueva && (
         <FormNuevaCuenta
           onCerrar={() => setModalNueva(false)}
@@ -80,19 +89,6 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todas");
   const [procesando, setProcesando] = useState<string | null>(null);
-  const [solicitudes, setSolicitudes] = useState<SolicitudBajaDTO[]>([]);
-
-  useEffect(() => {
-    listarSolicitudesBaja("pendiente").then(setSolicitudes).catch(() => {});
-  }, [cuentas]); // re-fetch when cuentas change
-
-  async function resolverBaja(id: string, accion: string, respuesta?: string) {
-    try {
-      await resolverSolicitudBaja(id, accion, respuesta);
-      setSolicitudes(prev => prev.filter(s => s.id !== id));
-      if (accion === "aprobar") onRecargar();
-    } catch (e) { alert((e as Error).message); }
-  }
 
   async function baja(c: Cuenta) {
     const nombre = c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "esta casa");
@@ -129,36 +125,6 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
 
   return (
     <div>
-      {/* ── Solicitudes de baja pendientes ── */}
-      {solicitudes.length > 0 && (
-        <div className="solicitudes-baja-banner">
-          <div className="solicitudes-baja-head">
-            <AlertTriangle size={18} />
-            <b>{solicitudes.length} solicitud{solicitudes.length > 1 ? "es" : ""} de baja pendiente{solicitudes.length > 1 ? "s" : ""}</b>
-          </div>
-          {solicitudes.map(s => (
-            <div key={s.id} className="solicitud-baja-card">
-              <div className="solicitud-baja-info">
-                <span><b>{s.edificio} · Apto {s.apartamento}</b> — {s.titular}</span>
-                <span className="muted small">Solicitó: {s.solicitada_por} · {new Date(s.created_at).toLocaleDateString("es-HN")}</span>
-                <span className="muted small">Motivo: {s.motivo}</span>
-                <span className="muted small">Desocupación: {new Date(s.fecha_desocupacion).toLocaleDateString("es-HN")}</span>
-              </div>
-              <div className="solicitud-baja-acciones">
-                <button className="btn-tabla btn-tabla-ok" onClick={() => {
-                  if (confirm(`¿Aprobar la baja de Apto ${s.apartamento} en ${s.edificio}?\n\nSe dará de baja la cuenta de ${s.titular}.`))
-                    resolverBaja(s.id, "aprobar");
-                }}>✓ Aprobar</button>
-                <button className="btn-tabla btn-tabla-baja" onClick={() => {
-                  const motivo = prompt("Motivo del rechazo:");
-                  if (motivo) resolverBaja(s.id, "rechazar", motivo);
-                }}>✕ Rechazar</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Buscador y filtros */}
       <div className="casas-filtros">
         <input
@@ -1471,5 +1437,148 @@ function InfoTip({ texto }: { texto: string }) {
       <Info size={15} />
       {abierto && <span className="infotip-bubble">{texto}</span>}
     </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PESTAÑA: SOLICITUDES DE BAJA
+   ═══════════════════════════════════════════════════════════════════ */
+function SolicitudesBajaPanel({ onCambio }: { onCambio: () => void }) {
+  const [solicitudes, setSolicitudes] = useState<SolicitudBajaDTO[]>([]);
+  const [filtro, setFiltro] = useState("pendiente");
+  const [cargando, setCargando] = useState(true);
+  const [procesando, setProcesando] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
+
+  async function cargar() {
+    setCargando(true);
+    try { setSolicitudes(await listarSolicitudesBaja(filtro)); }
+    catch { setSolicitudes([]); }
+    finally { setCargando(false); }
+  }
+  useEffect(() => { cargar(); }, [filtro]);
+
+  async function nivelar(s: SolicitudBajaDTO) {
+    if (!confirm(
+      `Nivelar saldo de Apto ${s.apartamento} (${s.edificio}) al ${new Date(s.fecha_desocupacion).toLocaleDateString("es-HN")}?\n\n` +
+      `La última cuota pendiente se recalculará para cobrar solo los días ocupados hasta la fecha de desocupación.`
+    )) return;
+    setProcesando(s.id); setMsg(null);
+    try {
+      const res = await nivelarSaldo(s.cuenta_id, s.fecha_desocupacion);
+      const detalle = res.ajustes.map(a =>
+        a.accion === "anulada"
+          ? `${a.periodo}: anulada (era L ${a.monto_original.toFixed(2)})`
+          : `${a.periodo}: ${a.dias_ocupados} días → L ${a.monto_final.toFixed(2)} (era L ${a.monto_original.toFixed(2)})`
+      ).join(" · ");
+      setMsg({ tipo: "ok", texto: `Saldo nivelado. ${detalle}. Ahora registrá el pago en Caja si queda monto, y luego aprobá la baja.` });
+    } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+    finally { setProcesando(null); }
+  }
+
+  async function resolver(s: SolicitudBajaDTO, accion: string) {
+    let respuesta: string | undefined;
+    if (accion === "rechazar") {
+      respuesta = prompt("Motivo del rechazo:") || undefined;
+      if (!respuesta) return;
+    } else {
+      if (!confirm(
+        `¿Aprobar la baja de Apto ${s.apartamento} en ${s.edificio}?\n\n` +
+        `Se verificará que el saldo esté en 0, se dará de baja la cuenta de ${s.titular}, ` +
+        `se suspenderá su acceso a crear QR y se desactivarán sus tarjetas.`
+      )) return;
+    }
+    setProcesando(s.id); setMsg(null);
+    try {
+      await resolverSolicitudBaja(s.id, accion, respuesta);
+      setMsg({ tipo: "ok", texto: accion === "aprobar" ? "Baja aprobada y ejecutada." : "Solicitud rechazada." });
+      cargar(); onCambio();
+    } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+    finally { setProcesando(null); }
+  }
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="lista-toolbar">
+        <select value={filtro} onChange={e => setFiltro(e.target.value)} className="periodo-select">
+          <option value="pendiente">Pendientes</option>
+          <option value="aprobada">Aprobadas</option>
+          <option value="rechazada">Rechazadas</option>
+          <option value="todas">Todas</option>
+        </select>
+        <span className="muted small">{solicitudes.length} solicitud{solicitudes.length !== 1 ? "es" : ""}</span>
+      </div>
+
+      {msg && (
+        <div className={`msg-banner ${msg.tipo === "ok" ? "msg-banner-ok" : "msg-banner-err"}`} style={{ margin: "10px 0" }}>
+          <span>{msg.tipo === "ok" ? "✓" : "⚠"} {msg.texto}</span>
+          <button className="msg-banner-close" onClick={() => setMsg(null)}>✕</button>
+        </div>
+      )}
+
+      {cargando ? (
+        <p className="muted" style={{ padding: 20 }}>Cargando…</p>
+      ) : solicitudes.length === 0 ? (
+        <p className="muted" style={{ padding: 20, textAlign: "center" }}>
+          No hay solicitudes {filtro !== "todas" ? `en estado "${filtro}"` : ""}.
+        </p>
+      ) : (
+        <div className="solicitudes-grid">
+          {solicitudes.map(s => (
+            <div key={s.id} className={`solicitud-card solicitud-card--${s.estado}`}>
+              <div className="solicitud-card-head">
+                <div>
+                  <b>{s.edificio} · Apto {s.apartamento}</b>
+                  <div className="muted small">Titular: {s.titular || "—"}</div>
+                </div>
+                <span className={`pill-estado ${
+                  s.estado === "pendiente" ? "pill-estado--pendiente"
+                  : s.estado === "aprobada" ? "pill-estado--activo" : "pill-estado--mora"}`}>
+                  {s.estado}
+                </span>
+              </div>
+
+              <div className="solicitud-card-body">
+                <div className="dato-item">
+                  <span className="muted small">Solicitó</span>
+                  <span>{s.solicitada_por} · {new Date(s.created_at).toLocaleDateString("es-HN")}</span>
+                </div>
+                <div className="dato-item">
+                  <span className="muted small">Motivo</span>
+                  <span>{s.motivo}</span>
+                </div>
+                <div className="dato-item">
+                  <span className="muted small">Fecha de desocupación</span>
+                  <span><b>{new Date(s.fecha_desocupacion).toLocaleDateString("es-HN")}</b></span>
+                </div>
+                {s.respuesta_admin && (
+                  <div className="dato-item">
+                    <span className="muted small">Respuesta admin</span>
+                    <span>{s.respuesta_admin}</span>
+                  </div>
+                )}
+              </div>
+
+              {s.estado === "pendiente" && (
+                <div className="solicitud-card-acciones">
+                  <button className="btn-tabla btn-tabla-editar" disabled={procesando === s.id}
+                    onClick={() => nivelar(s)} title="Prorratear la última cuota a los días ocupados">
+                    ⚖ Nivelar saldo
+                  </button>
+                  <button className="btn-tabla btn-tabla-ok" disabled={procesando === s.id}
+                    onClick={() => resolver(s, "aprobar")}>
+                    ✓ Aprobar baja
+                  </button>
+                  <button className="btn-tabla btn-tabla-baja" disabled={procesando === s.id}
+                    onClick={() => resolver(s, "rechazar")}>
+                    ✕ Rechazar
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
