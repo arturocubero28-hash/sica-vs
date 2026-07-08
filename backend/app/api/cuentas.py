@@ -703,6 +703,8 @@ def apartamentos_del_edificio(usuario_actual, edificio_uuid):
         return _err("sin_permiso", "No tenés permiso para ver este edificio", 403)
 
     cuentas = Cuenta.query.filter_by(unidad_id=unidad.id, activa=True).all()
+    # Excluir la cuenta del contenedor (admin que no vive ahí) — no es un apto real
+    cuentas = [c for c in cuentas if c.tipo_cuenta != "edificio_contenedor"]
     return jsonify({"data": [c.to_dict() for c in cuentas]})
 
 
