@@ -326,8 +326,13 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
                                errs.email     = "El correo no tiene un formato válido.";
     if (!telefono.trim())      errs.telefono  = "El teléfono es obligatorio.";
-    if (dni && !dniCompleto(dni))
+    if (!dni.trim())           errs.dni       = "La identidad es obligatoria.";
+    else if (!dniCompleto(dni))
                                errs.dni       = "El DNI debe tener 13 dígitos (0000-0000-00000).";
+    if (!direccionExacta.trim()) errs.direccion = "La dirección exacta es obligatoria.";
+    if (!profesion.trim())     errs.profesion = "La profesión es obligatoria.";
+    if (!emergNombre.trim())   errs.emergNombre = "El contacto de emergencia es obligatorio.";
+    if (!emergTel.trim())      errs.emergTel  = "El teléfono de emergencia es obligatorio.";
     if (esEdificio && !esDuenoSinVivienda && duenoVive && !apartamento.trim())
                                errs.apartamento = "Indicá el número del apartamento que ocupa.";
 
@@ -614,7 +619,7 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
           </div>
           <div className="row">
             <div className="campo-con-error">
-              <input placeholder="Identidad (0000-0000-00000)" value={dni} inputMode="numeric"
+              <input placeholder="Identidad (0000-0000-00000) *" value={dni} inputMode="numeric"
                 maxLength={15} className={fieldErrors.dni ? "input-error" : ""}
                 onChange={(e) => { setDni(formatearDNI(e.target.value)); clearFieldError("dni"); }} />
               {fieldErrors.dni && <span className="campo-error">{fieldErrors.dni}</span>}
@@ -622,8 +627,18 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
             <input placeholder="RTN (opcional)" value={rtn} onChange={(e) => setRtn(e.target.value)} />
           </div>
           <div className="row">
-            <input placeholder="Dirección exacta (opcional)" value={direccionExacta} onChange={(e) => setDireccionExacta(e.target.value)} />
-            <input placeholder="Profesión (opcional)" value={profesion} onChange={(e) => setProfesion(e.target.value)} />
+            <div className="campo-con-error">
+              <input placeholder="Dirección exacta *" value={direccionExacta}
+                className={fieldErrors.direccion ? "input-error" : ""}
+                onChange={(e) => { setDireccionExacta(e.target.value); clearFieldError("direccion"); }} />
+              {fieldErrors.direccion && <span className="campo-error">{fieldErrors.direccion}</span>}
+            </div>
+            <div className="campo-con-error">
+              <input placeholder="Profesión *" value={profesion}
+                className={fieldErrors.profesion ? "input-error" : ""}
+                onChange={(e) => { setProfesion(e.target.value); clearFieldError("profesion"); }} />
+              {fieldErrors.profesion && <span className="campo-error">{fieldErrors.profesion}</span>}
+            </div>
             <select value={ocupacion} onChange={(e) => setOcupacion(e.target.value)} style={{ marginTop: 6 }}>
               <option value="">— Ocupación (opcional) —</option>
               <option value="estudiante">Estudiante</option>
@@ -638,8 +653,18 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
             )}
           </div>
           <div className="row">
-            <input placeholder="Contacto de emergencia (nombre, opcional)" value={emergNombre} onChange={(e) => setEmergNombre(e.target.value)} />
-            <input placeholder="Teléfono del contacto (opcional)" value={emergTel} onChange={(e) => setEmergTel(e.target.value)} />
+            <div className="campo-con-error">
+              <input placeholder="Contacto de emergencia (nombre) *" value={emergNombre}
+                className={fieldErrors.emergNombre ? "input-error" : ""}
+                onChange={(e) => { setEmergNombre(e.target.value); clearFieldError("emergNombre"); }} />
+              {fieldErrors.emergNombre && <span className="campo-error">{fieldErrors.emergNombre}</span>}
+            </div>
+            <div className="campo-con-error">
+              <input placeholder="Teléfono del contacto *" value={emergTel}
+                className={fieldErrors.emergTel ? "input-error" : ""}
+                onChange={(e) => { setEmergTel(e.target.value); clearFieldError("emergTel"); }} />
+              {fieldErrors.emergTel && <span className="campo-error">{fieldErrors.emergTel}</span>}
+            </div>
           </div>
           </div>
 
@@ -687,6 +712,9 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   const [msg, setMsg] = useState("");
   const [miembroEnlace, setMiembroEnlace] = useState<{ email: string; url: string } | null>(null);
   const [mostrarAgregar, setMostrarAgregar] = useState(false);
+  const [mErrors, setMErrors] = useState<Record<string, string>>({});
+  const [msgMiembro, setMsgMiembro] = useState("");
+  function clearMError(k: string) { setMErrors(prev => { const c = { ...prev }; delete c[k]; return c; }); }
 
   async function guardarQrRecurrente(valor: boolean) {
     setGuardandoQr(true); setMsgConfig("");
@@ -730,7 +758,26 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   }
 
   async function addMiembro() {
-    if (!mNombre.trim() || !mEmail.trim()) return;
+    const errs: Record<string, string> = {};
+    if (!mNombre.trim())    errs.nombre    = "El nombre es obligatorio.";
+    if (!mApellido.trim())  errs.apellido  = "El apellido es obligatorio.";
+    if (!mEmail.trim())     errs.email     = "El correo es obligatorio.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mEmail.trim()))
+                            errs.email     = "El correo no tiene un formato válido.";
+    if (!mTelefono.trim())  errs.telefono  = "El teléfono es obligatorio.";
+    if (!mDni.trim())       errs.dni       = "La identidad es obligatoria.";
+    else if (!dniCompleto(mDni))
+                            errs.dni       = "El DNI debe tener 13 dígitos (0000-0000-00000).";
+    if (!mProfesion.trim()) errs.profesion = "La profesión es obligatoria.";
+    if (!mEmergNombre.trim()) errs.emergNombre = "El contacto de emergencia es obligatorio.";
+    if (!mEmergTel.trim())    errs.emergTel    = "El teléfono de emergencia es obligatorio.";
+
+    setMErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      setMsgMiembro("Hay campos incompletos o con errores. Revisalos arriba.");
+      return;
+    }
+    setMsgMiembro("");
     try {
       const res = await agregarMiembro(cuenta.id, {
         nombre: mNombre, apellido: mApellido, email: mEmail, telefono: mTelefono,
@@ -744,8 +791,8 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
       }
       setMNombre(""); setMEmail(""); setMApellido(""); setMTelefono("");
       setMDni(""); setMProfesion(""); setMEmergNombre(""); setMEmergTel("");
-      setMsg(""); onCambio();
-    } catch (e) { setMsg((e as Error).message); }
+      setMErrors({}); setMsg(""); onCambio();
+    } catch (e) { setMsgMiembro((e as Error).message); }
   }
 
   return (
@@ -925,6 +972,8 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           </div>
         )}
 
+        {cuenta.tipo_cuenta !== "edificio_contenedor" && (
+        <>
         <button className="toggle-agregar-miembro" onClick={() => setMostrarAgregar(v => !v)}>
           {mostrarAgregar ? "▲ Ocultar formulario" : "＋ Agregar nuevo miembro"}
         </button>
@@ -935,42 +984,84 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
             <span className="agregar-miembro-icon"><User size={16} /></span>
             <div>
               <h4>Agregar nuevo miembro</h4>
-              <span className="muted small">Registrá un familiar o dependiente de esta casa. Solo el nombre y el correo son obligatorios.</span>
+              <span className="muted small">Todos los campos marcados con * son obligatorios.</span>
             </div>
           </div>
+
+          {msgMiembro && (
+            <div className="msg-banner msg-banner-err" style={{ margin: "0 0 10px" }}>
+              <span>⚠ {msgMiembro}</span>
+              <button className="msg-banner-close" onClick={() => setMsgMiembro("")}>✕</button>
+            </div>
+          )}
 
           <div className="agregar-miembro-campos">
             <div className="campo-grupo">
               <label className="campo-label">Datos básicos</label>
               <div className="row">
-                <input placeholder="Nombre *" value={mNombre} onChange={(e) => setMNombre(e.target.value)} />
-                <input placeholder="Apellido" value={mApellido} onChange={(e) => setMApellido(e.target.value)} />
+                <div className="campo-con-error">
+                  <input placeholder="Nombre *" value={mNombre} className={mErrors.nombre ? "input-error" : ""}
+                    onChange={(e) => { setMNombre(e.target.value); clearMError("nombre"); }} />
+                  {mErrors.nombre && <span className="campo-error">{mErrors.nombre}</span>}
+                </div>
+                <div className="campo-con-error">
+                  <input placeholder="Apellido *" value={mApellido} className={mErrors.apellido ? "input-error" : ""}
+                    onChange={(e) => { setMApellido(e.target.value); clearMError("apellido"); }} />
+                  {mErrors.apellido && <span className="campo-error">{mErrors.apellido}</span>}
+                </div>
               </div>
               <div className="row">
-                <input placeholder="Correo electrónico *" value={mEmail} onChange={(e) => setMEmail(e.target.value)} />
-                <input placeholder="Teléfono" value={mTelefono} onChange={(e) => setMTelefono(e.target.value)} />
+                <div className="campo-con-error">
+                  <input placeholder="Correo electrónico *" value={mEmail} className={mErrors.email ? "input-error" : ""}
+                    onChange={(e) => { setMEmail(e.target.value); clearMError("email"); }} />
+                  {mErrors.email && <span className="campo-error">{mErrors.email}</span>}
+                </div>
+                <div className="campo-con-error">
+                  <input placeholder="Teléfono *" value={mTelefono} className={mErrors.telefono ? "input-error" : ""}
+                    onChange={(e) => { setMTelefono(e.target.value); clearMError("telefono"); }} />
+                  {mErrors.telefono && <span className="campo-error">{mErrors.telefono}</span>}
+                </div>
               </div>
             </div>
 
             <div className="campo-grupo">
-              <label className="campo-label">Información adicional</label>
+              <label className="campo-label">Identificación</label>
               <div className="row">
-                <input placeholder="Identidad (0000-0000-00000)" value={mDni} inputMode="numeric" maxLength={15} onChange={(e) => setMDni(formatearDNI(e.target.value))} />
-                <input placeholder="Profesión" value={mProfesion} onChange={(e) => setMProfesion(e.target.value)} />
+                <div className="campo-con-error">
+                  <input placeholder="Identidad (0000-0000-00000) *" value={mDni} inputMode="numeric" maxLength={15}
+                    className={mErrors.dni ? "input-error" : ""}
+                    onChange={(e) => { setMDni(formatearDNI(e.target.value)); clearMError("dni"); }} />
+                  {mErrors.dni && <span className="campo-error">{mErrors.dni}</span>}
+                </div>
+                <div className="campo-con-error">
+                  <input placeholder="Profesión *" value={mProfesion} className={mErrors.profesion ? "input-error" : ""}
+                    onChange={(e) => { setMProfesion(e.target.value); clearMError("profesion"); }} />
+                  {mErrors.profesion && <span className="campo-error">{mErrors.profesion}</span>}
+                </div>
               </div>
             </div>
 
             <div className="campo-grupo">
               <label className="campo-label">Contacto de emergencia</label>
               <div className="row">
-                <input placeholder="Nombre del contacto" value={mEmergNombre} onChange={(e) => setMEmergNombre(e.target.value)} />
-                <input placeholder="Teléfono del contacto" value={mEmergTel} onChange={(e) => setMEmergTel(e.target.value)} />
+                <div className="campo-con-error">
+                  <input placeholder="Nombre del contacto *" value={mEmergNombre} className={mErrors.emergNombre ? "input-error" : ""}
+                    onChange={(e) => { setMEmergNombre(e.target.value); clearMError("emergNombre"); }} />
+                  {mErrors.emergNombre && <span className="campo-error">{mErrors.emergNombre}</span>}
+                </div>
+                <div className="campo-con-error">
+                  <input placeholder="Teléfono del contacto *" value={mEmergTel} className={mErrors.emergTel ? "input-error" : ""}
+                    onChange={(e) => { setMEmergTel(e.target.value); clearMError("emergTel"); }} />
+                  {mErrors.emergTel && <span className="campo-error">{mErrors.emergTel}</span>}
+                </div>
               </div>
             </div>
           </div>
 
           <button className="agregar-miembro-btn" onClick={addMiembro}>+ Agregar miembro</button>
         </div>
+        )}
+        </>
         )}
 
         <div className="sub">Tarjetas de proximidad ({(cuenta.tarjetas || []).length})</div>

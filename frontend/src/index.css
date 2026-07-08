@@ -34,14 +34,14 @@ button {
   background: var(--azul2); color: #fff; font-size: 14.5px; font-weight: 600;
   font-family: inherit; transition: all .16s ease; -webkit-tap-highlight-color: transparent;
 }
-button:hover:not(:disabled) { background: var(--azul); transform: translateY(-1px);
+button:hover:not(:disabled) { background: var(--azul); color: #fff; transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(31,78,121,.22); }
 button:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 button:focus-visible { outline: 2px solid var(--marca-naranja); outline-offset: 2px; }
 /* Fantasma: acciones secundarias/terciarias */
 button.ghost { background: transparent; color: var(--azul2); border: 1.5px solid #d6deea; }
-button.ghost:hover:not(:disabled) { background: #eef4fb; border-color: #b9c6da;
+button.ghost:hover:not(:disabled) { background: #eef4fb; color: var(--azul2); border-color: #b9c6da;
   box-shadow: none; transform: translateY(-1px); }
 .muted { color: var(--gris); }
 .small { font-size: 12px; text-align: center; }
@@ -2305,9 +2305,9 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 /* Acciones del residente */
 .residente-acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .btn-regenerar { color: #1e40af !important; border-color: #bfdbfe !important; }
-.btn-regenerar:hover { background: #dbeafe !important; }
+.btn-regenerar:hover:not(:disabled) { background: #dbeafe !important; color: #1e40af !important; box-shadow: none !important; transform: none !important; }
 .btn-quitar-miembro { color: #991b1b !important; border-color: #fecaca !important; }
-.btn-quitar-miembro:hover { background: #fee2e2 !important; }
+.btn-quitar-miembro:hover:not(:disabled) { background: #fee2e2 !important; color: #991b1b !important; box-shadow: none !important; transform: none !important; }
 .datos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .dato-item { display: flex; flex-direction: column; gap: 2px; }
 .datos-editar { display: flex; flex-direction: column; gap: 8px; }
@@ -2525,8 +2525,10 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 /* Asignar tarjeta: tipo de acceso */
 .tarjeta-create-box { border: 1px solid #e3e9f2; border-radius: 10px; padding: 14px; margin-top: 8px; background: #fafbfd; }
 .acceso-toggle { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.acceso-toggle button { padding: 7px 14px; border: 1px solid #d4dce6; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; }
+.acceso-toggle button { padding: 7px 14px; border: 1px solid #d4dce6; border-radius: 8px; background: #fff; cursor: pointer; font-size: 14px; color: #334155; display: inline-flex; align-items: center; gap: 5px; }
+.acceso-toggle button:hover:not(:disabled) { background: #f1f5f9 !important; color: #334155 !important; box-shadow: none !important; transform: none !important; border-color: #94a3b8; }
 .acceso-toggle button.on { background: #022E45; color: #fff; border-color: #022E45; }
+.acceso-toggle button.on:hover:not(:disabled) { background: #033a5a !important; color: #fff !important; }
 
 /* ===== Día 15: tablas y listas unificadas ===== */
 /* Contenedor de lista admin: mismo marco que .dash-card */
@@ -2698,7 +2700,7 @@ table.data tbody tr:hover td { background: #f1f6fd; }
   color: var(--azul); font-weight: 600; font-size: 14px; cursor: pointer;
   transition: background 0.1s, border-color 0.1s;
 }
-.toggle-agregar-miembro:hover { background: #eaf1fa; border-color: var(--marca-naranja); }
+.toggle-agregar-miembro:hover { background: #eaf1fa; border-color: var(--marca-naranja); color: var(--azul); box-shadow: none; transform: none; }
 
 /* ===== Día 17: lista de dispositivos con huella ===== */
 .huella-lista { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
@@ -3123,7 +3125,7 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   font-size: 15px; padding: 0; opacity: .65; flex-shrink: 0;
   transform: none !important; box-shadow: none !important;
 }
-.msg-banner-close:hover { opacity: 1; }
+.msg-banner-close:hover { opacity: 1; background: none !important; color: inherit !important; box-shadow: none !important; transform: none !important; }
 
 /* Campo con error inline (bajo el input) */
 .campo-error {
