@@ -23,3 +23,4 @@ reportlab==4.2.5
 Flask-Limiter==3.8.0
 radon==6.0.1
 firebase-admin==6.5.0
+boto3==1.34.69  # DigitalOcean Spaces / AWS S3 compatible storage

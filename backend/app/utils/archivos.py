@@ -61,13 +61,8 @@ def validar_contenido(stream, ext_declarada: str) -> bool:
 def guardar_imagen_segura(archivo, carpeta_destino, extensiones=EXT_IMAGEN):
     """
     Guarda un archivo subido de forma segura.
-    Retorna (nombre_generado, None) si OK, o (None, mensaje_error) si falla.
-
-    Seguridad aplicada:
-      - Whitelist de extensiones
-      - Validación de magic bytes (el contenido debe ser realmente una imagen)
-      - Nombre 100% generado por el servidor (UUID), nunca el del usuario
-      - El usuario nunca controla la ruta ni el nombre
+    Retorna (clave_archivo, None) si OK, o (None, mensaje_error) si falla.
+    La clave puede ser una ruta local o una clave de Spaces según el entorno.
     """
     if not archivo or not archivo.filename:
         return None, "No se adjuntó ningún archivo. Seleccioná una foto o PDF del comprobante."
@@ -79,12 +74,10 @@ def guardar_imagen_segura(archivo, carpeta_destino, extensiones=EXT_IMAGEN):
                       f"Subí una imagen o PDF ({permitidas}). "
                       f"Si es una captura de pantalla, guardala como JPG o PNG.")
 
-    # Validar que el contenido real coincida con la extensión
     if not validar_contenido(archivo.stream, ext):
         return None, ("El archivo parece estar dañado o no es una imagen válida. "
                       "Probá tomar la foto de nuevo o elegir otro archivo.")
 
-    # Validar tamaño máximo (5 MB). Se mide moviendo el cursor al final.
     archivo.stream.seek(0, os.SEEK_END)
     tam = archivo.stream.tell()
     archivo.stream.seek(0)
@@ -94,27 +87,55 @@ def guardar_imagen_segura(archivo, carpeta_destino, extensiones=EXT_IMAGEN):
         return None, (f"El archivo pesa {mb:.1f} MB y el máximo es 5 MB. "
                       f"Reducí la resolución de la foto o comprimila.")
 
-    # Nombre generado por el servidor — el usuario NO controla el nombre
-    nombre_seguro = f"{uuid_lib.uuid4().hex}.{ext}"
-    os.makedirs(carpeta_destino, exist_ok=True)
-    ruta = os.path.join(carpeta_destino, nombre_seguro)
-    archivo.save(ruta)
-    return nombre_seguro, None
+    # Detectar si estamos en modo nube
+    from app.services.storage import es_modo_nube, guardar_archivo
+    if es_modo_nube():
+        # En modo nube: la subcarpeta se deriva del path de carpeta_destino
+        # para mantener la misma estructura (comprobantes/, fotos-acceso/, etc.)
+        base = os.environ.get("UPLOAD_FOLDER", "/app/uploads")
+        subcarpeta = os.path.relpath(carpeta_destino, base).replace("\\", "/")
+        content_types = {
+            "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+            "webp": "image/webp", "pdf": "application/pdf",
+        }
+        ct = content_types.get(ext, "application/octet-stream")
+        try:
+            clave = guardar_archivo(archivo.stream, subcarpeta, ct, ext)
+            return clave, None
+        except Exception as e:
+            return None, f"Error al subir el archivo a la nube: {e}"
+    else:
+        # Modo local: guardar en disco como antes
+        nombre_seguro = f"{uuid_lib.uuid4().hex}.{ext}"
+        os.makedirs(carpeta_destino, exist_ok=True)
+        ruta = os.path.join(carpeta_destino, nombre_seguro)
+        archivo.save(ruta)
+        return nombre_seguro, None
 
 
 def servir_archivo_seguro(carpeta, nombre_archivo):
     """
     Sirve un archivo de forma segura, previniendo path traversal.
-    Devuelve la respuesta Flask o un error JSON.
+    En modo nube redirige al CDN de Spaces directamente.
     """
-    # secure_filename elimina cualquier intento de path traversal
+    from app.services.storage import es_modo_nube, servir_archivo
+    if es_modo_nube():
+        # En modo nube la clave es subcarpeta/nombre o solo nombre
+        base = os.environ.get("UPLOAD_FOLDER", "/app/uploads")
+        try:
+            subcarpeta = os.path.relpath(carpeta, base).replace("\\", "/")
+            clave = f"{subcarpeta}/{nombre_archivo}" if subcarpeta != "." else nombre_archivo
+        except ValueError:
+            clave = nombre_archivo
+        return servir_archivo(clave)
+
+    # Modo local: secure_filename + anti traversal
     nombre_limpio = secure_filename(nombre_archivo)
     if not nombre_limpio or nombre_limpio != nombre_archivo:
         return jsonify({"error": {"code": "nombre_invalido",
                                   "message": "Nombre de archivo no válido"}}), 400
 
     ruta = os.path.join(carpeta, nombre_limpio)
-    # Verificar que la ruta resuelta esté DENTRO de la carpeta (anti traversal)
     ruta_real = os.path.realpath(ruta)
     carpeta_real = os.path.realpath(carpeta)
     if not ruta_real.startswith(carpeta_real + os.sep):
