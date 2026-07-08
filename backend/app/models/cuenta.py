@@ -826,12 +826,14 @@ class SolicitudBaja(db.Model):
 
     def to_dict(self):
         c = self.cuenta
+        t = c.titular() if c else None
+        titular_nombre = f"{t.usuario.nombre} {t.usuario.apellido}" if t and t.usuario else None
         return {
             "id": str(self.uuid_publico),
             "cuenta_id": str(c.uuid_publico) if c else None,
             "apartamento": c.apartamento if c else None,
             "edificio": c.unidad.identificador if c and c.unidad else None,
-            "titular": c.nombre_completo if c else None,
+            "titular": titular_nombre,
             "solicitada_por": f"{self.usuario.nombre} {self.usuario.apellido}" if self.usuario else None,
             "motivo": self.motivo,
             "fecha_desocupacion": self.fecha_desocupacion.isoformat() if self.fecha_desocupacion else None,
