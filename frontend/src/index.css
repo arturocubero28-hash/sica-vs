@@ -2287,10 +2287,27 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 /* Lista de residentes expandible (detalle de casa) */
 .residentes-lista { display: flex; flex-direction: column; gap: 6px; }
 .residente-fila { border: 1px solid #eef2f7; border-radius: 10px; overflow: hidden; }
+.residente-pendiente { border-color: #fde68a; background: #fffef5; }
 .residente-cabecera { display: flex; align-items: center; gap: 10px; padding: 10px 12px; flex-wrap: wrap; }
 .residente-nombre { font-weight: 600; color: var(--marca-azul); flex: 1; min-width: 120px; }
 .residente-cabecera .mini { margin-left: auto; }
 .residente-detalle { padding: 12px; background: #f9fbfd; border-top: 1px solid #eef2f7; }
+.residente-pendiente .residente-detalle { background: #fffef5; border-top-color: #fde68a; }
+
+/* Pills de estado de activación */
+.pill-estado {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+}
+.pill-estado--activo { color: #166534; background: #dcfce7; }
+.pill-estado--pendiente { color: #92400e; background: #fef3c7; }
+
+/* Acciones del residente */
+.residente-acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.btn-regenerar { color: #1e40af !important; border-color: #bfdbfe !important; }
+.btn-regenerar:hover { background: #dbeafe !important; }
+.btn-quitar-miembro { color: #991b1b !important; border-color: #fecaca !important; }
+.btn-quitar-miembro:hover { background: #fee2e2 !important; }
 .datos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
 .dato-item { display: flex; flex-direction: column; gap: 2px; }
 .datos-editar { display: flex; flex-direction: column; gap: 8px; }

@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import {
   listarCuentas, listarUnidades, listarTarifas, crearUnidad, crearCuenta,
-  detalleCuenta, agregarMiembro, asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
+  detalleCuenta, agregarMiembro, quitarMiembro, regenerarEnlace,
+  asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
   crearTarifa, editarTarifa, desactivarTarifa,
   validarCodigoEnrolamiento, toggleQrRecurrente, editarUnidad,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
-import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users } from "lucide-react";
+import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle } from "lucide-react";
 
 /** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
  *  Solo acepta números y coloca los guiones automáticamente. */
@@ -875,7 +876,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         </div>
         <div className="residentes-lista">
           {(cuenta.residentes || []).map((r) => (
-            <FilaResidente key={r.id} residente={r} onActualizado={onCambio} />
+            <FilaResidente key={r.id} residente={r} cuentaId={cuenta.id} onActualizado={onCambio} />
           ))}
         </div>
 
@@ -1003,13 +1004,15 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   );
 }
 
-function FilaResidente({ residente, onActualizado }: {
-  residente: ResidenteDTO; onActualizado: () => void;
+function FilaResidente({ residente, cuentaId, onActualizado }: {
+  residente: ResidenteDTO; cuentaId: string; onActualizado: () => void;
 }) {
   const [expandido, setExpandido] = useState(false);
   const [editando, setEditando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState("");
+  const [enlaceRegenerado, setEnlaceRegenerado] = useState<{ email: string; url?: string } | null>(null);
+  const [procesando, setProcesando] = useState(false);
 
   // Campos editables (precargados con lo actual)
   const [f, setF] = useState({
@@ -1037,6 +1040,32 @@ function FilaResidente({ residente, onActualizado }: {
     finally { setGuardando(false); }
   }
 
+  async function handleQuitar() {
+    const nombre = residente.nombre || "este miembro";
+    if (!confirm(`¿Quitar a ${nombre} de esta cuenta?\n\nSe eliminará su acceso y su usuario. Esta acción no se puede deshacer.`)) return;
+    setProcesando(true);
+    try {
+      await quitarMiembro(cuentaId, residente.id);
+      onActualizado();
+    } catch (e) { setMsg((e as Error).message); }
+    finally { setProcesando(false); }
+  }
+
+  async function handleRegenerar() {
+    setProcesando(true); setMsg(""); setEnlaceRegenerado(null);
+    try {
+      const res = await regenerarEnlace(cuentaId, residente.id);
+      const token = res.activacion.token_activacion;
+      setEnlaceRegenerado({
+        email: res.activacion.usuario_email,
+        url: token ? `${window.location.origin}/?activar=${token}` : undefined,
+      });
+    } catch (e) { setMsg((e as Error).message); }
+    finally { setProcesando(false); }
+  }
+
+  const esPendiente = residente.estado_acceso === "pendiente";
+
   const Dato = ({ label, valor }: { label: string; valor?: string }) => (
     <div className="dato-item">
       <span className="muted small">{label}</span>
@@ -1045,14 +1074,20 @@ function FilaResidente({ residente, onActualizado }: {
   );
 
   return (
-    <div className="residente-fila">
+    <div className={`residente-fila ${esPendiente ? "residente-pendiente" : ""}`}>
       <div className="residente-cabecera">
         <span className="residente-nombre">{residente.nombre}</span>
         <span className="pill">{residente.rol_cuenta}</span>
         <span className="muted small">{residente.relacion}</span>
-        <span className={residente.estado_acceso === "activo" ? "pill green" : "pill amber"}>
-          {residente.estado_acceso}
-        </span>
+        {esPendiente ? (
+          <span className="pill-estado pill-estado--pendiente">
+            <Clock size={12} /> Pendiente
+          </span>
+        ) : (
+          <span className="pill-estado pill-estado--activo">
+            <CheckCircle size={12} /> Activo
+          </span>
+        )}
         <button className="mini" onClick={() => setExpandido(e => !e)}>
           {expandido ? "Ocultar" : "Ver"}
         </button>
@@ -1072,7 +1107,43 @@ function FilaResidente({ residente, onActualizado }: {
                 <Dato label="Contacto emergencia" valor={residente.contacto_emergencia_nombre} />
                 <Dato label="Tel. emergencia" valor={residente.contacto_emergencia_telefono} />
               </div>
-              <button className="mini" onClick={() => setEditando(true)}><Pencil size={16} /> Editar información</button>
+
+              <div className="residente-acciones">
+                <button className="mini" onClick={() => setEditando(true)}>
+                  <Pencil size={14} /> Editar
+                </button>
+
+                {esPendiente && (
+                  <button className="mini btn-regenerar" onClick={handleRegenerar} disabled={procesando}>
+                    <RefreshCw size={14} /> {procesando ? "Generando…" : "Regenerar enlace"}
+                  </button>
+                )}
+
+                {residente.rol_cuenta === "miembro" && (
+                  <button className="mini btn-quitar-miembro" onClick={handleQuitar} disabled={procesando}>
+                    <Trash2 size={14} /> Quitar miembro
+                  </button>
+                )}
+              </div>
+
+              {enlaceRegenerado && (
+                <div className="activacion-box" style={{ marginTop: 10 }}>
+                  <div className="activacion-titulo">Nuevo enlace de activación (48h)</div>
+                  {enlaceRegenerado.url ? (
+                    <>
+                      <p className="muted small">Compartí este enlace con <b>{enlaceRegenerado.email}</b>:</p>
+                      <div className="activacion-url">{enlaceRegenerado.url}</div>
+                      <button className="mini" onClick={() => navigator.clipboard.writeText(enlaceRegenerado.url!)}>
+                        Copiar enlace
+                      </button>
+                    </>
+                  ) : (
+                    <p className="muted small">Se envió un nuevo enlace a <b>{enlaceRegenerado.email}</b> por correo.</p>
+                  )}
+                </div>
+              )}
+
+              {msg && <div className="error" style={{ marginTop: 8 }}>{msg}</div>}
             </>
           ) : (
             <div className="datos-editar">

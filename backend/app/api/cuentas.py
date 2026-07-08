@@ -502,6 +502,75 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
     }}), 201
 
 
+@cuentas_bp.delete("/cuentas/<cuenta_uuid>/residentes/<residente_uuid>")
+@roles_required("admin", "super_admin")
+def quitar_miembro(usuario_actual, cuenta_uuid, residente_uuid):
+    """Elimina un miembro (no titular) de la cuenta.
+    Borra el registro Residente y el Usuario asociado si no tiene otros vínculos."""
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+
+    residente = Residente.query.filter_by(
+        uuid_publico=residente_uuid, cuenta_id=cuenta.id
+    ).first()
+    if not residente:
+        return _err("no_encontrado", "Residente no encontrado", 404)
+
+    if residente.rol_cuenta == "titular":
+        return _err("es_titular",
+                     "No se puede quitar al titular. Para eso, dá de baja la cuenta completa.", 400)
+
+    usuario = residente.usuario
+
+    # Quitar tarjetas asignadas a este residente
+    Tarjeta.query.filter_by(residente_id=residente.id).update(
+        {"residente_id": None, "estado": "desasignada"})
+
+    db.session.delete(residente)
+
+    # Si el usuario no tiene más vínculos en otras cuentas, borrarlo
+    otros = Residente.query.filter(
+        Residente.usuario_id == usuario.id,
+        Residente.id != residente.id,
+    ).count()
+    if otros == 0:
+        db.session.delete(usuario)
+
+    db.session.commit()
+    return jsonify({"data": {"ok": True, "message": "Miembro eliminado"}}), 200
+
+
+@cuentas_bp.post("/cuentas/<cuenta_uuid>/residentes/<residente_uuid>/regenerar-enlace")
+@roles_required("admin", "super_admin")
+def regenerar_enlace(usuario_actual, cuenta_uuid, residente_uuid):
+    """Genera un nuevo token de activación (48h) para un residente que no ha activado."""
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+
+    residente = Residente.query.filter_by(
+        uuid_publico=residente_uuid, cuenta_id=cuenta.id
+    ).first()
+    if not residente:
+        return _err("no_encontrado", "Residente no encontrado", 404)
+
+    usuario = residente.usuario
+    if usuario.activo and usuario.password_hash:
+        return _err("ya_activo", "Este residente ya activó su cuenta. No necesita un nuevo enlace.", 400)
+
+    token_activacion = jwt.encode(
+        {"sub": usuario.email, "proposito": "activacion",
+         "exp": dt.datetime.utcnow() + dt.timedelta(hours=48)},
+        current_app.config["JWT_SECRET"], algorithm="HS256"
+    )
+
+    return jsonify({"data": {
+        "activacion": _bloque_activacion(usuario, token_activacion,
+                                         nota="Nuevo enlace generado (48h de validez)"),
+    }}), 200
+
+
 # =====================================================================
 # TARJETAS
 # =====================================================================

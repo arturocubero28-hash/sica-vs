@@ -193,6 +193,15 @@ export const agregarMiembro = (cuentaId: string, body: object) =>
   request<{ residente: ResidenteDTO }>(`/unidades/cuentas/${cuentaId}/residentes`,
     { method: "POST", body: JSON.stringify(body) });
 
+export const quitarMiembro = (cuentaId: string, residenteId: string) =>
+  request<{ ok: boolean; message: string }>(`/unidades/cuentas/${cuentaId}/residentes/${residenteId}`,
+    { method: "DELETE" });
+
+export const regenerarEnlace = (cuentaId: string, residenteId: string) =>
+  request<{ activacion: { usuario_email: string; token_activacion?: string; nota?: string } }>(
+    `/unidades/cuentas/${cuentaId}/residentes/${residenteId}/regenerar-enlace`,
+    { method: "POST" });
+
 export const asignarTarjeta = (cuentaId: string, body: { card_uid: string; etiqueta?: string; residente_id?: string; tipo_acceso?: "vehicular" | "peatonal" }) =>
   request<TarjetaDTO>(`/unidades/cuentas/${cuentaId}/tarjetas`,
     { method: "POST", body: JSON.stringify(body) });
