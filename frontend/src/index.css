@@ -3106,3 +3106,93 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   padding: 12px 14px; margin: 12px 0; font-size: 13px; line-height: 1.5;
   color: #6b5800;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   SISTEMA DE MENSAJES UNIFORME — aplica en todo el sistema
+   ═══════════════════════════════════════════════════════════════════ */
+.msg-banner {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 10px; padding: 11px 14px; border-radius: 10px;
+  font-size: 13.5px; font-weight: 500; line-height: 1.45;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.10);
+}
+.msg-banner-ok  { background: #eafaf1; color: #166534; border: 1px solid #86efac; }
+.msg-banner-err { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+.msg-banner-close {
+  background: none; border: none; color: inherit; cursor: pointer;
+  font-size: 15px; padding: 0; opacity: .65; flex-shrink: 0;
+  transform: none !important; box-shadow: none !important;
+}
+.msg-banner-close:hover { opacity: 1; }
+
+/* Campo con error inline (bajo el input) */
+.campo-error {
+  display: block; font-size: 12px; color: #c81e1e;
+  margin-top: 4px; line-height: 1.35;
+}
+input.input-error, select.input-error, textarea.input-error {
+  border-color: #f87171 !important;
+  background: #fff8f8 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BOTONES DE TABLA — reemplaza .mini con colores claros y texto legible
+   Regla: texto siempre oscuro para máximo contraste, fondo suave
+   ═══════════════════════════════════════════════════════════════════ */
+.btn-tabla {
+  padding: 5px 11px; font-size: 12.5px; font-weight: 600; border-radius: 7px;
+  border: 1.5px solid transparent; cursor: pointer; transition: all .15s;
+  line-height: 1.3; white-space: nowrap;
+  /* Anular el hover base azul oscuro que hace el texto invisible */
+  background: none; color: inherit;
+  transform: none !important; box-shadow: none !important;
+}
+.btn-tabla:hover:not(:disabled) {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 3px 8px rgba(0,0,0,.12) !important;
+}
+.btn-tabla:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-tabla-neutro {
+  background: #f1f5f9; color: #334155; border-color: #cbd5e1;
+}
+.btn-tabla-neutro:hover:not(:disabled) { background: #e2e8f0 !important; color: #1e293b !important; }
+
+.btn-tabla-ok {
+  background: #f0fdf4; color: #166534; border-color: #86efac;
+}
+.btn-tabla-ok:hover:not(:disabled) { background: #dcfce7 !important; color: #14532d !important; }
+
+.btn-tabla-baja {
+  background: #fff1f2; color: #9f1239; border-color: #fda4af;
+}
+.btn-tabla-baja:hover:not(:disabled) { background: #ffe4e6 !important; color: #881337 !important; }
+
+.btn-tabla-ver {
+  background: #eff6ff; color: #1e40af; border-color: #93c5fd;
+}
+.btn-tabla-ver:hover:not(:disabled) { background: #dbeafe !important; color: #1e3a8a !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   BOTÓN DE ACCIÓN PRIMARIO — naranja, reemplaza cuota-btn-pagar en modales
+   ═══════════════════════════════════════════════════════════════════ */
+.btn-accion {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: var(--marca-naranja, #F48723); color: #fff;
+  border: none; border-radius: 10px; padding: 10px 20px;
+  font-size: 14px; font-weight: 700; cursor: pointer; transition: all .16s;
+  white-space: nowrap;
+}
+.btn-accion:hover:not(:disabled) {
+  background: #e07b18 !important; transform: translateY(-1px) !important;
+  box-shadow: 0 4px 14px rgba(244,135,35,.32) !important; color: #fff !important;
+}
+.btn-accion:active:not(:disabled) { transform: translateY(0) !important; box-shadow: none !important; }
+.btn-accion:disabled { opacity: .5; cursor: not-allowed; }
+.btn-accion.full { display: flex; width: 100%; }
+
+/* badge rojo para pendiente de cambio de contraseña */
+.badge-pendiente { font-size: 12px; margin-left: 5px; }
+
+/* Wrapper que preserva el layout .row y permite mostrar el error debajo del input */
+.campo-con-error { display: flex; flex-direction: column; flex: 1; min-width: 0; }

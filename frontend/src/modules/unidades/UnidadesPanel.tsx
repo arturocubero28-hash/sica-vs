@@ -192,10 +192,10 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
                         : <span className={c.bloqueada ? "pill red" : "pill green"}>{c.bloqueada ? "Bloqueada" : c.estado}</span>}
                     </td>
                     <td style={{ display: "flex", gap: 6 }}>
-                      <button className="mini" onClick={() => onAbrir(c)}>Ver</button>
+                      <button className="btn-tabla btn-tabla-ver" onClick={() => onAbrir(c)}>Ver</button>
                       {dadaBaja
-                        ? <button className="mini btn-reactivar" disabled={procesando === c.id} onClick={() => reactivar(c)}>Reactivar</button>
-                        : <button className="mini btn-baja" disabled={procesando === c.id} onClick={() => baja(c)}>Dar de baja</button>}
+                        ? <button className="btn-tabla btn-tabla-ok" disabled={procesando === c.id} onClick={() => reactivar(c)}>Reactivar</button>
+                        : <button className="btn-tabla btn-tabla-baja" disabled={procesando === c.id} onClick={() => baja(c)}>Dar de baja</button>}
                     </td>
                   </tr>
                 );
@@ -303,24 +303,40 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
     } finally { setValidando(false); }
   }
 
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  function clearFieldError(campo: string) {
+    setFieldErrors(p => { const n = {...p}; delete n[campo]; return n; });
+  }
+
   async function guardar() {
     setMsg(null); setEnlace(null);
-    // La unidad puede estar ya seleccionada (edificio existente) o ser nueva
-    // (casa/edificio que se escribe en el momento): en ese caso se envía
-    // unidad_nueva y el backend la crea junto con la cuenta.
+
     const hayUnidad = unidadId || (modoUnidad === "nueva" && nuevaUnidadId.trim());
-    // Si es dueño de edificio que NO vive ahí, la tarifa no es obligatoria
-    // (el edificio es solo un contenedor, los apartamentos pagan cuota)
     const esDuenoSinVivienda = esEdificio && modoUnidad === "nueva" && !duenoVive;
     const hayTarifa = esDuenoSinVivienda || !!tarifaId;
-    if (!hayUnidad || !hayTarifa || !nombre || !email) {
-      setMsg({ tipo: "err", texto: "Completá la casa/edificio, la tarifa, y el nombre y correo del titular" });
+
+    // Validación campo a campo — muestra todos los errores de una vez
+    const errs: Record<string, string> = {};
+    if (!hayUnidad)            errs.unidad    = "Seleccioná o ingresá la casa o edificio.";
+    if (!hayTarifa)            errs.tarifa    = "Seleccioná la tarifa mensual.";
+    if (!nombre.trim())        errs.nombre    = "El nombre del titular es obligatorio.";
+    if (!apellido.trim())      errs.apellido  = "El apellido del titular es obligatorio.";
+    if (!email.trim())         errs.email     = "El correo electrónico es obligatorio.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
+                               errs.email     = "El correo no tiene un formato válido.";
+    if (!telefono.trim())      errs.telefono  = "El teléfono es obligatorio.";
+    if (dni && !dniCompleto(dni))
+                               errs.dni       = "El DNI debe tener 13 dígitos (0000-0000-00000).";
+    if (esEdificio && !esDuenoSinVivienda && duenoVive && !apartamento.trim())
+                               errs.apartamento = "Indicá el número del apartamento que ocupa.";
+
+    setFieldErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      setMsg({ tipo: "err", texto: "Hay campos incompletos o con errores. Revisalos arriba." });
       return;
     }
-    if (dni && !dniCompleto(dni)) {
-      setMsg({ tipo: "err", texto: "El número de identidad debe tener 13 dígitos (0000-0000-00000)" });
-      return;
-    }
+
     try {
       const res = await crearCuenta({
         unidad_id: unidadId || undefined,
@@ -570,27 +586,46 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
             <div className="alta-seccion-head">
               <span className="alta-num">3</span>
               <b>Titular de la cuenta</b>
-              <InfoTip texto="Es la persona responsable de la cuenta (quien paga). Se le creará un acceso en estado pendiente y recibirá un enlace para definir su propia contraseña. Solo el nombre, apellido y correo son obligatorios." />
+              <InfoTip texto="Es la persona responsable de la cuenta (quien paga). Se le creará un acceso en estado pendiente y recibirá un enlace para definir su propia contraseña. Nombre, apellido, correo y teléfono son obligatorios." />
             </div>
           <div className="row">
-            <input placeholder="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
-            <input placeholder="Apellido" value={apellido} onChange={(e) => setApellido(e.target.value)} />
+            <div className="campo-con-error">
+              <input placeholder="Nombre *" value={nombre} className={fieldErrors.nombre ? "input-error" : ""}
+                onChange={(e) => { setNombre(e.target.value); clearFieldError("nombre"); }} />
+              {fieldErrors.nombre && <span className="campo-error">{fieldErrors.nombre}</span>}
+            </div>
+            <div className="campo-con-error">
+              <input placeholder="Apellido *" value={apellido} className={fieldErrors.apellido ? "input-error" : ""}
+                onChange={(e) => { setApellido(e.target.value); clearFieldError("apellido"); }} />
+              {fieldErrors.apellido && <span className="campo-error">{fieldErrors.apellido}</span>}
+            </div>
           </div>
           <div className="row">
-            <input placeholder="Correo electrónico" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <input placeholder="Teléfono (opcional)" value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+            <div className="campo-con-error">
+              <input placeholder="Correo electrónico *" value={email} className={fieldErrors.email ? "input-error" : ""}
+                onChange={(e) => { setEmail(e.target.value); clearFieldError("email"); }} />
+              {fieldErrors.email && <span className="campo-error">{fieldErrors.email}</span>}
+            </div>
+            <div className="campo-con-error">
+              <input placeholder="Teléfono *" value={telefono} className={fieldErrors.telefono ? "input-error" : ""}
+                onChange={(e) => { setTelefono(e.target.value); clearFieldError("telefono"); }} />
+              {fieldErrors.telefono && <span className="campo-error">{fieldErrors.telefono}</span>}
+            </div>
           </div>
           <div className="row">
-            <input placeholder="Identidad (0000-0000-00000)" value={dni} inputMode="numeric"
-              maxLength={15}
-              onChange={(e) => setDni(formatearDNI(e.target.value))} />
+            <div className="campo-con-error">
+              <input placeholder="Identidad (0000-0000-00000)" value={dni} inputMode="numeric"
+                maxLength={15} className={fieldErrors.dni ? "input-error" : ""}
+                onChange={(e) => { setDni(formatearDNI(e.target.value)); clearFieldError("dni"); }} />
+              {fieldErrors.dni && <span className="campo-error">{fieldErrors.dni}</span>}
+            </div>
             <input placeholder="RTN (opcional)" value={rtn} onChange={(e) => setRtn(e.target.value)} />
           </div>
           <div className="row">
-            <input placeholder="Dirección exacta" value={direccionExacta} onChange={(e) => setDireccionExacta(e.target.value)} />
-            <input placeholder="Profesión" value={profesion} onChange={(e) => setProfesion(e.target.value)} />
+            <input placeholder="Dirección exacta (opcional)" value={direccionExacta} onChange={(e) => setDireccionExacta(e.target.value)} />
+            <input placeholder="Profesión (opcional)" value={profesion} onChange={(e) => setProfesion(e.target.value)} />
             <select value={ocupacion} onChange={(e) => setOcupacion(e.target.value)} style={{ marginTop: 6 }}>
-              <option value="">— Ocupación —</option>
+              <option value="">— Ocupación (opcional) —</option>
               <option value="estudiante">Estudiante</option>
               <option value="profesional">Profesional / Empleado</option>
               <option value="otro">Otro</option>
@@ -603,8 +638,8 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
             )}
           </div>
           <div className="row">
-            <input placeholder="Contacto de emergencia (nombre)" value={emergNombre} onChange={(e) => setEmergNombre(e.target.value)} />
-            <input placeholder="Contacto de emergencia (teléfono)" value={emergTel} onChange={(e) => setEmergTel(e.target.value)} />
+            <input placeholder="Contacto de emergencia (nombre, opcional)" value={emergNombre} onChange={(e) => setEmergNombre(e.target.value)} />
+            <input placeholder="Teléfono del contacto (opcional)" value={emergTel} onChange={(e) => setEmergTel(e.target.value)} />
           </div>
           </div>
 
@@ -827,7 +862,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
               <div className="row" style={{ maxWidth: 160 }}>
                 <input type="number" min={1} max={200} placeholder="Sin límite"
                   value={maxAptos} onChange={(e) => setMaxAptos(e.target.value)} />
-                <button className="mini" onClick={guardarMaxAptos} disabled={guardandoAptos}>
+                <button className="btn-tabla btn-tabla-neutro" onClick={guardarMaxAptos} disabled={guardandoAptos}>
                   {guardandoAptos ? "…" : "Guardar"}
                 </button>
               </div>
