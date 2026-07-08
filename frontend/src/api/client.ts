@@ -156,6 +156,10 @@ export interface CodigoEnrolamiento {
   estado: string; created_at?: string; usado_en?: string | null;
 }
 export const misEdificios = () => request<Unidad[]>("/unidades/mis-edificios");
+export const apartamentosDelEdificio = (edificioId: string) =>
+  request<Cuenta[]>(`/unidades/mis-edificios/${edificioId}/apartamentos`);
+export const crearSolicitudBaja = (body: { cuenta_id: string; motivo: string; fecha_desocupacion: string }) =>
+  request<SolicitudBajaDTO>("/unidades/solicitudes-baja", { method: "POST", body: JSON.stringify(body) });
 export const generarCodigoEnrolamiento = (body: { edificio_id: string; apartamento?: string; nota?: string }) =>
   request<CodigoEnrolamiento>("/unidades/enrolamiento/generar", { method: "POST", body: JSON.stringify(body) });
 export const misCodigosEnrolamiento = () => request<CodigoEnrolamiento[]>("/unidades/enrolamiento/mis-codigos");

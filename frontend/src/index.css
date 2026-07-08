@@ -3220,3 +3220,28 @@ input.input-error, select.input-error, textarea.input-error {
 .solicitud-baja-acciones {
   display: flex; gap: 6px; flex-shrink: 0;
 }
+
+/* ── Apartamentos del edificio (vista residente admin) ── */
+.aptos-lista { display: flex; flex-direction: column; gap: 8px; }
+.apto-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; background: #f9fbfd; border: 1px solid #eef2f7;
+  border-radius: 12px; cursor: pointer; transition: all 0.15s;
+}
+.apto-card:hover { background: #eef4fb; border-color: #c9d6e8; }
+.apto-card-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; font-size: 20px;
+  flex-shrink: 0;
+}
+.apto-card-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.apto-card-info b { font-size: 14px; color: var(--marca-azul); }
+.apto-card-arrow { font-size: 22px; color: #94a3b8; font-weight: 300; }
+.pill-inline {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  color: #fff; background: var(--marca-azul); padding: 1px 6px; border-radius: 4px;
+  margin-left: 6px; vertical-align: middle;
+}
+.pill-estado { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 8px; margin-top: 2px; }
+.pill-estado--ok { color: #166534; background: #dcfce7; }
+.pill-estado--mora { color: #991b1b; background: #fee2e2; }
