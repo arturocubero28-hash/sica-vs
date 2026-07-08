@@ -618,7 +618,25 @@ def _edificios_de_propietario(usuario):
     return Unidad.query.filter_by(tipo="edificio", propietario_id=usuario.id, activa=True).all()
 
 
-@cuentas_bp.get("/mis-edificios")
+@cuentas_bp.get("/mis-edificios/<edificio_uuid>/apartamentos")
+@token_required
+def apartamentos_del_edificio(usuario_actual, edificio_uuid):
+    """Lista los apartamentos registrados bajo un edificio del que el usuario
+    es propietario. Para que el dueño vea el estado de sus inquilinos desde
+    la app móvil."""
+    from app.models.cuenta import Unidad, Cuenta
+    unidad = Unidad.query.filter_by(uuid_publico=edificio_uuid, tipo="edificio").first()
+    if not unidad:
+        return _err("no_encontrada", "Edificio no encontrado", 404)
+    # Solo el propietario del edificio o un admin pueden ver esto
+    if (unidad.propietario_id != usuario_actual.id
+            and usuario_actual.rol not in ("admin", "super_admin")):
+        return _err("sin_permiso", "No tenés permiso para ver este edificio", 403)
+
+    cuentas = Cuenta.query.filter_by(unidad_id=unidad.id, activa=True).all()
+    return jsonify({"data": [c.to_dict() for c in cuentas]})
+
+
 @token_required
 def mis_edificios(usuario_actual):
     """Edificios de los que el usuario actual es dueño (para su portal)."""
