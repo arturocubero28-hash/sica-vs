@@ -89,14 +89,8 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("todas");
   const [procesando, setProcesando] = useState<string | null>(null);
+  const [cuentaBaja, setCuentaBaja] = useState<Cuenta | null>(null);
 
-  async function baja(c: Cuenta) {
-    const nombre = c.identificador || (c.apartamento ? `Apto ${c.apartamento}` : "esta casa");
-    if (!confirm(`¿Dar de baja ${nombre}? Dejará de generar cuotas y sus residentes perderán acceso. Podés reactivarla luego.`)) return;
-    setProcesando(c.id);
-    try { await darBajaCuenta(c.id); onRecargar(); }
-    finally { setProcesando(null); }
-  }
   async function reactivar(c: Cuenta) {
     setProcesando(c.id);
     try { await reactivarCuenta(c.id); onRecargar(); }
@@ -205,7 +199,7 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
                       <button className="btn-tabla btn-tabla-ver" onClick={() => onAbrir(c)}>Ver</button>
                       {dadaBaja
                         ? <button className="btn-tabla btn-tabla-ok" disabled={procesando === c.id} onClick={() => reactivar(c)}>Reactivar</button>
-                        : <button className="btn-tabla btn-tabla-baja" disabled={procesando === c.id} onClick={() => baja(c)}>Dar de baja</button>}
+                        : <button className="btn-tabla btn-tabla-baja" disabled={procesando === c.id} onClick={() => setCuentaBaja(c)}>Dar de baja</button>}
                     </td>
                   </tr>
                 );
@@ -213,6 +207,14 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
             </tbody>
           </table>
         </div></div>
+      )}
+
+      {cuentaBaja && (
+        <ModalDarBaja
+          cuenta={cuentaBaja}
+          onCerrar={() => setCuentaBaja(null)}
+          onBajaCompletada={() => { setCuentaBaja(null); onRecargar(); }}
+        />
       )}
     </div>
   );
@@ -1579,6 +1581,131 @@ function SolicitudesBajaPanel({ onCambio }: { onCambio: () => void }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MODAL: DAR DE BAJA UNA CUENTA (con guía y nivelación de saldo)
+   ═══════════════════════════════════════════════════════════════════ */
+function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
+  cuenta: Cuenta; onCerrar: () => void; onBajaCompletada: () => void;
+}) {
+  const [fechaDes, setFechaDes] = useState(new Date().toISOString().split("T")[0]);
+  const [nivelando, setNivelando] = useState(false);
+  const [dandoBaja, setDandoBaja] = useState(false);
+  const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
+  const [ajustes, setAjustes] = useState<{ periodo: string; accion: string; dias_ocupados?: number; monto_original: number; monto_final: number }[] | null>(null);
+
+  const nombre = cuenta.identificador || (cuenta.apartamento ? `Apto ${cuenta.apartamento}` : "esta cuenta");
+
+  async function handleNivelar() {
+    if (!fechaDes) { setMsg({ tipo: "err", texto: "Seleccioná la fecha de desocupación" }); return; }
+    setNivelando(true); setMsg(null);
+    try {
+      const res = await nivelarSaldo(cuenta.id, fechaDes);
+      setAjustes(res.ajustes);
+      setMsg({ tipo: "ok", texto: res.message });
+    } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+    finally { setNivelando(false); }
+  }
+
+  async function handleBaja() {
+    if (!confirm(
+      `¿Confirmar la baja de ${nombre}?\n\n` +
+      `Se verificará que el saldo esté en 0. Al ejecutar:\n` +
+      `• La cuenta dejará de generar cuotas\n` +
+      `• Sus residentes perderán acceso a crear QR\n` +
+      `• Todas sus tarjetas quedarán desactivadas\n\n` +
+      `Podés reactivarla después si es necesario.`
+    )) return;
+    setDandoBaja(true); setMsg(null);
+    try {
+      await darBajaCuenta(cuenta.id);
+      onBajaCompletada();
+    } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+    finally { setDandoBaja(false); }
+  }
+
+  return (
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <div className="modal-head">
+          <h3 className="modal-head-titulo">
+            <span className="modal-tipo-icon" style={{ background: "#fee2e2", color: "#991b1b" }}>
+              <Trash2 size={20} />
+            </span>
+            Dar de baja — {nombre}
+          </h3>
+          <button className="ghost mini" onClick={onCerrar}>Cerrar</button>
+        </div>
+
+        {/* Instrucciones */}
+        <div className="baja-instrucciones">
+          <p><b>Para dar de baja una cuenta, el saldo debe estar en L 0.00.</b> Seguí estos pasos:</p>
+          <ol>
+            <li><b>Nivelar saldo</b> — si ya se generó una cuota que el residente no va a ocupar completa,
+              indicá la fecha de desocupación y el sistema prorratea la cuota a los días realmente ocupados.</li>
+            <li><b>Registrar el pago</b> — si después de nivelar queda un monto por pagar, el residente
+              debe pagarlo en Caja antes de continuar.</li>
+            <li><b>Dar de baja</b> — con el saldo en 0, la baja desactiva la cuenta, sus accesos QR y
+              todas sus tarjetas.</li>
+          </ol>
+        </div>
+
+        {msg && (
+          <div className={`msg-banner ${msg.tipo === "ok" ? "msg-banner-ok" : "msg-banner-err"}`} style={{ margin: "10px 0" }}>
+            <span>{msg.tipo === "ok" ? "✓" : "⚠"} {msg.texto}</span>
+            <button className="msg-banner-close" onClick={() => setMsg(null)}>✕</button>
+          </div>
+        )}
+
+        {/* Paso 1: nivelar saldo */}
+        <div className="baja-paso">
+          <div className="baja-paso-titulo">Paso 1 · Nivelar saldo (opcional si ya está en 0)</div>
+          <div className="row" style={{ alignItems: "flex-end" }}>
+            <div className="form-field" style={{ flex: 1 }}>
+              <label>Fecha de desocupación</label>
+              <input type="date" value={fechaDes} max={new Date().toISOString().split("T")[0]}
+                onChange={e => setFechaDes(e.target.value)} />
+            </div>
+            <button className="btn-tabla btn-tabla-editar" onClick={handleNivelar} disabled={nivelando}
+              style={{ height: 38 }}>
+              ⚖ {nivelando ? "Nivelando…" : "Nivelar saldo"}
+            </button>
+          </div>
+
+          {ajustes && ajustes.length > 0 && (
+            <div className="baja-ajustes">
+              {ajustes.map((a, i) => (
+                <div key={i} className="baja-ajuste-fila">
+                  <span>{new Date(a.periodo + "T00:00:00").toLocaleDateString("es-HN", { month: "long", year: "numeric" })}</span>
+                  <span>
+                    {a.accion === "anulada"
+                      ? <>Anulada (era L {a.monto_original.toFixed(2)})</>
+                      : <>{a.dias_ocupados} días → <b>L {a.monto_final.toFixed(2)}</b> (era L {a.monto_original.toFixed(2)})</>}
+                  </span>
+                </div>
+              ))}
+              <p className="muted small" style={{ margin: "8px 0 0" }}>
+                Si queda monto por pagar, registralo en <b>Caja</b> antes de dar de baja.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Paso 2: dar de baja */}
+        <div className="baja-paso">
+          <div className="baja-paso-titulo">Paso 2 · Ejecutar la baja</div>
+          <p className="muted small" style={{ margin: "0 0 10px" }}>
+            El sistema verificará que el saldo esté en 0. Si hay cuotas pendientes, la baja será rechazada.
+          </p>
+          <button className="btn-tabla btn-tabla-baja" onClick={handleBaja} disabled={dandoBaja}
+            style={{ width: "100%", justifyContent: "center", padding: "10px" }}>
+            <Trash2 size={15} /> {dandoBaja ? "Procesando…" : `Dar de baja ${nombre}`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

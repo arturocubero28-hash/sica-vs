@@ -3277,3 +3277,28 @@ input.input-error, select.input-error, textarea.input-error {
   color: #6b21a8 !important; border-color: #e9d5ff !important; background: #faf5ff !important;
 }
 .btn-tabla-editar:hover:not(:disabled) { background: #f3e8ff !important; color: #581c87 !important; box-shadow: none !important; transform: none !important; }
+
+/* ── Modal dar de baja ── */
+.baja-instrucciones {
+  background: #f4f7fb; border-left: 4px solid #022E45; border-radius: 8px;
+  padding: 12px 16px; font-size: 13px; color: #3a4048; margin-bottom: 12px;
+}
+.baja-instrucciones p { margin: 0 0 8px; }
+.baja-instrucciones ol { margin: 0; padding-left: 20px; }
+.baja-instrucciones li { margin-bottom: 6px; line-height: 1.45; }
+.baja-paso {
+  border: 1px solid #e5e9f0; border-radius: 10px; padding: 14px; margin-bottom: 10px;
+}
+.baja-paso-titulo {
+  font-weight: 700; font-size: 13px; color: var(--marca-azul); margin-bottom: 10px;
+}
+.baja-ajustes {
+  background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px;
+  padding: 10px 12px; margin-top: 10px; font-size: 13px;
+}
+.baja-ajuste-fila {
+  display: flex; justify-content: space-between; gap: 10px; padding: 4px 0;
+  border-bottom: 1px dashed #e9d5ff;
+}
+.baja-ajuste-fila:last-of-type { border-bottom: none; }
+.baja-ajuste-fila span:first-child { text-transform: capitalize; color: #6b21a8; font-weight: 600; }
