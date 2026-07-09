@@ -38,13 +38,22 @@ def _mi_residente(usuario):
     return Residente.query.filter_by(usuario_id=usuario.id, activo=True).first()
 
 
+EXTENSIONES_IMAGEN_VALIDAS = {"webp", "jpg", "jpeg", "png"}
+
+
 def _guardar_foto_multipart(archivo, prefijo):
-    """Guarda una foto subida como multipart (app móvil) y devuelve el nombre."""
+    """Guarda una foto subida como multipart (app móvil o web) y devuelve el nombre.
+    Preserva la extensión real del archivo (webp, jpg, png) en vez de forzar .jpg —
+    la app comprime a WebP antes de subir, así que forzar .jpg guardaría bytes
+    WebP con extensión incorrecta."""
     if not archivo or not archivo.filename:
         return None
     try:
         os.makedirs("/app/uploads", exist_ok=True)
-        nombre = f"{prefijo}_{uuid_lib.uuid4().hex[:12]}.jpg"
+        ext = archivo.filename.rsplit(".", 1)[-1].lower() if "." in archivo.filename else "jpg"
+        if ext not in EXTENSIONES_IMAGEN_VALIDAS:
+            ext = "jpg"
+        nombre = f"{prefijo}_{uuid_lib.uuid4().hex[:12]}.{ext}"
         ruta = f"/app/uploads/{nombre}"
         archivo.save(ruta)
         return nombre

@@ -4,6 +4,7 @@ import {
   urlImagenComunicado, type ComunicadoDTO,
 } from "../../api/client";
 import { Image, Megaphone } from "lucide-react";
+import { comprimirImagenWebp } from "../../utils/comprimirImagen";
 
 export function ComunicadosAdmin() {
   const [lista, setLista] = useState<ComunicadoDTO[]>([]);
@@ -78,8 +79,10 @@ function FormComunicado({ onCerrar, onCreado }: { onCerrar: () => void; onCreado
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    setImagen(f);
-    setPreview(URL.createObjectURL(f));
+    comprimirImagenWebp(f).then(comprimido => {
+      setImagen(comprimido);
+      setPreview(URL.createObjectURL(comprimido));
+    });
   }
 
   async function publicar() {

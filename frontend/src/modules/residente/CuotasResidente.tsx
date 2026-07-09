@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { misCuotas, subirComprobante, subirComprobanteAbono, urlReciboPDF,
   type CuotaDTO, type AbonoArregloDTO, type PagoHistorialDTO } from "../../api/client";
 import { AlertTriangle, Paperclip, Handshake, Receipt } from "lucide-react";
+import { comprimirImagenWebp } from "../../utils/comprimirImagen";
 
 const estadoLabel: Record<string, string> = {
   pendiente: "Pendiente", en_revision: "En revisión", pagada: "Pagada", vencida: "Vencida",
@@ -233,13 +234,15 @@ function FormPago({ cuota, onCerrar, onExito }: {
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    setArchivo(f);
-    if (f.type.startsWith("image/")) {
-      const url = URL.createObjectURL(f);
-      setPreview(url);
-    } else {
-      setPreview(null);
-    }
+    comprimirImagenWebp(f).then(comprimido => {
+      setArchivo(comprimido);
+      if (comprimido.type.startsWith("image/")) {
+        const url = URL.createObjectURL(comprimido);
+        setPreview(url);
+      } else {
+        setPreview(null);
+      }
+    });
   }
 
   async function enviar() {
@@ -320,8 +323,10 @@ function FormPagoAbono({ abono, onCerrar, onExito }: {
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    setArchivo(f);
-    setPreview(f.type.startsWith("image/") ? URL.createObjectURL(f) : null);
+    comprimirImagenWebp(f).then(comprimido => {
+      setArchivo(comprimido);
+      setPreview(comprimido.type.startsWith("image/") ? URL.createObjectURL(comprimido) : null);
+    });
   }
 
   async function enviar() {
