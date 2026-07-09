@@ -299,20 +299,9 @@ export const registrarAcceso = async (body: {
   return json.data;
 };
 
-// URL de la imagen QR (con token en query para autenticación de imagen)
-export function urlImagenQR(visitaId: string): string {
-  const token = getToken();
-  return `${API_URL}/visitas/${visitaId}/qr-imagen?_auth=${token}`;
-}
-
-// Obtiene la imagen QR como blob (para descargar/compartir)
-export async function obtenerImagenQR(visitaId: string): Promise<Blob> {
-  const res = await fetch(`${API_URL}/visitas/${visitaId}/qr-imagen`, {
-    headers: { Authorization: `Bearer ${getToken()}` },
-  });
-  if (!res.ok) throw new Error("No se pudo generar la imagen");
-  return res.blob();
-}
+// NOTA: la tarjeta QR ya NO se pide al servidor. Se genera en el cliente
+// (src/components/TarjetaQR.tsx) a partir del campo `qr_token` que viene en
+// el JSON de la visita. Ver comentario de ese archivo para el contexto.
 
 // =====================================================================
 // Dashboard administrativo

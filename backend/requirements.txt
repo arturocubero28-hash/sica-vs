@@ -14,8 +14,8 @@ eventlet==0.36.1
 webauthn==2.2.0
 resend==2.0.0
 marshmallow==3.21.2
-qrcode[pil]==7.4.2
-Pillow==10.3.0
+# qrcode: eliminado en Día 31 — la tarjeta QR se genera en el cliente.
+Pillow==10.3.0  # requerido por reportlab (recibos PDF) y opencv
 opencv-python-headless==4.10.0.84
 
 psutil==5.9.8

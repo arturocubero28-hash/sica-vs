@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import {
-  miCuenta, misVisitas, crearVisita, cancelarVisita, urlImagenQR, obtenerImagenQR,
+  miCuenta, misVisitas, crearVisita, cancelarVisita,
   type MiCuentaDTO, type VisitaDTO,
 } from "../../api/client";
 import { CuotasResidente } from "./CuotasResidente";
 import { HomeResidente } from "./HomeResidente";
 import { MiEdificio } from "./MiEdificio";
+import { TarjetaQR, descargarTarjetaQR, generarTarjetaQR } from "../../components/TarjetaQR";
 import { Car, Package, RefreshCw, User, AlertTriangle } from "lucide-react";
 
 // Comparte el QR por WhatsApp (descarga la imagen y abre WhatsApp con mensaje)
@@ -18,13 +19,15 @@ async function compartirWhatsApp(visita: VisitaDTO) {
     `Preséntalo al guardia en la entrada.` +
     (vigencia ? ` Válido hasta: ${vigencia}.` : "");
 
-  // Intentar compartir la imagen nativamente (móvil)
+  // Intentar compartir la imagen nativamente (móvil) — generada en el cliente
   try {
-    const blob = await obtenerImagenQR(visita.id);
-    const file = new File([blob], "qr-visita.png", { type: "image/png" });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], text: mensaje });
-      return;
+    const blob = await generarTarjetaQR(visita);
+    if (blob) {
+      const file = new File([blob], "qr-visita.png", { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], text: mensaje });
+        return;
+      }
     }
   } catch { /* sigue al fallback */ }
 
@@ -44,18 +47,12 @@ async function compartirCodigoWhatsApp(visita: VisitaDTO) {
   window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, "_blank");
 }
 
-// Descarga la imagen del QR
+// Descarga la imagen del QR — generada en el cliente, sin tocar el servidor
 async function descargarQR(visita: VisitaDTO) {
   try {
-    const blob = await obtenerImagenQR(visita.id);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `qr_${visita.nombre_visitante.replace(/ /g, "_")}.png`;
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (e) {
-    alert("No se pudo descargar la imagen");
+    await descargarTarjetaQR(visita);
+  } catch {
+    alert("No se pudo generar la imagen");
   }
 }
 
@@ -186,11 +183,7 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
           </>
         ) : (
           <>
-            <img
-              className="qr-imagen"
-              src={urlImagenQR(resultado.id)}
-              alt="Código QR de la visita"
-            />
+            <TarjetaQR visita={resultado} className="qr-imagen" />
             <p>Compartí esta imagen con <b>{resultado.nombre_visitante}</b> para que la presente al guardia.</p>
             <div className="row-btns">
               <button onClick={() => compartirWhatsApp(resultado)}>
@@ -395,7 +388,7 @@ function ModalCompartirCodigo({ visita, onCerrar }: { visita: VisitaDTO; onCerra
           </>
         ) : (
           <>
-            <img className="qr-imagen" src={urlImagenQR(visita.id)} alt="Código QR" />
+            <TarjetaQR visita={visita} className="qr-imagen" />
             <p className="muted small">Compartí esta imagen con {visita.nombre_visitante}.</p>
             <div className="row-btns">
               <button onClick={() => compartirWhatsApp(visita)}>Compartir por WhatsApp</button>

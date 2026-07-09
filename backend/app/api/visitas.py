@@ -15,15 +15,8 @@ import datetime as dt
 import os
 import uuid as uuid_lib
 import base64
-import io
 
-import qrcode
-from qrcode.image.styledpil import StyledPilImage
-from qrcode.image.styles.moduledrawers.pil import RoundedModuleDrawer
-from qrcode.image.styles.colormasks import SolidFillColorMask
-from PIL import Image, ImageDraw, ImageFont
-
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify
 
 from app.extensions import db
 from app.models.visita import Visita, CodigoQR, EventoAcceso
@@ -500,133 +493,17 @@ def accesos_recientes(usuario_actual):
     return jsonify({"data": resultado})
 
 
-# =====================================================================
-# QR como IMAGEN (tarjeta con diseño Villas del Sol)
-# =====================================================================
-# Colores del logo
-COLOR_NARANJA = (244, 135, 35)
-COLOR_AZUL = (2, 46, 69)
-COLOR_BLANCO = (255, 255, 255)
-
-
-def _generar_tarjeta_qr(visita):
-    """Genera una tarjeta PNG de alta resolución con el QR y datos de la visita."""
-    ESCALA = 2  # render a 2x para nitidez
-    W, H = 600 * ESCALA, 880 * ESCALA
-
-    # 1. QR azul marino con módulos redondeados
-    qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_H,
-                       box_size=10, border=2)
-    qr.add_data(str(visita.qr.token))
-    qr.make(fit=True)
-    qr_img = qr.make_image(
-        image_factory=StyledPilImage,
-        module_drawer=RoundedModuleDrawer(),
-        color_mask=SolidFillColorMask(front_color=COLOR_AZUL, back_color=COLOR_BLANCO),
-    ).convert("RGBA")
-
-    # 2. Lienzo blanco
-    card = Image.new("RGB", (W, H), COLOR_BLANCO)
-    draw = ImageDraw.Draw(card)
-
-    def fuente(size, bold=False):
-        r = ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold
-             else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
-        return ImageFont.truetype(r, size * ESCALA) if os.path.exists(r) else ImageFont.load_default()
-
-    # 3. Encabezado: franja naranja con degradado
-    head_h = 175 * ESCALA
-    for y in range(head_h):
-        t = y / head_h
-        r = int(244 + (255 - 244) * t)
-        g = int(135 + (190 - 135) * t)
-        b = int(35 + (110 - 35) * t)
-        draw.line([(0, y), (W, y)], fill=(r, g, b))
-
-    # 4. Logo dentro de un círculo blanco a la izquierda del encabezado
-    try:
-        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "logo.png")
-        if os.path.exists(logo_path):
-            logo = Image.open(logo_path).convert("RGBA")
-            logo_sz = 105 * ESCALA
-            logo = logo.resize((logo_sz, logo_sz))
-            # círculo blanco de fondo
-            cx, cy = 70 * ESCALA, head_h // 2
-            rad = 58 * ESCALA
-            draw.ellipse([cx - rad, cy - rad, cx + rad, cy + rad], fill=COLOR_BLANCO)
-            card.paste(logo, (cx - logo_sz // 2, cy - logo_sz // 2), logo)
-    except Exception:
-        pass
-
-    # 5. Texto del encabezado, a la derecha del logo
-    tx = 150 * ESCALA
-    draw.text((tx, 58 * ESCALA), "RESIDENCIAL", font=fuente(24, bold=True), fill=COLOR_BLANCO, anchor="lm")
-    draw.text((tx, 105 * ESCALA), "VILLAS DEL SOL", font=fuente(32, bold=True), fill=COLOR_BLANCO, anchor="lm")
-
-    # 6. QR centrado con marco naranja
-    qr_size = 380 * ESCALA
-    qr_img = qr_img.resize((qr_size, qr_size))
-    qr_x = (W - qr_size) // 2
-    qr_y = head_h + 40 * ESCALA
-    draw.rounded_rectangle(
-        [qr_x - 16 * ESCALA, qr_y - 16 * ESCALA, qr_x + qr_size + 16 * ESCALA, qr_y + qr_size + 16 * ESCALA],
-        radius=24 * ESCALA, outline=COLOR_NARANJA, width=5 * ESCALA)
-    card.paste(qr_img, (qr_x, qr_y), qr_img)
-
-    # 7. Línea separadora
-    y = qr_y + qr_size + 50 * ESCALA
-    draw.line([(80 * ESCALA, y), (W - 80 * ESCALA, y)], fill=(230, 230, 230), width=2 * ESCALA)
-    y += 35 * ESCALA
-
-    # 8. Datos del visitante (grandes y legibles)
-    tipos = {"unica": "VISITA ÚNICA", "recurrente": "VISITA RECURRENTE", "repartidor": "REPARTIDOR"}
-    # Nombre grande
-    draw.text((W // 2, y), visita.nombre_visitante, font=fuente(34, bold=True), fill=COLOR_AZUL, anchor="mm")
-    y += 50 * ESCALA
-    # Tipo en pill naranja
-    tipo_txt = tipos.get(visita.tipo, visita.tipo.upper())
-    tf = fuente(19, bold=True)
-    bbox = draw.textbbox((0, 0), tipo_txt, font=tf)
-    tw = bbox[2] - bbox[0]
-    pill_w = tw + 50 * ESCALA
-    pill_x = (W - pill_w) // 2
-    draw.rounded_rectangle([pill_x, y - 18 * ESCALA, pill_x + pill_w, y + 18 * ESCALA],
-                           radius=18 * ESCALA, fill=COLOR_NARANJA)
-    draw.text((W // 2, y), tipo_txt, font=tf, fill=COLOR_BLANCO, anchor="mm")
-    y += 50 * ESCALA
-
-    # Detalles
-    if visita.valido_hasta:
-        vence = visita.valido_hasta.strftime("%d/%m/%Y a las %H:%M")
-        draw.text((W // 2, y), f"Válido hasta: {vence}", font=fuente(17), fill=(90, 90, 90), anchor="mm")
-        y += 32 * ESCALA
-    if visita.placa_vehiculo:
-        draw.text((W // 2, y), f"Vehículo: {visita.placa_vehiculo}", font=fuente(17), fill=(90, 90, 90), anchor="mm")
-        y += 32 * ESCALA
-    if visita.empresa:
-        draw.text((W // 2, y), f"Empresa: {visita.empresa}", font=fuente(17), fill=(90, 90, 90), anchor="mm")
-        y += 32 * ESCALA
-
-    # 9. Pie
-    draw.text((W // 2, H - 45 * ESCALA), "Presente este código al guardia en la entrada",
-              font=fuente(15), fill=(150, 150, 150), anchor="mm")
-    # Franja inferior naranja
-    draw.rectangle([0, H - 14 * ESCALA, W, H], fill=COLOR_NARANJA)
-
-    return card
-
-
-@visitas_bp.get("/<visita_uuid>/qr-imagen")
-@token_required
-def qr_imagen(usuario_actual, visita_uuid):
-    """Devuelve la imagen PNG de la tarjeta QR de una visita."""
-    visita = Visita.query.filter_by(uuid_publico=visita_uuid).first()
-    if not visita or not visita.qr:
-        return jsonify({"error": {"code": "no_encontrada", "message": "Visita no encontrada"}}), 404
-
-    card = _generar_tarjeta_qr(visita)
-    buf = io.BytesIO()
-    card.save(buf, format="PNG")
-    buf.seek(0)
-    return send_file(buf, mimetype="image/png",
-                     download_name=f"qr_{visita.nombre_visitante.replace(' ', '_')}.png")
+# ─────────────────────────────────────────────────────────────────────────
+# NOTA (Día 31): el endpoint GET /<visita_uuid>/qr-imagen fue ELIMINADO.
+#
+# Generaba con PIL una tarjeta de 1200×1760 px por cada apertura del QR
+# (~150 ms de CPU, sin caché). Con 500 familias saturaba los workers de
+# Gunicorn en horas pico y dejaba esperando al guardia que escaneaba.
+#
+# La tarjeta ahora se renderiza en el cliente a partir del campo `qr_token`
+# que ya viajaba en el JSON de la visita:
+#   - Web:    frontend/src/components/TarjetaQR.tsx  (Canvas API)
+#   - Móvil:  lib/widgets/tarjeta_qr.dart            (qr_flutter + RepaintBoundary)
+#
+# El servidor ya no genera ni sirve ninguna imagen de QR.
+# ─────────────────────────────────────────────────────────────────────────

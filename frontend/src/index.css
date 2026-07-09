@@ -3302,3 +3302,16 @@ input.input-error, select.input-error, textarea.input-error {
 }
 .baja-ajuste-fila:last-of-type { border-bottom: none; }
 .baja-ajuste-fila span:first-child { text-transform: capitalize; color: #6b21a8; font-weight: 600; }
+
+/* Placeholder mientras se genera la tarjeta QR en el cliente */
+.qr-skeleton {
+  width: 100%; max-width: 300px; aspect-ratio: 600 / 880;
+  margin: 0 auto; border-radius: 12px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e8eef5 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: qr-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes qr-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
