@@ -365,6 +365,8 @@ class Cuota(db.Model):
     fecha_vencimiento = db.Column(db.Date, nullable=False)
     estado            = db.Column(db.String(20), nullable=False, default="pendiente", index=True)
     arreglo_id        = db.Column(db.BigInteger, db.ForeignKey("arreglos_pago.id"))  # si está en un arreglo
+    monto_original    = db.Column(db.Numeric(10, 2))  # monto pleno antes de nivelar (se fija una sola vez)
+    nivelada          = db.Column(db.Boolean, nullable=False, default=False)
     created_at        = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at        = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 

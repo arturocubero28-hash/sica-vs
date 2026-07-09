@@ -11,3 +11,7 @@ CREATE TABLE IF NOT EXISTS solicitudes_baja (
     created_at TIMESTAMPTZ DEFAULT now(),
     resuelto_en TIMESTAMPTZ
 );
+
+-- Nivelación de saldo idempotente: guardar el monto pleno antes de nivelar
+ALTER TABLE cuotas ADD COLUMN IF NOT EXISTS monto_original NUMERIC(10,2);
+ALTER TABLE cuotas ADD COLUMN IF NOT EXISTS nivelada BOOLEAN NOT NULL DEFAULT false;

@@ -513,33 +513,39 @@ def nivelar_saldo(usuario_actual, cuenta_uuid):
         # Inicio real del ciclo: día de pago del mes del período
         inicio_ciclo = dt.date(periodo.year, periodo.month, min(dia_pago_cfg, 28))
 
+        # Fijar el monto original SOLO la primera vez — evita que nivelaciones
+        # repetidas sigan achicando el monto sobre un valor ya reducido.
+        if cuota.monto_original is None:
+            cuota.monto_original = cuota.monto
+        baseline = float(cuota.monto_original)
+
         if fecha_des < inicio_ciclo:
             # Se fue antes de que empezara este ciclo → anular la cuota
-            monto_original = float(cuota.monto)
             cuota.monto = _monto_pagado_cuota(cuota)  # dejarla en lo ya pagado
             cuota.estado = "pagada" if cuota.monto > 0 else "anulada"
+            cuota.nivelada = True
             ajustes.append({
                 "periodo": periodo.isoformat(),
                 "accion": "anulada",
-                "monto_original": monto_original,
+                "monto_original": baseline,
                 "monto_final": float(cuota.monto),
             })
         else:
             # Días ocupados dentro del ciclo (mes comercial 30 días)
             dias_ocupados = min((fecha_des - inicio_ciclo).days + 1, 30)
-            monto_original = float(cuota.monto)
-            monto_diario = monto_original / 30
+            monto_diario = baseline / 30
             monto_nivelado = round(monto_diario * dias_ocupados, 2)
             pagado = _monto_pagado_cuota(cuota)
 
             cuota.monto = max(monto_nivelado, pagado)  # nunca menos de lo ya pagado
+            cuota.nivelada = True
             if pagado >= cuota.monto:
                 cuota.estado = "pagada"
             ajustes.append({
                 "periodo": periodo.isoformat(),
                 "accion": "prorrateada",
                 "dias_ocupados": dias_ocupados,
-                "monto_original": monto_original,
+                "monto_original": baseline,
                 "monto_final": float(cuota.monto),
             })
 
