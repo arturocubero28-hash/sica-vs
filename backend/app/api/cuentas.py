@@ -25,7 +25,7 @@ from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db
 from app.models.usuario import Usuario
-from app.models.cuenta import Unidad, Cuenta, Residente, Tarjeta, Tarifa, CodigoEnrolamiento, Cuota, SolicitudBaja
+from app.models.cuenta import Unidad, Cuenta, Residente, Tarjeta, Tarifa, CodigoEnrolamiento, Cuota, SolicitudBaja, Pago
 from app.auth.security import roles_required, token_required
 
 cuentas_bp = Blueprint("cuentas", __name__)
@@ -48,6 +48,13 @@ def _bloque_activacion(usuario, token_o_error, nota=None):
 
 def _err(code, msg, status):
     return jsonify({"error": {"code": code, "message": msg}}), status
+
+
+def _monto_pagado_cuota(cuota):
+    """Suma los pagos APROBADOS de una cuota (Cuota no guarda monto_pagado directo)."""
+    total = (Pago.query.filter_by(cuota_id=cuota.id, estado="aprobado")
+             .with_entities(db.func.coalesce(db.func.sum(Pago.monto), 0)).scalar())
+    return float(total or 0)
 
 
 def _crear_usuario_pendiente(nombre, apellido, email, telefono=None, extra=None):
@@ -439,7 +446,7 @@ def dar_baja_cuenta(usuario_actual, cuenta_uuid):
         Cuota.estado.in_(["pendiente", "parcial", "vencida", "en_arreglo"]),
     ).all()
     if cuotas_pendientes:
-        total_pendiente = sum(float(c.monto) - float(c.monto_pagado or 0) for c in cuotas_pendientes)
+        total_pendiente = sum(float(c.monto) - _monto_pagado_cuota(c) for c in cuotas_pendientes)
         return _err("saldo_pendiente",
                      f"No se puede dar de baja: la cuenta tiene {len(cuotas_pendientes)} cuota(s) "
                      f"pendiente(s) por L {total_pendiente:.2f}. El saldo debe estar en 0. "
@@ -509,7 +516,7 @@ def nivelar_saldo(usuario_actual, cuenta_uuid):
         if fecha_des < inicio_ciclo:
             # Se fue antes de que empezara este ciclo → anular la cuota
             monto_original = float(cuota.monto)
-            cuota.monto = float(cuota.monto_pagado or 0)  # dejarla en lo ya pagado
+            cuota.monto = _monto_pagado_cuota(cuota)  # dejarla en lo ya pagado
             cuota.estado = "pagada" if cuota.monto > 0 else "anulada"
             ajustes.append({
                 "periodo": periodo.isoformat(),
@@ -523,7 +530,7 @@ def nivelar_saldo(usuario_actual, cuenta_uuid):
             monto_original = float(cuota.monto)
             monto_diario = monto_original / 30
             monto_nivelado = round(monto_diario * dias_ocupados, 2)
-            pagado = float(cuota.monto_pagado or 0)
+            pagado = _monto_pagado_cuota(cuota)
 
             cuota.monto = max(monto_nivelado, pagado)  # nunca menos de lo ya pagado
             if pagado >= cuota.monto:
@@ -1051,7 +1058,7 @@ def resolver_solicitud_baja(usuario_actual, solicitud_uuid):
             Cuota.estado.in_(["pendiente", "parcial", "vencida", "en_arreglo"]),
         ).all()
         if cuotas_pendientes:
-            total = sum(float(c.monto) - float(c.monto_pagado or 0) for c in cuotas_pendientes)
+            total = sum(float(c.monto) - _monto_pagado_cuota(c) for c in cuotas_pendientes)
             return _err("saldo_pendiente",
                          f"No se puede aprobar: la cuenta tiene {len(cuotas_pendientes)} cuota(s) "
                          f"pendiente(s) por L {total:.2f}. Usá 'Nivelar saldo' y registrá el pago "
