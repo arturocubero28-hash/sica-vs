@@ -352,6 +352,53 @@ class Tarjeta(db.Model):
 
 
 # ---------------------------------------------------------------------
+# TARJETA VIRTUAL: QR permanente que rota cada 24h para acceso sin guardia
+#
+# El residente lo agrega a Google/Apple Wallet. La Pi lo lee como si fuera
+# una tarjeta RFID — el código del día se sincroniza igual que los card_uid.
+#
+# Flujo de rotación (medianoche):
+#   1. Celery genera un nuevo código de 10 dígitos para cada tarjeta activa
+#   2. El código_anterior se guarda para la ventana de gracia (10 min)
+#   3. El sync de la Pi incluye AMBOS códigos durante esos 10 min
+#   4. Google/Apple Wallet llaman al endpoint de actualización → reciben el QR nuevo
+# ---------------------------------------------------------------------
+class TarjetaVirtual(db.Model):
+    __tablename__ = "tarjetas_virtuales"
+
+    id            = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico  = _uuid_col()
+    cuenta_id     = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False, unique=True)
+    residente_id  = db.Column(db.BigInteger, db.ForeignKey("residentes.id"), nullable=False)
+
+    # Código activo del día (10 dígitos, prefijado con "SV" para distinguirlo de tarjetas físicas)
+    codigo_hoy      = db.Column(db.String(20), nullable=False, unique=True)
+    # Código anterior — válido durante 10 min después de medianoche para evitar
+    # que alguien quede afuera mientras la Pi sincroniza el nuevo código
+    codigo_anterior = db.Column(db.String(20))
+
+    estado       = db.Column(db.String(20), nullable=False, default="activa")  # activa | suspendida
+    tipo_acceso  = db.Column(db.String(20), nullable=False, default="peatonal")
+    rotado_en    = db.Column(db.DateTime(timezone=True), default=_now)  # última rotación
+    created_at   = db.Column(db.DateTime(timezone=True), default=_now)
+
+    cuenta    = db.relationship("Cuenta", lazy="joined")
+    residente = db.relationship("Residente", lazy="joined")
+
+    def to_dict(self):
+        from app.models.cuenta import Cuenta as C  # evitar import circular
+        titular = self.residente.usuario if self.residente else None
+        return {
+            "id": str(self.uuid_publico),
+            "estado": self.estado,
+            "tipo_acceso": self.tipo_acceso,
+            "codigo_hoy": self.codigo_hoy,
+            "rotado_en": self.rotado_en.isoformat() if self.rotado_en else None,
+            "titular": f"{titular.nombre} {titular.apellido}" if titular else None,
+        }
+
+
+# ---------------------------------------------------------------------
 # CUOTA: cuota mensual generada automáticamente por Celery
 # ---------------------------------------------------------------------
 class Cuota(db.Model):

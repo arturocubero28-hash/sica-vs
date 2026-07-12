@@ -29,7 +29,7 @@ import hmac
 from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db, limiter
-from app.models.cuenta import Tarjeta, Cuenta
+from app.models.cuenta import Tarjeta, Cuenta, TarjetaVirtual
 from app.models.visita import EventoAcceso, AccesoFisico
 from app.models.dispositivo import Dispositivo
 from app.models.camara import Camara
@@ -172,9 +172,7 @@ def sincronizar():
         accesos_q = accesos_q.filter_by(punto_acceso=disp.punto_acceso)
     accesos = accesos_q.all()
 
-    # Tarjetas con permiso vigente (fuente única de verdad). Para el modelo de
-    # copia local, la Pi recibe la lista completa de quién puede entrar; la
-    # compatibilidad de tipo (peatonal/vehicular) la resuelve la Pi por tranca.
+    # Tarjetas físicas con permiso vigente
     tarjetas = tarjetas_con_permiso()
     tarjetas_out = []
     for t in tarjetas:
@@ -186,6 +184,31 @@ def sincronizar():
             "tipo_acceso": t.tipo_acceso,
             "residente": nombre,
         })
+
+    # Tarjetas virtuales (QR permanentes que rotan cada 24h)
+    # Durante los 10 min después de medianoche se incluye el código anterior
+    # para que nadie quede afuera mientras la Pi descarga la nueva lista.
+    ahora = dt.datetime.utcnow()
+    ventana_gracia = (ahora.hour == 0 and ahora.minute < 10)
+    virtuales = TarjetaVirtual.query.filter_by(estado="activa").all()
+    for tv in virtuales:
+        nombre = None
+        if tv.residente and tv.residente.usuario:
+            nombre = f"{tv.residente.usuario.nombre} {tv.residente.usuario.apellido}"
+        tarjetas_out.append({
+            "card_uid": tv.codigo_hoy,
+            "tipo_acceso": tv.tipo_acceso,
+            "residente": nombre,
+            "es_virtual": True,
+        })
+        # Código anterior válido solo durante la ventana de gracia de 10 min
+        if ventana_gracia and tv.codigo_anterior:
+            tarjetas_out.append({
+                "card_uid": tv.codigo_anterior,
+                "tipo_acceso": tv.tipo_acceso,
+                "residente": nombre,
+                "es_virtual": True,
+            })
 
     # Registrar la última sincronización de esta Pi
     disp.ultima_sync = dt.datetime.utcnow()

@@ -315,3 +315,39 @@ def limpiar_tokens_revocados():
         sesiones = SesionActiva.query.filter(SesionActiva.expira_en < ahora).delete()
         db.session.commit()
         return {"tokens_eliminados": borrados, "sesiones_eliminadas": sesiones}
+
+
+@celery.task(name="tasks.rotar_tarjetas_virtuales")
+def rotar_tarjetas_virtuales():
+    """
+    Rotación diaria de los códigos QR permanentes (tarjetas virtuales).
+    Corre a las 00:00 todos los días.
+
+    Por qué dos códigos:
+      La Pi sincroniza cada 5 minutos. Si el código rota a medianoche exacta y
+      un residente madrugador llega a las 00:02, la Pi todavía tiene el código
+      viejo y le niega el acceso. Guardar el código anterior como válido durante
+      10 minutos elimina esa ventana. Después de las 00:10 solo vale el nuevo.
+    """
+    from app import create_app
+    from app.extensions import db
+    from app.models.cuenta import TarjetaVirtual
+    import secrets, datetime as dt
+
+    app = create_app()
+    with app.app_context():
+        tarjetas = TarjetaVirtual.query.filter_by(estado="activa").all()
+        total = 0
+        for tv in tarjetas:
+            # Guardar el código de hoy como anterior antes de rotarlo
+            tv.codigo_anterior = tv.codigo_hoy
+            # Nuevo código: prefijo SV + 10 dígitos aleatorios (evita colisión con tarjetas físicas)
+            while True:
+                nuevo = "SV" + str(secrets.randbelow(10**10)).zfill(10)
+                if not TarjetaVirtual.query.filter_by(codigo_hoy=nuevo).first():
+                    break
+            tv.codigo_hoy = nuevo
+            tv.rotado_en = dt.datetime.utcnow()
+            total += 1
+        db.session.commit()
+        return f"Rotadas {total} tarjetas virtuales"

@@ -46,4 +46,11 @@ celery.conf.beat_schedule = {
         "task": "tasks.avisar_cuotas_por_vencer",
         "schedule": crontab(hour=8, minute=0),
     },
+    # Rotación de tarjetas virtuales (QR permanentes) a medianoche
+    # El código anterior queda válido 10 min para evitar que nadie quede
+    # afuera mientras la Pi descarga la nueva lista en su próximo sync.
+    "rotar-tarjetas-virtuales": {
+        "task": "tasks.rotar_tarjetas_virtuales",
+        "schedule": crontab(hour=0, minute=0),
+    },
 }
