@@ -200,11 +200,9 @@ def wallet_pass(usuario_actual):
                 "barcode": {
                     "type": "QR_CODE",
                     "value": tv.codigo_hoy,
-                    "alternateText": "Código de acceso diario",
                 },
                 "textModulesData": [
                     {"header": "Tipo de acceso", "body": tv.tipo_acceso.capitalize(), "id": "tipo"},
-                    {"header": "Válido hasta", "body": "00:00 del día siguiente", "id": "vigencia"},
                 ],
                 "validTimeInterval": {
                     "start": {"date": dt.datetime.utcnow().isoformat() + "Z"},
@@ -221,8 +219,6 @@ def wallet_pass(usuario_actual):
     if not service_key:
         return jsonify({"data": {
             "modo": "desarrollo",
-            "codigo_hoy": tv.codigo_hoy,
-            "pass_object": pass_obj,
             "nota": "Configurá GOOGLE_SERVICE_ACCOUNT_KEY para habilitar Google Wallet",
         }})
 
@@ -239,3 +235,43 @@ def wallet_pass(usuario_actual):
         }})
     except Exception as e:
         return _err("wallet_error", f"No se pudo generar el pase: {str(e)}", 500)
+
+
+@tv_bp.post("/wallet-callback")
+def wallet_callback():
+    """
+    Google Wallet llama a este endpoint cuando el pase del residente expira
+    (a medianoche) para obtener el QR actualizado.
+
+    Google envía un JSON con el objeto del pase que necesita actualizar.
+    El servidor responde con el pase actualizado (nuevo codigo_hoy).
+
+    Este endpoint es público (sin token del residente) — Google se autentica
+    con su propia firma en el cuerpo del request.
+    """
+    data = request.get_json(silent=True) or {}
+    object_id = data.get("objectId", "")
+
+    # El object_id tiene formato: <issuer_id>.tv_<uuid_publico>
+    if ".tv_" not in object_id:
+        return _err("invalid_object", "ID de objeto inválido", 400)
+
+    uuid_str = object_id.split(".tv_")[-1]
+    tv = TarjetaVirtual.query.filter_by(uuid_publico=uuid_str, estado="activa").first()
+    if not tv:
+        return jsonify({"error": "Pass not found or inactive"}), 404
+
+    if tv.cuenta.bloqueada:
+        # Pase bloqueado por mora — Google lo marcará como expirado
+        return jsonify({"result": "PASS_SHOULD_BE_UPDATED", "expiredTimeMillis": 0}), 200
+
+    # Responder con el nuevo QR (Google lo actualiza silenciosamente en la Wallet)
+    return jsonify({
+        "result": "PASS_SHOULD_BE_UPDATED",
+        "updatedObject": {
+            "barcode": {
+                "type": "QR_CODE",
+                "value": tv.codigo_hoy,
+            }
+        }
+    })

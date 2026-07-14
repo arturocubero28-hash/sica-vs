@@ -323,11 +323,8 @@ def rotar_tarjetas_virtuales():
     Rotación diaria de los códigos QR permanentes (tarjetas virtuales).
     Corre a las 00:00 todos los días.
 
-    Por qué dos códigos:
-      La Pi sincroniza cada 5 minutos. Si el código rota a medianoche exacta y
-      un residente madrugador llega a las 00:02, la Pi todavía tiene el código
-      viejo y le niega el acceso. Guardar el código anterior como válido durante
-      10 minutos elimina esa ventana. Después de las 00:10 solo vale el nuevo.
+    Después de rotar, notifica a Google Wallet para que actualice los pases
+    en segundo plano — el residente no necesita abrir la app.
     """
     from app import create_app
     from app.extensions import db
@@ -338,16 +335,62 @@ def rotar_tarjetas_virtuales():
     with app.app_context():
         tarjetas = TarjetaVirtual.query.filter_by(estado="activa").all()
         total = 0
+        ids_actualizados = []
         for tv in tarjetas:
-            # Guardar el código de hoy como anterior antes de rotarlo
             tv.codigo_anterior = tv.codigo_hoy
-            # Nuevo código: prefijo SV + 10 dígitos aleatorios (evita colisión con tarjetas físicas)
             while True:
                 nuevo = "SV" + str(secrets.randbelow(10**10)).zfill(10)
                 if not TarjetaVirtual.query.filter_by(codigo_hoy=nuevo).first():
                     break
             tv.codigo_hoy = nuevo
             tv.rotado_en = dt.datetime.utcnow()
+            ids_actualizados.append(str(tv.uuid_publico))
             total += 1
         db.session.commit()
+
+        # Notificar a Google Wallet (si está configurado)
+        _notificar_wallet_actualizacion.delay(ids_actualizados)
+
         return f"Rotadas {total} tarjetas virtuales"
+
+
+@celery.task(name="tasks.notificar_wallet_actualizacion")
+def _notificar_wallet_actualizacion(uuids: list):
+    """
+    Llama a la Google Wallet API para marcar cada pase como desactualizado.
+    Google Wallet luego llama al callback del servidor para obtener el QR nuevo.
+    Si no está configurado Google Cloud, simplemente no hace nada.
+    """
+    from app import create_app
+    import json
+
+    app = create_app()
+    with app.app_context():
+        service_key = app.config.get("GOOGLE_SERVICE_ACCOUNT_KEY")
+        issuer_id = app.config.get("GOOGLE_ISSUER_ID")
+        if not service_key or not issuer_id:
+            return "Google Wallet no configurado — skip"
+
+        try:
+            import google.auth.crypt
+            import google.auth.transport.requests
+            import google.oauth2.service_account
+            import requests as req
+
+            creds = google.oauth2.service_account.Credentials.from_service_account_info(
+                json.loads(service_key),
+                scopes=["https://www.googleapis.com/auth/wallet_object.issuer"])
+            session = google.auth.transport.requests.AuthorizedSession(creds)
+
+            actualizados = 0
+            for uuid_str in uuids:
+                object_id = f"{issuer_id}.tv_{uuid_str}"
+                url = f"https://walletobjects.googleapis.com/walletobjects/v1/genericObject/{object_id}"
+                # PATCH con expire_time = ahora → Google sabe que debe pedir el refresh
+                resp = session.patch(url, json={"state": "ACTIVE"})
+                if resp.status_code in (200, 404):
+                    actualizados += 1
+
+            return f"Wallet notificado: {actualizados}/{len(uuids)} pases"
+        except Exception as e:
+            return f"Error notificando Wallet: {e}"
