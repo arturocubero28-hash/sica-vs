@@ -5,6 +5,10 @@ Flask-Cors==4.0.1
 Flask-SocketIO==5.3.6
 psycopg2-binary==2.9.9
 PyJWT==2.8.0
+# Google Wallet API (firmado de pases y notificaciones de actualización)
+google-auth==2.29.0
+google-auth-httplib2==0.2.0
+requests==2.31.0
 bcrypt==4.1.3
 redis==5.0.4
 celery==5.4.0

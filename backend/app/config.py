@@ -49,6 +49,19 @@ class Config:
     # al validar tarjetas. En producción debe setearse a un valor secreto.
     DEVICE_TOKEN = os.environ.get("DEVICE_TOKEN", "sicavs-device-dev")
 
+    # ── Google Wallet (tarjeta virtual de acceso) ──────────────────────────────
+    # GOOGLE_ISSUER_ID: el ID numérico del emisor en Google Pay & Wallet Console
+    #   → pay.google.com/business/console → URL contiene el issuer ID
+    # GOOGLE_SERVICE_ACCOUNT_EMAIL: email de la cuenta de servicio de Google Cloud
+    # GOOGLE_SERVICE_ACCOUNT_KEY: contenido completo del JSON descargado de GCP
+    #   (poner en una sola línea escapando las comillas, o usar un archivo montado)
+    # LOGO_URL: URL pública del logo para que aparezca en el pase de la Wallet
+    #   Ej: https://sicavs.villasdelsol.hn/logo-vs.png
+    GOOGLE_ISSUER_ID            = os.environ.get("GOOGLE_ISSUER_ID", "")
+    GOOGLE_SERVICE_ACCOUNT_EMAIL = os.environ.get("GOOGLE_SERVICE_ACCOUNT_EMAIL", "")
+    GOOGLE_SERVICE_ACCOUNT_KEY   = os.environ.get("GOOGLE_SERVICE_ACCOUNT_KEY", "")
+    LOGO_URL = os.environ.get("LOGO_URL", "")
+
 
 # Defaults inseguros que NUNCA deben usarse en producción
 _SECRETOS_INSEGUROS = {
