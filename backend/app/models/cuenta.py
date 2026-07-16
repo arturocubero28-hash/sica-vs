@@ -399,6 +399,73 @@ class TarjetaVirtual(db.Model):
 
 
 # ---------------------------------------------------------------------
+# CREDENCIAL BLE: acceso por Bluetooth de baja energía, atado al dispositivo
+#
+# A diferencia de la tarjeta virtual (QR), la credencial BLE está ATADA a un
+# dispositivo físico específico (device_id). No basta con tener la cuenta
+# abierta — el acceso solo funciona en el teléfono registrado.
+#
+# Defensas implementadas:
+#   1. Atada al device_id — un login en otro teléfono NO hereda el acceso BLE
+#   2. Clave secreta única por credencial (para el desafío-respuesta)
+#   3. Rolling counter — cada uso incrementa un contador; el lector rechaza
+#      un contador menor o igual al último visto (anti-repetición)
+#   4. Token rotado cada 24h igual que el QR
+#   5. Máximo 1 dispositivo activo por residente (registrar otro revoca el anterior)
+#   6. Verificación de proximidad (RSSI) — se valida en el lector, no aquí
+# ---------------------------------------------------------------------
+class CredencialBLE(db.Model):
+    __tablename__ = "credenciales_ble"
+
+    id            = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico  = _uuid_col()
+    cuenta_id     = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
+    residente_id  = db.Column(db.BigInteger, db.ForeignKey("residentes.id"), nullable=False)
+
+    # Identificador único del dispositivo físico (generado en el teléfono al activar)
+    device_id     = db.Column(db.String(128), nullable=False)
+    device_nombre = db.Column(db.String(120))  # ej. "Samsung Galaxy S24" para mostrar al usuario
+
+    # Token BLE del día (lo que el teléfono transmite al lector, rota cada 24h)
+    token_hoy      = db.Column(db.String(32), nullable=False, unique=True)
+    token_anterior = db.Column(db.String(32))  # ventana de gracia de 10 min
+
+    # Clave secreta para el desafío-respuesta (HMAC). Nunca sale del servidor
+    # ni del teléfono en texto plano — se usa para firmar el challenge del lector.
+    clave_secreta = db.Column(db.String(64), nullable=False)
+
+    # Rolling counter anti-repetición. El lector rechaza contadores <= al último visto.
+    contador      = db.Column(db.BigInteger, nullable=False, default=0)
+
+    estado       = db.Column(db.String(20), nullable=False, default="activa")  # activa | suspendida
+    tipo_acceso  = db.Column(db.String(20), nullable=False, default="peatonal")
+    rotado_en    = db.Column(db.DateTime(timezone=True), default=_now)
+    ultimo_uso   = db.Column(db.DateTime(timezone=True))
+    created_at   = db.Column(db.DateTime(timezone=True), default=_now)
+
+    cuenta    = db.relationship("Cuenta", lazy="joined")
+    residente = db.relationship("Residente", lazy="joined")
+
+    def to_dict(self, incluir_secretos=False):
+        titular = self.residente.usuario if self.residente else None
+        d = {
+            "id": str(self.uuid_publico),
+            "estado": self.estado,
+            "tipo_acceso": self.tipo_acceso,
+            "device_nombre": self.device_nombre,
+            "rotado_en": self.rotado_en.isoformat() if self.rotado_en else None,
+            "ultimo_uso": self.ultimo_uso.isoformat() if self.ultimo_uso else None,
+            "titular": f"{titular.nombre} {titular.apellido}" if titular else None,
+        }
+        # La clave secreta y el token solo se envían al dispositivo dueño al activar
+        if incluir_secretos:
+            d["token_hoy"] = self.token_hoy
+            d["clave_secreta"] = self.clave_secreta
+            d["contador"] = self.contador
+        return d
+
+
+# ---------------------------------------------------------------------
 # CUOTA: cuota mensual generada automáticamente por Celery
 # ---------------------------------------------------------------------
 class Cuota(db.Model):

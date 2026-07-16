@@ -31,3 +31,24 @@ CREATE TABLE IF NOT EXISTS tarjetas_virtuales (
 );
 CREATE INDEX IF NOT EXISTS idx_tarjetas_virtuales_codigo_hoy ON tarjetas_virtuales(codigo_hoy);
 CREATE INDEX IF NOT EXISTS idx_tarjetas_virtuales_codigo_anterior ON tarjetas_virtuales(codigo_anterior);
+
+-- Credenciales BLE (acceso por Bluetooth, atado al dispositivo)
+CREATE TABLE IF NOT EXISTS credenciales_ble (
+    id             BIGSERIAL PRIMARY KEY,
+    uuid_publico   UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+    cuenta_id      BIGINT NOT NULL REFERENCES cuentas(id),
+    residente_id   BIGINT NOT NULL REFERENCES residentes(id),
+    device_id      VARCHAR(128) NOT NULL,
+    device_nombre  VARCHAR(120),
+    token_hoy      VARCHAR(32) NOT NULL UNIQUE,
+    token_anterior VARCHAR(32),
+    clave_secreta  VARCHAR(64) NOT NULL,
+    contador       BIGINT NOT NULL DEFAULT 0,
+    estado         VARCHAR(20) NOT NULL DEFAULT 'activa',
+    tipo_acceso    VARCHAR(20) NOT NULL DEFAULT 'peatonal',
+    rotado_en      TIMESTAMPTZ DEFAULT now(),
+    ultimo_uso     TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_credenciales_ble_token_hoy ON credenciales_ble(token_hoy);
+CREATE INDEX IF NOT EXISTS idx_credenciales_ble_residente ON credenciales_ble(residente_id);

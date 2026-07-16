@@ -351,7 +351,28 @@ def rotar_tarjetas_virtuales():
         # Notificar a Google Wallet (si está configurado)
         _notificar_wallet_actualizacion.delay(ids_actualizados)
 
+        # Rotar también los tokens BLE
+        _rotar_credenciales_ble()
+
         return f"Rotadas {total} tarjetas virtuales"
+
+
+def _rotar_credenciales_ble():
+    """Rota los tokens BLE a medianoche, igual que las tarjetas virtuales.
+    El token anterior queda válido 10 min (ventana de gracia en el sync)."""
+    from app.models.cuenta import CredencialBLE
+    import secrets
+
+    creds = CredencialBLE.query.filter_by(estado="activa").all()
+    for c in creds:
+        c.token_anterior = c.token_hoy
+        while True:
+            nuevo = "BLE" + secrets.token_hex(8).upper()
+            if not CredencialBLE.query.filter_by(token_hoy=nuevo).first():
+                break
+        c.token_hoy = nuevo
+        c.rotado_en = dt.datetime.utcnow()
+    db.session.commit()
 
 
 @celery.task(name="tasks.notificar_wallet_actualizacion")

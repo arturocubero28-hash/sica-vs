@@ -122,6 +122,9 @@ def create_app(config_class=Config):
     from app.api.tarjeta_virtual import tv_bp
     app.register_blueprint(tv_bp, url_prefix="/api/v1/acceso")
 
+    from app.api.credencial_ble import ble_bp
+    app.register_blueprint(ble_bp, url_prefix="/api/v1/acceso")
+
     # Inicializar Firebase Cloud Messaging (notificaciones push).
     # Si no está configurado (falta el archivo de credenciales), no rompe:
     # el servicio simplemente omite el envío de notificaciones.

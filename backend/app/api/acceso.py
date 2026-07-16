@@ -29,7 +29,7 @@ import hmac
 from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db, limiter
-from app.models.cuenta import Tarjeta, Cuenta, TarjetaVirtual
+from app.models.cuenta import Tarjeta, Cuenta, TarjetaVirtual, CredencialBLE
 from app.models.visita import EventoAcceso, AccesoFisico
 from app.models.dispositivo import Dispositivo
 from app.models.camara import Camara
@@ -210,6 +210,31 @@ def sincronizar():
                 "es_virtual": True,
             })
 
+    # Credenciales BLE (Bluetooth). El lector BLE valida el desafío-respuesta
+    # con la clave secreta; la Pi solo necesita conocer los tokens válidos y
+    # sus claves para pasárselas al lector.
+    credenciales_ble = CredencialBLE.query.filter_by(estado="activa").all()
+    ble_out = []
+    for c in credenciales_ble:
+        nombre = None
+        if c.residente and c.residente.usuario:
+            nombre = f"{c.residente.usuario.nombre} {c.residente.usuario.apellido}"
+        ble_out.append({
+            "token": c.token_hoy,
+            "clave_secreta": c.clave_secreta,
+            "contador": c.contador,
+            "tipo_acceso": c.tipo_acceso,
+            "residente": nombre,
+        })
+        if ventana_gracia and c.token_anterior:
+            ble_out.append({
+                "token": c.token_anterior,
+                "clave_secreta": c.clave_secreta,
+                "contador": c.contador,
+                "tipo_acceso": c.tipo_acceso,
+                "residente": nombre,
+            })
+
     # Registrar la última sincronización de esta Pi
     disp.ultima_sync = dt.datetime.utcnow()
     db.session.commit()
@@ -219,6 +244,7 @@ def sincronizar():
         "generado_en": dt.datetime.utcnow().isoformat() + "Z",
         "accesos": [a.to_dict() for a in accesos],
         "tarjetas": tarjetas_out,
+        "credenciales_ble": ble_out,
     }})
 
 
