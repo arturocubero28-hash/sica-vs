@@ -233,14 +233,61 @@ def wallet_pass(usuario_actual):
     try:
         import google.auth.crypt
         import google.auth.jwt
-        signer = google.auth.crypt.RSASigner.from_service_account_info(json.loads(service_key))
-        token = google.auth.jwt.encode(signer, pass_obj).decode("utf-8")
+        import google.oauth2.service_account
+        import google.auth.transport.requests
+        import requests as req
+
+        key_data = json.loads(service_key)
+        object_id = f"{issuer_id}.tv_{tv.uuid_publico}"
+        class_id  = f"{issuer_id}.acceso_residencial"
+        titular   = residente.usuario
+        nombre    = f"{titular.nombre} {titular.apellido}" if titular else "Residente"
+
+        # Credenciales para la API REST
+        creds = google.oauth2.service_account.Credentials.from_service_account_info(
+            key_data,
+            scopes=["https://www.googleapis.com/auth/wallet_object.issuer"])
+        session = google.auth.transport.requests.AuthorizedSession(creds)
+
+        # Definición del objeto genérico
+        generic_object = {
+            "id": object_id,
+            "classId": class_id,
+            "genericType": "GENERIC_TYPE_UNSPECIFIED",
+            "hexBackgroundColor": "#022E45",
+            "cardTitle": {"defaultValue": {"language": "es", "value": "Residencial Villas del Sol"}},
+            "subheader": {"defaultValue": {"language": "es", "value": "Tarjeta de Acceso"}},
+            "header": {"defaultValue": {"language": "es", "value": nombre}},
+            "barcode": {"type": "QR_CODE", "value": tv.codigo_hoy},
+            "textModulesData": [
+                {"header": "Tipo de acceso", "body": tv.tipo_acceso.capitalize(), "id": "tipo"},
+            ],
+            "state": "ACTIVE",
+        }
+
+        # Intentar crear el objeto; si ya existe (409) actualizarlo con PATCH
+        api_base = "https://walletobjects.googleapis.com/walletobjects/v1/genericObject"
+        r = session.post(api_base, json=generic_object)
+        if r.status_code == 409:
+            # Ya existe — actualizar el QR con el código del día
+            session.patch(f"{api_base}/{object_id}",
+                json={"barcode": {"type": "QR_CODE", "value": tv.codigo_hoy}})
+
+        # Generar el JWT para el botón "Agregar a Wallet"
+        signer = google.auth.crypt.RSASigner.from_service_account_info(key_data)
+        token = google.auth.jwt.encode(signer, {
+            "iss": key_data["client_email"],
+            "aud": "google",
+            "typ": "savetowallet",
+            "iat": int(dt.datetime.utcnow().timestamp()),
+            "payload": {"genericObjects": [{"id": object_id}]},
+        }).decode("utf-8")
+
         wallet_url = f"https://pay.google.com/gp/v/save/{token}"
-        return jsonify({"data": {
-            "wallet_url": wallet_url,
-            "codigo_hoy": tv.codigo_hoy,
-        }})
+        return jsonify({"data": {"wallet_url": wallet_url}})
+
     except Exception as e:
+        current_app.logger.error(f"Google Wallet error: {e}")
         return _err("wallet_error", f"No se pudo generar el pase: {str(e)}", 500)
 
 
