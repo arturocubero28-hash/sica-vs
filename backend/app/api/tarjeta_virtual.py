@@ -215,7 +215,14 @@ def wallet_pass(usuario_actual):
 
     # Si no están configuradas las credenciales de Google → devolver el objeto
     # sin firmar (modo desarrollo / Apple Wallet usa el QR directo)
+    # Si no está en variable de entorno, intentar desde archivo montado
     service_key = current_app.config.get("GOOGLE_SERVICE_ACCOUNT_KEY")
+    if not service_key:
+        import os
+        key_file = "/app/google-wallet-key.json"
+        if os.path.exists(key_file):
+            with open(key_file) as f:
+                service_key = f.read()
     if not service_key:
         return jsonify({"data": {
             "modo": "desarrollo",

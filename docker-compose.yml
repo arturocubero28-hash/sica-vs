@@ -56,6 +56,12 @@ services:
       WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
       WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:5173}
       WEBAUTHN_RP_NAME: SICA-VS Villas del Sol
+      # Google Wallet — copiá el JSON descargado a backend/google-wallet-key.json
+      # y descomentá estas 3 líneas:
+      # GOOGLE_ISSUER_ID: "3388000000023171269"
+      # GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
+      # GOOGLE_SERVICE_ACCOUNT_KEY: ${GOOGLE_SERVICE_ACCOUNT_KEY:-}
+      # LOGO_URL: "https://diabetes-earflap-faction.ngrok-free.dev/static/logo-vs.png"
     depends_on:
       db:
         condition: service_healthy
