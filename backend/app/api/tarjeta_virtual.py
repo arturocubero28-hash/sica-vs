@@ -238,6 +238,7 @@ def wallet_pass(usuario_actual):
         import requests as req
 
         key_data = json.loads(service_key)
+        issuer_id = current_app.config.get("GOOGLE_ISSUER_ID", "")
         object_id = f"{issuer_id}.tv_{tv.uuid_publico}"
         class_id  = f"{issuer_id}.acceso_residencial"
         titular   = residente.usuario
