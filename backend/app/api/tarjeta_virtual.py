@@ -253,6 +253,7 @@ def wallet_pass(usuario_actual):
         session = google.auth.transport.requests.AuthorizedSession(creds)
 
         # Definición del objeto genérico
+        logo_url = current_app.config.get("LOGO_URL", "")
         generic_object = {
             "id": object_id,
             "classId": class_id,
@@ -267,6 +268,11 @@ def wallet_pass(usuario_actual):
             ],
             "state": "ACTIVE",
         }
+        if logo_url:
+            generic_object["logo"] = {
+                "sourceUri": {"uri": logo_url},
+                "contentDescription": {"defaultValue": {"language": "es", "value": "SICA-VS"}},
+            }
 
         # Verificar que la clase exista; si no, crearla vía API
         # (la clase creada desde la consola web a veces no es visible para
@@ -299,9 +305,11 @@ def wallet_pass(usuario_actual):
         r = session.post(api_base, json=generic_object)
         current_app.logger.info(f"Google Wallet POST object: {r.status_code} — {r.text[:500]}")
         if r.status_code == 409:
-            # Ya existe — actualizar el QR con el código del día
-            r2 = session.patch(f"{api_base}/{object_id}",
-                json={"barcode": {"type": "QR_CODE", "value": tv.codigo_hoy}})
+            # Ya existe — actualizar el QR del día y refrescar el logo por si cambió
+            patch_body = {"barcode": {"type": "QR_CODE", "value": tv.codigo_hoy}}
+            if logo_url:
+                patch_body["logo"] = generic_object.get("logo")
+            r2 = session.patch(f"{api_base}/{object_id}", json=patch_body)
             current_app.logger.info(f"Google Wallet PATCH object: {r2.status_code} — {r2.text[:500]}")
         elif r.status_code not in (200, 201):
             current_app.logger.error(f"Google Wallet object creation failed: {r.status_code} {r.text}")
