@@ -239,7 +239,9 @@ def wallet_pass(usuario_actual):
 
         key_data = json.loads(service_key)
         issuer_id = current_app.config.get("GOOGLE_ISSUER_ID", "")
-        object_id = f"{issuer_id}.tv_{tv.uuid_publico}"
+        # Google no acepta guiones en el object id — se quitan del uuid
+        uuid_limpio = str(tv.uuid_publico).replace("-", "")
+        object_id = f"{issuer_id}.tv{uuid_limpio}"
         class_id  = f"{issuer_id}.acceso_residencial"
         titular   = residente.usuario
         nombre    = f"{titular.nombre} {titular.apellido}" if titular else "Residente"
@@ -307,11 +309,16 @@ def wallet_callback():
     data = request.get_json(silent=True) or {}
     object_id = data.get("objectId", "")
 
-    # El object_id tiene formato: <issuer_id>.tv_<uuid_publico>
-    if ".tv_" not in object_id:
+    # El object_id tiene formato: <issuer_id>.tv<uuid_sin_guiones>
+    if ".tv" not in object_id:
         return _err("invalid_object", "ID de objeto inválido", 400)
 
-    uuid_str = object_id.split(".tv_")[-1]
+    uuid_hex = object_id.split(".tv")[-1]
+    # Reconstruir el UUID con guiones (8-4-4-4-12)
+    if len(uuid_hex) == 32:
+        uuid_str = f"{uuid_hex[0:8]}-{uuid_hex[8:12]}-{uuid_hex[12:16]}-{uuid_hex[16:20]}-{uuid_hex[20:32]}"
+    else:
+        uuid_str = uuid_hex
     tv = TarjetaVirtual.query.filter_by(uuid_publico=uuid_str, estado="activa").first()
     if not tv:
         return jsonify({"error": "Pass not found or inactive"}), 404
