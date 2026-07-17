@@ -271,10 +271,15 @@ def wallet_pass(usuario_actual):
         # Intentar crear el objeto; si ya existe (409) actualizarlo con PATCH
         api_base = "https://walletobjects.googleapis.com/walletobjects/v1/genericObject"
         r = session.post(api_base, json=generic_object)
+        current_app.logger.info(f"Google Wallet POST object: {r.status_code} — {r.text[:500]}")
         if r.status_code == 409:
             # Ya existe — actualizar el QR con el código del día
-            session.patch(f"{api_base}/{object_id}",
+            r2 = session.patch(f"{api_base}/{object_id}",
                 json={"barcode": {"type": "QR_CODE", "value": tv.codigo_hoy}})
+            current_app.logger.info(f"Google Wallet PATCH object: {r2.status_code} — {r2.text[:500]}")
+        elif r.status_code not in (200, 201):
+            current_app.logger.error(f"Google Wallet object creation failed: {r.status_code} {r.text}")
+            return _err("wallet_error", f"Google rechazó el objeto: {r.text[:200]}", 500)
 
         # Generar el JWT para el botón "Agregar a Wallet"
         signer = google.auth.crypt.RSASigner.from_service_account_info(key_data)
