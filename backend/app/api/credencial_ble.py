@@ -98,7 +98,7 @@ def activar_ble(usuario_actual):
         clave_secreta=secrets.token_hex(32),  # 64 chars — clave HMAC
         contador=0,
         estado="activa",
-        tipo_acceso="peatonal",
+        tipo_acceso=cuenta.tipo_acceso_virtual,
     )
     db.session.add(cred)
     db.session.commit()
@@ -146,6 +146,7 @@ def reactivar_ble(usuario_actual):
     cred.clave_secreta = secrets.token_hex(32)
     cred.contador = 0
     cred.estado = "activa"
+    cred.tipo_acceso = cuenta.tipo_acceso_virtual  # por si el admin lo cambió mientras estaba suspendida
     cred.rotado_en = dt.datetime.utcnow()
     db.session.commit()
     return jsonify({"data": cred.to_dict(incluir_secretos=True)})

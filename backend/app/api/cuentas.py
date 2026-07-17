@@ -306,9 +306,13 @@ def crear_cuenta(usuario_actual):
         return _err("titular_invalido", token_o_error, 400)
 
     # crear la cuenta
+    tipo_acceso_virtual = data.get("tipo_acceso_virtual", "peatonal")
+    if tipo_acceso_virtual not in ("peatonal", "vehicular"):
+        tipo_acceso_virtual = "peatonal"
     cuenta = Cuenta(
         unidad_id=unidad.id, apartamento=apartamento if not es_solo_contenedor else None,
         tarifa_id=tarifa.id if tarifa else None, dia_pago=dia_pago,
+        tipo_acceso_virtual=tipo_acceso_virtual,
     )
     db.session.add(cuenta)
     db.session.flush()
@@ -403,6 +407,10 @@ def editar_cuenta(usuario_actual, cuenta_uuid):
     body = request.get_json(silent=True) or {}
     if "qr_recurrente_habilitado" in body:
         cuenta.qr_recurrente_habilitado = bool(body["qr_recurrente_habilitado"])
+    if "tipo_acceso_virtual" in body:
+        valor = body["tipo_acceso_virtual"]
+        if valor in ("peatonal", "vehicular"):
+            cuenta.tipo_acceso_virtual = valor
     if "dia_pago" in body:
         dp = int(body["dia_pago"])
         if 1 <= dp <= 28:

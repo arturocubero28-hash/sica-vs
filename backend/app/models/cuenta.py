@@ -84,6 +84,13 @@ class Cuenta(db.Model):
     # Solo la administración puede habilitar la generación de QR recurrentes
     # para una cuenta. Por defecto está deshabilitado (Día 29).
     qr_recurrente_habilitado = db.Column(db.Boolean, nullable=False, default=False)
+    # Tipo de acceso que el admin autoriza para las credenciales virtuales
+    # (QR permanente y BLE) de esta cuenta — misma idea que el tipo_acceso
+    # de las tarjetas físicas: 'peatonal' o 'vehicular'. Las cuentas con
+    # tarifa reducida suelen limitarse a 'peatonal'. Este valor se copia a
+    # TarjetaVirtual/CredencialBLE al activarlas, así la Pi filtra igual
+    # que ya filtra las tarjetas físicas por tipo_acceso.
+    tipo_acceso_virtual = db.Column(db.String(20), nullable=False, default="peatonal")
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -199,6 +206,7 @@ class Cuenta(db.Model):
             "bloqueada": self.bloqueada,
             "activa": self.activa,
             "qr_recurrente_habilitado": self.qr_recurrente_habilitado,
+            "tipo_acceso_virtual": self.tipo_acceso_virtual,
             "tarifa": self.tarifa.nombre if self.tarifa else None,
             "monto": float(self.tarifa.monto) if self.tarifa else None,
             "titular": t.to_dict() if t else None,

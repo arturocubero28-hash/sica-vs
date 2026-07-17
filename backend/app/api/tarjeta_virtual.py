@@ -94,7 +94,7 @@ def activar_tarjeta_virtual(usuario_actual):
         residente_id=residente.id,
         codigo_hoy=codigo,
         estado="activa",
-        tipo_acceso="peatonal",
+        tipo_acceso=cuenta.tipo_acceso_virtual,
     )
     db.session.add(tv)
     db.session.commit()
@@ -141,6 +141,7 @@ def reactivar_tarjeta_virtual(usuario_actual):
     tv.codigo_anterior = None  # no aceptar el código viejo bajo ninguna circunstancia
     tv.codigo_hoy = _generar_codigo_unico()
     tv.estado = "activa"
+    tv.tipo_acceso = cuenta.tipo_acceso_virtual  # por si el admin lo cambió mientras estaba suspendida
     tv.rotado_en = dt.datetime.utcnow()
     db.session.commit()
     return jsonify({"data": tv.to_dict()})

@@ -52,3 +52,7 @@ CREATE TABLE IF NOT EXISTS credenciales_ble (
 );
 CREATE INDEX IF NOT EXISTS idx_credenciales_ble_token_hoy ON credenciales_ble(token_hoy);
 CREATE INDEX IF NOT EXISTS idx_credenciales_ble_residente ON credenciales_ble(residente_id);
+
+-- Tipo de acceso que el admin autoriza para credenciales virtuales (QR/BLE)
+-- de cada cuenta. Mismo concepto que el tipo_acceso de las tarjetas físicas.
+ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS tipo_acceso_virtual VARCHAR(20) NOT NULL DEFAULT 'peatonal';
