@@ -134,6 +134,7 @@ export interface Cuenta {
   bloqueada: boolean; activa?: boolean; tarifa: string; monto: number;
   titular?: ResidenteDTO; total_residentes: number; total_tarjetas: number;
   cuotas_pendientes?: number; qr_recurrente_habilitado?: boolean; created_at?: string;
+  tipo_acceso_virtual?: "peatonal" | "vehicular";
   residentes?: ResidenteDTO[]; tarjetas?: TarjetaDTO[];
   unidad?: UnidadDetalle; cuotas_recientes?: CuotaResumen[];
   apartamentos?: ApartamentoResumen[];
@@ -198,11 +199,13 @@ export const crearUnidad = (body: { tipo: string; identificador: string; direcci
 
 
 export interface NuevaCuenta {
-  unidad_id?: string; unidad_nueva?: { tipo: "casa" | "edificio"; identificador: string };
-  apartamento?: string; tarifa_id: number; dia_pago: number;
-  codigo_enrolamiento?: string; es_dueno_edificio?: boolean;
+  unidad_id?: string; unidad_nueva?: { tipo: "casa" | "edificio"; identificador: string; max_apartamentos?: number };
+  apartamento?: string; tarifa_id?: number; dia_pago: number;
+  codigo_enrolamiento?: string; es_dueno_edificio?: boolean; es_solo_contenedor?: boolean;
+  tipo_acceso_virtual?: "peatonal" | "vehicular";
   titular: { nombre: string; apellido: string; email: string; telefono?: string; relacion?: string;
     dni?: string; rtn?: string; direccion_exacta?: string; profesion?: string;
+    ocupacion?: string; centro_estudios?: string; lugar_trabajo?: string;
     contacto_emergencia_nombre?: string; contacto_emergencia_telefono?: string };
 }
 export const crearCuenta = (body: NuevaCuenta) =>
@@ -1068,6 +1071,16 @@ export const toggleQrRecurrente = (cuentaUuid: string, habilitado: boolean) =>
   request<object>(
     `/unidades/cuentas/${cuentaUuid}`,
     { method: "PUT", body: JSON.stringify({ qr_recurrente_habilitado: habilitado }) });
+
+// ── Tipo de acceso virtual (QR/BLE) por cuenta (admin) ──────────────────────
+// Define qué trancas puede abrir el QR permanente y el BLE de los residentes
+// de esta cuenta. Mismo concepto que el tipo_acceso de las tarjetas físicas,
+// pero configurado a nivel de cuenta porque el residente activa QR/BLE
+// cuando quiere, no el admin al momento de entregar una tarjeta.
+export const editarTipoAccesoVirtual = (cuentaUuid: string, tipo: "peatonal" | "vehicular") =>
+  request<object>(
+    `/unidades/cuentas/${cuentaUuid}`,
+    { method: "PUT", body: JSON.stringify({ tipo_acceso_virtual: tipo }) });
 
 export const editarUnidad = (unidadUuid: string, body: { max_apartamentos?: number | null; max_residentes_extra?: number | null }) =>
   request<UnidadDetalle>(

@@ -3054,6 +3054,22 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 .switch input:checked + .switch-slider::before { transform: translateX(18px); }
 .switch input:disabled + .switch-slider { opacity: 0.6; cursor: not-allowed; }
 
+/* Segmented control (2 opciones, ej. tipo de acceso virtual) */
+.segmented {
+  display: inline-flex; background: #f0f4f8; border: 1px solid #e3e9f2;
+  border-radius: 8px; padding: 3px; flex-shrink: 0;
+}
+.segmented button {
+  border: none; background: transparent; padding: 6px 14px; font-size: 12.5px;
+  font-weight: 600; color: #64748b; border-radius: 6px; cursor: pointer;
+  transition: 0.15s;
+}
+.segmented button:hover:not(:disabled):not(.segmented-activo) { color: #334155; }
+.segmented button:disabled { cursor: not-allowed; opacity: 0.6; }
+.segmented-activo {
+  background: var(--azul2, #044a6e) !important; color: #fff !important;
+}
+
 /* Distinción visual: cuenta contenedora de edificio vs apartamentos */
 /* ── Filas por tipo ── */
 .fila-edificio { background: #f0f6fb; }

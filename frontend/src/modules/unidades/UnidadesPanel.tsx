@@ -4,7 +4,7 @@ import {
   detalleCuenta, agregarMiembro, quitarMiembro, regenerarEnlace,
   asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
   crearTarifa, editarTarifa, desactivarTarifa,
-  validarCodigoEnrolamiento, toggleQrRecurrente, editarUnidad,
+  validarCodigoEnrolamiento, toggleQrRecurrente, editarTipoAccesoVirtual, editarUnidad,
   listarSolicitudesBaja, resolverSolicitudBaja, nivelarSaldo,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO, type SolicitudBajaDTO,
 } from "../../api/client";
@@ -227,6 +227,7 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
   const [apartamento, setApartamento] = useState("");
   const [tarifaId, setTarifaId] = useState<number>(0);
   const [diaPago, setDiaPago] = useState<number>(new Date().getDate() > 28 ? 28 : new Date().getDate());
+  const [tipoAccesoVirtualAlta, setTipoAccesoVirtualAlta] = useState<"peatonal" | "vehicular">("peatonal");
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
   const [email, setEmail] = useState("");
@@ -364,6 +365,7 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
         apartamento: (esEdificio && !esDuenoSinVivienda) ? apartamento : undefined,
         tarifa_id: esDuenoSinVivienda ? undefined : tarifaId,
         dia_pago: esDuenoSinVivienda ? 1 : diaPago,
+        tipo_acceso_virtual: tipoAccesoVirtualAlta,
         codigo_enrolamiento: codigoEnrol.trim() || undefined,
         es_dueno_edificio: esEdificio && modoUnidad === "nueva" && !enrolInfo,
         es_solo_contenedor: esDuenoSinVivienda || undefined,
@@ -596,6 +598,23 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
                 onChange={(e) => setDiaPago(Number(e.target.value))} />
             </label>
           </div>
+          <div className="row" style={{ alignItems: "center", marginTop: 10 }}>
+            <span className="muted small" style={{ marginRight: 10 }}>
+              Acceso virtual (QR/Bluetooth) de esta cuenta:
+            </span>
+            <div className="segmented" role="group" aria-label="Tipo de acceso virtual">
+              <button type="button"
+                className={tipoAccesoVirtualAlta === "peatonal" ? "segmented-activo" : ""}
+                onClick={() => setTipoAccesoVirtualAlta("peatonal")}>
+                Peatonal
+              </button>
+              <button type="button"
+                className={tipoAccesoVirtualAlta === "vehicular" ? "segmented-activo" : ""}
+                onClick={() => setTipoAccesoVirtualAlta("vehicular")}>
+                Vehicular
+              </button>
+            </div>
+          </div>
           </div>
           )}
 
@@ -705,6 +724,9 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   const [etiqueta, setEtiqueta] = useState("");
   const [qrRecurrente, setQrRecurrente] = useState(cuenta.qr_recurrente_habilitado ?? false);
   const [guardandoQr, setGuardandoQr] = useState(false);
+  const [tipoAccesoVirtual, setTipoAccesoVirtual] = useState<"peatonal" | "vehicular">(
+    cuenta.tipo_acceso_virtual ?? "peatonal");
+  const [guardandoTipoVirtual, setGuardandoTipoVirtual] = useState(false);
   const [maxAptos, setMaxAptos] = useState(cuenta.unidad?.max_apartamentos?.toString() ?? "");
   const [guardandoAptos, setGuardandoAptos] = useState(false);
   const [msgConfig, setMsgConfig] = useState("");
@@ -738,6 +760,18 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
       setTimeout(() => setMsgConfig(""), 2500);
     } catch (e) { setMsgConfig((e as Error).message); }
     finally { setGuardandoQr(false); }
+  }
+
+  async function guardarTipoAccesoVirtual(valor: "peatonal" | "vehicular") {
+    setGuardandoTipoVirtual(true); setMsgConfig("");
+    try {
+      await editarTipoAccesoVirtual(cuenta.id, valor);
+      setTipoAccesoVirtual(valor);
+      setMsgConfig("✓ Guardado");
+      onCambio();
+      setTimeout(() => setMsgConfig(""), 2500);
+    } catch (e) { setMsgConfig((e as Error).message); }
+    finally { setGuardandoTipoVirtual(false); }
   }
 
   async function guardarMaxAptos() {
@@ -907,6 +941,35 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
                 onChange={(e) => guardarQrRecurrente(e.target.checked)} />
               <span className="switch-slider" />
             </label>
+          </div>
+
+          <div className="detalle-config-fila" style={{ marginTop: 10 }}>
+            <div>
+              <b>Acceso virtual (QR y Bluetooth)</b>
+              <p className="muted small" style={{ margin: "2px 0 0" }}>
+                Qué trancas puede abrir la tarjeta de acceso digital de los residentes
+                de esta cuenta — igual criterio que las tarjetas físicas. Las cuentas
+                con tarifa reducida suelen limitarse a peatonal.
+              </p>
+            </div>
+            <div className="segmented" role="group" aria-label="Tipo de acceso virtual">
+              <button
+                type="button"
+                className={tipoAccesoVirtual === "peatonal" ? "segmented-activo" : ""}
+                disabled={guardandoTipoVirtual}
+                onClick={() => guardarTipoAccesoVirtual("peatonal")}
+              >
+                Peatonal
+              </button>
+              <button
+                type="button"
+                className={tipoAccesoVirtual === "vehicular" ? "segmented-activo" : ""}
+                disabled={guardandoTipoVirtual}
+                onClick={() => guardarTipoAccesoVirtual("vehicular")}
+              >
+                Vehicular
+              </button>
+            </div>
           </div>
 
           {(cuenta.tipo_cuenta === "edificio_contenedor" || cuenta.tipo_cuenta === "edificio_admin") && (
