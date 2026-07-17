@@ -268,6 +268,32 @@ def wallet_pass(usuario_actual):
             "state": "ACTIVE",
         }
 
+        # Verificar que la clase exista; si no, crearla vía API
+        # (la clase creada desde la consola web a veces no es visible para
+        # la API REST hasta que el Perfil de Empresa está aprobado)
+        class_url = f"https://walletobjects.googleapis.com/walletobjects/v1/genericClass/{class_id}"
+        rc = session.get(class_url)
+        current_app.logger.info(f"Google Wallet GET class: {rc.status_code}")
+        if rc.status_code == 404:
+            clase = {
+                "id": class_id,
+                "classTemplateInfo": {
+                    "cardTemplateOverride": {
+                        "cardRowTemplateInfos": [{
+                            "twoItems": {
+                                "startItem": {"firstValue": {"fields": [
+                                    {"fieldPath": "object.textModulesData['tipo']"}
+                                ]}},
+                            }
+                        }]
+                    }
+                },
+            }
+            rc2 = session.post(
+                "https://walletobjects.googleapis.com/walletobjects/v1/genericClass",
+                json=clase)
+            current_app.logger.info(f"Google Wallet CREATE class: {rc2.status_code} — {rc2.text[:300]}")
+
         # Intentar crear el objeto; si ya existe (409) actualizarlo con PATCH
         api_base = "https://walletobjects.googleapis.com/walletobjects/v1/genericObject"
         r = session.post(api_base, json=generic_object)
