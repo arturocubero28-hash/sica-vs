@@ -594,6 +594,10 @@ export interface EventoHistorialDTO {
   punto_acceso?: string; tranca?: string;
   placa_observada?: string; placa_no_coincide?: boolean;
   foto_identidad?: string; foto_placa?: string; foto_numero_asignado?: string;
+  // Detalle completo de la visita (Día 36)
+  autorizado_por?: string; tipo_visita?: string; documento_id?: string;
+  telefono?: string; empresa?: string; en_vehiculo?: boolean;
+  visita_creada_en?: string;
 }
 export interface HistorialDTO {
   eventos: EventoHistorialDTO[];

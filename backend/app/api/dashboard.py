@@ -319,6 +319,13 @@ def historial_accesos(usuario_actual):
         punto_acceso = acceso.punto_acceso if acceso else None
         tranca = acceso.nombre if acceso else None
 
+        # Quién generó/autorizó la visita (el residente) — dato pedido
+        # explícitamente por el usuario: "quién lo dejó entrar".
+        autorizado_por = None
+        if visita and visita.residente and visita.residente.usuario:
+            u = visita.residente.usuario
+            autorizado_por = f"{u.nombre} {u.apellido}"
+
         # ¿Esta visita está adentro ahora mismo?
         esta_adentro = visita.id in ids_adentro if visita else False
 
@@ -342,6 +349,14 @@ def historial_accesos(usuario_actual):
             "foto_identidad": e.foto_identidad,
             "foto_placa": e.foto_placa,
             "foto_numero_asignado": e.foto_numero_asignado,
+            # Datos completos de la visita, para la vista de detalle
+            "autorizado_por": autorizado_por,
+            "tipo_visita": visita.tipo if visita else None,
+            "documento_id": visita.documento_id if visita else None,
+            "telefono": visita.telefono if visita else None,
+            "empresa": visita.empresa if visita else None,
+            "en_vehiculo": visita.en_vehiculo if visita else False,
+            "visita_creada_en": visita.created_at.isoformat() if visita and visita.created_at else None,
         }
         # Filtro de texto en memoria (placa/visitante/unidad)
         if buscar:

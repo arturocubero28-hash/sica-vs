@@ -38,7 +38,7 @@ function TabAccesos() {
   const [estado, setEstado] = useState("");
   const [buscar, setBuscar] = useState("");
   const [pagina, setPagina] = useState(1);
-  const [fotosVer, setFotosVer] = useState<EventoHistorialDTO | null>(null);
+  const [detalleVer, setDetalleVer] = useState<EventoHistorialDTO | null>(null);
 
   function cargar() {
     setCargando(true);
@@ -54,10 +54,6 @@ function TabAccesos() {
   function limpiar() {
     setDesde(""); setHasta(""); setDireccion(""); setEstado(""); setBuscar(""); setPagina(1);
     setTimeout(cargar, 0);
-  }
-
-  function tieneFotos(e: EventoHistorialDTO) {
-    return !!(e.foto_identidad || e.foto_placa || e.foto_numero_asignado);
   }
 
   return (
@@ -112,11 +108,11 @@ function TabAccesos() {
               <table className="data">
                 <thead>
                   <tr><th>Fecha / Hora</th><th>Dirección</th><th>Visitante</th><th>Unidad</th>
-                    <th>Acceso</th><th>Placa</th><th>Guardia</th><th>Fotos</th></tr>
+                    <th>Acceso</th><th>Placa</th><th>Guardia</th><th></th></tr>
                 </thead>
                 <tbody>
                   {data.eventos.map(e => (
-                    <tr key={e.id}>
+                    <tr key={e.id} className="fila-clickeable" onClick={() => setDetalleVer(e)}>
                       <td className="small">{new Date(e.ocurrido_en).toLocaleString("es-HN")}</td>
                       <td>
                         <span className={`pill ${e.direccion === "entrada" ? "green" : ""}`}>
@@ -128,7 +124,7 @@ function TabAccesos() {
                       <td>{e.unidad}</td>
                       <td className="small">{e.punto_acceso || "—"}</td>
                       <td>
-                        {e.placa || "—"}
+                        {e.en_vehiculo ? (e.placa || "—") : <span className="muted small">Peatonal</span>}
                         {e.placa_no_coincide && (
                           <span className="pill" style={{ background: "#fde2e2", color: "#b42318", marginLeft: 6, fontSize: 10 }}
                             title={`El guardia observó: ${e.placa_observada}`}>
@@ -138,9 +134,9 @@ function TabAccesos() {
                       </td>
                       <td className="small">{e.guardia}</td>
                       <td>
-                        {tieneFotos(e)
-                          ? <button className="mini" onClick={() => setFotosVer(e)}><Camera size={16} /> Ver</button>
-                          : <span className="muted small">—</span>}
+                        <button className="mini" onClick={(ev) => { ev.stopPropagation(); setDetalleVer(e); }}>
+                          Ver detalle →
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -158,14 +154,18 @@ function TabAccesos() {
         </>
       )}
 
-      {fotosVer && (
-        <ModalFotos evento={fotosVer} onCerrar={() => setFotosVer(null)} />
+      {detalleVer && (
+        <ModalDetalleEvento evento={detalleVer} onCerrar={() => setDetalleVer(null)} />
       )}
     </>
   );
 }
 
-function ModalFotos({ evento, onCerrar }: { evento: EventoHistorialDTO; onCerrar: () => void }) {
+const TIPO_VISITA_LABEL: Record<string, string> = {
+  unica: "Visita única", recurrente: "Visita recurrente", repartidor: "Repartidor / delivery",
+};
+
+function ModalDetalleEvento({ evento, onCerrar }: { evento: EventoHistorialDTO; onCerrar: () => void }) {
   const fotos = [
     { label: "Identidad", archivo: evento.foto_identidad },
     { label: "Placa", archivo: evento.foto_placa },
@@ -176,18 +176,62 @@ function ModalFotos({ evento, onCerrar }: { evento: EventoHistorialDTO; onCerrar
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
         <div className="modal-head">
-          <h3>Fotos del ingreso — {evento.visitante}</h3>
+          <h3>Detalle del acceso — {evento.visitante}</h3>
           <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
-        <div className="fotos-ingreso-grid">
-          {fotos.map((f, i) => (
-            <div key={i} className="foto-ingreso-item">
-              <span className="muted small">{f.label}</span>
-              <img src={urlFotoGuardia(f.archivo!)} alt={f.label}
-                onClick={() => window.open(urlFotoGuardia(f.archivo!), "_blank")} />
-            </div>
-          ))}
+
+        <div className="detalle-grid" style={{ marginBottom: 16 }}>
+          <Dato label="Dirección" valor={evento.direccion === "entrada" ? "Entrada" : "Salida"} />
+          <Dato label="Fecha y hora" valor={new Date(evento.ocurrido_en).toLocaleString("es-HN")} />
+          <Dato label="Punto de acceso" valor={evento.punto_acceso || "—"} />
+          <Dato label="Tranca" valor={evento.tranca || "—"} />
+          <Dato label="Registrado por (guardia)" valor={evento.guardia} />
+          <Dato label="Autorizado por (residente)" valor={evento.autorizado_por || "—"} />
         </div>
+
+        <div className="sub" style={{ marginBottom: 8 }}>Datos de la visita</div>
+        <div className="detalle-grid" style={{ marginBottom: 16 }}>
+          <Dato label="Nombre" valor={evento.visitante} />
+          <Dato label="Unidad visitada" valor={evento.unidad} />
+          <Dato label="Tipo de visita" valor={evento.tipo_visita ? (TIPO_VISITA_LABEL[evento.tipo_visita] || evento.tipo_visita) : "—"} />
+          <Dato label="Documento de identidad" valor={evento.documento_id || "—"} />
+          <Dato label="Teléfono" valor={evento.telefono || "—"} />
+          {evento.empresa && <Dato label="Empresa" valor={evento.empresa} />}
+          {evento.visita_creada_en && (
+            <Dato label="Visita generada el" valor={new Date(evento.visita_creada_en).toLocaleString("es-HN")} />
+          )}
+        </div>
+
+        {evento.en_vehiculo && (
+          <>
+            <div className="sub" style={{ marginBottom: 8 }}>Vehículo</div>
+            <div className="detalle-grid" style={{ marginBottom: 16 }}>
+              <Dato label="Placa declarada por el residente" valor={evento.placa || "—"} />
+              <Dato label="Placa observada por el guardia" valor={evento.placa_observada || "—"} />
+            </div>
+            {evento.placa_no_coincide && (
+              <div className="cuota-rechazo" style={{ marginBottom: 16 }}>
+                <b>⚠ La placa observada no coincide con la declarada.</b>
+                <span> Revisá las fotos para confirmar.</span>
+              </div>
+            )}
+          </>
+        )}
+
+        {fotos.length > 0 && (
+          <>
+            <div className="sub" style={{ marginBottom: 8 }}>Fotos del ingreso</div>
+            <div className="fotos-ingreso-grid">
+              {fotos.map((f, i) => (
+                <div key={i} className="foto-ingreso-item">
+                  <span className="muted small">{f.label}</span>
+                  <img src={urlFotoGuardia(f.archivo!)} alt={f.label}
+                    onClick={() => window.open(urlFotoGuardia(f.archivo!), "_blank")} />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -380,5 +424,14 @@ function TabTarjetas() {
         </>
       )}
     </>
+  );
+}
+
+function Dato({ label, valor }: { label: string; valor: string }) {
+  return (
+    <div className="dato">
+      <span className="muted small">{label}</span>
+      <b>{valor}</b>
+    </div>
   );
 }
