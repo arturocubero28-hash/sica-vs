@@ -63,3 +63,29 @@ ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS tipo_acceso_virtual VARCHAR(20) NOT
 -- que la base de datos rechace cualquier duplicado que se colara por otra vía.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pagos_numero_recibo_unico
     ON pagos (numero_recibo) WHERE numero_recibo IS NOT NULL;
+
+-- ACCESS-04: separar la placa que el residente declaró al crear la visita
+-- (placa_vehiculo, ya existía) de la que el guardia observa físicamente
+-- al momento del acceso. Antes el backend ignoraba la que digitaba el
+-- guardia y siempre guardaba la declarada.
+ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS placa_observada VARCHAR(20);
+
+-- ACCESS-04: el guardia elige en qué punto de acceso está trabajando este
+-- turno (queda fijo, normalmente un teléfono por punto). Se usa para
+-- registrar correctamente por cuál punto entró/salió cada visita, en vez
+-- de asumir siempre el mismo punto por defecto.
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS punto_acceso_actual VARCHAR(80);
+
+-- ACCESS-04: aperturas manuales de tranca sin visita asociada (el guardia
+-- deja salir a alguien que vio, emergencias, etc.) Exige confirmación en
+-- la app y queda auditado por separado de los eventos de visita normales.
+CREATE TABLE IF NOT EXISTS aperturas_manuales (
+    id             BIGSERIAL PRIMARY KEY,
+    uuid_publico   UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+    acceso_id      BIGINT NOT NULL REFERENCES accesos_fisicos(id),
+    guardia_id     BIGINT NOT NULL REFERENCES usuarios(id),
+    motivo         VARCHAR(255),
+    ocurrido_en    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_aperturas_manuales_guardia ON aperturas_manuales(guardia_id);
+CREATE INDEX IF NOT EXISTS idx_aperturas_manuales_acceso ON aperturas_manuales(acceso_id);

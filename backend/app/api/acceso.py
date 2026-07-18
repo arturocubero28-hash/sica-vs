@@ -29,6 +29,7 @@ import hmac
 from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db, limiter
+from app.auth.security import roles_required
 from app.models.cuenta import Tarjeta, Cuenta, TarjetaVirtual, CredencialBLE
 from app.models.visita import EventoAcceso, AccesoFisico
 from app.models.dispositivo import Dispositivo
@@ -390,3 +391,162 @@ def heartbeat_agente_camaras():
     disp.ultimo_heartbeat = dt.datetime.utcnow()
     db.session.commit()
     return jsonify({"data": {"ok": True}})
+
+
+# =====================================================================
+# ADMIN: gestión operativa de puntos de acceso (ACCESS-04, Auditoría Día 35)
+#
+# Un "punto de acceso" es un lugar físico de la residencial (ej. "Portón
+# Principal") que puede tener una tranca peatonal, una vehicular, o ambas
+# (entrada + salida vehicular por separado). Cada tranca individual sigue
+# siendo una fila en accesos_fisicos, agrupada por el campo punto_acceso.
+#
+# División de responsabilidad deliberada:
+#   - El ADMIN gestiona aquí lo operativo: nombre del punto, qué trancas
+#     tiene (peatonal / entrada vehicular / salida vehicular), activar o
+#     desactivar. Esto es equivalente a dar de alta una casa o un residente
+#     — no requiere conocimiento técnico.
+#   - relay_pin y pulso_ms (el cableado real a la Raspberry Pi) siguen
+#     existiendo SOLO en el panel de desarrollador. Un admin sin
+#     conocimiento técnico que cambie un pin GPIO por error podría dejar
+#     una tranca sin funcionar o dos trancas apuntando al mismo pin.
+#   - Por la misma razón, el admin NUNCA borra un punto de verdad — solo
+#     lo desactiva. El historial de accesos que ya pasó por ahí no se
+#     pierde nunca.
+# =====================================================================
+
+def _punto_a_dict(nombre_punto, trancas):
+    """Agrupa las trancas individuales (filas AccesoFisico) de un mismo
+    punto_acceso en un solo objeto para el admin y para el guardia."""
+    peatonal = next((t for t in trancas if t.tipo == "peatonal"), None)
+    veh_entrada = next((t for t in trancas if t.tipo == "vehicular" and t.direccion == "entrada"), None)
+    veh_salida = next((t for t in trancas if t.tipo == "vehicular" and t.direccion == "salida"), None)
+    return {
+        "punto_acceso": nombre_punto,
+        "activo": any(t.activo for t in trancas),
+        "tiene_peatonal": peatonal is not None,
+        "tiene_vehicular_entrada": veh_entrada is not None,
+        "tiene_vehicular_salida": veh_salida is not None,
+        "trancas": [t.to_dict() for t in trancas],
+    }
+
+
+@acceso_bp.get("/puntos")
+@roles_required("admin", "super_admin", "guardia")
+def listar_puntos_acceso(usuario_actual):
+    """
+    Lista los puntos de acceso agrupados por punto_acceso. Un guardia
+    también puede consultar esta lista (para elegir en cuál está); un
+    admin la usa para gestionarlos.
+    """
+    solo_activos = request.args.get("solo_activos", "true").lower() != "false"
+    q = AccesoFisico.query
+    if solo_activos:
+        q = q.filter_by(activo=True)
+    trancas = q.order_by(AccesoFisico.punto_acceso, AccesoFisico.tipo).all()
+
+    agrupado = {}
+    for t in trancas:
+        clave = t.punto_acceso or "(sin nombre de punto)"
+        agrupado.setdefault(clave, []).append(t)
+
+    puntos = [_punto_a_dict(nombre, lista) for nombre, lista in agrupado.items()]
+    return jsonify({"data": puntos})
+
+
+@acceso_bp.post("/puntos")
+@roles_required("admin", "super_admin")
+def crear_punto_acceso(usuario_actual):
+    """
+    Crea un punto de acceso nuevo con las trancas que el admin indique.
+    Ej: { "nombre": "Portón Secundario", "peatonal": true,
+          "vehicular_entrada": true, "vehicular_salida": true }
+    Cada tranca marcada como true se crea como una fila AccesoFisico con
+    relay_pin=NULL — el desarrollador la configura después al instalar
+    el hardware real.
+    """
+    body = request.get_json(silent=True) or {}
+    nombre = (body.get("nombre") or "").strip()
+    if not nombre:
+        return _err("nombre_requerido", "El nombre del punto de acceso es obligatorio", 400)
+    if len(nombre) > 80:
+        return _err("nombre_largo", "El nombre no puede superar 80 caracteres", 400)
+
+    if AccesoFisico.query.filter_by(punto_acceso=nombre).first():
+        return _err("nombre_duplicado", "Ya existe un punto de acceso con ese nombre", 400)
+
+    quiere_peatonal = bool(body.get("peatonal"))
+    quiere_veh_entrada = bool(body.get("vehicular_entrada"))
+    quiere_veh_salida = bool(body.get("vehicular_salida"))
+    if not (quiere_peatonal or quiere_veh_entrada or quiere_veh_salida):
+        return _err("sin_trancas", "Elegí al menos una tranca para el punto de acceso", 400)
+
+    creadas = []
+    if quiere_peatonal:
+        t = AccesoFisico(nombre=f"{nombre} — Peatonal", tipo="peatonal",
+                          direccion="entrada", punto_acceso=nombre, activo=True)
+        db.session.add(t)
+        creadas.append(t)
+    if quiere_veh_entrada:
+        t = AccesoFisico(nombre=f"{nombre} — Entrada vehicular", tipo="vehicular",
+                          direccion="entrada", punto_acceso=nombre, activo=True)
+        db.session.add(t)
+        creadas.append(t)
+    if quiere_veh_salida:
+        t = AccesoFisico(nombre=f"{nombre} — Salida vehicular", tipo="vehicular",
+                          direccion="salida", punto_acceso=nombre, activo=True)
+        db.session.add(t)
+        creadas.append(t)
+
+    db.session.commit()
+    return jsonify({"data": _punto_a_dict(nombre, creadas)}), 201
+
+
+@acceso_bp.put("/puntos/<nombre_punto>")
+@roles_required("admin", "super_admin")
+def editar_punto_acceso(usuario_actual, nombre_punto):
+    """
+    Edita lo operativo de un punto: nombre nuevo, o activar/desactivar
+    todas sus trancas de una vez. NO permite tocar relay_pin ni pulso_ms
+    — eso sigue siendo exclusivo del panel de desarrollador.
+    """
+    trancas = AccesoFisico.query.filter_by(punto_acceso=nombre_punto).all()
+    if not trancas:
+        return _err("no_encontrado", "Punto de acceso no encontrado", 404)
+
+    body = request.get_json(silent=True) or {}
+
+    if "activo" in body:
+        activo = bool(body["activo"])
+        for t in trancas:
+            t.activo = activo
+
+    nuevo_nombre = None
+    if "nombre" in body:
+        nuevo_nombre = (body["nombre"] or "").strip()
+        if not nuevo_nombre:
+            return _err("nombre_requerido", "El nombre no puede quedar vacío", 400)
+        if len(nuevo_nombre) > 80:
+            return _err("nombre_largo", "El nombre no puede superar 80 caracteres", 400)
+        if nuevo_nombre != nombre_punto and AccesoFisico.query.filter_by(punto_acceso=nuevo_nombre).first():
+            return _err("nombre_duplicado", "Ya existe un punto de acceso con ese nombre", 400)
+        for t in trancas:
+            t.punto_acceso = nuevo_nombre
+            # Mantener el nombre descriptivo de cada tranca en sincronía
+            sufijo = t.nombre.split("—")[-1].strip() if "—" in t.nombre else t.tipo
+            t.nombre = f"{nuevo_nombre} — {sufijo}"
+
+    db.session.commit()
+    return jsonify({"data": _punto_a_dict(nuevo_nombre or nombre_punto, trancas)})
+
+
+@acceso_bp.get("/puntos/<nombre_punto>/historial-count")
+@roles_required("admin", "super_admin")
+def historial_count_punto(usuario_actual, nombre_punto):
+    """Cuántos eventos de acceso tiene un punto — informativo antes de desactivarlo."""
+    trancas = AccesoFisico.query.filter_by(punto_acceso=nombre_punto).all()
+    if not trancas:
+        return _err("no_encontrado", "Punto de acceso no encontrado", 404)
+    ids = [t.id for t in trancas]
+    n = EventoAcceso.query.filter(EventoAcceso.acceso_id.in_(ids)).count()
+    return jsonify({"data": {"eventos": n}})

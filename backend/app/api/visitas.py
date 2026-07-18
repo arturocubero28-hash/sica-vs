@@ -19,7 +19,7 @@ import base64
 from flask import Blueprint, request, jsonify
 
 from app.extensions import db
-from app.models.visita import Visita, CodigoQR, EventoAcceso
+from app.models.visita import Visita, CodigoQR, EventoAcceso, AccesoFisico
 from app.models.cuenta import Cuenta, Residente
 from app.auth.security import token_required, roles_required
 
@@ -259,7 +259,19 @@ def mi_cuenta(usuario_actual):
 @visitas_bp.post("/qr/validar")
 @roles_required("guardia", "admin", "super_admin")
 def validar_qr(usuario_actual):
-    """Recibe { token } y devuelve los datos de la visita si es válido."""
+    """
+    Recibe { token } y devuelve los datos de la visita para que el guardia
+    vea nombre, foto de la cuota, dirección sugerida, etc. ANTES de confirmar.
+
+    IMPORTANTE (ACCESS-03, Auditoría Día 35): este endpoint es solo una
+    PREVISUALIZACIÓN — no bloquea la fila ni consume el QR. La validación
+    real y definitiva ocurre en POST /accesos/visita, que recibe el mismo
+    token, vuelve a chequear todo dentro de una transacción con bloqueo de
+    fila, y ahí sí es imposible que quede en un estado inconsistente. Nunca
+    asumas que porque este endpoint devolvió 'válido', el registro va a
+    tener éxito — siempre puede rechazarse en el paso final (por ejemplo,
+    si otro guardia lo registró en el segundo exacto entre ambas llamadas).
+    """
     data = request.get_json(silent=True) or {}
     token_str = (data.get("token") or "").strip()
 
@@ -353,38 +365,117 @@ def validar_qr(usuario_actual):
 # =====================================================================
 # GUARDIA: registrar acceso de visita
 # =====================================================================
+# =====================================================================
+# GUARDIA: registrar acceso de visita
+#
+# ACCESS-03 / ACCESS-04 (Auditoría Día 35): antes esto eran DOS llamadas
+# separadas — validar_qr() y luego registrar_acceso_visita() con el
+# visita_id suelto. Entre ambas no había ninguna garantía atómica:
+#   - Dos guardias/dispositivos podían validar el mismo QR casi
+#     simultáneamente y ambos registrar una entrada.
+#   - Se podía llamar directo a este endpoint con un visita_id conocido,
+#     SIN pasar nunca por validar_qr() — el token nunca se revisaba aquí.
+#   - acceso_id venía del cliente sin validar nada (línea hardcodeada
+#     'acceso_id': '1' en la app).
+#   - La placa que el guardia observaba se descartaba; se guardaba
+#     siempre la que el residente declaró al crear la visita.
+#
+# Ahora este único endpoint recibe el TOKEN del QR (no el visita_id) y
+# hace todo dentro de una sola transacción con bloqueo de fila:
+#   1. SELECT ... FOR UPDATE sobre el CodigoQR — nadie más puede tocar
+#      esta visita hasta que termine esta transacción.
+#   2. Revalida token, revocación, expiración y estado de uso — las
+#      mismas reglas que antes vivían en validar_qr(), pero ahora
+#      dentro del candado.
+#   3. Decide entrada/salida en el servidor según el último evento.
+#   4. Determina el punto de acceso físico en el servidor (ya no lo
+#      envía el cliente).
+#   5. Guarda la placa declarada y la observada por separado.
+#   6. Marca el QR como usado y confirma todo junto.
+# =====================================================================
 @visitas_bp.post("/accesos/visita")
 @roles_required("guardia", "admin", "super_admin")
 def registrar_acceso_visita(usuario_actual):
-    """Registra la entrada o salida de una visita.
-    Acepta JSON (web, fotos en base64) o multipart/form-data (app móvil,
-    fotos como archivos). Retrocompatible con ambos.
+    """Valida el token QR y registra la entrada/salida en una sola operación
+    atómica. Acepta JSON (web, fotos en base64) o multipart/form-data (app
+    móvil, fotos como archivos). Retrocompatible con ambos formatos.
     """
-    # Leer campos desde JSON o desde form (multipart)
     data = request.get_json(silent=True) or {}
     if not data:
         data = request.form.to_dict()
-    visita = Visita.query.filter_by(uuid_publico=data.get("visita_id")).first()
-    if not visita:
-        return jsonify({"error": {"code": "visita_invalida",
-                                  "message": "Visita no encontrada"}}), 404
 
-    direccion = data.get("direccion", "entrada")
-    if direccion not in ("entrada", "salida"):
+    token_str = (data.get("token") or "").strip()
+    if not token_str:
+        return jsonify({"error": {"code": "token_requerido",
+                                  "message": "Falta el token del código QR"}}), 400
+
+    # PASO 1 — bloquear la fila del QR. Mientras dure esta transacción,
+    # ninguna otra petición concurrente puede leer/escribir esta misma
+    # fila: PostgreSQL hace esperar a la segunda petición hasta que la
+    # primera confirme o revierta. Esto elimina la condición de carrera
+    # de doble registro con el mismo QR.
+    if token_str.isdigit():
+        qr = (CodigoQR.query.filter_by(codigo_numerico=token_str)
+              .with_for_update().first())
+    else:
+        qr = (CodigoQR.query.filter_by(token=token_str)
+              .with_for_update().first())
+    if not qr:
+        return jsonify({"error": {"code": "qr_invalido",
+                                  "message": "Código no encontrado"}}), 404
+    if qr.revocado:
+        return jsonify({"error": {"code": "qr_revocado",
+                                  "message": "Este código fue revocado"}}), 400
+
+    visita = Visita.query.with_for_update().get(qr.visita_id)
+    ahora = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc)
+
+    # PASO 2 — mismas reglas de validación que antes vivían en validar_qr(),
+    # ahora dentro del candado de la transacción.
+    ultimo_evento = (
+        EventoAcceso.query
+        .filter_by(visita_id=visita.id)
+        .order_by(EventoAcceso.ocurrido_en.desc())
+        .first()
+    )
+    esta_adentro = bool(ultimo_evento and ultimo_evento.direccion == "entrada")
+
+    if esta_adentro:
+        # Si está adentro, SIEMPRE se permite la salida, sin importar
+        # vencimiento o estado de uso — la persona está físicamente dentro.
+        direccion = "salida"
+    else:
+        if visita.estado == "expirada":
+            return jsonify({"error": {"code": "qr_expirado", "message": "Este código expiró"}}), 400
+        if visita.valido_hasta:
+            hasta = visita.valido_hasta
+            if hasta.tzinfo is None:
+                hasta = hasta.replace(tzinfo=dt.timezone.utc)
+            if ahora > hasta:
+                visita.estado = "expirada"
+                db.session.commit()
+                return jsonify({"error": {"code": "qr_expirado",
+                                          "message": "Este código expiró"}}), 400
+        if visita.tipo == "unica" and visita.estado == "usada":
+            return jsonify({"error": {"code": "qr_usado",
+                                      "message": "Este código de visita única ya fue utilizado"}}), 400
+        if visita.tipo == "repartidor" and visita.estado == "usada":
+            return jsonify({"error": {"code": "qr_usado",
+                                      "message": "Este código de repartidor ya fue utilizado"}}), 400
         direccion = "entrada"
 
-    # La foto de identidad es OBLIGATORIA para registrar una entrada.
+    # PASO 3 — evidencia fotográfica obligatoria para entradas
     tiene_foto_id = data.get("foto_identidad") or request.files.get("foto_identidad")
     if direccion == "entrada" and not tiene_foto_id:
         return jsonify({"error": {"code": "foto_requerida",
                                   "message": "La foto de identidad es obligatoria para dar acceso"}}), 400
 
+    placa_observada = (data.get("placa_observada") or data.get("placa_vehiculo") or "").strip() or None
     tiene_foto_pl = data.get("foto_placa") or request.files.get("foto_placa")
     if direccion == "entrada" and visita.en_vehiculo and not tiene_foto_pl:
         return jsonify({"error": {"code": "foto_placa_requerida",
                                   "message": "La foto de la placa es obligatoria para vehículos"}}), 400
 
-    # Guardar fotos — acepta multipart (app móvil) o base64 en JSON (web)
     foto_id = (_guardar_foto_multipart(request.files.get("foto_identidad"), "id")
                or _guardar_foto_base64(data.get("foto_identidad"), "id"))
     foto_pl = (_guardar_foto_multipart(request.files.get("foto_placa"), "placa")
@@ -392,40 +483,62 @@ def registrar_acceso_visita(usuario_actual):
     foto_num = (_guardar_foto_multipart(request.files.get("foto_numero_asignado"), "numero")
                 or _guardar_foto_base64(data.get("foto_numero_asignado"), "numero"))
 
+    # PASO 4 — el punto de acceso lo decide el PUNTO ASIGNADO AL GUARDIA que
+    # está registrando, no el cliente. ACCESS-04 (Auditoría Día 35): antes
+    # la app enviaba siempre '1' sin ninguna validación, y todos los eventos
+    # quedaban atribuidos al mismo punto sin importar cuál guardia realmente
+    # los registró. Villas del Sol opera con dos puntos de acceso y un
+    # guardia fijo por teléfono en cada uno; el guardia elige su punto una
+    # vez (POST /guardias/mi-punto-acceso) y queda fijo mientras usa la app.
+    if not usuario_actual.punto_acceso_actual:
+        return jsonify({"error": {"code": "sin_punto_asignado",
+                                  "message": "No tenés un punto de acceso asignado. "
+                                             "Elegí en cuál estás desde el menú del guardia."}}), 400
+
+    tipo_punto = "vehicular" if visita.en_vehiculo else "peatonal"
+    direccion_tranca = direccion  # la tranca de entrada/salida vehicular usa la misma dirección del evento
+    q_acceso = AccesoFisico.query.filter_by(
+        activo=True, tipo=tipo_punto, punto_acceso=usuario_actual.punto_acceso_actual)
+    if tipo_punto == "vehicular":
+        q_acceso = q_acceso.filter_by(direccion=direccion_tranca)
+    acceso = q_acceso.first()
+    if not acceso:
+        return jsonify({"error": {"code": "tranca_no_disponible",
+                                  "message": f"Tu punto de acceso no tiene tranca "
+                                             f"{tipo_punto} de {direccion_tranca} configurada. "
+                                             f"Avisá al administrador."}}), 400
+
     evento = EventoAcceso(
         origen="visita",
         direccion=direccion,
-        acceso_id=data.get("acceso_id", 1),
+        acceso_id=acceso.id,
         visita_id=visita.id,
         guardia_id=usuario_actual.id,
         foto_identidad=foto_id,
         foto_placa=foto_pl,
         foto_numero_asignado=foto_num,
         en_vehiculo=visita.en_vehiculo,
-        placa_vehiculo=visita.placa_vehiculo,
+        placa_vehiculo=visita.placa_vehiculo,     # la que el residente declaró
+        placa_observada=placa_observada,           # la que el guardia observó/digitó
     )
     db.session.add(evento)
 
-    # Actualizar estado de la visita y QR
+    # PASO 5 — actualizar estado de visita y consumir el QR, todo dentro
+    # de la misma transacción bloqueada.
     if visita.tipo == "unica" and direccion == "entrada":
         visita.estado = "usada"
-    # Al registrar salida de visita única, queda como completada (sigue 'usada')
-
-    # El repartidor es de un solo ciclo: al registrar su SALIDA queda usado
-    # y no se puede volver a escanear.
     if visita.tipo == "repartidor" and direccion == "salida":
         visita.estado = "usada"
-    if visita.qr:
-        visita.qr.usos += 1
+    qr.usos += 1
 
-    db.session.commit()
+    db.session.commit()  # libera el bloqueo de fila aquí
 
-    # Notificar al residente que autorizó la visita (async, no bloquea el registro)
+    # Notificar al residente (async, fuera de la transacción crítica)
     try:
         from app.services import notificaciones as _notif
         if visita.cuenta_id:
             nombre = visita.nombre_visitante or "Tu visita"
-            tipo = visita.tipo  # unica | recurrente | repartidor
+            tipo = visita.tipo
 
             if direccion == "entrada":
                 if tipo == "repartidor":

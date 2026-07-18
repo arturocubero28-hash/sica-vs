@@ -43,6 +43,11 @@ class Usuario(db.Model):
     activo = db.Column(db.Boolean, nullable=False, default=True)
     debe_cambiar_password = db.Column(db.Boolean, nullable=False, default=False)
     biometria_activa = db.Column(db.Boolean, nullable=False, default=False)
+    # Solo aplica a usuarios con rol 'guardia': en qué punto de acceso está
+    # trabajando este turno (ej. "Portón Principal"). Se elige al iniciar
+    # sesión y queda fijo — el guardia normalmente usa siempre el mismo
+    # teléfono asignado a un punto específico (ACCESS-04, Auditoría Día 35).
+    punto_acceso_actual = db.Column(db.String(80))
     ultimo_acceso = db.Column(db.DateTime(timezone=True))
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow,
@@ -80,4 +85,5 @@ class Usuario(db.Model):
             "activo": self.activo,
             "debe_cambiar_password": self.debe_cambiar_password,
             "biometria_activa": self.biometria_activa,
+            "punto_acceso_actual": self.punto_acceso_actual,
         }

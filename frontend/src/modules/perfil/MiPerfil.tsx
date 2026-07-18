@@ -2,13 +2,15 @@ import { useState, useEffect } from "react";
 import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesiones,
   registrarHuella, listarCredencialesHuella, eliminarCredencialHuella, soportaHuella,
   getConfigResidencial, setConfigResidencial,
-  type Usuario, type SesionDTO, type CredencialWebAuthnDTO, type ConfigResidencial } from "../../api/client";
+  listarPuntosAcceso, crearPuntoAcceso, editarPuntoAcceso, historialCountPunto,
+  type Usuario, type SesionDTO, type CredencialWebAuthnDTO, type ConfigResidencial,
+  type PuntoAccesoDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
 import { Fingerprint } from "lucide-react";
 
 export function MiPerfil() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [tab, setTab] = useState<"perfil" | "config">("perfil");
+  const [tab, setTab] = useState<"perfil" | "config" | "accesos">("perfil");
   useEffect(() => { getMe().then(setUsuario).catch(() => {}); }, []);
 
   if (!usuario) return <p className="muted">Cargando…</p>;
@@ -29,6 +31,8 @@ export function MiPerfil() {
             onClick={() => setTab("perfil")}>Mi perfil</button>
           <button className={`tab-btn ${tab === "config" ? "active" : ""}`}
             onClick={() => setTab("config")}>⚙ Configuraciones</button>
+          <button className={`tab-btn ${tab === "accesos" ? "active" : ""}`}
+            onClick={() => setTab("accesos")}>🚧 Puntos de acceso</button>
         </div>
       )}
 
@@ -52,6 +56,7 @@ export function MiPerfil() {
       </>}
 
       {tab === "config" && esAdmin && <ConfigPanel />}
+      {tab === "accesos" && esAdmin && <PuntosAccesoPanel />}
     </div>
   );
 }
@@ -276,7 +281,262 @@ function HuellaDigital() {
 }
 
 
-// ── Configuración global de la residencial (solo admin) ──────────────────────
+// ── Puntos de acceso (ACCESS-04, Auditoría Día 35) ──────────────────────────
+// Gestión operativa para el admin: crear puntos, nombrarlos, elegir qué
+// trancas tienen, activar/desactivar. El cableado real (relay_pin, pulso_ms)
+// sigue siendo exclusivo del panel de desarrollador — un admin sin
+// conocimiento técnico que lo tocara por error podría dejar una tranca sin
+// funcionar o dos trancas apuntando al mismo pin GPIO.
+
+function PuntosAccesoPanel() {
+  const [puntos, setPuntos] = useState<PuntoAccesoDTO[] | null>(null);
+  const [error, setError] = useState("");
+  const [mostrarCrear, setMostrarCrear] = useState(false);
+
+  function cargar() {
+    listarPuntosAcceso(false).then(setPuntos).catch(() => setError("No se pudieron cargar los puntos de acceso"));
+  }
+  useEffect(cargar, []);
+
+  return (
+    <div>
+      <div className="dash-card">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <h3>🚧 Puntos de acceso</h3>
+          <button onClick={() => setMostrarCrear(true)} style={{ padding: "8px 16px" }}>
+            + Nuevo punto
+          </button>
+        </div>
+        <p className="muted small" style={{ marginBottom: 16 }}>
+          Cada punto es un lugar físico de la residencial (ej. "Portón Principal") con una o más
+          trancas: peatonal, entrada vehicular, salida vehicular. Los guardias eligen en cuál
+          punto están trabajando; los accesos que registren quedan atribuidos a ese punto.
+        </p>
+
+        {error && <p className="err small">{error}</p>}
+        {!puntos && !error && <p className="muted">Cargando…</p>}
+
+        {puntos && puntos.length === 0 && (
+          <div className="muted small" style={{ padding: "16px 0" }}>
+            Todavía no hay ningún punto de acceso creado. Creá el primero con "+ Nuevo punto".
+          </div>
+        )}
+
+        {puntos && puntos.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {puntos.map((p) => (
+              <PuntoAccesoFila key={p.punto_acceso} punto={p} onCambio={cargar} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="dash-card" style={{ marginTop: 16 }}>
+        <h3>ℹ️ Sobre esta configuración</h3>
+        <div className="muted small" style={{ lineHeight: 1.6 }}>
+          <p><b>Qué podés hacer acá:</b> crear puntos de acceso, ponerles nombre, elegir qué
+          trancas tienen (peatonal / entrada vehicular / salida vehicular), y activarlos o
+          desactivarlos.</p>
+          <p><b>Qué NO se configura acá:</b> el cableado real hacia la Raspberry Pi (número de
+          pin GPIO, duración del pulso del relay). Eso lo configura quien instala el hardware
+          en sitio, desde el panel técnico — evita que un cambio accidental deje una tranca sin
+          funcionar.</p>
+          <p><b>Desactivar en vez de borrar:</b> por seguridad, un punto nunca se elimina de
+          verdad si ya tiene historial de accesos — solo se desactiva. Así el historial de
+          quién entró y por dónde nunca se pierde.</p>
+        </div>
+      </div>
+
+      {mostrarCrear && (
+        <ModalCrearPunto onCerrar={() => setMostrarCrear(false)} onCreado={() => { setMostrarCrear(false); cargar(); }} />
+      )}
+    </div>
+  );
+}
+
+function PuntoAccesoFila({ punto, onCambio }: { punto: PuntoAccesoDTO; onCambio: () => void }) {
+  const [editando, setEditando] = useState(false);
+  const [nombre, setNombre] = useState(punto.punto_acceso);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+  const [confirmarDesactivar, setConfirmarDesactivar] = useState(false);
+  const [eventosCount, setEventosCount] = useState<number | null>(null);
+
+  const tags: string[] = [];
+  if (punto.tiene_peatonal) tags.push("Peatonal");
+  if (punto.tiene_vehicular_entrada) tags.push("Entrada vehicular");
+  if (punto.tiene_vehicular_salida) tags.push("Salida vehicular");
+
+  async function guardarNombre() {
+    if (!nombre.trim()) { setError("El nombre no puede quedar vacío"); return; }
+    setGuardando(true); setError("");
+    try {
+      await editarPuntoAcceso(punto.punto_acceso, { nombre: nombre.trim() });
+      setEditando(false);
+      onCambio();
+    } catch (e: any) {
+      setError(e.message || "Error al guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function pedirDesactivar() {
+    try {
+      const res = await historialCountPunto(punto.punto_acceso);
+      setEventosCount(res.eventos);
+    } catch {
+      setEventosCount(0);
+    }
+    setConfirmarDesactivar(true);
+  }
+
+  async function confirmarToggle() {
+    setGuardando(true); setError("");
+    try {
+      await editarPuntoAcceso(punto.punto_acceso, { activo: !punto.activo });
+      setConfirmarDesactivar(false);
+      onCambio();
+    } catch (e: any) {
+      setError(e.message || "Error al guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div style={{
+      padding: "12px 14px", borderRadius: 10, border: "1px solid var(--borde)",
+      background: punto.activo ? "var(--fondo)" : "#f7f2ea",
+      opacity: punto.activo ? 1 : 0.75,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          {editando ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+              <input value={nombre} onChange={(e) => setNombre(e.target.value)}
+                style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid var(--borde)", fontSize: 14 }} />
+              <button onClick={guardarNombre} disabled={guardando} style={{ padding: "5px 12px", fontSize: 13 }}>
+                {guardando ? "…" : "Guardar"}
+              </button>
+              <button onClick={() => { setEditando(false); setNombre(punto.punto_acceso); }}
+                className="ghost" style={{ padding: "5px 12px", fontSize: 13 }}>
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <b style={{ fontSize: 15 }}>{punto.punto_acceso}</b>
+              {!punto.activo && <span className="pill" style={{ background: "#eee", color: "#888" }}>Inactivo</span>}
+              <button onClick={() => setEditando(true)}
+                className="btn-tabla-neutro" style={{ fontSize: 12, padding: "2px 8px" }}>
+                Editar nombre
+              </button>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {tags.map((t) => (
+              <span key={t} className="muted small"
+                style={{ background: "#fff", border: "1px solid var(--borde)", borderRadius: 6, padding: "2px 8px" }}>
+                {t}
+              </span>
+            ))}
+          </div>
+          {error && <p className="err small" style={{ marginTop: 6 }}>{error}</p>}
+        </div>
+
+        {!confirmarDesactivar ? (
+          <button onClick={pedirDesactivar} disabled={guardando}
+            className="ghost" style={{ fontSize: 13, padding: "6px 12px", whiteSpace: "nowrap" }}>
+            {punto.activo ? "Desactivar" : "Reactivar"}
+          </button>
+        ) : (
+          <div style={{ textAlign: "right" }}>
+            <p className="small" style={{ marginBottom: 6, maxWidth: 220 }}>
+              {punto.activo
+                ? (eventosCount !== null && eventosCount > 0
+                    ? `Este punto tiene ${eventosCount} evento(s) registrados. No se borra — solo se desactiva y deja de aparecer para los guardias.`
+                    : "¿Desactivar este punto? Dejará de aparecer para los guardias.")
+                : "¿Reactivar este punto de acceso?"}
+            </p>
+            <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+              <button onClick={confirmarToggle} disabled={guardando} style={{ fontSize: 13, padding: "5px 12px" }}>
+                {guardando ? "…" : "Sí, confirmar"}
+              </button>
+              <button onClick={() => setConfirmarDesactivar(false)}
+                className="ghost" style={{ fontSize: 13, padding: "5px 12px" }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ModalCrearPunto({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: () => void }) {
+  const [nombre, setNombre] = useState("");
+  const [peatonal, setPeatonal] = useState(true);
+  const [vehEntrada, setVehEntrada] = useState(false);
+  const [vehSalida, setVehSalida] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState("");
+
+  async function crear() {
+    if (!nombre.trim()) { setError("Ponele un nombre al punto de acceso"); return; }
+    if (!peatonal && !vehEntrada && !vehSalida) { setError("Elegí al menos una tranca"); return; }
+    setGuardando(true); setError("");
+    try {
+      await crearPuntoAcceso({
+        nombre: nombre.trim(), peatonal, vehicular_entrada: vehEntrada, vehicular_salida: vehSalida,
+      });
+      onCreado();
+    } catch (e: any) {
+      setError(e.message || "No se pudo crear el punto de acceso");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <h3>Nuevo punto de acceso</h3>
+        <p className="muted small" style={{ marginBottom: 14 }}>
+          Ej: "Portón Principal", "Portón Secundario". Elegí qué trancas tiene este punto.
+        </p>
+
+        <label className="small muted" style={{ display: "block", marginBottom: 4 }}>Nombre</label>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Portón Secundario"
+          style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)", marginBottom: 14 }} />
+
+        <label className="small muted" style={{ display: "block", marginBottom: 6 }}>Trancas de este punto</label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+            <input type="checkbox" checked={peatonal} onChange={(e) => setPeatonal(e.target.checked)} />
+            Peatonal
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+            <input type="checkbox" checked={vehEntrada} onChange={(e) => setVehEntrada(e.target.checked)} />
+            Entrada vehicular
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+            <input type="checkbox" checked={vehSalida} onChange={(e) => setVehSalida(e.target.checked)} />
+            Salida vehicular
+          </label>
+        </div>
+
+        {error && <p className="err small" style={{ marginBottom: 10 }}>{error}</p>}
+
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button onClick={onCerrar} className="ghost" disabled={guardando}>Cancelar</button>
+          <button onClick={crear} disabled={guardando}>{guardando ? "Creando…" : "Crear punto"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ConfigPanel() {
   const [cfg, setCfg] = useState<ConfigResidencial | null>(null);

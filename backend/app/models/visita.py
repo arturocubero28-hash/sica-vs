@@ -179,6 +179,12 @@ class EventoAcceso(db.Model):
 
     en_vehiculo = db.Column(db.Boolean, nullable=False, default=False)
     placa_vehiculo = db.Column(db.String(20))
+    # ACCESS-04: la placa que el residente declaró al crear la visita
+    # (placa_vehiculo, arriba) y la que el guardia observa físicamente en la
+    # entrada pueden no coincidir. Antes el backend ignoraba lo que digitaba
+    # el guardia y siempre guardaba la declarada. Ahora se guardan ambas por
+    # separado para poder detectar y auditar discrepancias.
+    placa_observada = db.Column(db.String(20))
     ocurrido_en = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     sincronizado = db.Column(db.Boolean, nullable=False, default=True)
     # Identificador único que genera la Raspberry Pi para cada evento. Permite
@@ -190,17 +196,63 @@ class EventoAcceso(db.Model):
     guardia = db.relationship("Usuario", foreign_keys=[guardia_id], lazy="joined")
 
     def to_dict(self):
+        placa_declarada = self.placa_vehiculo
+        placa_obs = self.placa_observada
+        no_coincide = bool(
+            placa_declarada and placa_obs
+            and placa_declarada.strip().upper() != placa_obs.strip().upper()
+        )
         return {
             "id": str(self.uuid_publico),
             "origen": self.origen,
             "direccion": self.direccion,
             "en_vehiculo": self.en_vehiculo,
-            "placa_vehiculo": self.placa_vehiculo,
+            "placa_vehiculo": placa_declarada,       # la que el residente declaró al crear la visita
+            "placa_observada": placa_obs,            # la que el guardia digitó viendo el vehículo
+            "placa_no_coincide": no_coincide,         # aviso: declarada y observada difieren
             "guardia": (
                 f"{self.guardia.nombre} {self.guardia.apellido}" if self.guardia else None
             ),
             "foto_identidad": self.foto_identidad,
             "foto_placa": self.foto_placa,
             "foto_numero_asignado": self.foto_numero_asignado,
+            "ocurrido_en": self.ocurrido_en.isoformat() if self.ocurrido_en else None,
+        }
+
+
+class AperturaManual(db.Model):
+    """
+    Registro de una tranca abierta manualmente por el guardia, SIN estar
+    ligada a ninguna visita (ACCESS-04, Auditoría Día 35). Ej: dejar salir
+    a alguien que vio caminando, una emergencia, etc.
+
+    Se guarda por separado de EventoAcceso (que siempre representa la
+    entrada/salida de una visita o residente específico) justamente
+    porque esta acción no tiene ningún visitante ni residente asociado —
+    es una decisión del guardia sobre el terreno, y por eso exige
+    confirmación explícita en la app y queda auditada con quién, cuándo
+    y cuál tranca exacta.
+    """
+    __tablename__ = "aperturas_manuales"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid()
+    acceso_id = db.Column(db.BigInteger, db.ForeignKey("accesos_fisicos.id"), nullable=False)
+    guardia_id = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
+    motivo = db.Column(db.String(255))  # opcional: nota corta del guardia
+    ocurrido_en = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
+
+    acceso = db.relationship("AccesoFisico", lazy="joined")
+    guardia = db.relationship("Usuario", foreign_keys=[guardia_id], lazy="joined")
+
+    def to_dict(self):
+        return {
+            "id": str(self.uuid_publico),
+            "acceso": self.acceso.nombre if self.acceso else None,
+            "punto_acceso": self.acceso.punto_acceso if self.acceso else None,
+            "tipo": self.acceso.tipo if self.acceso else None,
+            "direccion": self.acceso.direccion if self.acceso else None,
+            "guardia": f"{self.guardia.nombre} {self.guardia.apellido}" if self.guardia else None,
+            "motivo": self.motivo,
             "ocurrido_en": self.ocurrido_en.isoformat() if self.ocurrido_en else None,
         }

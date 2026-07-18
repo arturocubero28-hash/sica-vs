@@ -1069,6 +1069,47 @@ export const setConfigResidencial = (body: Partial<ConfigResidencial>) =>
   request<ConfigResidencial & { cuentas_actualizadas?: number }>(
     "/unidades/config-residencial", { method: "PUT", body: JSON.stringify(body) });
 
+// ── Puntos de acceso (ACCESS-04, Auditoría Día 35) ──────────────────────────
+// Gestión OPERATIVA para el admin: nombre, qué trancas tiene, activo/inactivo.
+// El cableado real (relay_pin, pulso_ms) sigue siendo exclusivo del panel de
+// desarrollador — un admin sin conocimiento técnico no debería poder tocarlo.
+
+export interface TrancaDTO {
+  id: number;
+  nombre: string;
+  tipo: "peatonal" | "vehicular";
+  direccion: "entrada" | "salida";
+  activo: boolean;
+  relay_pin: number | null;
+  pulso_ms: number;
+  punto_acceso: string | null;
+}
+
+export interface PuntoAccesoDTO {
+  punto_acceso: string;
+  activo: boolean;
+  tiene_peatonal: boolean;
+  tiene_vehicular_entrada: boolean;
+  tiene_vehicular_salida: boolean;
+  trancas: TrancaDTO[];
+}
+
+export const listarPuntosAcceso = (soloActivos = false) =>
+  request<PuntoAccesoDTO[]>(`/acceso/puntos?solo_activos=${soloActivos}`);
+
+export const crearPuntoAcceso = (body: {
+  nombre: string; peatonal: boolean; vehicular_entrada: boolean; vehicular_salida: boolean;
+}) => request<PuntoAccesoDTO>("/acceso/puntos", { method: "POST", body: JSON.stringify(body) });
+
+export const editarPuntoAcceso = (nombrePunto: string, body: { nombre?: string; activo?: boolean }) =>
+  request<PuntoAccesoDTO>(
+    `/acceso/puntos/${encodeURIComponent(nombrePunto)}`,
+    { method: "PUT", body: JSON.stringify(body) });
+
+export const historialCountPunto = (nombrePunto: string) =>
+  request<{ eventos: number }>(
+    `/acceso/puntos/${encodeURIComponent(nombrePunto)}/historial-count`);
+
 // ── Toggle de QR recurrente por cuenta (admin) ──────────────────────────────
 
 export const toggleQrRecurrente = (cuentaUuid: string, habilitado: boolean) =>
