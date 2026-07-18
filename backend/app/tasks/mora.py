@@ -415,3 +415,49 @@ def _notificar_wallet_actualizacion(uuids: list):
             return f"Wallet notificado: {actualizados}/{len(uuids)} pases"
         except Exception as e:
             return f"Error notificando Wallet: {e}"
+
+
+@celery.task(name="tasks.expirar_visitas_vencidas")
+def expirar_visitas_vencidas():
+    """
+    Marca como 'expirada' cualquier visita activa cuyo valido_hasta ya pasó
+    y nadie la usó. Antes esto era perezoso: solo se marcaba si alguien
+    intentaba validar el QR después de vencido — si nadie lo intentaba, la
+    visita seguía apareciendo como 'activa' para siempre en la lista del
+    residente, aunque ya no sirviera para nada (encontrado en pruebas del
+    Día 36, reportado por el usuario).
+
+    Corre cada hora. No toca visitas 'usada', 'revocada' ni las que ya
+    están adentro (esas se resuelven por su propio flujo de salida).
+    """
+    from app import create_app
+    from app.extensions import db
+    from app.models.visita import Visita, EventoAcceso
+    import datetime as dt
+
+    app = create_app()
+    with app.app_context():
+        ahora = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc)
+
+        candidatas = (Visita.query
+                      .filter(Visita.estado == "activa")
+                      .filter(Visita.valido_hasta.isnot(None))
+                      .filter(Visita.valido_hasta < ahora)
+                      .all())
+
+        total = 0
+        for visita in candidatas:
+            # No expirar si está actualmente adentro — que termine su salida primero
+            ultimo = (EventoAcceso.query.filter_by(visita_id=visita.id)
+                      .order_by(EventoAcceso.ocurrido_en.desc()).first())
+            si_adentro = bool(ultimo and ultimo.direccion == "entrada")
+            if si_adentro:
+                continue
+
+            visita.estado = "expirada"
+            if visita.qr:
+                visita.qr.revocado = True
+            total += 1
+
+        db.session.commit()
+        return f"Expiradas {total} visitas vencidas"

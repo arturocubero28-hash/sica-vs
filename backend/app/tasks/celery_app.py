@@ -53,4 +53,13 @@ celery.conf.beat_schedule = {
         "task": "tasks.rotar_tarjetas_virtuales",
         "schedule": crontab(hour=0, minute=0),
     },
+    # Marca como 'expirada' las visitas activas cuyo valido_hasta ya pasó y
+    # nadie las usó — antes era perezoso (solo se marcaba al intentar
+    # validar el QR), así que una visita vencida sin uso seguía apareciendo
+    # como 'activa' para siempre. Corre cada hora, no una vez al día, para
+    # que la transición a 'vencida' sea razonablemente oportuna.
+    "expirar-visitas-vencidas": {
+        "task": "tasks.expirar_visitas_vencidas",
+        "schedule": crontab(minute=5),  # a los 5 minutos de cada hora
+    },
 }
