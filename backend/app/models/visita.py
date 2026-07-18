@@ -194,6 +194,9 @@ class EventoAcceso(db.Model):
 
     tarjeta_id = db.Column(db.BigInteger, db.ForeignKey("tarjetas_proximidad.id"))
     residente_id = db.Column(db.BigInteger, db.ForeignKey("residentes.id"))
+    # DEVICE-06: qué Raspberry Pi generó este evento (origen='residente').
+    # NULL para eventos de guardia (origen='visita'), que no vienen de una Pi.
+    dispositivo_id = db.Column(db.BigInteger, db.ForeignKey("dispositivos_pi.id"))
 
     visita_id = db.Column(db.BigInteger, db.ForeignKey("visitas.id"), index=True)
     guardia_id = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))

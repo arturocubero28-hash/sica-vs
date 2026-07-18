@@ -11,7 +11,7 @@ from flask import Blueprint, request, jsonify
 from app.extensions import db
 from app.models.auditoria import LogAuditoria
 from app.models.visita import AccesoFisico, EventoAcceso
-from app.models.dispositivo import Dispositivo, generar_token
+from app.models.dispositivo import Dispositivo, generar_token, hash_token
 from app.auth.security import roles_required
 
 dev_bp = Blueprint("desarrollador", __name__)
@@ -524,12 +524,15 @@ def crear_dispositivo(usuario_actual):
     if not nombre:
         return jsonify({"error": {"code": "nombre_requerido",
                                   "message": "El nombre es obligatorio"}}), 400
+    # DEVICE-06: el token en claro solo existe en esta variable local, para
+    # devolverlo una vez al admin. En la base solo se guarda el hash.
+    token_plano = generar_token()
     disp = Dispositivo(nombre=nombre, tipo=tipo, punto_acceso=punto,
-                        token=generar_token(), activo=True)
+                        token_hash=hash_token(token_plano), activo=True)
     db.session.add(disp)
     db.session.commit()
     # Al crear, se devuelve el token UNA vez (anótalo, no se vuelve a mostrar)
-    return jsonify({"data": disp.to_dict(incluir_token=True)}), 201
+    return jsonify({"data": disp.to_dict(token_plano=token_plano)}), 201
 
 
 @dev_bp.put("/dispositivos/<uuid:disp_uuid>")
@@ -562,9 +565,10 @@ def regenerar_token_dispositivo(usuario_actual, disp_uuid):
     if not disp:
         return jsonify({"error": {"code": "no_encontrado",
                                   "message": "Dispositivo no encontrado"}}), 404
-    disp.token = generar_token()
+    token_plano = generar_token()
+    disp.token_hash = hash_token(token_plano)
     db.session.commit()
-    return jsonify({"data": disp.to_dict(incluir_token=True)})
+    return jsonify({"data": disp.to_dict(token_plano=token_plano)})
 
 
 @dev_bp.delete("/dispositivos/<uuid:disp_uuid>")

@@ -45,8 +45,11 @@ class Config:
     # relajado en desarrollo para no estorbar durante las pruebas.
     LOGIN_RATE_LIMIT = "5 per 15 minutes" if ENV == "production" else "100 per minute"
 
-    # Token que usan los dispositivos de acceso (Raspberry Pi) para autenticarse
-    # al validar tarjetas. En producción debe setearse a un valor secreto.
+    # OBSOLETO (DEVICE-06, Auditoría Día 35): este token global compartido
+    # ya no se usa en ningún endpoint. Cada Raspberry Pi tiene su propio
+    # token individual, hasheado en la base (ver Dispositivo.token_hash,
+    # panel de desarrollador → Dispositivos). Se conserva la variable acá
+    # para no romper el arranque si docker-compose.yml todavía la define.
     DEVICE_TOKEN = os.environ.get("DEVICE_TOKEN", "sicavs-device-dev")
 
     # ── Google Wallet (tarjeta virtual de acceso) ──────────────────────────────
@@ -88,11 +91,6 @@ def validar_config_produccion():
         )
     if "sicavs_dev" in Config.SQLALCHEMY_DATABASE_URI:
         problemas.append("La contraseña de PostgreSQL sigue siendo la de desarrollo (sicavs_dev).")
-    if Config.DEVICE_TOKEN in _SECRETOS_INSEGUROS or Config.DEVICE_TOKEN == "sicavs-device-dev" or len(Config.DEVICE_TOKEN) < 24:
-        problemas.append(
-            "DEVICE_TOKEN es inseguro o muy corto (lo usan las Raspberry Pi de acceso).\n"
-            "    Generá uno aleatorio largo, ej: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
-        )
     # CORS con credenciales no debe usar comodín ni http en producción
     if "*" in Config.CORS_ORIGINS:
         problemas.append("CORS_ORIGINS no puede contener '*' en producción (se usan credenciales).")

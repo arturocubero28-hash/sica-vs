@@ -101,3 +101,20 @@ CREATE TABLE IF NOT EXISTS comprobantes_pago (
     created_at   TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_comprobantes_pago_pago_id ON comprobantes_pago(pago_id);
+
+-- DEVICE-06: el token de cada Raspberry Pi se guarda como HASH (SHA-256),
+-- nunca en texto plano. Se renombra la columna y se agrega dispositivo_id
+-- a eventos_acceso para saber qué Pi generó cada evento de residente.
+--
+-- ADVERTENCIA IMPORTANTE si ya hay dispositivos creados en producción:
+-- este ALTER TABLE renombra la columna pero NO puede hashear
+-- retroactivamente tokens ya existentes (el hash es de un solo sentido).
+-- Cualquier dispositivo creado ANTES de esta migración debe REGENERAR
+-- su token desde el panel de desarrollador después de aplicarla — el
+-- token viejo dejará de servir porque token_hash quedará con el valor
+-- en claro viejo, que no coincidirá con ningún hash real generado por
+-- el backend nuevo.
+ALTER TABLE dispositivos_pi RENAME COLUMN token TO token_hash;
+
+ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS dispositivo_id BIGINT
+    REFERENCES dispositivos_pi(id);

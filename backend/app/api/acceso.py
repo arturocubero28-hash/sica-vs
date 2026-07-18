@@ -24,9 +24,8 @@ autenticación del dispositivo es un token simple en el header; se endurece al
 desplegar.
 """
 import datetime as dt
-import hmac
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify
 
 from app.extensions import db, limiter
 from app.auth.security import roles_required
@@ -43,32 +42,25 @@ def _err(code, message, status):
     return jsonify({"error": {"code": code, "message": message}}), status
 
 
-def _dispositivo_autorizado():
-    """
-    Verifica el token del dispositivo (la Pi) en el header X-Device-Token.
-    Por ahora compara contra una variable de entorno simple. Al desplegar se
-    puede dar un token único por acceso físico.
-    """
-    token = request.headers.get("X-Device-Token", "")
-    esperado = current_app.config.get("DEVICE_TOKEN", "sicavs-device-dev")
-    # Comparación en tiempo constante para evitar timing attacks que permitirían
-    # reconstruir el token carácter por carácter midiendo tiempos de respuesta.
-    if not token or not esperado:
-        return False
-    return hmac.compare_digest(token, esperado)
-
-
 def _dispositivo_actual():
     """
     Identifica la Pi por su token individual (header X-Device-Token) contra la
     tabla de dispositivos. Devuelve el Dispositivo si el token es válido y está
-    activo, o None. Es la forma nueva (por-Pi); _dispositivo_autorizado() es el
-    fallback legacy del token compartido.
+    activo, o None.
+
+    DEVICE-06 (Auditoría Día 35): la comparación es contra el HASH guardado
+    en la base (token_hash), nunca contra un token en claro — la base de
+    datos nunca contiene el token real de ninguna Pi. Antes existía además
+    un fallback legacy (_dispositivo_autorizado) con un único token global
+    compartido por variable de entorno, usado solo por /validar-tarjeta —
+    se eliminó: ahora ese endpoint también identifica la Pi individual,
+    igual que /sincronizar y /reportar.
     """
     token = request.headers.get("X-Device-Token", "")
     if not token:
         return None
-    disp = Dispositivo.query.filter_by(token=token, activo=True).first()
+    from app.models.dispositivo import hash_token
+    disp = Dispositivo.query.filter_by(token_hash=hash_token(token), activo=True).first()
     return disp
 
 
@@ -78,8 +70,13 @@ def validar_tarjeta():
     """
     Recibe {card_uid, acceso_id} y decide si se permite el acceso.
     Devuelve {permitido, motivo, ...} y registra el evento.
+
+    DEVICE-06: antes usaba el token global compartido (_dispositivo_autorizado).
+    Ahora identifica la Pi individual igual que /sincronizar y /reportar —
+    el evento queda atribuido a qué dispositivo exacto lo generó.
     """
-    if not _dispositivo_autorizado():
+    disp = _dispositivo_actual()
+    if not disp:
         return _err("dispositivo_no_autorizado",
                     "Dispositivo no autorizado para validar accesos", 401)
 
@@ -108,6 +105,7 @@ def validar_tarjeta():
             acceso_id=acceso.id,
             tarjeta_id=tarjeta.id if tarjeta else None,
             residente_id=residente.id if residente else None,
+            dispositivo_id=disp.id,
             sincronizado=True,
         )
         db.session.add(evento)
