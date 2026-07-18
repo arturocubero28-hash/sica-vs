@@ -65,7 +65,13 @@ class Visita(db.Model):
     uuid_publico = _uuid()
     cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False, index=True)
     generada_por = db.Column(db.BigInteger, db.ForeignKey("residentes.id"), nullable=False)
-    tipo = db.Column(db.String(20), nullable=False)  # unica | recurrente | repartidor
+    # NOTA: 'tipo' y 'modo_recurrencia' son ENUMs reales de PostgreSQL
+    # (tipo_visita, modo_recurrencia), no VARCHAR. create_type=False porque
+    # el tipo ya existe en la base — mismo problema y mismo fix que
+    # AccesoFisico.tipo, encontrado en pruebas del Día 36.
+    tipo = db.Column(
+        db.Enum("unica", "recurrente", "repartidor", name="tipo_visita", create_type=False),
+        nullable=False)
 
     nombre_visitante = db.Column(db.String(160), nullable=False)
     documento_id = db.Column(db.String(40))
@@ -76,7 +82,8 @@ class Visita(db.Model):
 
     valido_desde = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     valido_hasta = db.Column(db.DateTime(timezone=True))
-    modo_recurrencia = db.Column(db.String(20))  # libre | una_por_dia
+    modo_recurrencia = db.Column(
+        db.Enum("libre", "una_por_dia", name="modo_recurrencia", create_type=False))
 
     estado = db.Column(db.String(20), nullable=False, default="activa", index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
