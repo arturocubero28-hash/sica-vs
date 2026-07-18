@@ -56,3 +56,10 @@ CREATE INDEX IF NOT EXISTS idx_credenciales_ble_residente ON credenciales_ble(re
 -- Tipo de acceso que el admin autoriza para credenciales virtuales (QR/BLE)
 -- de cada cuenta. Mismo concepto que el tipo_acceso de las tarjetas físicas.
 ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS tipo_acceso_virtual VARCHAR(20) NOT NULL DEFAULT 'peatonal';
+
+-- PAY-11: defensa de segunda capa contra recibos duplicados. El correlativo
+-- ahora se genera con un UPDATE atómico (ver ConfigRecibo.siguiente_correlativo),
+-- pero un índice único parcial (solo cuando numero_recibo no es NULL) asegura
+-- que la base de datos rechace cualquier duplicado que se colara por otra vía.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pagos_numero_recibo_unico
+    ON pagos (numero_recibo) WHERE numero_recibo IS NOT NULL;

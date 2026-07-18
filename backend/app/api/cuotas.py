@@ -367,7 +367,24 @@ def revisar_pago(usuario_actual, uuid_pago):
                     for c in arr.cuotas:
                         c.estado = "pagada"
         elif pago.cuota:
-            pago.cuota.estado = "pagada"
+            # PAY-11: no marcar la cuota como pagada solo porque este pago se
+            # aprobó — hay que sumar TODOS los pagos aprobados de esa cuota
+            # (este incluido) y compararlo contra el monto real adeudado.
+            # Antes: un pago parcial (ej. L100 sobre una deuda de L1,200)
+            # marcaba la cuota completa como pagada al aprobarse.
+            cuota = pago.cuota
+            db.session.flush()  # asegurar que pago.estado='aprobado' ya esté visible para el SUM
+            total_aprobado = _monto_pagado_cuota(cuota)
+            monto_cuota = float(cuota.monto)
+            if total_aprobado >= monto_cuota:
+                cuota.estado = "pagada"
+            else:
+                # Pago parcial: la cuota sigue pendiente por el saldo restante.
+                # Se mantiene en pendiente/vencida (no se toca aquí) para que
+                # el sistema de mora y bloqueo la siga tratando como corresponde;
+                # el saldo se expone en to_dict() vía monto_pagado/saldo_pendiente.
+                if cuota.estado == "en_revision":
+                    cuota.estado = "vencida" if cuota.fecha_vencimiento < dt.date.today() else "pendiente"
         # Desbloqueo automático SOLO si ya no quedan cuotas vencidas sin pagar.
         # (Si el residente pagó una cuota pero aún debe otras, sigue bloqueado.)
         if cuenta:

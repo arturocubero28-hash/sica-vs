@@ -496,11 +496,22 @@ class Cuota(db.Model):
     pagos  = db.relationship("Pago", backref="cuota", lazy="dynamic")
 
     def to_dict(self, con_pagos=False):
+        # PAY-11: exponer cuánto se ha pagado realmente (solo pagos aprobados)
+        # y el saldo restante, para que el residente vea con claridad un pago
+        # parcial en vez de que la cuota simplemente "desaparezca" de pendientes
+        # o quede marcada como pagada sin estarlo.
+        pagado = float(
+            self.pagos.filter_by(estado="aprobado")
+                .with_entities(db.func.coalesce(db.func.sum(Pago.monto), 0)).scalar() or 0
+        )
+        monto_f = float(self.monto)
         d = {
             "id":               str(self.uuid_publico),
             "periodo":          self.periodo.isoformat(),
             "mes_label":        self.periodo.strftime("%B %Y"),
-            "monto":            float(self.monto),
+            "monto":            monto_f,
+            "monto_pagado":     pagado,
+            "saldo_pendiente":  round(max(monto_f - pagado, 0), 2),
             "fecha_vencimiento": self.fecha_vencimiento.isoformat(),
             "estado":           self.estado,
             "created_at":       self.created_at.isoformat(),
@@ -729,9 +740,31 @@ class ConfigRecibo(db.Model):
         return cfg
 
     def siguiente_correlativo(self):
-        """Reserva y devuelve el siguiente número de recibo."""
-        self.ultimo_correlativo = (self.ultimo_correlativo or 0) + 1
-        return self.ultimo_correlativo
+        """
+        Reserva y devuelve el siguiente número de recibo.
+
+        PAY-11: antes esto era 'leer en Python, sumar 1, escribir' — dos
+        aprobaciones de pago casi simultáneas podían leer el mismo valor
+        antes de que la primera confirmara su escritura, generando el mismo
+        número de recibo dos veces.
+
+        Ahora el incremento ocurre como una sola sentencia UPDATE atómica en
+        PostgreSQL (SET x = x + 1 ... RETURNING x), que la propia base de
+        datos serializa entre transacciones concurrentes — sin necesidad de
+        bloqueos manuales ni SELECT FOR UPDATE.
+        """
+        resultado = db.session.execute(
+            db.text(
+                "UPDATE config_recibo "
+                "SET ultimo_correlativo = ultimo_correlativo + 1 "
+                "WHERE id = :id "
+                "RETURNING ultimo_correlativo"
+            ),
+            {"id": self.id},
+        ).scalar()
+        # Mantener el objeto en memoria sincronizado con lo que quedó en la BD
+        self.ultimo_correlativo = resultado
+        return resultado
 
     def numero_formateado(self, correlativo):
         """

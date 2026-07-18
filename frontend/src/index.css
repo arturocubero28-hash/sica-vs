@@ -807,6 +807,13 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 }
 .cuota-rechazo b { color: #c81e1e; }
 
+.cuota-pago-parcial {
+  background: #fff8e6; border: 1px solid #f0d68a; color: #7a5b0a;
+  border-radius: 9px; padding: 10px 12px; font-size: 13px; line-height: 1.5;
+  margin-bottom: 10px;
+}
+.cuota-pago-parcial b { color: #5c4400; }
+
 /* ============================================================
    COMUNICADOS RESIDENTE — card compacta + modal
    ============================================================ */

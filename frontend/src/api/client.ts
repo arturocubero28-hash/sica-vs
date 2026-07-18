@@ -347,6 +347,10 @@ export interface CuotaDTO {
   created_at: string; pagos?: PagoDTO[];
   pago_rechazado?: boolean; nota_rechazo?: string; en_revision?: boolean;
   pago?: { id: string; numero_recibo?: number; metodo: string; revisado_en?: string };
+  // PAY-11: cuánto se ha pagado realmente (solo pagos aprobados) y el saldo
+  // restante — para mostrar con claridad un pago parcial en vez de que la
+  // cuota simplemente desaparezca de "pendientes" sin explicación.
+  monto_pagado?: number; saldo_pendiente?: number;
 }
 export interface PagoDTO {
   id: string; cuota_id: string; monto: number; metodo: string;

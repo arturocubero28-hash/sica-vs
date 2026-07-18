@@ -188,6 +188,13 @@ function CuotaCard({ cuota, onPagar }: { cuota: CuotaDTO; onPagar?: () => void }
           <span> Podés subir un nuevo comprobante.</span>
         </div>
       )}
+      {!!cuota.monto_pagado && cuota.monto_pagado > 0 &&
+        (cuota.estado === "pendiente" || cuota.estado === "vencida") && (
+        <div className="cuota-pago-parcial">
+          Ya pagaste <b>L {cuota.monto_pagado.toFixed(2)}</b> de L {cuota.monto.toFixed(2)}.
+          Saldo pendiente: <b>L {(cuota.saldo_pendiente ?? 0).toFixed(2)}</b>
+        </div>
+      )}
       {(cuota.estado === "pendiente" || cuota.estado === "vencida") && !cuota.en_revision && onPagar && (
         <button className="cuota-btn-pagar" onClick={onPagar}>
           {cuota.pago_rechazado ? "Subir nuevo comprobante" : "Subir comprobante de pago"}
