@@ -414,12 +414,19 @@ def registrar_acceso_visita(usuario_actual):
     # fila: PostgreSQL hace esperar a la segunda petición hasta que la
     # primera confirme o revierta. Esto elimina la condición de carrera
     # de doble registro con el mismo QR.
+    #
+    # of=CodigoQR/Visita: Visita tiene relaciones lazy="joined" (qr,
+    # residente, cuenta, etc.) que SQLAlchemy arma como LEFT OUTER JOIN
+    # automáticamente. PostgreSQL no permite FOR UPDATE sobre el lado
+    # nulo de un outer join ('FeatureNotSupported'), así que hay que
+    # decirle explícitamente que bloquee SOLO la tabla principal, no
+    # las tablas unidas — encontrado en pruebas del Día 36.
     if token_str.isdigit():
         qr = (CodigoQR.query.filter_by(codigo_numerico=token_str)
-              .with_for_update().first())
+              .with_for_update(of=CodigoQR).first())
     else:
         qr = (CodigoQR.query.filter_by(token=token_str)
-              .with_for_update().first())
+              .with_for_update(of=CodigoQR).first())
     if not qr:
         return jsonify({"error": {"code": "qr_invalido",
                                   "message": "Código no encontrado"}}), 404
@@ -427,7 +434,7 @@ def registrar_acceso_visita(usuario_actual):
         return jsonify({"error": {"code": "qr_revocado",
                                   "message": "Este código fue revocado"}}), 400
 
-    visita = Visita.query.with_for_update().get(qr.visita_id)
+    visita = Visita.query.with_for_update(of=Visita).get(qr.visita_id)
     ahora = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc)
 
     # PASO 2 — mismas reglas de validación que antes vivían en validar_qr(),
