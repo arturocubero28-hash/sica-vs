@@ -21,7 +21,16 @@ class AccesoFisico(db.Model):
     __tablename__ = "accesos_fisicos"
     id = db.Column(db.BigInteger, primary_key=True)
     nombre = db.Column(db.String(80), nullable=False)
-    tipo = db.Column(db.String(20), nullable=False)
+    # NOTA: la columna 'tipo' en la base real es un ENUM de PostgreSQL
+    # (tipo_acceso: vehicular | peatonal), no un VARCHAR simple. Se usa
+    # sqlalchemy.Enum con create_type=False para que SQLAlchemy no intente
+    # crear el tipo (ya existe) y sí le diga a Postgres que caste el valor
+    # correctamente en los INSERT — sin esto, un INSERT con VARCHAR plano
+    # fallaba con 'column tipo is of type tipo_acceso but expression is of
+    # type character varying' (encontrado en pruebas del Día 36).
+    tipo = db.Column(
+        db.Enum("vehicular", "peatonal", name="tipo_acceso", create_type=False),
+        nullable=False)
     activo = db.Column(db.Boolean, nullable=False, default=True)
     # Hardware: relay/GPIO que acciona la tranca de este acceso y duración del pulso.
     # relay_pin = número de pin GPIO de la Raspberry Pi que cierra el contacto seco.
