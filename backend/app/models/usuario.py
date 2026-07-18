@@ -39,7 +39,11 @@ class Usuario(db.Model):
     contacto_emergencia_telefono = db.Column(db.String(30))
     password_hash = db.Column(db.String(255), nullable=False)
     # rol global: super_admin | admin | guardia | residente
-    rol = db.Column(db.String(20), nullable=False, default="residente")
+    # ENUM real de PostgreSQL (rol_global) — fix Día 36.
+    rol = db.Column(
+        db.Enum("super_admin", "admin", "guardia", "residente", "cajero", "desarrollador",
+                name="rol_global", create_type=False),
+        nullable=False, default="residente")
     activo = db.Column(db.Boolean, nullable=False, default=True)
     debe_cambiar_password = db.Column(db.Boolean, nullable=False, default=False)
     biometria_activa = db.Column(db.Boolean, nullable=False, default=False)

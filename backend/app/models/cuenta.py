@@ -32,7 +32,11 @@ class Unidad(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True)
     uuid_publico = _uuid_col()
-    tipo = db.Column(db.String(10), nullable=False)        # 'casa' | 'edificio'
+    # ENUM real de PostgreSQL (tipo_unidad: casa | edificio) — mismo patrón
+    # de fix que el resto de columnas enum encontradas el Día 36.
+    tipo = db.Column(
+        db.Enum("casa", "edificio", name="tipo_unidad", create_type=False),
+        nullable=False)
     identificador = db.Column(db.String(60), unique=True, nullable=False)  # "Casa 24", "Edificio 1"
     direccion_ref = db.Column(db.String(160))
     # Para edificios: el usuario dueño/responsable que avala a sus inquilinos
@@ -290,7 +294,10 @@ class Residente(db.Model):
     uuid_publico = _uuid_col()
     usuario_id = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
     cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
-    rol_cuenta = db.Column(db.String(10), nullable=False, default="miembro")  # titular | miembro
+    # ENUM real de PostgreSQL (rol_en_cuenta: titular | miembro).
+    rol_cuenta = db.Column(
+        db.Enum("titular", "miembro", name="rol_en_cuenta", create_type=False),
+        nullable=False, default="miembro")
     relacion = db.Column(db.String(60))                    # propietario, inquilino, hijo...
     activo = db.Column(db.Boolean, nullable=False, default=True)
     fecha_ingreso = db.Column(db.Date, nullable=False, default=dt.date.today)
@@ -336,8 +343,13 @@ class Tarjeta(db.Model):
     cuenta_id = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False)
     residente_id = db.Column(db.BigInteger, db.ForeignKey("residentes.id"))
     etiqueta = db.Column(db.String(80))                    # "Tarjeta principal", "Auto 2"
-    tipo_acceso = db.Column(db.String(20), nullable=False, default="vehicular")  # vehicular | peatonal
-    estado = db.Column(db.String(20), nullable=False, default="activa")
+    # ENUMs reales de PostgreSQL — mismo patrón de fix del Día 36.
+    tipo_acceso = db.Column(
+        db.Enum("vehicular", "peatonal", name="tipo_acceso", create_type=False),
+        nullable=False, default="vehicular")
+    estado = db.Column(
+        db.Enum("activa", "bloqueada", "extraviada", "baja", name="estado_tarjeta", create_type=False),
+        nullable=False, default="activa")
     fecha_asignacion = db.Column(db.Date, nullable=False, default=dt.date.today)
     fecha_baja = db.Column(db.Date)
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
@@ -541,11 +553,17 @@ class Pago(db.Model):
     abono_id             = db.Column(db.BigInteger, db.ForeignKey("abonos_arreglo.id"), nullable=True)
     cuenta_id            = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False, index=True)
     subido_por           = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
-    metodo               = db.Column(db.String(20), nullable=False, default="transferencia")
+    # ENUMs reales de PostgreSQL — fix Día 36.
+    metodo = db.Column(
+        db.Enum("transferencia", "pasarela", "efectivo", "tarjeta_pos", "linea",
+                name="metodo_pago", create_type=False),
+        nullable=False, default="transferencia")
     monto                = db.Column(db.Numeric(10, 2), nullable=False)
     comprobante_archivo  = db.Column(db.String(255))
     referencia           = db.Column(db.String(120))
-    estado               = db.Column(db.String(20), nullable=False, default="en_revision", index=True)
+    estado = db.Column(
+        db.Enum("en_revision", "aprobado", "rechazado", name="estado_pago", create_type=False),
+        nullable=False, default="en_revision", index=True)
     revisado_por         = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
     revisado_en          = db.Column(db.DateTime(timezone=True))
     nota_admin           = db.Column(db.String(255))

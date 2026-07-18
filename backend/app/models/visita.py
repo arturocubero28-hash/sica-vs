@@ -43,7 +43,10 @@ class AccesoFisico(db.Model):
     # Dirección fija de la tranca: "entrada" o "salida". Cada punto tiene una
     # tranca de entrada y una de salida; la dirección del evento la define por
     # qué tranca pasó la tarjeta (no se adivina). Default "entrada".
-    direccion = db.Column(db.String(10), nullable=False, default="entrada")
+    # ENUM real de PostgreSQL (direccion_acceso) — fix Día 36.
+    direccion = db.Column(
+        db.Enum("entrada", "salida", name="direccion_acceso", create_type=False),
+        nullable=False, default="entrada")
 
     def to_dict(self):
         return {
@@ -180,8 +183,13 @@ class EventoAcceso(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True)
     uuid_publico = _uuid()
-    origen = db.Column(db.String(20), nullable=False)  # residente | visita
-    direccion = db.Column(db.String(10), nullable=False)  # entrada | salida
+    # ENUMs reales de PostgreSQL — fix Día 36.
+    origen = db.Column(
+        db.Enum("residente", "visita", name="origen_evento", create_type=False),
+        nullable=False)
+    direccion = db.Column(
+        db.Enum("entrada", "salida", name="direccion_acceso", create_type=False),
+        nullable=False)
     acceso_id = db.Column(db.BigInteger, db.ForeignKey("accesos_fisicos.id"), nullable=False)
 
     tarjeta_id = db.Column(db.BigInteger, db.ForeignKey("tarjetas_proximidad.id"))
