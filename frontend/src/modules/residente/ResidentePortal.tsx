@@ -153,6 +153,7 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
         tipo, nombre_visitante: nombre, documento_id: documento || undefined,
         telefono: telefono || undefined, empresa: tipo === "repartidor" ? empresa : undefined,
         en_vehiculo: enVehiculo,
+        placa_vehiculo: enVehiculo && placa.trim() ? placa.trim() : undefined,
         valido_hasta: tipo === "recurrente" ? new Date(validoHasta).toISOString() : undefined,
         modo_recurrencia: tipo === "recurrente" ? modo : undefined,
       });
@@ -222,7 +223,16 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
         <input type="checkbox" checked={enVehiculo} onChange={e => setEnVehiculo(e.target.checked)} />
         Viene en vehículo
       </label>
-      {enVehiculo && <span className="muted small" style={{ display: "block", marginTop: 4 }}>El guardia le pedirá el número de placa al visitante al momento de ingresar.</span>}
+      {enVehiculo && (
+        <>
+          <input placeholder="Placa del vehículo (opcional)" value={placa}
+            onChange={e => setPlaca(e.target.value.toUpperCase())} style={{ marginTop: 4 }} />
+          <span className="muted small" style={{ display: "block", marginTop: 4 }}>
+            Si la conocés, ayuda al guardia a confirmar quién llega. Si no la sabés, no pasa nada
+            — el guardia la anota al momento de ingresar.
+          </span>
+        </>
+      )}
 
       {tipo === "recurrente" && (
         <>
