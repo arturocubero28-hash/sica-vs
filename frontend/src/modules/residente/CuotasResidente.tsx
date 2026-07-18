@@ -42,6 +42,12 @@ export function CuotasResidente() {
   const pendientes = cuotas.filter(c => c.estado !== "pagada" && c.estado !== "en_arreglo");
   const abonosPend = arreglo ? arreglo.abonos.filter(a => a.estado !== "pagado") : [];
   const totalPend = pendientes.length + abonosPend.length;
+  // Orden cronológico obligatorio (Día 36): solo se puede pagar la cuota
+  // pendiente más antigua primero. pendientes viene ordenado desc. desde
+  // el backend, así que el período más antiguo es el mínimo del array.
+  const periodoMasAntiguoPendiente = pendientes.length > 0
+    ? pendientes.reduce((min, c) => c.periodo < min ? c.periodo : min, pendientes[0].periodo)
+    : null;
 
   return (
     <div className="cuotas-wrap">
@@ -85,9 +91,13 @@ export function CuotasResidente() {
               <h3 className="cuotas-seccion" style={{ marginTop: (arreglo && abonosPend.length > 0) ? 24 : 0 }}>
                 Cuotas de mensualidad
               </h3>
+              <p className="muted small" style={{ margin: "0 0 10px" }}>
+                Pagá en orden: primero la más antigua pendiente.
+              </p>
               <div className="cuota-list">
                 {pendientes.map(c => (
-                  <CuotaCard key={c.id} cuota={c} onPagar={() => setCuotaPago(c)} />
+                  <CuotaCard key={c.id} cuota={c} onPagar={() => setCuotaPago(c)}
+                    esLaMasAntigua={c.periodo === periodoMasAntiguoPendiente} />
                 ))}
               </div>
             </section>
@@ -164,8 +174,11 @@ function AbonoCard({ abono, onPagar }: { abono: AbonoArregloDTO; onPagar: () => 
   );
 }
 
-function CuotaCard({ cuota, onPagar }: { cuota: CuotaDTO; onPagar?: () => void }) {
+function CuotaCard({ cuota, onPagar, esLaMasAntigua = true }: {
+  cuota: CuotaDTO; onPagar?: () => void; esLaMasAntigua?: boolean;
+}) {
   const vencida = new Date(cuota.fecha_vencimiento) < new Date() && cuota.estado !== "pagada";
+  const puedeSubir = (cuota.estado === "pendiente" || cuota.estado === "vencida") && !cuota.en_revision;
   return (
     <div className={`cuota-card ${vencida ? "vencida" : ""}`}>
       <div className="cuota-card-top">
@@ -188,8 +201,14 @@ function CuotaCard({ cuota, onPagar }: { cuota: CuotaDTO; onPagar?: () => void }
           <span> Podés subir un nuevo comprobante.</span>
         </div>
       )}
-      {(cuota.estado === "pendiente" || cuota.estado === "vencida") && !cuota.en_revision && onPagar && (
-        <button className="cuota-btn-pagar" onClick={onPagar}>
+      {puedeSubir && !esLaMasAntigua && (
+        <div className="cuota-rechazo" style={{ background: "#eef2fb", borderColor: "#c7d3ef", color: "#2c4a8f" }}>
+          Tenés una cuota más antigua sin pagar. Pagá esa primero.
+        </div>
+      )}
+      {puedeSubir && onPagar && (
+        <button className="cuota-btn-pagar" onClick={onPagar} disabled={!esLaMasAntigua}
+          style={!esLaMasAntigua ? { opacity: 0.5, cursor: "not-allowed" } : undefined}>
           {cuota.pago_rechazado ? "Subir nuevo comprobante" : "Subir comprobante de pago"}
         </button>
       )}

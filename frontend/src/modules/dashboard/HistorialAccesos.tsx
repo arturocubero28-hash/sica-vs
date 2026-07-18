@@ -111,7 +111,8 @@ function TabAccesos() {
             <div className="scroll-x">
               <table className="data">
                 <thead>
-                  <tr><th>Fecha / Hora</th><th>Dirección</th><th>Visitante</th><th>Unidad</th><th>Placa</th><th>Guardia</th><th>Fotos</th></tr>
+                  <tr><th>Fecha / Hora</th><th>Dirección</th><th>Visitante</th><th>Unidad</th>
+                    <th>Acceso</th><th>Placa</th><th>Guardia</th><th>Fotos</th></tr>
                 </thead>
                 <tbody>
                   {data.eventos.map(e => (
@@ -125,7 +126,16 @@ function TabAccesos() {
                       </td>
                       <td>{e.visitante}</td>
                       <td>{e.unidad}</td>
-                      <td>{e.placa || "—"}</td>
+                      <td className="small">{e.punto_acceso || "—"}</td>
+                      <td>
+                        {e.placa || "—"}
+                        {e.placa_no_coincide && (
+                          <span className="pill" style={{ background: "#fde2e2", color: "#b42318", marginLeft: 6, fontSize: 10 }}
+                            title={`El guardia observó: ${e.placa_observada}`}>
+                            ⚠ no coincide
+                          </span>
+                        )}
+                      </td>
                       <td className="small">{e.guardia}</td>
                       <td>
                         {tieneFotos(e)

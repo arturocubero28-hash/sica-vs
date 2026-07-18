@@ -171,6 +171,24 @@ def subir_comprobante(usuario_actual, uuid_cuota):
                                   "message": "Ya subiste un comprobante para esta cuota. "
                                              "Esperá a que la administración lo revise."}}), 409
 
+    # Orden cronológico obligatorio: no se puede pagar una cuota si hay otra
+    # más antigua de la misma cuenta todavía sin pagar. Evita que alguien
+    # "salte" meses recientes para escapar del bloqueo por mora mientras
+    # deja atrás una deuda vieja sin resolver.
+    cuota_anterior_pendiente = (
+        Cuota.query.filter(
+            Cuota.cuenta_id == cuota.cuenta_id,
+            Cuota.periodo < cuota.periodo,
+            Cuota.estado.in_(("pendiente", "vencida", "en_revision")),
+        ).order_by(Cuota.periodo.asc()).first()
+    )
+    if cuota_anterior_pendiente:
+        return jsonify({"error": {
+            "code": "CUOTA_ANTERIOR_PENDIENTE",
+            "message": f"Tenés una cuota anterior sin pagar: "
+                       f"{cuota_anterior_pendiente.periodo.strftime('%B %Y')}. "
+                       f"Pagá esa primero."}}), 409
+
     # Uno o varios comprobantes (ej. depósito en dos partes) — se aceptan
     # como múltiples archivos bajo el mismo nombre de campo 'comprobante',
     # o el campo singular anterior para retrocompatibilidad.

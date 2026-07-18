@@ -589,6 +589,10 @@ export interface EventoHistorialDTO {
   id: string; direccion: string; visitante: string;
   unidad: string; guardia: string; placa?: string; ocurrido_en: string;
   esta_adentro?: boolean;
+  // ACCESS-04: por dónde entró/salió, y la placa que observó el guardia
+  // vs la que declaró el residente al crear la visita.
+  punto_acceso?: string; tranca?: string;
+  placa_observada?: string; placa_no_coincide?: boolean;
   foto_identidad?: string; foto_placa?: string; foto_numero_asignado?: string;
 }
 export interface HistorialDTO {

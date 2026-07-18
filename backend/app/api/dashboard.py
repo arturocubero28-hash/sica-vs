@@ -305,7 +305,19 @@ def historial_accesos(usuario_actual):
             if cuenta and cuenta.unidad:
                 unidad = cuenta.unidad.identificador
         guardia = f"{e.guardia.nombre} {e.guardia.apellido}" if e.guardia else "—"
-        placa = e.placa_vehiculo or (visita.placa_vehiculo if visita else None)
+        placa_declarada = e.placa_vehiculo or (visita.placa_vehiculo if visita else None)
+        placa_observada = e.placa_observada
+        no_coincide = bool(
+            placa_declarada and placa_observada
+            and placa_declarada.strip().upper() != placa_observada.strip().upper()
+        )
+
+        # Punto de acceso real por el que entró/salió (ACCESS-04, Día 35).
+        # Antes no se mostraba en el historial — solo se sabía que existió
+        # un evento, no por cuál portón.
+        acceso = AccesoFisico.query.get(e.acceso_id) if e.acceso_id else None
+        punto_acceso = acceso.punto_acceso if acceso else None
+        tranca = acceso.nombre if acceso else None
 
         # ¿Esta visita está adentro ahora mismo?
         esta_adentro = visita.id in ids_adentro if visita else False
@@ -320,7 +332,11 @@ def historial_accesos(usuario_actual):
             "visitante": visitante,
             "unidad": unidad,
             "guardia": guardia,
-            "placa": placa,
+            "placa": placa_declarada,
+            "placa_observada": placa_observada,
+            "placa_no_coincide": no_coincide,
+            "punto_acceso": punto_acceso,
+            "tranca": tranca,
             "ocurrido_en": e.ocurrido_en.isoformat() if e.ocurrido_en else None,
             "esta_adentro": esta_adentro,
             "foto_identidad": e.foto_identidad,
@@ -329,7 +345,7 @@ def historial_accesos(usuario_actual):
         }
         # Filtro de texto en memoria (placa/visitante/unidad)
         if buscar:
-            blob = f"{visitante} {unidad} {placa or ''}".lower()
+            blob = f"{visitante} {unidad} {placa_declarada or ''}".lower()
             if buscar not in blob:
                 continue
         filas.append(fila)
