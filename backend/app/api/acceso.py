@@ -415,6 +415,22 @@ def heartbeat_agente_camaras():
 #     pierde nunca.
 # =====================================================================
 
+# Marcador para trancas creadas antes de existir el concepto de "punto de
+# acceso" (ej. desde el panel de desarrollador antiguo), que en la base
+# real tienen punto_acceso = NULL. Se agrupan bajo esta etiqueta para que
+# no desaparezcan silenciosamente de la lista del admin, y se permite
+# asignarles un nombre real desde el mismo panel.
+SIN_PUNTO = "(sin nombre de punto)"
+
+
+def _trancas_del_punto(nombre_punto):
+    """Busca las trancas de un punto por nombre. Si el nombre es SIN_PUNTO,
+    busca las que tienen punto_acceso=NULL en la base."""
+    if nombre_punto == SIN_PUNTO:
+        return AccesoFisico.query.filter(AccesoFisico.punto_acceso.is_(None)).all()
+    return AccesoFisico.query.filter_by(punto_acceso=nombre_punto).all()
+
+
 def _punto_a_dict(nombre_punto, trancas):
     """Agrupa las trancas individuales (filas AccesoFisico) de un mismo
     punto_acceso en un solo objeto para el admin y para el guardia."""
@@ -423,6 +439,7 @@ def _punto_a_dict(nombre_punto, trancas):
     veh_salida = next((t for t in trancas if t.tipo == "vehicular" and t.direccion == "salida"), None)
     return {
         "punto_acceso": nombre_punto,
+        "sin_nombre": nombre_punto == SIN_PUNTO,
         "activo": any(t.activo for t in trancas),
         "tiene_peatonal": peatonal is not None,
         "tiene_vehicular_entrada": veh_entrada is not None,
@@ -447,7 +464,7 @@ def listar_puntos_acceso(usuario_actual):
 
     agrupado = {}
     for t in trancas:
-        clave = t.punto_acceso or "(sin nombre de punto)"
+        clave = t.punto_acceso or SIN_PUNTO
         agrupado.setdefault(clave, []).append(t)
 
     puntos = [_punto_a_dict(nombre, lista) for nombre, lista in agrupado.items()]
@@ -510,7 +527,7 @@ def editar_punto_acceso(usuario_actual, nombre_punto):
     todas sus trancas de una vez. NO permite tocar relay_pin ni pulso_ms
     — eso sigue siendo exclusivo del panel de desarrollador.
     """
-    trancas = AccesoFisico.query.filter_by(punto_acceso=nombre_punto).all()
+    trancas = _trancas_del_punto(nombre_punto)
     if not trancas:
         return _err("no_encontrado", "Punto de acceso no encontrado", 404)
 
@@ -544,7 +561,7 @@ def editar_punto_acceso(usuario_actual, nombre_punto):
 @roles_required("admin", "super_admin")
 def historial_count_punto(usuario_actual, nombre_punto):
     """Cuántos eventos de acceso tiene un punto — informativo antes de desactivarlo."""
-    trancas = AccesoFisico.query.filter_by(punto_acceso=nombre_punto).all()
+    trancas = _trancas_del_punto(nombre_punto)
     if not trancas:
         return _err("no_encontrado", "Punto de acceso no encontrado", 404)
     ids = [t.id for t in trancas]

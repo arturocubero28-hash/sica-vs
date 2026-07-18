@@ -1087,6 +1087,7 @@ export interface TrancaDTO {
 
 export interface PuntoAccesoDTO {
   punto_acceso: string;
+  sin_nombre?: boolean;
   activo: boolean;
   tiene_peatonal: boolean;
   tiene_vehicular_entrada: boolean;

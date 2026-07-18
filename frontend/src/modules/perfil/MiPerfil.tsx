@@ -424,6 +424,20 @@ function PuntoAccesoFila({ punto, onCambio }: { punto: PuntoAccesoDTO; onCambio:
                 Cancelar
               </button>
             </div>
+          ) : punto.sin_nombre ? (
+            <div style={{ marginBottom: 6 }}>
+              <span className="pill" style={{ background: "#fdf0d5", color: "#92651c", marginBottom: 4, display: "inline-block" }}>
+                ⚠ Sin nombre asignado
+              </span>
+              <p className="muted small" style={{ margin: "4px 0" }}>
+                Estas trancas se crearon antes de existir los puntos de acceso con nombre.
+                Ponele un nombre para poder gestionarlas normalmente.
+              </p>
+              <button onClick={() => { setEditando(true); setNombre(""); }}
+                style={{ fontSize: 13, padding: "5px 12px" }}>
+                Ponerle nombre
+              </button>
+            </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
               <b style={{ fontSize: 15 }}>{punto.punto_acceso}</b>
