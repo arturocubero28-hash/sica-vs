@@ -11,10 +11,9 @@ from flask import Blueprint, request, jsonify
 from app.extensions import db
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
+from app.utils.passwords import generar_password_temporal
 
 guardias_bp = Blueprint("guardias", __name__)
-
-PASSWORD_GENERICA = "VillasDelSol2026"
 
 
 @guardias_bp.post("")
@@ -33,17 +32,21 @@ def crear_guardia(usuario_actual):
         return jsonify({"error": {"code": "email_duplicado",
                                   "message": "Ya existe un usuario con ese correo"}}), 400
 
+    # SEC-01: contraseña aleatoria por usuario — antes era una fija
+    # compartida ('VillasDelSol2026') para todos los guardias nuevos.
+    password_temporal = generar_password_temporal()
+
     guardia = Usuario(
         nombre=nombre, apellido=apellido, email=email,
         rol="guardia", activo=True,
         debe_cambiar_password=True,   # obligado a cambiar en el primer login
     )
-    guardia.set_password(PASSWORD_GENERICA)
+    guardia.set_password(password_temporal)
     db.session.add(guardia)
     db.session.commit()
 
     d = guardia.to_dict()
-    d["password_generica"] = PASSWORD_GENERICA  # mostrar al admin para entregársela
+    d["password_generica"] = password_temporal  # mostrar al admin para entregársela
     return jsonify({"data": d}), 201
 
 

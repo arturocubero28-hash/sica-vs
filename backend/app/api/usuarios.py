@@ -9,10 +9,9 @@ from flask import Blueprint, request, jsonify
 from app.extensions import db
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
+from app.utils.passwords import generar_password_temporal, puede_gestionar_rol, ROLES_CREDENCIAL_LOCAL
 
 usuarios_bp = Blueprint("usuarios", __name__)
-
-PASSWORD_GENERICA = "VillasDelSol2026"
 
 
 # ── Listar / buscar usuarios ──────────────────────────────────────────────────
@@ -44,17 +43,24 @@ def listar_usuarios(usuario_actual):
 @usuarios_bp.post("/cajeros")
 @roles_required("admin", "super_admin")
 def crear_cajero(usuario_actual):
-    return _crear_usuario_rol(request, "cajero")
+    return _crear_usuario_rol(request, "cajero", usuario_actual)
 
 
 # ── Crear desarrollador (solo super_admin o desarrollador) ────────────────────
 @usuarios_bp.post("/desarrolladores")
 @roles_required("super_admin", "desarrollador")
 def crear_desarrollador(usuario_actual):
-    return _crear_usuario_rol(request, "desarrollador")
+    return _crear_usuario_rol(request, "desarrollador", usuario_actual)
 
 
-def _crear_usuario_rol(req, rol):
+def _crear_usuario_rol(req, rol, usuario_actual):
+    # SEC-01: jerarquía de roles — un admin no puede crear un super_admin
+    # ni un desarrollador. Solo super_admin/desarrollador pueden hacerlo.
+    if not puede_gestionar_rol(usuario_actual.rol, rol):
+        return jsonify({"error": {"code": "rol_insuficiente",
+                                  "message": f"Tu rol no tiene permiso para crear usuarios "
+                                             f"con rol '{rol}'"}}), 403
+
     data = req.get_json(silent=True) or {}
     nombre = (data.get("nombre") or "").strip()
     apellido = (data.get("apellido") or "").strip()
@@ -67,20 +73,25 @@ def _crear_usuario_rol(req, rol):
         return jsonify({"error": {"code": "email_duplicado",
                                   "message": "Ya existe un usuario con ese correo"}}), 400
 
+    # SEC-01: contraseña aleatoria por usuario, no una fija compartida.
+    # Se muestra una sola vez en la respuesta para que el admin la anote
+    # y se la entregue en papel; el usuario debe cambiarla en su primer login.
+    password_temporal = generar_password_temporal()
+
     u = Usuario(
         nombre=nombre, apellido=apellido, email=email,
         rol=rol, activo=True, debe_cambiar_password=True,
     )
-    u.set_password(PASSWORD_GENERICA)
+    u.set_password(password_temporal)
     db.session.add(u)
     db.session.commit()
 
     d = u.to_dict()
-    d["password_generica"] = PASSWORD_GENERICA
+    d["password_generica"] = password_temporal
     return jsonify({"data": d}), 201
 
 
-# ── Resetear contraseña de cualquier usuario ──────────────────────────────────
+# ── Resetear contraseña de guardias/cajeros (solo desde el panel admin) ───────
 @usuarios_bp.post("/<uuid_usuario>/reset-password")
 @roles_required("admin", "super_admin")
 def reset_password(usuario_actual, uuid_usuario):
@@ -88,11 +99,34 @@ def reset_password(usuario_actual, uuid_usuario):
     if not u:
         return jsonify({"error": {"code": "no_encontrado", "message": "Usuario no encontrado"}}), 404
 
-    u.set_password(PASSWORD_GENERICA)
+    # SEC-01: un usuario no puede resetearse su propia contraseña por esta vía
+    if u.id == usuario_actual.id:
+        return jsonify({"error": {"code": "auto_reset",
+                                  "message": "No podés resetear tu propia contraseña por acá. "
+                                             "Usá 'Cambiar contraseña' en tu perfil."}}), 400
+
+    # SEC-01: jerarquía de roles — un admin no puede resetear a un
+    # super_admin ni a un desarrollador. Solo super_admin puede hacerlo.
+    if not puede_gestionar_rol(usuario_actual.rol, u.rol):
+        return jsonify({"error": {"code": "rol_insuficiente",
+                                  "message": "Tu rol no tiene permiso para resetear "
+                                             "la contraseña de este usuario"}}), 403
+
+    # SEC-01: este endpoint es SOLO para credenciales locales de papel
+    # (guardia, cajero). Residentes, admins y super_admins usan el flujo
+    # de recuperación por correo electrónico — no se les genera ni
+    # muestra una contraseña en pantalla.
+    if u.rol not in ROLES_CREDENCIAL_LOCAL:
+        return jsonify({"error": {"code": "usa_recuperacion_email",
+                                  "message": "Este usuario debe recuperar su contraseña por "
+                                             "correo electrónico, no desde este panel."}}), 400
+
+    password_temporal = generar_password_temporal()
+    u.set_password(password_temporal)
     u.debe_cambiar_password = True
     db.session.commit()
     return jsonify({"data": {"message": "Contraseña restablecida",
-                             "password_generica": PASSWORD_GENERICA}})
+                             "password_generica": password_temporal}})
 
 
 # ── Activar / desactivar usuario ──────────────────────────────────────────────
@@ -102,6 +136,13 @@ def editar_usuario(usuario_actual, uuid_usuario):
     u = Usuario.query.filter_by(uuid_publico=uuid_usuario).first()
     if not u:
         return jsonify({"error": {"code": "no_encontrado", "message": "Usuario no encontrado"}}), 404
+
+    # SEC-01: jerarquía de roles — un admin no puede editar/desactivar a un
+    # super_admin ni desarrollador. Se exceptúa el propio usuario editando
+    # sus propios datos de contacto (nombre, teléfono, etc. — no rol).
+    if u.id != usuario_actual.id and not puede_gestionar_rol(usuario_actual.rol, u.rol):
+        return jsonify({"error": {"code": "rol_insuficiente",
+                                  "message": "Tu rol no tiene permiso para editar este usuario"}}), 403
 
     data = request.get_json(silent=True) or {}
 

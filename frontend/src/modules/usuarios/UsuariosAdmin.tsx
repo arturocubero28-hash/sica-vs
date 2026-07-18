@@ -39,7 +39,7 @@ export function UsuariosAdmin() {
   useEffect(() => { recargar(); }, []);
 
   async function reset(u: UsuarioAdminDTO) {
-    if (!confirm(`¿Resetear la contraseña de ${u.nombre} ${u.apellido}?\nSe generará una nueva contraseña genérica que deberá cambiar en su próximo ingreso.`)) return;
+    if (!confirm(`¿Resetear la contraseña de ${u.nombre} ${u.apellido}?\nSe generará una nueva contraseña aleatoria que deberá cambiar en su próximo ingreso. Anotala para entregársela.`)) return;
     setProcesando(u.id);
     try {
       const r = await resetPasswordUsuario(u.id);
@@ -134,12 +134,14 @@ export function UsuariosAdmin() {
                     </td>
                     <td>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button className="btn-tabla btn-tabla-neutro"
-                          disabled={procesando === u.id}
-                          onClick={() => reset(u)}
-                          title="Generar nueva contraseña genérica">
-                          🔑 Reset clave
-                        </button>
+                        {(u.rol === "guardia" || u.rol === "cajero") && (
+                          <button className="btn-tabla btn-tabla-neutro"
+                            disabled={procesando === u.id}
+                            onClick={() => reset(u)}
+                            title="Generar nueva contraseña — guardias y cajeros usan credencial local, no correo">
+                            🔑 Reset clave
+                          </button>
+                        )}
                         <button
                           className={`btn-tabla ${u.activo ? "btn-tabla-baja" : "btn-tabla-ok"}`}
                           disabled={procesando === u.id}
@@ -278,7 +280,7 @@ function FormUsuario({ tipo, onCerrar, onCreado }: {
           </CampoFormulario>
 
           <p className="muted small" style={{ marginTop: 4 }}>
-            * Campos obligatorios. Se creará con contraseña genérica que deberá cambiar en su primer ingreso.
+            * Campos obligatorios. Se creará con una contraseña aleatoria que deberá cambiar en su primer ingreso.
           </p>
 
           <button className="btn-accion full" onClick={crear} disabled={guardando} style={{ marginTop: 12 }}>

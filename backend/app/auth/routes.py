@@ -16,6 +16,7 @@ from app.extensions import db, limiter
 from app.config import Config
 from app.models.usuario import Usuario
 from app.auth.security import generar_token, token_required, revocar_token
+from app.utils.passwords import ROLES_CREDENCIAL_LOCAL
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -200,6 +201,13 @@ def solicitar_recuperacion():
                                   "message": "El correo es obligatorio"}}), 400
 
     usuario = Usuario.query.filter_by(email=email).first()
+
+    # SEC-01: guardias y cajeros son credenciales locales de papel — su
+    # única vía de reseteo es el panel admin (POST /usuarios/<id>/reset-password),
+    # no la recuperación por correo. Se responde igual que si no existiera
+    # el email, para no revelar el rol del usuario a quien hace la consulta.
+    if usuario and usuario.rol in ROLES_CREDENCIAL_LOCAL:
+        return jsonify({"data": {"message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."}})
 
     # Siempre respondemos OK para no revelar si el email existe
     if not usuario:
