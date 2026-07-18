@@ -188,13 +188,6 @@ function CuotaCard({ cuota, onPagar }: { cuota: CuotaDTO; onPagar?: () => void }
           <span> Podés subir un nuevo comprobante.</span>
         </div>
       )}
-      {!!cuota.monto_pagado && cuota.monto_pagado > 0 &&
-        (cuota.estado === "pendiente" || cuota.estado === "vencida") && (
-        <div className="cuota-pago-parcial">
-          Ya pagaste <b>L {cuota.monto_pagado.toFixed(2)}</b> de L {cuota.monto.toFixed(2)}.
-          Saldo pendiente: <b>L {(cuota.saldo_pendiente ?? 0).toFixed(2)}</b>
-        </div>
-      )}
       {(cuota.estado === "pendiente" || cuota.estado === "vencida") && !cuota.en_revision && onPagar && (
         <button className="cuota-btn-pagar" onClick={onPagar}>
           {cuota.pago_rechazado ? "Subir nuevo comprobante" : "Subir comprobante de pago"}
@@ -230,35 +223,40 @@ function CuotaCard({ cuota, onPagar }: { cuota: CuotaDTO; onPagar?: () => void }
 function FormPago({ cuota, onCerrar, onExito }: {
   cuota: CuotaDTO; onCerrar: () => void; onExito: () => void;
 }) {
-  const [archivo, setArchivo] = useState<File | null>(null);
+  const [archivos, setArchivos] = useState<File[]>([]);
+  const [previews, setPrevius] = useState<string[]>([]);
   const [monto, setMonto] = useState(String(cuota.monto));
   const [referencia, setReferencia] = useState("");
   const [subiendo, setSubiendo] = useState(false);
   const [error, setError] = useState("");
-  const [preview, setPreview] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    comprimirImagenWebp(f).then(comprimido => {
-      setArchivo(comprimido);
-      if (comprimido.type.startsWith("image/")) {
-        const url = URL.createObjectURL(comprimido);
-        setPreview(url);
-      } else {
-        setPreview(null);
-      }
-    });
+  async function onArchivos(e: React.ChangeEvent<HTMLInputElement>) {
+    const nuevos = Array.from(e.target.files || []);
+    if (nuevos.length === 0) return;
+    if (archivos.length + nuevos.length > 5) {
+      setError("Máximo 5 comprobantes por pago");
+      return;
+    }
+    setError("");
+    const comprimidos = await Promise.all(nuevos.map(f => comprimirImagenWebp(f)));
+    setArchivos(prev => [...prev, ...comprimidos]);
+    setPrevius(prev => [...prev, ...comprimidos.map(f =>
+      f.type.startsWith("image/") ? URL.createObjectURL(f) : "")]);
+  }
+
+  function quitarArchivo(i: number) {
+    setArchivos(prev => prev.filter((_, idx) => idx !== i));
+    setPrevius(prev => prev.filter((_, idx) => idx !== i));
   }
 
   async function enviar() {
-    if (!archivo) { setError("Seleccioná el comprobante"); return; }
+    if (archivos.length === 0) { setError("Adjuntá al menos un comprobante"); return; }
     const m = parseFloat(monto);
     if (!m || m <= 0) { setError("Ingresá un monto válido"); return; }
     setError(""); setSubiendo(true);
     try {
-      await subirComprobante(cuota.id, archivo, m, referencia);
+      await subirComprobante(cuota.id, archivos, m, referencia);
       onExito();
     } catch (e) {
       setError((e as Error).message);
@@ -287,19 +285,46 @@ function FormPago({ cuota, onCerrar, onExito }: {
               placeholder="Ej. TRN-2026-001234" />
           </div>
           <div className="form-field">
-            <label>Comprobante (foto o PDF)</label>
-            <div className="upload-area" onClick={() => inputRef.current?.click()}>
-              {preview
-                ? <img src={preview} alt="Comprobante" className="preview-img" />
-                : <div className="upload-placeholder">
-                    <span className="upload-icon"><Paperclip size={16} /></span>
-                    <span>{archivo ? archivo.name : "Toca para adjuntar"}</span>
-                    <span className="muted small">PNG, JPG o PDF</span>
+            <label>Comprobante(s) — foto o PDF</label>
+            <p className="muted small" style={{ marginBottom: 6 }}>
+              ¿Depositaste en varias partes? Adjuntá todos los comprobantes acá — la
+              administración los revisa juntos y aprueba el pago completo.
+            </p>
+
+            {archivos.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                {archivos.map((a, i) => (
+                  <div key={i} style={{ position: "relative", width: 72, height: 72 }}>
+                    {previews[i]
+                      ? <img src={previews[i]} alt={a.name} className="preview-img"
+                          style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8 }} />
+                      : <div style={{ width: 72, height: 72, borderRadius: 8, background: "var(--fondo)",
+                          border: "1px solid var(--borde)", display: "flex", alignItems: "center",
+                          justifyContent: "center", fontSize: 10, textAlign: "center", padding: 4 }}>
+                          {a.name}
+                        </div>}
+                    <button onClick={() => quitarArchivo(i)}
+                      style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20,
+                        borderRadius: "50%", background: "#c0392b", color: "#fff", border: "none",
+                        fontSize: 12, cursor: "pointer", lineHeight: 1 }}>
+                      ✕
+                    </button>
                   </div>
-              }
-            </div>
-            <input ref={inputRef} type="file" accept="image/*,.pdf"
-              style={{ display: "none" }} onChange={onArchivo} />
+                ))}
+              </div>
+            )}
+
+            {archivos.length < 5 && (
+              <div className="upload-area" onClick={() => inputRef.current?.click()}>
+                <div className="upload-placeholder">
+                  <span className="upload-icon"><Paperclip size={16} /></span>
+                  <span>{archivos.length > 0 ? "Agregar otro comprobante" : "Toca para adjuntar"}</span>
+                  <span className="muted small">PNG, JPG o PDF · hasta 5</span>
+                </div>
+              </div>
+            )}
+            <input ref={inputRef} type="file" accept="image/*,.pdf" multiple
+              style={{ display: "none" }} onChange={onArchivos} />
           </div>
 
           {error && <div className="error">{error}</div>}

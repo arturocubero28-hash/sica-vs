@@ -508,22 +508,11 @@ class Cuota(db.Model):
     pagos  = db.relationship("Pago", backref="cuota", lazy="dynamic")
 
     def to_dict(self, con_pagos=False):
-        # PAY-11: exponer cuánto se ha pagado realmente (solo pagos aprobados)
-        # y el saldo restante, para que el residente vea con claridad un pago
-        # parcial en vez de que la cuota simplemente "desaparezca" de pendientes
-        # o quede marcada como pagada sin estarlo.
-        pagado = float(
-            self.pagos.filter_by(estado="aprobado")
-                .with_entities(db.func.coalesce(db.func.sum(Pago.monto), 0)).scalar() or 0
-        )
-        monto_f = float(self.monto)
         d = {
             "id":               str(self.uuid_publico),
             "periodo":          self.periodo.isoformat(),
             "mes_label":        self.periodo.strftime("%B %Y"),
-            "monto":            monto_f,
-            "monto_pagado":     pagado,
-            "saldo_pendiente":  round(max(monto_f - pagado, 0), 2),
+            "monto":            float(self.monto),
             "fecha_vencimiento": self.fecha_vencimiento.isoformat(),
             "estado":           self.estado,
             "created_at":       self.created_at.isoformat(),
@@ -577,21 +566,49 @@ class Pago(db.Model):
     cuenta   = db.relationship("Cuenta", foreign_keys=[cuenta_id], backref="pagos_de_cuenta")
     uploader = db.relationship("Usuario", foreign_keys=[subido_por])
     revisor  = db.relationship("Usuario", foreign_keys=[revisado_por])
+    # Varios comprobantes por pago (ej. el residente depositó en dos partes
+    # y sube ambas fotos para el mismo pago) — el admin las revisa juntas y
+    # aprueba/rechaza el pago completo, no cada imagen por separado.
+    comprobantes = db.relationship("ComprobantePago", backref="pago",
+                                    order_by="ComprobantePago.created_at",
+                                    cascade="all, delete-orphan")
 
     def to_dict(self):
+        # Lista de archivos: si hay comprobantes en la tabla nueva, se usan
+        # esos; si el pago es viejo (de antes de esta funcionalidad) y solo
+        # tiene comprobante_archivo, se devuelve como lista de un elemento
+        # para que el frontend no tenga que distinguir dos formatos.
+        archivos = [c.archivo for c in self.comprobantes] if self.comprobantes else (
+            [self.comprobante_archivo] if self.comprobante_archivo else [])
         return {
             "id":                  str(self.uuid_publico),
             "cuota_id":            str(self.cuota.uuid_publico) if self.cuota else None,
             "monto":               float(self.monto),
             "metodo":              self.metodo,
             "referencia":          self.referencia,
-            "comprobante_archivo": self.comprobante_archivo,
+            "comprobante_archivo": self.comprobante_archivo,  # compatibilidad con historial viejo
+            "comprobantes":        archivos,                   # lista completa (nuevo)
             "numero_recibo":       self.numero_recibo,
             "estado":              self.estado,
             "nota_admin":          self.nota_admin,
             "revisado_en":         self.revisado_en.isoformat() if self.revisado_en else None,
             "created_at":          self.created_at.isoformat(),
         }
+
+
+class ComprobantePago(db.Model):
+    """
+    Una imagen de comprobante asociada a un Pago. Un pago puede tener varios
+    (ej. el residente depositó en dos partes y sube las dos fotos para que
+    el admin las revise juntas y apruebe el pago completo de una vez).
+    """
+    __tablename__ = "comprobantes_pago"
+
+    id         = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid_col()
+    pago_id    = db.Column(db.BigInteger, db.ForeignKey("pagos.id", ondelete="CASCADE"), nullable=False)
+    archivo    = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_now)
 
 
 class ArregloPago(db.Model):

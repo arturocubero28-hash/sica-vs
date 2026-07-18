@@ -83,25 +83,42 @@ export function PagosAdmin() {
               <Dato label="Recibido" valor={new Date(pagoDetalle.created_at).toLocaleString("es-HN")} />
             </div>
 
-            {pagoDetalle.comprobante_archivo && (
+            {((pagoDetalle.comprobantes && pagoDetalle.comprobantes.length > 0)
+              ? pagoDetalle.comprobantes
+              : (pagoDetalle.comprobante_archivo ? [pagoDetalle.comprobante_archivo] : [])
+            ).length > 0 && (
               <div className="comprobante-preview">
-                <div className="sub">Comprobante adjunto</div>
-                {pagoDetalle.comprobante_archivo.endsWith(".pdf") ? (
-                  <a
-                    href={urlComprobante(pagoDetalle.comprobante_archivo)}
-                    target="_blank" rel="noreferrer"
-                    className="cuota-btn-pagar"
-                    style={{ display: "inline-block", textDecoration: "none", marginBottom: 12 }}
-                  >
-                    Ver PDF →
-                  </a>
-                ) : (
-                  <img
-                    src={urlComprobante(pagoDetalle.comprobante_archivo)}
-                    alt="Comprobante"
-                    className="comprobante-img"
-                  />
-                )}
+                <div className="sub">
+                  {(pagoDetalle.comprobantes?.length ?? 1) > 1
+                    ? `Comprobantes adjuntos (${pagoDetalle.comprobantes!.length})`
+                    : "Comprobante adjunto"}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                  {(pagoDetalle.comprobantes && pagoDetalle.comprobantes.length > 0
+                    ? pagoDetalle.comprobantes
+                    : [pagoDetalle.comprobante_archivo!]
+                  ).map((archivo, i) => (
+                    archivo.endsWith(".pdf") ? (
+                      <a key={i}
+                        href={urlComprobante(archivo)}
+                        target="_blank" rel="noreferrer"
+                        className="cuota-btn-pagar"
+                        style={{ display: "inline-block", textDecoration: "none", marginBottom: 12 }}
+                      >
+                        Ver PDF {i + 1} →
+                      </a>
+                    ) : (
+                      <img
+                        key={i}
+                        src={urlComprobante(archivo)}
+                        alt={`Comprobante ${i + 1}`}
+                        className="comprobante-img"
+                        style={{ maxWidth: 220, cursor: "pointer" }}
+                        onClick={() => window.open(urlComprobante(archivo), "_blank")}
+                      />
+                    )
+                  ))}
+                </div>
               </div>
             )}
 

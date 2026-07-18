@@ -347,14 +347,10 @@ export interface CuotaDTO {
   created_at: string; pagos?: PagoDTO[];
   pago_rechazado?: boolean; nota_rechazo?: string; en_revision?: boolean;
   pago?: { id: string; numero_recibo?: number; metodo: string; revisado_en?: string };
-  // PAY-11: cuánto se ha pagado realmente (solo pagos aprobados) y el saldo
-  // restante — para mostrar con claridad un pago parcial en vez de que la
-  // cuota simplemente desaparezca de "pendientes" sin explicación.
-  monto_pagado?: number; saldo_pendiente?: number;
 }
 export interface PagoDTO {
   id: string; cuota_id: string; monto: number; metodo: string;
-  referencia?: string; comprobante_archivo?: string;
+  referencia?: string; comprobante_archivo?: string; comprobantes?: string[];
   estado: string; nota_admin?: string; revisado_en?: string; created_at: string;
 }
 export interface PagoAdminDTO extends PagoDTO {
@@ -396,11 +392,11 @@ export async function subirComprobanteAbono(
 }
 
 export async function subirComprobante(
-  cuotaUuid: string, archivo: File, monto: number, referencia: string
+  cuotaUuid: string, archivos: File[], monto: number, referencia: string
 ): Promise<PagoDTO> {
   const token = getToken();
   const form = new FormData();
-  form.append("comprobante", archivo);
+  for (const archivo of archivos) form.append("comprobante", archivo);
   form.append("monto", String(monto));
   form.append("referencia", referencia);
   const res = await fetch(`${API_URL}/cuotas/mias/${cuotaUuid}/pagar`, {

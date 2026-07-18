@@ -18,7 +18,7 @@ import datetime as dt
 from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db
-from app.models.cuenta import Cuota, Pago, Residente, Cuenta
+from app.models.cuenta import Cuota, Pago, Residente, Cuenta, ComprobantePago
 from app.auth.security import token_required, roles_required
 from app.utils.archivos import guardar_imagen_segura, servir_archivo_seguro, EXT_DOCUMENTO
 
@@ -171,9 +171,15 @@ def subir_comprobante(usuario_actual, uuid_cuota):
                                   "message": "Ya subiste un comprobante para esta cuota. "
                                              "Esperá a que la administración lo revise."}}), 409
 
-    # Validar archivo
-    if "comprobante" not in request.files:
-        return jsonify({"error": {"code": "SIN_ARCHIVO", "message": "Adjuntá el comprobante"}}), 400
+    # Uno o varios comprobantes (ej. depósito en dos partes) — se aceptan
+    # como múltiples archivos bajo el mismo nombre de campo 'comprobante',
+    # o el campo singular anterior para retrocompatibilidad.
+    archivos_subidos = request.files.getlist("comprobante")
+    if not archivos_subidos:
+        return jsonify({"error": {"code": "SIN_ARCHIVO", "message": "Adjuntá al menos un comprobante"}}), 400
+    if len(archivos_subidos) > 5:
+        return jsonify({"error": {"code": "DEMASIADOS_ARCHIVOS",
+                                  "message": "Máximo 5 comprobantes por pago"}}), 400
 
     # Validar monto
     monto_str = request.form.get("monto", "")
@@ -186,12 +192,15 @@ def subir_comprobante(usuario_actual, uuid_cuota):
 
     referencia = request.form.get("referencia", "")[:120]
 
-    # Guardar archivo de forma segura (valida tipo real, genera nombre propio)
-    nombre_archivo, error = guardar_imagen_segura(
-        request.files["comprobante"], _carpeta_comprobantes(), EXT_DOCUMENTO
-    )
-    if error:
-        return jsonify({"error": {"code": "FORMATO_INVALIDO", "message": error}}), 400
+    # Guardar cada archivo de forma segura (valida tipo real, genera nombre propio).
+    # Si alguno falla, no se guarda nada a medias — se informa cuál fue.
+    nombres_archivos = []
+    for i, archivo in enumerate(archivos_subidos):
+        nombre_archivo, error = guardar_imagen_segura(archivo, _carpeta_comprobantes(), EXT_DOCUMENTO)
+        if error:
+            return jsonify({"error": {"code": "FORMATO_INVALIDO",
+                                      "message": f"Comprobante {i + 1}: {error}"}}), 400
+        nombres_archivos.append(nombre_archivo)
 
     pago = Pago(
         cuota_id=cuota.id,
@@ -199,10 +208,15 @@ def subir_comprobante(usuario_actual, uuid_cuota):
         subido_por=usuario_actual.id,
         monto=monto,
         referencia=referencia,
-        comprobante_archivo=nombre_archivo,
+        comprobante_archivo=nombres_archivos[0],  # el primero, por compatibilidad con historial viejo
         estado="en_revision",
     )
     db.session.add(pago)
+    db.session.flush()  # necesito pago.id antes de crear los ComprobantePago
+
+    for nombre_archivo in nombres_archivos:
+        db.session.add(ComprobantePago(pago_id=pago.id, archivo=nombre_archivo))
+
     cuota.estado = "en_revision"
     db.session.commit()
 
@@ -263,7 +277,11 @@ def ver_comprobante(usuario_actual, nombre_archivo):
     # Solo se sirve el archivo si corresponde a un comprobante realmente
     # registrado en un pago. Evita servir archivos arbitrarios de la carpeta
     # aunque alguien adivine o construya un nombre.
-    existe = Pago.query.filter_by(comprobante_archivo=nombre_archivo).first()
+    # Un pago puede tener varios comprobantes (ComprobantePago); el primero
+    # también queda en Pago.comprobante_archivo por compatibilidad con
+    # pagos creados antes de esta funcionalidad.
+    existe = (Pago.query.filter_by(comprobante_archivo=nombre_archivo).first()
+              or ComprobantePago.query.filter_by(archivo=nombre_archivo).first())
     if not existe:
         return jsonify({"error": {"code": "no_encontrado",
                                   "message": "Comprobante no encontrado"}}), 404
@@ -367,24 +385,12 @@ def revisar_pago(usuario_actual, uuid_pago):
                     for c in arr.cuotas:
                         c.estado = "pagada"
         elif pago.cuota:
-            # PAY-11: no marcar la cuota como pagada solo porque este pago se
-            # aprobó — hay que sumar TODOS los pagos aprobados de esa cuota
-            # (este incluido) y compararlo contra el monto real adeudado.
-            # Antes: un pago parcial (ej. L100 sobre una deuda de L1,200)
-            # marcaba la cuota completa como pagada al aprobarse.
-            cuota = pago.cuota
-            db.session.flush()  # asegurar que pago.estado='aprobado' ya esté visible para el SUM
-            total_aprobado = _monto_pagado_cuota(cuota)
-            monto_cuota = float(cuota.monto)
-            if total_aprobado >= monto_cuota:
-                cuota.estado = "pagada"
-            else:
-                # Pago parcial: la cuota sigue pendiente por el saldo restante.
-                # Se mantiene en pendiente/vencida (no se toca aquí) para que
-                # el sistema de mora y bloqueo la siga tratando como corresponde;
-                # el saldo se expone en to_dict() vía monto_pagado/saldo_pendiente.
-                if cuota.estado == "en_revision":
-                    cuota.estado = "vencida" if cuota.fecha_vencimiento < dt.date.today() else "pendiente"
+            # El admin es quien decide si el monto del comprobante cubre la
+            # cuota — si no alcanza, rechaza el pago y le pide al residente
+            # subir el/los comprobante(s) que falten (ver ComprobantePago,
+            # varias imágenes por pago). Por eso, al aprobar, el pago
+            # siempre representa el monto completo acordado.
+            pago.cuota.estado = "pagada"
         # Desbloqueo automático SOLO si ya no quedan cuotas vencidas sin pagar.
         # (Si el residente pagó una cuota pero aún debe otras, sigue bloqueado.)
         if cuenta:

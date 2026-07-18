@@ -89,3 +89,15 @@ CREATE TABLE IF NOT EXISTS aperturas_manuales (
 );
 CREATE INDEX IF NOT EXISTS idx_aperturas_manuales_guardia ON aperturas_manuales(guardia_id);
 CREATE INDEX IF NOT EXISTS idx_aperturas_manuales_acceso ON aperturas_manuales(acceso_id);
+
+-- Múltiples comprobantes por pago (el residente puede subir varias fotos
+-- para el mismo pago, ej. depositó en dos partes). El admin las revisa
+-- juntas y aprueba/rechaza el pago completo, no cada imagen por separado.
+CREATE TABLE IF NOT EXISTS comprobantes_pago (
+    id           BIGSERIAL PRIMARY KEY,
+    uuid_publico UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+    pago_id      BIGINT NOT NULL REFERENCES pagos(id) ON DELETE CASCADE,
+    archivo      VARCHAR(255) NOT NULL,
+    created_at   TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_comprobantes_pago_pago_id ON comprobantes_pago(pago_id);
