@@ -120,10 +120,14 @@ class _SpacesBackend:
             clave,
             ExtraArgs={
                 "ContentType": content_type,
-                # ACL pública — las fotos de acceso/comprobantes no son sensibles en URL
-                # pero la URL es un UUID no adivinable. Si querés más privacidad,
-                # cambia a "private" y usa url_firmada() en vez de url_publica().
-                "ACL": "public-read",
+                # FILES-05 (Auditoría Día 35): antes 'public-read'. Fotos de
+                # identidad y comprobantes de pago son datos sensibles — un
+                # UUID en la URL no es "seguro por oscuridad" si esa URL se
+                # filtra en un log, una captura compartida, o un reenvío sin
+                # querer. Ahora el bucket es privado y el acceso es siempre
+                # a través de servir_archivo() con una URL firmada de corta
+                # duración (ver url_firmada), nunca de forma pública directa.
+                "ACL": "private",
             },
         )
         return clave
@@ -173,8 +177,15 @@ def guardar_archivo(stream, subcarpeta: str, content_type: str = "application/oc
 
 def url_archivo(clave: str) -> str | None:
     """
-    URL pública del archivo (CDN de Spaces) o None si es local.
-    En modo local, el backend sirve el archivo por su propio endpoint.
+    URL pública directa del archivo (sin pasar por el backend).
+
+    FILES-05: en modo nube el bucket ahora es PRIVADO — esta función ya no
+    devuelve una URL utilizable para fotos de identidad/comprobantes (el
+    bucket rechazará el acceso). No está en uso actualmente en el código;
+    se conserva por si en el futuro hace falta una URL pública real para
+    contenido no sensible (ej. el logo público de la app). Para servir
+    archivos sensibles, usar siempre servir_archivo(), que pasa por
+    autenticación del endpoint y genera una URL firmada de corta duración.
     """
     return _get_backend().url_publica(clave)
 
@@ -183,13 +194,20 @@ def servir_archivo(clave: str):
     """
     Sirve un archivo desde donde esté (local o Spaces).
     Devuelve una respuesta Flask.
+
+    FILES-05: en modo nube, el bucket es privado — se genera una URL
+    pre-firmada de corta duración (10 min) en vez de un link público
+    permanente, y se redirige a ella. Cada llamada a este endpoint pasa
+    primero por la verificación de rol/pertenencia del endpoint que lo
+    invoca (ver_foto, ver_comprobante, ver_imagen) — la URL firmada es
+    una capa adicional, no la única protección.
     """
     from flask import send_file, jsonify
     backend = _get_backend()
-    # Si está en Spaces con CDN, redirigir directamente (no pasar por el servidor)
-    url = backend.url_publica(clave)
-    if url:
+    # Si está en Spaces, redirigir a una URL firmada de corta duración
+    if isinstance(backend, _SpacesBackend):
         from flask import redirect
+        url = backend.url_firmada(clave, expira_en=600)  # 10 minutos
         return redirect(url, code=302)
     # Modo local: servir desde disco
     stream, content_type = backend.stream(clave)

@@ -290,7 +290,7 @@ def subir_comprobante_abono(usuario_actual, uuid_abono):
     db.session.commit()
     return jsonify({"data": pago.to_dict()}), 201
 @cuotas_bp.get("/comprobantes/<nombre_archivo>")
-@roles_required("admin", "super_admin", "cajero", "desarrollador")
+@token_required
 def ver_comprobante(usuario_actual, nombre_archivo):
     # Solo se sirve el archivo si corresponde a un comprobante realmente
     # registrado en un pago. Evita servir archivos arbitrarios de la carpeta
@@ -298,11 +298,29 @@ def ver_comprobante(usuario_actual, nombre_archivo):
     # Un pago puede tener varios comprobantes (ComprobantePago); el primero
     # también queda en Pago.comprobante_archivo por compatibilidad con
     # pagos creados antes de esta funcionalidad.
-    existe = (Pago.query.filter_by(comprobante_archivo=nombre_archivo).first()
-              or ComprobantePago.query.filter_by(archivo=nombre_archivo).first())
-    if not existe:
+    pago = (Pago.query.filter_by(comprobante_archivo=nombre_archivo).first())
+    comprobante = None
+    if not pago:
+        comprobante = ComprobantePago.query.filter_by(archivo=nombre_archivo).first()
+        pago = comprobante.pago if comprobante else None
+    if not pago:
         return jsonify({"error": {"code": "no_encontrado",
                                   "message": "Comprobante no encontrado"}}), 404
+
+    # FILES-05: quién puede ver este comprobante — el staff (ya podía) o el
+    # propio residente dueño del pago (antes NO podía ver su propio
+    # comprobante desde este endpoint, un hueco de autorización encontrado
+    # de paso al revisar el control de acceso a archivos).
+    es_staff = usuario_actual.rol in ("admin", "super_admin", "cajero", "desarrollador")
+    es_dueno = False
+    if not es_staff:
+        residente = Residente.query.filter_by(usuario_id=usuario_actual.id, activo=True).first()
+        es_dueno = bool(residente and pago.cuenta_id == residente.cuenta_id)
+
+    if not (es_staff or es_dueno):
+        return jsonify({"error": {"code": "acceso_denegado",
+                                  "message": "No tenés permiso para ver este comprobante"}}), 403
+
     return servir_archivo_seguro(_carpeta_comprobantes(), nombre_archivo)
 
 
