@@ -780,11 +780,13 @@ export interface AccesoFisicoDTO {
   pulso_ms: number;
   punto_acceso: string | null;
   direccion: string;
+  // Bases multi-residencial (Día 37): a qué cliente pertenece esta tranca
+  residencial: { id: string; nombre: string } | null;
 }
 export const devAccesosFisicos = () => request<AccesoFisicoDTO[]>("/dev/accesos-fisicos");
-export const devConfigurarAcceso = (id: number, body: { relay_pin?: number | null; pulso_ms?: number; nombre?: string; tipo?: string; activo?: boolean; punto_acceso?: string; direccion?: string }) =>
+export const devConfigurarAcceso = (id: number, body: { relay_pin?: number | null; pulso_ms?: number; nombre?: string; tipo?: string; activo?: boolean; punto_acceso?: string; direccion?: string; residencial_id?: string | null }) =>
   request<AccesoFisicoDTO>(`/dev/accesos-fisicos/${id}`, { method: "PUT", body: JSON.stringify(body) });
-export const devCrearAcceso = (body: { nombre: string; tipo: string; punto_acceso?: string }) =>
+export const devCrearAcceso = (body: { nombre: string; tipo: string; punto_acceso?: string; residencial_id?: string }) =>
   request<AccesoFisicoDTO>("/dev/accesos-fisicos", { method: "POST", body: JSON.stringify(body) });
 export const devHistorialCount = (id: number) =>
   request<{ eventos: number }>(`/dev/accesos-fisicos/${id}/historial-count`);

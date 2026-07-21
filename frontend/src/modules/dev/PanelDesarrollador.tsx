@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO } from "../../api/client";
 import { AlertTriangle, BarChart3, Building2, Construction, Key, Lock, Monitor, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
@@ -514,6 +514,10 @@ function ConfigTrancas() {
   // Baja
   const [borrar, setBorrar] = useState<{ acceso: AccesoFisicoDTO; eventos: number } | null>(null);
   const [borrando, setBorrando] = useState(false);
+  // Bases multi-residencial (Día 37): a qué cliente asignar cada tranca,
+  // y filtro para ver solo las de una residencial en particular.
+  const [residenciales, setResidenciales] = useState<ResidencialDTO[]>([]);
+  const [filtroResidencial, setFiltroResidencial] = useState("");
 
   const cargar = useCallback(() => {
     setCargando(true);
@@ -526,9 +530,17 @@ function ConfigTrancas() {
       })
       .catch(() => setAccesos([]))
       .finally(() => setCargando(false));
+    devResidenciales().then(setResidenciales).catch(() => setResidenciales([]));
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  async function asignarResidencial(a: AccesoFisicoDTO, residencialId: string) {
+    try {
+      const actualizado = await devConfigurarAcceso(a.id, { residencial_id: residencialId || null });
+      setAccesos((prev) => prev ? prev.map((x) => x.id === a.id ? actualizado : x) : prev);
+    } catch { /* noop */ }
+  }
 
   function setCampo(id: number, campo: "nombre" | "tipo" | "relay_pin" | "pulso_ms" | "punto_acceso" | "direccion", valor: string) {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
@@ -610,7 +622,12 @@ function ConfigTrancas() {
   if (cargando) return <p className="muted" style={{ padding: 20 }}>Cargando trancas…</p>;
 
   // Lista de puntos existentes (para el autocompletado) y agrupación por punto.
-  const lista = accesos || [];
+  // Bases multi-residencial (Día 37): si hay un filtro activo, solo se
+  // agrupan/muestran las trancas de esa residencial.
+  const listaCompleta = accesos || [];
+  const lista = filtroResidencial
+    ? listaCompleta.filter((a) => a.residencial?.id === filtroResidencial)
+    : listaCompleta;
   const puntos = Array.from(new Set(lista.map((a) => a.punto_acceso).filter(Boolean)));
   const grupos: { punto: string; items: AccesoFisicoDTO[] }[] = [];
   const sinPunto: AccesoFisicoDTO[] = [];
@@ -631,7 +648,14 @@ function ConfigTrancas() {
       </div>
 
       <div className="dev-trancas-barra">
-        <span className="dev-trancas-total">{accesos?.length || 0} acceso(s) registrado(s)</span>
+        <span className="dev-trancas-total">{lista.length} acceso(s) registrado(s)</span>
+        {residenciales.length > 0 && (
+          <select value={filtroResidencial} onChange={(e) => setFiltroResidencial(e.target.value)}
+            className="dev-tranca-tipo-sel" style={{ maxWidth: 220 }}>
+            <option value="">Todas las residenciales</option>
+            {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+          </select>
+        )}
         <button className="dev-tranca-add" onClick={() => { setMostrarAlta((v) => !v); setMsgAlta(""); }}>
           {mostrarAlta ? "Cancelar" : "+ Agregar acceso"}
         </button>
@@ -710,6 +734,14 @@ function ConfigTrancas() {
                       <span>Punto de acceso (Raspberry Pi)</span>
                       <input type="text" placeholder="Ej: Acceso Principal" maxLength={80} list="puntos-existentes"
                         value={ed.punto_acceso} onChange={(e) => setCampo(a.id, "punto_acceso", e.target.value)} />
+                    </label>
+                    <label className="dev-tranca-punto">
+                      <span>Residencial</span>
+                      <select value={a.residencial?.id || ""} onChange={(e) => asignarResidencial(a, e.target.value)}
+                        className="dev-tranca-tipo-sel" style={{ width: "100%" }}>
+                        <option value="">— Sin asignar —</option>
+                        {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                      </select>
                     </label>
                     <div className="dev-tranca-campos">
                       <label>
@@ -990,7 +1022,13 @@ function PanelResidenciales() {
             <div key={r.id} className={`dev-tranca-card ${!r.activa ? "inactiva" : ""}`}
               style={{ cursor: "pointer" }} onClick={() => verDetalle(r)}>
               <div className="dev-tranca-head">
-                <span className="dev-tranca-nombre">{r.nombre}</span>
+                <span className="dev-tranca-nombre" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {r.logo_archivo && (
+                    <img src={urlLogoResidencial(r.logo_archivo)} alt=""
+                      style={{ width: 24, height: 24, borderRadius: 6, objectFit: "contain", background: "#fff" }} />
+                  )}
+                  {r.nombre}
+                </span>
                 <span className={`dev-tranca-badge ${r.activa ? "ok" : "sin"}`}>{r.activa ? "Activa" : "Inactiva"}</span>
               </div>
               <div className="dev-pi-info">

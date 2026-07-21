@@ -414,6 +414,19 @@ def configurar_acceso_fisico(usuario_actual, acceso_id):
                                       "message": "La dirección debe ser 'entrada' o 'salida'"}}), 400
         acceso.direccion = direccion
 
+    # Bases multi-residencial (Día 37): asignar/reasignar/desasignar esta
+    # tranca a una residencial. residencial_id: null o "" desasigna.
+    if "residencial_id" in body:
+        residencial_uuid = body.get("residencial_id")
+        if not residencial_uuid:
+            acceso.residencial_id = None
+        else:
+            r = Residencial.query.filter_by(uuid_publico=residencial_uuid).first()
+            if not r:
+                return jsonify({"error": {"code": "residencial_no_encontrada",
+                                          "message": "La residencial indicada no existe"}}), 404
+            acceso.residencial_id = r.id
+
     # relay_pin: entero en rango de GPIO de Raspberry Pi (0–40), o null para desconfigurar.
     if "relay_pin" in body:
         pin = body["relay_pin"]
@@ -464,8 +477,19 @@ def crear_acceso_fisico(usuario_actual):
         return jsonify({"error": {"code": "tipo_invalido",
                                   "message": "El tipo debe ser 'vehicular' o 'peatonal'"}}), 400
 
+    # Bases multi-residencial (Día 37): opcionalmente asignada al crear.
+    residencial_id = None
+    residencial_uuid = body.get("residencial_id")
+    if residencial_uuid:
+        r = Residencial.query.filter_by(uuid_publico=residencial_uuid).first()
+        if not r:
+            return jsonify({"error": {"code": "residencial_no_encontrada",
+                                      "message": "La residencial indicada no existe"}}), 404
+        residencial_id = r.id
+
     acceso = AccesoFisico(nombre=nombre, tipo=tipo, activo=True, pulso_ms=800,
-                          punto_acceso=(body.get("punto_acceso") or "").strip() or None)
+                          punto_acceso=(body.get("punto_acceso") or "").strip() or None,
+                          residencial_id=residencial_id)
     db.session.add(acceso)
     db.session.commit()
     return jsonify({"data": acceso.to_dict()}), 201

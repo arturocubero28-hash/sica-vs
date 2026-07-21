@@ -54,6 +54,12 @@ class AccesoFisico(db.Model):
         nullable=False, default="entrada")
 
     def to_dict(self):
+        residencial = None
+        if self.residencial_id:
+            from app.models.residencial import Residencial
+            r = Residencial.query.get(self.residencial_id)
+            if r:
+                residencial = {"id": str(r.uuid_publico), "nombre": r.nombre}
         return {
             "id": self.id,
             "nombre": self.nombre,
@@ -63,6 +69,7 @@ class AccesoFisico(db.Model):
             "pulso_ms": self.pulso_ms,
             "punto_acceso": self.punto_acceso,
             "direccion": self.direccion,
+            "residencial": residencial,
         }
 
 
