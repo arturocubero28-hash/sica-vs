@@ -41,7 +41,7 @@ class Usuario(db.Model):
     # rol global: super_admin | admin | guardia | residente
     # ENUM real de PostgreSQL (rol_global) — fix Día 36.
     rol = db.Column(
-        db.Enum("super_admin", "admin", "guardia", "residente", "cajero", "desarrollador",
+        db.Enum("super_admin", "admin", "supervisor", "guardia", "residente", "cajero", "desarrollador",
                 name="rol_global", create_type=False),
         nullable=False, default="residente")
     activo = db.Column(db.Boolean, nullable=False, default=True)
