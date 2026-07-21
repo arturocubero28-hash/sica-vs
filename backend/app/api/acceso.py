@@ -34,6 +34,7 @@ from app.models.visita import EventoAcceso, AccesoFisico
 from app.models.dispositivo import Dispositivo
 from app.models.camara import Camara
 from app.services.permisos import motivo_denegacion, tarjetas_con_permiso
+from app.utils.residencial import residencial_id_heredado
 
 acceso_bp = Blueprint("acceso", __name__)
 
@@ -136,9 +137,10 @@ def validar_tarjeta():
     if not tarjeta:
         return responder(False, "Tarjeta no registrada")
 
-    # 2-4. Permiso (tarjeta activa, cuenta activa/sin mora, tipo compatible).
+    # 2-4. Permiso (tarjeta activa, cuenta activa/sin mora, tipo compatible,
+    #      y misma residencial que esta Pi — bases multi-residencial Día 37).
     #      Fuente única de verdad: app.services.permisos
-    motivo = motivo_denegacion(tarjeta, acceso)
+    motivo = motivo_denegacion(tarjeta, acceso, residencial_id=disp.residencial_id)
     if motivo:
         return responder(False, motivo, tarjeta, tarjeta.residente)
 
@@ -169,10 +171,16 @@ def sincronizar():
     accesos_q = AccesoFisico.query.filter_by(activo=True)
     if disp.punto_acceso:
         accesos_q = accesos_q.filter_by(punto_acceso=disp.punto_acceso)
+    # Bases multi-residencial (Día 37): además del punto, la Pi solo recibe
+    # trancas de SU residencial. Si la Pi no tiene residencial asignada
+    # (disp.residencial_id es None), no se filtra — comportamiento idéntico
+    # al de siempre, para no romper nada mientras no se asignen dispositivos.
+    if disp.residencial_id is not None:
+        accesos_q = accesos_q.filter_by(residencial_id=disp.residencial_id)
     accesos = accesos_q.all()
 
-    # Tarjetas físicas con permiso vigente
-    tarjetas = tarjetas_con_permiso()
+    # Tarjetas físicas con permiso vigente (ya filtradas por residencial si aplica)
+    tarjetas = tarjetas_con_permiso(residencial_id=disp.residencial_id)
     tarjetas_out = []
     for t in tarjetas:
         nombre = None
@@ -189,7 +197,14 @@ def sincronizar():
     # para que nadie quede afuera mientras la Pi descarga la nueva lista.
     ahora = dt.datetime.utcnow()
     ventana_gracia = (ahora.hour == 0 and ahora.minute < 10)
-    virtuales = TarjetaVirtual.query.filter_by(estado="activa").all()
+    virtuales_q = TarjetaVirtual.query.filter_by(estado="activa")
+    if disp.residencial_id is not None:
+        from app.models.cuenta import Unidad
+        virtuales_q = (virtuales_q
+                       .join(Cuenta, TarjetaVirtual.cuenta_id == Cuenta.id)
+                       .join(Unidad, Cuenta.unidad_id == Unidad.id)
+                       .filter(Unidad.residencial_id == disp.residencial_id))
+    virtuales = virtuales_q.all()
     for tv in virtuales:
         nombre = None
         if tv.residente and tv.residente.usuario:
@@ -212,7 +227,14 @@ def sincronizar():
     # Credenciales BLE (Bluetooth). El lector BLE valida el desafío-respuesta
     # con la clave secreta; la Pi solo necesita conocer los tokens válidos y
     # sus claves para pasárselas al lector.
-    credenciales_ble = CredencialBLE.query.filter_by(estado="activa").all()
+    ble_q = CredencialBLE.query.filter_by(estado="activa")
+    if disp.residencial_id is not None:
+        from app.models.cuenta import Unidad
+        ble_q = (ble_q
+                 .join(Cuenta, CredencialBLE.cuenta_id == Cuenta.id)
+                 .join(Unidad, Cuenta.unidad_id == Unidad.id)
+                 .filter(Unidad.residencial_id == disp.residencial_id))
+    credenciales_ble = ble_q.all()
     ble_out = []
     for c in credenciales_ble:
         nombre = None
@@ -303,6 +325,14 @@ def reportar_eventos():
             ignorados += 1
             continue
 
+        # Bases multi-residencial (Día 37): si la Pi tiene una residencial
+        # asignada, solo puede reportar eventos de trancas de esa misma
+        # residencial — mismo criterio de defensa que ya existía para el
+        # punto de acceso, extendido al nuevo nivel de aislamiento.
+        if disp.residencial_id is not None and acceso.residencial_id != disp.residencial_id:
+            ignorados += 1
+            continue
+
         tarjeta = Tarjeta.query.filter_by(card_uid=(ev.get("card_uid") or "")).first()
 
         # Cuándo ocurrió realmente (lo que reporta la Pi), no cuándo se recibió.
@@ -319,6 +349,7 @@ def reportar_eventos():
             acceso_id=acceso.id,
             tarjeta_id=tarjeta.id if tarjeta else None,
             residente_id=tarjeta.residente_id if tarjeta and tarjeta.residente_id else None,
+            dispositivo_id=disp.id,  # DEVICE-06: trazabilidad de qué Pi lo generó
             ocurrido_en=ocurrido or dt.datetime.utcnow(),
             sincronizado=True,
             id_externo=id_externo,
@@ -453,11 +484,20 @@ def listar_puntos_acceso(usuario_actual):
     Lista los puntos de acceso agrupados por punto_acceso. Un guardia
     también puede consultar esta lista (para elegir en cuál está); un
     admin la usa para gestionarlos.
+
+    Bases multi-residencial (Día 37): se filtra por la residencial del
+    usuario que consulta, cuando la tiene asignada. Si no la tiene (ej.
+    super_admin, o un usuario creado antes de este cambio), se muestra
+    todo sin filtrar — igual que el comportamiento de siempre. Hoy, con
+    una sola residencial en Villas del Sol, el resultado es idéntico
+    filtrado o sin filtrar.
     """
     solo_activos = request.args.get("solo_activos", "true").lower() != "false"
     q = AccesoFisico.query
     if solo_activos:
         q = q.filter_by(activo=True)
+    if usuario_actual.residencial_id is not None:
+        q = q.filter_by(residencial_id=usuario_actual.residencial_id)
     trancas = q.order_by(AccesoFisico.punto_acceso, AccesoFisico.tipo).all()
 
     agrupado = {}
@@ -487,7 +527,17 @@ def crear_punto_acceso(usuario_actual):
     if len(nombre) > 80:
         return _err("nombre_largo", "El nombre no puede superar 80 caracteres", 400)
 
-    if AccesoFisico.query.filter_by(punto_acceso=nombre).first():
+    # Bases multi-residencial (Día 37): el punto hereda la residencial del
+    # admin/supervisor que lo crea. El chequeo de nombre duplicado se
+    # acota a esa misma residencial cuando existe — así, el día que haya
+    # una segunda residencial, cada una puede tener su propio "Portón
+    # Principal" sin chocar. Hoy, con una sola, el resultado es idéntico
+    # al chequeo global de antes.
+    residencial_id = residencial_id_heredado(usuario_actual)
+    dup_q = AccesoFisico.query.filter_by(punto_acceso=nombre)
+    if residencial_id is not None:
+        dup_q = dup_q.filter_by(residencial_id=residencial_id)
+    if dup_q.first():
         return _err("nombre_duplicado", "Ya existe un punto de acceso con ese nombre", 400)
 
     quiere_peatonal = bool(body.get("peatonal"))
@@ -499,17 +549,20 @@ def crear_punto_acceso(usuario_actual):
     creadas = []
     if quiere_peatonal:
         t = AccesoFisico(nombre=f"{nombre} — Peatonal", tipo="peatonal",
-                          direccion="entrada", punto_acceso=nombre, activo=True)
+                          direccion="entrada", punto_acceso=nombre, activo=True,
+                          residencial_id=residencial_id)
         db.session.add(t)
         creadas.append(t)
     if quiere_veh_entrada:
         t = AccesoFisico(nombre=f"{nombre} — Entrada vehicular", tipo="vehicular",
-                          direccion="entrada", punto_acceso=nombre, activo=True)
+                          direccion="entrada", punto_acceso=nombre, activo=True,
+                          residencial_id=residencial_id)
         db.session.add(t)
         creadas.append(t)
     if quiere_veh_salida:
         t = AccesoFisico(nombre=f"{nombre} — Salida vehicular", tipo="vehicular",
-                          direccion="salida", punto_acceso=nombre, activo=True)
+                          direccion="salida", punto_acceso=nombre, activo=True,
+                          residencial_id=residencial_id)
         db.session.add(t)
         creadas.append(t)
 

@@ -40,6 +40,11 @@ class AccesoFisico(db.Model):
     # Punto de acceso (identifica la Raspberry Pi que controla este dispositivo).
     # Los accesos del mismo punto los maneja la misma Pi. Ej: "Acceso Principal".
     punto_acceso = db.Column(db.String(80))
+    # Bases para multi-residencial (Día 37): a qué Residencial pertenece este
+    # punto de acceso. Importa para que el nombre "Portón Principal" de dos
+    # residenciales distintas no se mezcle el día que haya un segundo cliente.
+    # Se completa al crearlo, heredado del admin/supervisor que lo crea.
+    residencial_id = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     # Dirección fija de la tranca: "entrada" o "salida". Cada punto tiene una
     # tranca de entrada y una de salida; la dirección del evento la define por
     # qué tranca pasó la tarjeta (no se adivina). Default "entrada".

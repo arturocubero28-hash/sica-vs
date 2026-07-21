@@ -47,6 +47,15 @@ class Usuario(db.Model):
     activo = db.Column(db.Boolean, nullable=False, default=True)
     debe_cambiar_password = db.Column(db.Boolean, nullable=False, default=False)
     biometria_activa = db.Column(db.Boolean, nullable=False, default=False)
+    # Bases para multi-residencial (Día 37): a qué Residencial pertenece este
+    # usuario. NULL para super_admin/desarrollador (roles de plataforma, no
+    # de un cliente). Para el admin dueño, apunta a SU PROPIA Residencial
+    # (se completa al crearla). Todo lo demás (guardia, cajero, supervisor,
+    # residente) hereda este valor del admin/supervisor que lo creó — ver
+    # cada endpoint de creación. Hoy, con un solo admin en Villas del Sol,
+    # este campo tiene el mismo valor en todos lados y no cambia ningún
+    # comportamiento existente.
+    residencial_id = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     # Solo aplica a usuarios con rol 'guardia': en qué punto de acceso está
     # trabajando este turno (ej. "Portón Principal"). Se elige al iniciar
     # sesión y queda fijo — el guardia normalmente usa siempre el mismo

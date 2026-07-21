@@ -56,8 +56,14 @@ class Dispositivo(db.Model):
     # DEVICE-06: se guarda el HASH del token, nunca el token en claro.
     token_hash = db.Column(db.String(64), unique=True, nullable=False)
     activo = db.Column(db.Boolean, nullable=False, default=True) # revocar = activo False
-    # Preparado para SaaS (hoy NULL). No se usa todavía en la lógica.
-    residencial_id = db.Column(db.BigInteger)
+    # Bases para multi-residencial (Día 37): a qué Residencial pertenece esta
+    # Pi. El desarrollador la asigna al crear el dispositivo o después, desde
+    # el panel — es lo que le dice a /sincronizar y /validar-tarjeta qué
+    # tarjetas y trancas debe descargar (solo las de SU residencial). Antes
+    # era un BigInteger suelto sin FK, preparado pero sin usar; ahora es una
+    # referencia real. Sigue siendo NULL-able: una Pi sin asignar no
+    # descarga nada hasta que el desarrollador la asocie a una residencial.
+    residencial_id = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     ultima_sync = db.Column(db.DateTime(timezone=True))          # cuándo descargó su copia por última vez
     # Solo aplica a tipo='camara': latido periódico para saber si el agente
     # de video sigue conectado (distinto de ultima_sync, que es de accesos).
@@ -65,12 +71,19 @@ class Dispositivo(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
 
     def to_dict(self, token_plano=None):
+        residencial = None
+        if self.residencial_id:
+            from app.models.residencial import Residencial
+            r = Residencial.query.get(self.residencial_id)
+            if r:
+                residencial = {"id": str(r.uuid_publico), "nombre": r.nombre}
         d = {
             "id": str(self.uuid_publico),
             "nombre": self.nombre,
             "tipo": self.tipo,
             "punto_acceso": self.punto_acceso,
             "activo": self.activo,
+            "residencial": residencial,
             "ultima_sync": self.ultima_sync.isoformat() if self.ultima_sync else None,
             "ultimo_heartbeat": self.ultimo_heartbeat.isoformat() if self.ultimo_heartbeat else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,

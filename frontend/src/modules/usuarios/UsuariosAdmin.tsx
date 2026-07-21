@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  listarUsuarios, crearCajero, crearGuardia,
+  listarUsuarios, crearCajero, crearGuardia, crearSupervisor,
   resetPasswordUsuario, editarUsuario,
   type UsuarioAdminDTO,
 } from "../../api/client";
 import { fechaRelativa } from "../../utils/formato";
 
 const ROL_LABEL: Record<string, string> = {
-  super_admin: "Super Admin", admin: "Administrador",
+  super_admin: "Super Admin", admin: "Administrador", supervisor: "Supervisor",
   guardia: "Guardia", residente: "Residente", cajero: "Cajero", desarrollador: "Desarrollador",
 };
 
@@ -27,7 +27,7 @@ export function UsuariosAdmin() {
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [filtroRol, setFiltroRol] = useState("");
-  const [creando, setCreando] = useState<"cajero" | "guardia" | null>(null);
+  const [creando, setCreando] = useState<"cajero" | "guardia" | "supervisor" | null>(null);
   const [credencial, setCredencial] = useState<{ email: string; pass: string; nombre: string } | null>(null);
   const [procesando, setProcesando] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
@@ -82,6 +82,7 @@ export function UsuariosAdmin() {
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn-accion" onClick={() => setCreando("guardia")}>+ Crear guardia</button>
           <button className="btn-accion" onClick={() => setCreando("cajero")}>+ Crear cajero</button>
+          <button className="btn-accion" onClick={() => setCreando("supervisor")}>+ Crear supervisor</button>
         </div>
       </div>
 
@@ -195,9 +196,9 @@ export function UsuariosAdmin() {
   );
 }
 
-// ── Formulario de nuevo usuario (guardia / cajero) ────────────────────────────
+// ── Formulario de nuevo usuario (guardia / cajero / supervisor) ──────────────
 function FormUsuario({ tipo, onCerrar, onCreado }: {
-  tipo: "cajero" | "guardia";
+  tipo: "cajero" | "guardia" | "supervisor";
   onCerrar: () => void;
   onCreado: (cred: { email: string; pass: string; nombre: string }) => void;
 }) {
@@ -230,7 +231,7 @@ function FormUsuario({ tipo, onCerrar, onCreado }: {
     if (!validar()) return;
     setGuardando(true);
     try {
-      const fn = tipo === "cajero" ? crearCajero : crearGuardia;
+      const fn = tipo === "cajero" ? crearCajero : tipo === "supervisor" ? crearSupervisor : crearGuardia;
       const u = await fn({ nombre: nombre.trim(), apellido: apellido.trim(), email: email.trim() });
       onCreado({ email: u.email, pass: u.password_generica || "", nombre: `${u.nombre} ${u.apellido}` });
     } catch (e) {
@@ -241,8 +242,9 @@ function FormUsuario({ tipo, onCerrar, onCreado }: {
     }
   }
 
-  const titulo = tipo === "cajero" ? "Nuevo cajero" : "Nuevo guardia";
-  const ph = tipo === "cajero" ? "cajero@villasdelsol.hn" : "guardia@villasdelsol.hn";
+  const titulo = tipo === "cajero" ? "Nuevo cajero" : tipo === "supervisor" ? "Nuevo supervisor" : "Nuevo guardia";
+  const ph = tipo === "cajero" ? "cajero@villasdelsol.hn"
+    : tipo === "supervisor" ? "supervisor@villasdelsol.hn" : "guardia@villasdelsol.hn";
 
   return (
     <div className="modal" onClick={onCerrar}>
@@ -282,6 +284,12 @@ function FormUsuario({ tipo, onCerrar, onCreado }: {
           <p className="muted small" style={{ marginTop: 4 }}>
             * Campos obligatorios. Se creará con una contraseña aleatoria que deberá cambiar en su primer ingreso.
           </p>
+          {tipo === "supervisor" && (
+            <p className="muted small" style={{ marginTop: -4, color: "#92651c" }}>
+              ⚠ Un supervisor tiene el mismo nivel de acceso que vos, salvo que no puede crear
+              otros supervisores ni modificar tu cuenta de administrador.
+            </p>
+          )}
 
           <button className="btn-accion full" onClick={crear} disabled={guardando} style={{ marginTop: 12 }}>
             {guardando ? "Creando…" : `Crear ${tipo}`}

@@ -657,6 +657,11 @@ export const listarUsuarios = (params?: { rol?: string; buscar?: string }) => {
 };
 export const crearCajero = (body: { nombre: string; apellido: string; email: string }) =>
   request<UsuarioAdminDTO>("/usuarios/cajeros", { method: "POST", body: JSON.stringify(body) });
+// Bases multi-residencial (Día 37): mismo nivel de acceso que admin, con
+// las restricciones ya resueltas en el backend (no puede crear/gestionar
+// a otro supervisor ni al admin dueño).
+export const crearSupervisor = (body: { nombre: string; apellido: string; email: string }) =>
+  request<UsuarioAdminDTO>("/usuarios/supervisores", { method: "POST", body: JSON.stringify(body) });
 export const resetPasswordUsuario = (uuid: string) =>
   request<{ message: string; password_generica: string }>(`/usuarios/${uuid}/reset-password`, { method: "POST" });
 export const editarUsuario = (uuid: string, body: {
@@ -795,16 +800,31 @@ export interface DispositivoDTO {
   ultima_sync: string | null;
   created_at: string | null;
   token?: string;
+  // Bases multi-residencial (Día 37): a qué cliente pertenece esta Pi.
+  // null = sin asignar (no descarga información hasta que se le asigne).
+  residencial: { id: string; nombre: string } | null;
 }
 export const devDispositivos = () => request<DispositivoDTO[]>("/dev/dispositivos");
-export const devCrearDispositivo = (body: { nombre: string; punto_acceso?: string }) =>
+export const devCrearDispositivo = (body: { nombre: string; punto_acceso?: string; residencial_id?: string }) =>
   request<DispositivoDTO>("/dev/dispositivos", { method: "POST", body: JSON.stringify(body) });
-export const devActualizarDispositivo = (id: string, body: { nombre?: string; punto_acceso?: string; activo?: boolean }) =>
+export const devActualizarDispositivo = (id: string, body: { nombre?: string; punto_acceso?: string; activo?: boolean; residencial_id?: string | null }) =>
   request<DispositivoDTO>(`/dev/dispositivos/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const devRegenerarToken = (id: string) =>
   request<DispositivoDTO>(`/dev/dispositivos/${id}/regenerar-token`, { method: "POST" });
 export const devEliminarDispositivo = (id: string) =>
   request<{ eliminado: boolean }>(`/dev/dispositivos/${id}`, { method: "DELETE" });
+
+// ── Residenciales (bases multi-residencial, Día 37) — panel desarrollador ──
+// El desarrollador ve cuántos admins/clientes tiene creados y qué usuarios
+// hay bajo cada uno. Hoy, en Villas del Sol, esto muestra una sola fila.
+export interface UsuarioResidencialDTO {
+  nombre: string; apellido: string; email: string; rol: string; activo: boolean;
+}
+export const devResidenciales = () => request<ResidencialDTO[]>("/dev/residenciales");
+export const devUsuariosDeResidencial = (uuid: string) =>
+  request<{ residencial: ResidencialDTO; staff: UsuarioResidencialDTO[]; residentes_count: number }>(
+    `/dev/residenciales/${uuid}/usuarios`);
+
 // Intencional: el rol desarrollador se crea una sola vez directo en la BD,
 // no desde la UI. Se mantiene por si a futuro se habilita un flujo de alta.
 export const crearDesarrollador = (body: { nombre: string; apellido: string; email: string }) =>
@@ -1072,6 +1092,50 @@ export const getConfigResidencial = () =>
 export const setConfigResidencial = (body: Partial<ConfigResidencial>) =>
   request<ConfigResidencial & { cuentas_actualizadas?: number }>(
     "/unidades/config-residencial", { method: "PUT", body: JSON.stringify(body) });
+
+// ── Mi Residencial: nombre y logo (bases multi-residencial, Día 37) ────────
+// Distinto de ConfigResidencial (arriba, que es día de pago/gracia). Esto es
+// la identidad visual del cliente — el mismo endpoint sirve para uno o para
+// mil residenciales del futuro SaaS, porque siempre resuelve por el usuario
+// que consulta.
+
+export interface ResidencialDTO {
+  id: string;
+  nombre: string;
+  logo_archivo: string | null;
+  activa: boolean;
+  admin: { nombre: string; email: string } | null;
+  created_at: string | null;
+  stats?: {
+    guardias: number; cajeros: number; supervisores: number;
+    residentes: number; dispositivos: number;
+  };
+}
+
+export const getMiResidencial = () =>
+  request<ResidencialDTO | null>("/unidades/mi-residencial");
+
+export const setMiResidencial = (body: { nombre?: string }) =>
+  request<ResidencialDTO>("/unidades/mi-residencial", { method: "PUT", body: JSON.stringify(body) });
+
+export async function subirLogoResidencial(archivo: File): Promise<ResidencialDTO> {
+  const token = getToken();
+  const form = new FormData();
+  form.append("logo", archivo);
+  const res = await fetch(`${API_URL}/unidades/mi-residencial/logo`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || "Error al subir el logo");
+  return json.data;
+}
+
+export function urlLogoResidencial(nombreArchivo: string): string {
+  const token = getToken();
+  return `${API_URL}/unidades/mi-residencial/logo/${nombreArchivo}?_auth=${token}`;
+}
 
 // ── Puntos de acceso (ACCESS-04, Auditoría Día 35) ──────────────────────────
 // Gestión OPERATIVA para el admin: nombre, qué trancas tiene, activo/inactivo.

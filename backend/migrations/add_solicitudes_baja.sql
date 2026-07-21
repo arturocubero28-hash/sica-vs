@@ -118,3 +118,80 @@ ALTER TABLE dispositivos_pi RENAME COLUMN token TO token_hash;
 
 ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS dispositivo_id BIGINT
     REFERENCES dispositivos_pi(id);
+
+-- =====================================================================
+-- BASES MULTI-RESIDENCIAL (Día 37)
+--
+-- Un admin = una Residencial = un cliente que factura. Hoy, en Villas del
+-- Sol, esto crea UNA sola fila y no cambia ningún comportamiento existente
+-- — todo lo que ya existe se re-asigna a esa única Residencial. El día que
+-- haya un segundo cliente, se crea una segunda fila con su propio admin,
+-- y el filtrado por residencial_id (ya presente en el backend) empieza a
+-- separar los datos de verdad sin tener que tocar estas tablas de nuevo.
+-- =====================================================================
+
+-- Nuevo rol: supervisor (mismo nivel de acceso que admin, con las
+-- restricciones ya implementadas en el backend — ver puede_gestionar_rol).
+ALTER TYPE rol_global ADD VALUE IF NOT EXISTS 'supervisor';
+
+-- Tabla Residencial: la unidad de cliente/facturación.
+CREATE TABLE IF NOT EXISTS residenciales (
+    id           BIGSERIAL PRIMARY KEY,
+    uuid_publico UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
+    admin_id     BIGINT NOT NULL UNIQUE REFERENCES usuarios(id),
+    nombre       VARCHAR(160) NOT NULL,
+    logo_archivo VARCHAR(255),
+    activa       BOOLEAN NOT NULL DEFAULT true,
+    created_at   TIMESTAMPTZ DEFAULT now(),
+    updated_at   TIMESTAMPTZ DEFAULT now()
+);
+
+-- residencial_id en las tablas raíz. Nullable a propósito: NULL significa
+-- "sin residencial asignada" (super_admin/desarrollador, o una Pi que el
+-- desarrollador todavía no asignó a ningún cliente).
+ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS residencial_id BIGINT
+    REFERENCES residenciales(id);
+ALTER TABLE unidades ADD COLUMN IF NOT EXISTS residencial_id BIGINT
+    REFERENCES residenciales(id);
+ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS residencial_id BIGINT
+    REFERENCES residenciales(id);
+
+-- dispositivos_pi.residencial_id ya existía como BigInteger suelto (sin FK,
+-- "preparado para SaaS" desde antes). Se agrega la columna por si no
+-- existiera en algún entorno, y la restricción FK que antes no tenía.
+ALTER TABLE dispositivos_pi ADD COLUMN IF NOT EXISTS residencial_id BIGINT;
+DO $$ BEGIN
+    ALTER TABLE dispositivos_pi ADD CONSTRAINT fk_dispositivos_pi_residencial
+        FOREIGN KEY (residencial_id) REFERENCES residenciales(id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- BOOTSTRAP: crea la Residencial de Villas del Sol a partir del admin que
+-- ya existe (si hay más de uno por alguna razón, toma el primero creado
+-- como dueño — hoy debería haber exactamente uno). No hace nada si ya
+-- se corrió antes (ON CONFLICT) o si todavía no hay ningún admin creado.
+INSERT INTO residenciales (uuid_publico, admin_id, nombre, activa)
+SELECT gen_random_uuid(), id, 'Residencial Villas del Sol', true
+FROM usuarios
+WHERE rol = 'admin'
+ORDER BY id
+LIMIT 1
+ON CONFLICT (admin_id) DO NOTHING;
+
+-- Backfill: todo lo existente (usuarios que no sean super_admin/
+-- desarrollador, unidades, puntos de acceso) pasa a pertenecer a esa
+-- única Residencial. Los dispositivos NO se backfillean — quedan sin
+-- asignar hasta que el desarrollador los asocie explícitamente desde el
+-- panel (hoy, en Villas del Sol, todavía no existe ninguna Pi creada).
+UPDATE usuarios SET residencial_id = (SELECT id FROM residenciales ORDER BY id LIMIT 1)
+WHERE residencial_id IS NULL
+  AND rol NOT IN ('super_admin', 'desarrollador')
+  AND EXISTS (SELECT 1 FROM residenciales);
+
+UPDATE unidades SET residencial_id = (SELECT id FROM residenciales ORDER BY id LIMIT 1)
+WHERE residencial_id IS NULL
+  AND EXISTS (SELECT 1 FROM residenciales);
+
+UPDATE accesos_fisicos SET residencial_id = (SELECT id FROM residenciales ORDER BY id LIMIT 1)
+WHERE residencial_id IS NULL
+  AND EXISTS (SELECT 1 FROM residenciales);

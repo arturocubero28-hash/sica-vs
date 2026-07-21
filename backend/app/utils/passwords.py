@@ -16,6 +16,17 @@ Diseño acordado con el usuario:
     recuperación por correo (sin cambios en este trabajo).
   - Un admin no puede crear ni resetear un super_admin o desarrollador —
     eso queda reservado a super_admin.
+
+BASES MULTI-RESIDENCIAL (Día 37): se agrega el rol 'supervisor' — mismo
+nivel de acceso operativo que 'admin' en toda la aplicación (ver
+app/auth/security.py roles_required, que trata a 'supervisor' como
+equivalente a 'admin' en cualquier endpoint que acepte ese rol), pero con
+dos restricciones que SOLO admin/super_admin pueden saltarse:
+  - Un supervisor no puede crear ni gestionar a OTRO supervisor.
+  - Un supervisor no puede gestionar al admin dueño de la residencial.
+Esto evita que un supervisor se auto-promueva o le quite el control al
+admin, mientras le da autonomía real para todo lo demás (guardias,
+cajeros, residentes, unidades, dispositivos).
 """
 import secrets
 import string
@@ -56,10 +67,18 @@ def generar_password_temporal(largo: int = 10) -> str:
 
 # Jerarquía de roles: valor más alto = más privilegio.
 # Un usuario solo puede crear/resetear roles con jerarquía MENOR a la suya.
+# 'supervisor' queda al mismo nivel que 'admin' (2) — la distinción entre
+# ambos no se resuelve por jerarquía numérica sino por la regla especial
+# de puede_gestionar_rol() de abajo, porque "mismo nivel" normalmente
+# significa "no se pueden gestionar entre sí" (2 > 2 es falso), que es
+# exactamente lo que queremos para supervisor↔supervisor y
+# supervisor↔admin, pero NO para admin creando un supervisor por primera
+# vez — ese caso puntual se resuelve aparte.
 _JERARQUIA = {
     "residente": 0,
     "cajero": 1,
     "guardia": 1,
+    "supervisor": 2,
     "admin": 2,
     "super_admin": 3,
     "desarrollador": 3,
@@ -71,11 +90,22 @@ def puede_gestionar_rol(rol_actor: str, rol_objetivo: str) -> bool:
     ¿Un usuario con rol_actor puede crear/resetear/editar credenciales de
     un usuario con rol_objetivo?
 
-    Regla: estrictamente menor jerarquía. Un admin (2) puede gestionar
-    guardia/cajero (1) y residente (0), pero NO otro admin (2) ni
-    super_admin/desarrollador (3). Solo super_admin/desarrollador pueden
-    gestionar admins entre sí.
+    Regla general: estrictamente menor jerarquía. Un admin (2) puede
+    gestionar guardia/cajero (1) y residente (0), pero NO otro admin (2)
+    ni super_admin/desarrollador (3). Solo super_admin/desarrollador
+    pueden gestionar admins entre sí.
+
+    Regla especial para 'supervisor' (Día 37, bases multi-residencial):
+      - Gestionar a un supervisor (crearlo, resetearlo, editarlo) es
+        exclusivo de admin/super_admin — ni siquiera OTRO supervisor
+        puede hacerlo, aunque comparta la misma jerarquía numérica.
+      - Un supervisor, como ACTOR, gestiona todo lo demás (guardia,
+        cajero, residente) exactamente igual que un admin.
     """
+    if rol_objetivo == "supervisor":
+        return rol_actor in ("admin", "super_admin")
+    if rol_actor == "supervisor":
+        return _JERARQUIA.get("admin", -1) > _JERARQUIA.get(rol_objetivo, 99)
     return _JERARQUIA.get(rol_actor, -1) > _JERARQUIA.get(rol_objetivo, 99)
 
 

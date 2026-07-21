@@ -10,6 +10,7 @@ from app.extensions import db
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
 from app.utils.passwords import generar_password_temporal, puede_gestionar_rol, ROLES_CREDENCIAL_LOCAL
+from app.utils.residencial import residencial_id_heredado
 
 usuarios_bp = Blueprint("usuarios", __name__)
 
@@ -46,6 +47,16 @@ def crear_cajero(usuario_actual):
     return _crear_usuario_rol(request, "cajero", usuario_actual)
 
 
+# ── Crear supervisor (bases multi-residencial, Día 37) ─────────────────────────
+# Solo admin/super_admin — ver puede_gestionar_rol(): ni siquiera otro
+# supervisor puede crear uno nuevo, así el admin dueño mantiene el control
+# de quién tiene su mismo nivel de acceso.
+@usuarios_bp.post("/supervisores")
+@roles_required("admin", "super_admin")
+def crear_supervisor(usuario_actual):
+    return _crear_usuario_rol(request, "supervisor", usuario_actual)
+
+
 # ── Crear desarrollador (solo super_admin o desarrollador) ────────────────────
 @usuarios_bp.post("/desarrolladores")
 @roles_required("super_admin", "desarrollador")
@@ -56,6 +67,8 @@ def crear_desarrollador(usuario_actual):
 def _crear_usuario_rol(req, rol, usuario_actual):
     # SEC-01: jerarquía de roles — un admin no puede crear un super_admin
     # ni un desarrollador. Solo super_admin/desarrollador pueden hacerlo.
+    # También cubre la regla especial de 'supervisor' (Día 37): solo
+    # admin/super_admin puede crear uno, ni siquiera otro supervisor.
     if not puede_gestionar_rol(usuario_actual.rol, rol):
         return jsonify({"error": {"code": "rol_insuficiente",
                                   "message": f"Tu rol no tiene permiso para crear usuarios "
@@ -81,6 +94,10 @@ def _crear_usuario_rol(req, rol, usuario_actual):
     u = Usuario(
         nombre=nombre, apellido=apellido, email=email,
         rol=rol, activo=True, debe_cambiar_password=True,
+        # Bases multi-residencial (Día 37): cajero y supervisor heredan la
+        # residencial de quien los crea. desarrollador queda sin residencial
+        # (rol de plataforma) — residencial_id_heredado() ya lo maneja.
+        residencial_id=residencial_id_heredado(usuario_actual),
     )
     u.set_password(password_temporal)
     db.session.add(u)

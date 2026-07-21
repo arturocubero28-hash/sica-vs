@@ -42,6 +42,10 @@ class Unidad(db.Model):
     # Para edificios: el usuario dueño/responsable que avala a sus inquilinos
     propietario_id = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
     activa = db.Column(db.Boolean, nullable=False, default=True)
+    # Bases para multi-residencial (Día 37): a qué Residencial pertenece esta
+    # unidad. Se completa al crearla, heredado del admin/supervisor que la
+    # crea. Ver Usuario.residencial_id para el detalle completo del diseño.
+    residencial_id = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     # Límites por unidad (Día 29 — requisito de la administración):
     # Casa: máx 4 personas adicionales al titular (default)
     # Apto: máx 1 persona adicional al titular (default)

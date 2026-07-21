@@ -12,6 +12,7 @@ from app.extensions import db
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
 from app.utils.passwords import generar_password_temporal
+from app.utils.residencial import residencial_id_heredado
 
 guardias_bp = Blueprint("guardias", __name__)
 
@@ -40,6 +41,9 @@ def crear_guardia(usuario_actual):
         nombre=nombre, apellido=apellido, email=email,
         rol="guardia", activo=True,
         debe_cambiar_password=True,   # obligado a cambiar en el primer login
+        # Bases multi-residencial (Día 37): hereda la residencial de quien
+        # lo crea (el admin o supervisor). Hoy siempre el mismo valor.
+        residencial_id=residencial_id_heredado(usuario_actual),
     )
     guardia.set_password(password_temporal)
     db.session.add(guardia)

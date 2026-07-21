@@ -12,6 +12,8 @@ from app.extensions import db
 from app.models.auditoria import LogAuditoria
 from app.models.visita import AccesoFisico, EventoAcceso
 from app.models.dispositivo import Dispositivo, generar_token, hash_token
+from app.models.residencial import Residencial
+from app.models.usuario import Usuario
 from app.auth.security import roles_required
 
 dev_bp = Blueprint("desarrollador", __name__)
@@ -524,11 +526,25 @@ def crear_dispositivo(usuario_actual):
     if not nombre:
         return jsonify({"error": {"code": "nombre_requerido",
                                   "message": "El nombre es obligatorio"}}), 400
+
+    # Bases multi-residencial (Día 37): el desarrollador puede asignar la
+    # Pi a una residencial ya al crearla (opcional — puede quedar sin
+    # asignar y asociarse después desde 'actualizar_dispositivo').
+    residencial_id = None
+    residencial_uuid = body.get("residencial_id")
+    if residencial_uuid:
+        r = Residencial.query.filter_by(uuid_publico=residencial_uuid).first()
+        if not r:
+            return jsonify({"error": {"code": "residencial_no_encontrada",
+                                      "message": "La residencial indicada no existe"}}), 404
+        residencial_id = r.id
+
     # DEVICE-06: el token en claro solo existe en esta variable local, para
     # devolverlo una vez al admin. En la base solo se guarda el hash.
     token_plano = generar_token()
     disp = Dispositivo(nombre=nombre, tipo=tipo, punto_acceso=punto,
-                        token_hash=hash_token(token_plano), activo=True)
+                        token_hash=hash_token(token_plano), activo=True,
+                        residencial_id=residencial_id)
     db.session.add(disp)
     db.session.commit()
     # Al crear, se devuelve el token UNA vez (anótalo, no se vuelve a mostrar)
@@ -553,6 +569,19 @@ def actualizar_dispositivo(usuario_actual, disp_uuid):
         disp.punto_acceso = (body["punto_acceso"] or "").strip() or None
     if "activo" in body:
         disp.activo = bool(body["activo"])
+    # Bases multi-residencial (Día 37): asignar/reasignar/desasignar esta
+    # Pi a una residencial. residencial_id: null o "" desasigna (la Pi deja
+    # de descargar información hasta que se le asigne una de nuevo).
+    if "residencial_id" in body:
+        residencial_uuid = body.get("residencial_id")
+        if not residencial_uuid:
+            disp.residencial_id = None
+        else:
+            r = Residencial.query.filter_by(uuid_publico=residencial_uuid).first()
+            if not r:
+                return jsonify({"error": {"code": "residencial_no_encontrada",
+                                          "message": "La residencial indicada no existe"}}), 404
+            disp.residencial_id = r.id
     db.session.commit()
     return jsonify({"data": disp.to_dict()})
 
@@ -581,3 +610,45 @@ def eliminar_dispositivo(usuario_actual, disp_uuid):
     db.session.delete(disp)
     db.session.commit()
     return jsonify({"data": {"eliminado": True}})
+
+
+# =====================================================================
+# RESIDENCIALES (bases multi-residencial, Día 37)
+#
+# El desarrollador ve cuántos admins tiene creados (uno por Residencial)
+# y qué usuarios hay bajo cada uno. Hoy, en Villas del Sol, esto muestra
+# una sola fila — es la vista que se vuelve realmente útil el día que
+# exista un segundo cliente.
+# =====================================================================
+@dev_bp.get("/residenciales")
+@roles_required("desarrollador")
+def listar_residenciales(usuario_actual):
+    residenciales = Residencial.query.order_by(Residencial.created_at).all()
+    return jsonify({"data": [r.to_dict(incluir_stats=True) for r in residenciales]})
+
+
+@dev_bp.get("/residenciales/<uuid:res_uuid>/usuarios")
+@roles_required("desarrollador")
+def usuarios_de_residencial(usuario_actual, res_uuid):
+    """
+    Lista los usuarios de staff (admin, supervisor, guardia, cajero) de una
+    residencial completos, y solo la CANTIDAD de residentes — una
+    residencial real puede tener cientos, no tiene sentido traerlos todos
+    acá para una vista de diagnóstico del desarrollador.
+    """
+    r = Residencial.query.filter_by(uuid_publico=res_uuid).first()
+    if not r:
+        return jsonify({"error": {"code": "no_encontrada",
+                                  "message": "Residencial no encontrada"}}), 404
+
+    staff = (Usuario.query
+             .filter(Usuario.residencial_id == r.id,
+                     Usuario.rol.in_(("admin", "supervisor", "guardia", "cajero")))
+             .order_by(Usuario.rol, Usuario.nombre).all())
+
+    return jsonify({"data": {
+        "residencial": r.to_dict(),
+        "staff": [u.to_dict() for u in staff],
+        "residentes_count": Usuario.query.filter_by(
+            residencial_id=r.id, rol="residente").count(),
+    }})

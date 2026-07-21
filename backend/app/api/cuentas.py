@@ -17,6 +17,7 @@ Sobre la creación de usuarios de residentes:
     con Resend) se envía por correo para que el residente defina su contraseña.
     Por ahora el token se devuelve en la respuesta para pruebas.
 """
+import os
 import secrets
 import datetime as dt
 
@@ -27,6 +28,8 @@ from app.extensions import db
 from app.models.usuario import Usuario
 from app.models.cuenta import Unidad, Cuenta, Residente, Tarjeta, Tarifa, CodigoEnrolamiento, Cuota, SolicitudBaja, Pago
 from app.auth.security import roles_required, token_required
+from app.utils.residencial import residencial_id_heredado
+from app.utils.archivos import guardar_imagen_segura, servir_archivo_seguro, EXT_IMAGEN
 
 cuentas_bp = Blueprint("cuentas", __name__)
 
@@ -57,9 +60,13 @@ def _monto_pagado_cuota(cuota):
     return float(total or 0)
 
 
-def _crear_usuario_pendiente(nombre, apellido, email, telefono=None, extra=None):
+def _crear_usuario_pendiente(nombre, apellido, email, telefono=None, extra=None, usuario_actual=None):
     """Crea un Usuario residente en estado pendiente de activación.
-    Devuelve (usuario, token_activacion) o (None, mensaje_error)."""
+    Devuelve (usuario, token_activacion) o (None, mensaje_error).
+
+    usuario_actual: quien está creando este residente (el admin/supervisor).
+    Bases multi-residencial (Día 37) — el residente hereda su residencial_id.
+    """
     email = (email or "").strip().lower()
     if not email or not nombre:
         return None, "Nombre y email son obligatorios"
@@ -83,6 +90,7 @@ def _crear_usuario_pendiente(nombre, apellido, email, telefono=None, extra=None)
         contacto_emergencia_telefono=(extra.get("contacto_emergencia_telefono") or None),
         rol="residente",
         activo=False,            # pendiente hasta que defina contraseña
+        residencial_id=residencial_id_heredado(usuario_actual) if usuario_actual else None,
     )
     # contraseña temporal aleatoria e inutilizable (se reemplaza en la activación)
     u.set_password(secrets.token_urlsafe(32))
@@ -122,7 +130,10 @@ def crear_unidad(usuario_actual):
         return _err("duplicado", f"Ya existe la unidad '{identificador}'", 409)
 
     u = Unidad(tipo=tipo, identificador=identificador,
-               direccion_ref=data.get("direccion_ref"))
+               direccion_ref=data.get("direccion_ref"),
+               # Bases multi-residencial (Día 37): hereda la residencial de
+               # quien la crea. Hoy siempre el mismo valor en Villas del Sol.
+               residencial_id=residencial_id_heredado(usuario_actual))
     db.session.add(u)
     db.session.commit()
     return jsonify({"data": u.to_dict()}), 201
@@ -209,7 +220,9 @@ def crear_cuenta(usuario_actual):
             else:
                 max_aptos = nueva.get("max_apartamentos")
                 unidad = Unidad(tipo=tipo, identificador=ident, activa=True,
-                                max_apartamentos=int(max_aptos) if max_aptos and tipo == "edificio" else None)
+                                max_apartamentos=int(max_aptos) if max_aptos and tipo == "edificio" else None,
+                                # Bases multi-residencial (Día 37)
+                                residencial_id=residencial_id_heredado(usuario_actual))
                 db.session.add(unidad)
                 db.session.flush()
     if not unidad:
@@ -300,7 +313,7 @@ def crear_cuenta(usuario_actual):
     usuario, token_o_error = _crear_usuario_pendiente(
         titular_data.get("nombre"), titular_data.get("apellido"),
         titular_data.get("email"), titular_data.get("telefono"),
-        extra=titular_data,
+        extra=titular_data, usuario_actual=usuario_actual,
     )
     if usuario is None:
         return _err("titular_invalido", token_o_error, 400)
@@ -608,7 +621,7 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
     usuario, token_o_error = _crear_usuario_pendiente(
         data.get("nombre"), data.get("apellido"),
         data.get("email"), data.get("telefono"),
-        extra=data,
+        extra=data, usuario_actual=usuario_actual,
     )
     if usuario is None:
         return _err("miembro_invalido", token_o_error, 400)
@@ -987,6 +1000,115 @@ def editar_config_residencial(usuario_actual):
 
     db.session.commit()
     return jsonify({"data": {**cfg.to_dict(), "cuentas_actualizadas": actualizadas}})
+
+
+# =====================================================================
+# MI RESIDENCIAL — nombre y logo (bases multi-residencial, Día 37)
+#
+# Distinto de ConfigResidencial (arriba): eso es la configuración de pagos
+# de la ÚNICA residencial que existe hoy. Esto es la identidad visual
+# (nombre, logo) de LA residencial a la que pertenece el usuario que
+# consulta — el mismo endpoint sirve para uno o para mil clientes del
+# futuro SaaS sin cambiar nada, porque siempre resuelve por
+# usuario_actual.residencial_id.
+# =====================================================================
+def _carpeta_logos():
+    carpeta = os.path.join(current_app.config.get("UPLOAD_FOLDER", "/app/uploads"), "residenciales")
+    os.makedirs(carpeta, exist_ok=True)
+    return carpeta
+
+
+@cuentas_bp.get("/mi-residencial")
+@token_required
+def ver_mi_residencial(usuario_actual):
+    """Cualquier usuario autenticado puede ver el nombre/logo de su
+    residencial (para mostrarlo en el encabezado de la app/web)."""
+    from app.models.residencial import Residencial
+    if not usuario_actual.residencial_id:
+        return jsonify({"data": None})
+    r = Residencial.query.get(usuario_actual.residencial_id)
+    if not r:
+        return jsonify({"data": None})
+    return jsonify({"data": r.to_dict()})
+
+
+@cuentas_bp.put("/mi-residencial")
+@roles_required("admin", "super_admin")
+def editar_mi_residencial(usuario_actual):
+    """El admin (o supervisor, vía roles_required) edita el nombre de su
+    residencial. El logo se sube aparte (multipart) en el endpoint de abajo."""
+    from app.models.residencial import Residencial
+    if not usuario_actual.residencial_id:
+        return jsonify({"error": {"code": "sin_residencial",
+                                  "message": "Tu usuario no tiene una residencial asignada"}}), 400
+    r = Residencial.query.get(usuario_actual.residencial_id)
+    if not r:
+        return jsonify({"error": {"code": "no_encontrada",
+                                  "message": "Residencial no encontrada"}}), 404
+
+    body = request.get_json(silent=True) or {}
+    if "nombre" in body:
+        nombre = (body["nombre"] or "").strip()
+        if not nombre:
+            return jsonify({"error": {"code": "nombre_requerido",
+                                      "message": "El nombre no puede quedar vacío"}}), 400
+        if len(nombre) > 160:
+            return jsonify({"error": {"code": "nombre_largo",
+                                      "message": "El nombre no puede superar 160 caracteres"}}), 400
+        r.nombre = nombre
+    db.session.commit()
+    return jsonify({"data": r.to_dict()})
+
+
+@cuentas_bp.post("/mi-residencial/logo")
+@roles_required("admin", "super_admin")
+def subir_logo_residencial(usuario_actual):
+    """Sube/reemplaza el logo de la residencial del admin. Mismo patrón de
+    guardado seguro que comunicados (valida tipo real de archivo, genera
+    nombre propio) y mismo modelo de acceso privado que FILES-05 (se sirve
+    autenticado, no queda público en el bucket)."""
+    from app.models.residencial import Residencial
+    if not usuario_actual.residencial_id:
+        return jsonify({"error": {"code": "sin_residencial",
+                                  "message": "Tu usuario no tiene una residencial asignada"}}), 400
+    r = Residencial.query.get(usuario_actual.residencial_id)
+    if not r:
+        return jsonify({"error": {"code": "no_encontrada",
+                                  "message": "Residencial no encontrada"}}), 404
+
+    if "logo" not in request.files or not request.files["logo"].filename:
+        return jsonify({"error": {"code": "sin_archivo",
+                                  "message": "Adjuntá una imagen para el logo"}}), 400
+
+    nombre_archivo, error = guardar_imagen_segura(
+        request.files["logo"], _carpeta_logos(), EXT_IMAGEN
+    )
+    if error:
+        return jsonify({"error": {"code": "imagen_invalida", "message": error}}), 400
+
+    # Reemplaza el logo anterior si existía (no se acumulan archivos viejos)
+    if r.logo_archivo:
+        try:
+            os.remove(os.path.join(_carpeta_logos(), r.logo_archivo))
+        except OSError:
+            pass
+
+    r.logo_archivo = nombre_archivo
+    db.session.commit()
+    return jsonify({"data": r.to_dict()})
+
+
+@cuentas_bp.get("/mi-residencial/logo/<nombre_archivo>")
+@token_required
+def ver_logo_residencial(usuario_actual, nombre_archivo):
+    """Sirve el archivo del logo. Cualquier usuario autenticado puede verlo
+    (es la marca visual que ve toda la residencial, no un dato privado)."""
+    from app.models.residencial import Residencial
+    existe = Residencial.query.filter_by(logo_archivo=nombre_archivo).first()
+    if not existe:
+        return jsonify({"error": {"code": "no_encontrado",
+                                  "message": "Logo no encontrado"}}), 404
+    return servir_archivo_seguro(_carpeta_logos(), nombre_archivo)
 
 # =====================================================================
 # SOLICITUDES DE BAJA (admin de edificio pide dar de baja a un inquilino)

@@ -112,17 +112,38 @@ def token_required(f):
 
 
 def roles_required(*roles_permitidos):
-    """Exige token válido Y que el rol del usuario esté permitido."""
+    """
+    Exige token válido Y que el rol del usuario esté permitido.
+
+    Bases multi-residencial (Día 37): un usuario con rol 'supervisor' se
+    trata como equivalente a 'admin' en CUALQUIER endpoint que acepte
+    "admin" en roles_permitidos — sin tener que agregar "supervisor" a
+    mano en cada uno de los @roles_required("admin", "super_admin") que
+    ya existen por todo el código. Las pocas acciones donde supervisor SÍ
+    debe distinguirse de admin (crear/gestionar otro supervisor, tocar al
+    admin dueño) se resuelven aparte con puede_gestionar_rol(), no acá.
+
+    De paso (adelanto de AUDIT-12, Auditoría Día 35): se agrega
+    g.usuario_actual también en este decorador — antes solo lo hacía
+    token_required(), así que cualquier operación protegida con
+    roles_required() (la mayoría de las administrativas/privilegiadas)
+    quedaba sin actor para el hook de auditoría.
+    """
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
+            from flask import g
             usuario = _usuario_desde_request()
             if not usuario:
                 return jsonify({"error": {"code": "no_autorizado",
                                           "message": "Token inválido o ausente"}}), 401
-            if usuario.rol not in roles_permitidos:
+            permitido = usuario.rol in roles_permitidos
+            if not permitido and usuario.rol == "supervisor" and "admin" in roles_permitidos:
+                permitido = True
+            if not permitido:
                 return jsonify({"error": {"code": "prohibido",
                                           "message": "No tienes permiso para esta acción"}}), 403
+            g.usuario_actual = usuario
             return f(usuario, *args, **kwargs)
         return wrapper
     return decorator

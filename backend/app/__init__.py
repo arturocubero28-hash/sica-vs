@@ -57,6 +57,7 @@ def create_app(config_class=Config):
     from app.models.sesion_activa import SesionActiva  # noqa: F401  sesiones/dispositivos
     from app.models.credencial_webauthn import CredencialWebAuthn  # noqa: F401  biometría WebAuthn
     from app.models.dispositivo import Dispositivo  # noqa: F401  Raspberry Pi de accesos
+    from app.models.residencial import Residencial  # noqa: F401  bases multi-residencial (Día 37)
     from app.models.dispositivo_movil import DispositivoMovil  # noqa: F401  tokens FCM push
     from app.models.cuenta import ConfigResidencial  # noqa: F401  config global residencial
 
