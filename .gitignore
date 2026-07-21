@@ -1,9 +1,23 @@
 # Entorno
 .env
+*.env
 *.pyc
 __pycache__/
 .venv/
 venv/
+
+# SECRET-09 (Auditoría Día 35): certificados y llaves privadas — nunca
+# deben versionarse. frontend/key.pem quedó expuesto en el historial
+# (commit 564ab1c) sin cumplir ninguna función real (vite.config.ts
+# nunca lo usó) — se eliminó del árbol de trabajo y del historial.
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+google-wallet-key.json
+backend/google-wallet-key.json
+**/google-wallet-key.json
 
 # Node
 node_modules/
