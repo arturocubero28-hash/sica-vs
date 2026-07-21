@@ -536,6 +536,14 @@ function ConfigTrancas() {
   useEffect(() => { cargar(); }, [cargar]);
 
   async function asignarResidencial(a: AccesoFisicoDTO, residencialId: string) {
+    // Misma lógica que las Pi: reasignar la residencial de una tranca ya
+    // asignada es sensible, exige confirmación explícita.
+    const nueva = residenciales.find((r) => r.id === residencialId);
+    const nombreNueva = nueva ? nueva.nombre : "ninguna (sin asignar)";
+    const actual = a.residencial ? a.residencial.nombre : "sin asignar";
+    if (!confirm(`¿Cambiar la residencial de "${a.nombre}" de "${actual}" a "${nombreNueva}"?`)) {
+      return;
+    }
     try {
       const actualizado = await devConfigurarAcceso(a.id, { residencial_id: residencialId || null });
       setAccesos((prev) => prev ? prev.map((x) => x.id === a.id ? actualizado : x) : prev);
@@ -647,14 +655,28 @@ function ConfigTrancas() {
         cuántos milisegundos se mantiene el contacto seco. Un valor incorrecto puede impedir que una tranca abra.
       </div>
 
-      <div className="dev-trancas-barra">
+      <div className="dev-trancas-barra" style={{ flexWrap: "wrap", gap: 10 }}>
         <span className="dev-trancas-total">{lista.length} acceso(s) registrado(s)</span>
         {residenciales.length > 0 && (
-          <select value={filtroResidencial} onChange={(e) => setFiltroResidencial(e.target.value)}
-            className="dev-tranca-tipo-sel" style={{ maxWidth: 220 }}>
-            <option value="">Todas las residenciales</option>
-            {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-          </select>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: filtroResidencial ? "#eef4ff" : "var(--fondo)",
+            border: `1px solid ${filtroResidencial ? "#a9c4f5" : "var(--borde)"}`,
+            borderRadius: 8, padding: "6px 10px",
+          }}>
+            <Building2 size={15} color={filtroResidencial ? "#2c5cc5" : "#8a94a3"} />
+            <span className="small" style={{ fontWeight: 600, color: filtroResidencial ? "#2c5cc5" : "#5a6472", whiteSpace: "nowrap" }}>
+              Filtrar por residencial:
+            </span>
+            <select value={filtroResidencial} onChange={(e) => setFiltroResidencial(e.target.value)}
+              className="dev-tranca-tipo-sel" style={{ maxWidth: 220, border: "none", background: "transparent" }}>
+              <option value="">Todas</option>
+              {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+            </select>
+            {filtroResidencial && (
+              <button className="ghost mini" onClick={() => setFiltroResidencial("")} title="Quitar filtro">✕</button>
+            )}
+          </div>
         )}
         <button className="dev-tranca-add" onClick={() => { setMostrarAlta((v) => !v); setMsgAlta(""); }}>
           {mostrarAlta ? "Cancelar" : "+ Agregar acceso"}
@@ -803,6 +825,8 @@ function ConfigPis() {
   const [mostrarAlta, setMostrarAlta] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoPunto, setNuevoPunto] = useState("");
+  const [nuevaResidencial, setNuevaResidencial] = useState("");
+  const [errorAlta, setErrorAlta] = useState("");
   const [creando, setCreando] = useState(false);
   // token recién generado para mostrar una vez
   const [tokenNuevo, setTokenNuevo] = useState<{ nombre: string; token: string } | null>(null);
@@ -828,6 +852,18 @@ function ConfigPis() {
   useEffect(() => { cargar(); }, [cargar]);
 
   async function asignarResidencial(d: DispositivoDTO, residencialId: string) {
+    // Reasignar la residencial de una Pi ya en uso es una acción sensible
+    // (esa Pi deja de descargar información de su cliente anterior) —
+    // exige confirmación explícita, no se aplica con solo tocar el select.
+    const nueva = residenciales.find((r) => r.id === residencialId);
+    const nombreNueva = nueva ? nueva.nombre : "ninguna (sin asignar)";
+    const actual = d.residencial ? d.residencial.nombre : "sin asignar";
+    if (!confirm(
+      `¿Cambiar la residencial de "${d.nombre}" de "${actual}" a "${nombreNueva}"?\n\n` +
+      `Esta Pi dejará de sincronizar información de la residencial anterior.`
+    )) {
+      return; // no tocar nada — el <select> se re-renderiza con el valor real desde el estado
+    }
     try {
       await devActualizarDispositivo(d.id, { residencial_id: residencialId || null });
       cargar();
@@ -836,13 +872,17 @@ function ConfigPis() {
 
   async function crear() {
     if (!nuevoNombre.trim()) return;
+    if (!nuevaResidencial) { setErrorAlta("Elegí a qué residencial pertenece esta Pi — así queda atada desde el momento en que se crea."); return; }
+    setErrorAlta("");
     setCreando(true);
     try {
-      const d = await devCrearDispositivo({ nombre: nuevoNombre.trim(), punto_acceso: nuevoPunto.trim() });
+      const d = await devCrearDispositivo({ nombre: nuevoNombre.trim(), punto_acceso: nuevoPunto.trim(), residencial_id: nuevaResidencial });
       if (d.token) setTokenNuevo({ nombre: d.nombre, token: d.token });
-      setNuevoNombre(""); setNuevoPunto(""); setMostrarAlta(false);
+      setNuevoNombre(""); setNuevoPunto(""); setNuevaResidencial(""); setMostrarAlta(false);
       cargar();
-    } catch { /* noop */ } finally { setCreando(false); }
+    } catch (err: any) {
+      setErrorAlta(err?.message || "No se pudo crear la Pi");
+    } finally { setCreando(false); }
   }
 
   async function alternarActivo(d: DispositivoDTO) {
@@ -898,10 +938,24 @@ function ConfigPis() {
                 {puntos.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </label>
+            <label>
+              <span>Residencial *</span>
+              <select className="dev-tranca-tipo-sel" value={nuevaResidencial} onChange={(e) => setNuevaResidencial(e.target.value)}>
+                <option value="">— Elegí una residencial —</option>
+                {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+              </select>
+            </label>
             <button className="dev-tranca-btn" style={{ maxWidth: 160 }} disabled={creando} onClick={crear}>
               {creando ? "Creando…" : "Crear Pi"}
             </button>
           </div>
+          <p className="muted small" style={{ marginTop: 8 }}>
+            * Obligatoria: la Pi queda atada a esa residencial desde el momento en que se crea — evita
+            crear dispositivos sueltos que después haya que andar asignando.
+          </p>
+          {errorAlta && (
+            <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>{errorAlta}</div>
+          )}
           {puntos.length === 0 && (
             <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>
               No hay puntos de acceso todavía. Primero creá trancas con su punto en la pestaña <Construction size={16} /> Trancas.
