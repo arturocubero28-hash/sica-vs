@@ -114,7 +114,16 @@ CREATE INDEX IF NOT EXISTS idx_comprobantes_pago_pago_id ON comprobantes_pago(pa
 -- token viejo dejará de servir porque token_hash quedará con el valor
 -- en claro viejo, que no coincidirá con ningún hash real generado por
 -- el backend nuevo.
-ALTER TABLE dispositivos_pi RENAME COLUMN token TO token_hash;
+-- Idempotente: si ya se corrió antes (la columna ya se llama token_hash),
+-- no reintenta el rename — evita el error 'column "token" does not exist'
+-- que aparecía en rojo cada vez que se reejecutaba este archivo acumulativo
+-- completo (inofensivo, pero confuso de ver en la salida).
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_name = 'dispositivos_pi' AND column_name = 'token') THEN
+        ALTER TABLE dispositivos_pi RENAME COLUMN token TO token_hash;
+    END IF;
+END $$;
 
 ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS dispositivo_id BIGINT
     REFERENCES dispositivos_pi(id);
