@@ -193,10 +193,15 @@ def sincronizar():
         })
 
     # Tarjetas virtuales (QR permanentes que rotan cada 24h)
-    # Durante los 10 min después de medianoche se incluye el código anterior
-    # para que nadie quede afuera mientras la Pi descarga la nueva lista.
-    ahora = dt.datetime.utcnow()
-    ventana_gracia = (ahora.hour == 0 and ahora.minute < 10)
+    # ROTATION-07 (Auditoría Día 35): antes se comparaba la hora ACTUAL del
+    # servidor en UTC contra un rango fijo ("es medianoche y faltan menos
+    # de 10 min") — pero la rotación real ocurre a medianoche hora de
+    # Honduras (UTC-6), así que la ventana de gracia quedaba activa a las
+    # 6:00 AM en vez de a medianoche. Ahora se compara contra la fecha de
+    # expiración GUARDADA en cada fila al momento de rotar
+    # (codigo_anterior_valido_hasta/token_anterior_valido_hasta) — sin
+    # ninguna suposición de zona horaria ni de "qué hora es ahora".
+    ahora = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc)
     virtuales_q = TarjetaVirtual.query.filter_by(estado="activa")
     if disp.residencial_id is not None:
         from app.models.cuenta import Unidad
@@ -215,8 +220,8 @@ def sincronizar():
             "residente": nombre,
             "es_virtual": True,
         })
-        # Código anterior válido solo durante la ventana de gracia de 10 min
-        if ventana_gracia and tv.codigo_anterior:
+        # Código anterior válido solo hasta su fecha de expiración guardada
+        if tv.codigo_anterior and tv.codigo_anterior_valido_hasta and ahora < tv.codigo_anterior_valido_hasta:
             tarjetas_out.append({
                 "card_uid": tv.codigo_anterior,
                 "tipo_acceso": tv.tipo_acceso,
@@ -247,7 +252,7 @@ def sincronizar():
             "tipo_acceso": c.tipo_acceso,
             "residente": nombre,
         })
-        if ventana_gracia and c.token_anterior:
+        if c.token_anterior and c.token_anterior_valido_hasta and ahora < c.token_anterior_valido_hasta:
             ble_out.append({
                 "token": c.token_anterior,
                 "clave_secreta": c.clave_secreta,

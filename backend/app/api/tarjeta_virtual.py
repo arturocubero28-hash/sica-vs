@@ -139,6 +139,7 @@ def reactivar_tarjeta_virtual(usuario_actual):
 
     # Generar código nuevo — el anterior quedó comprometido
     tv.codigo_anterior = None  # no aceptar el código viejo bajo ninguna circunstancia
+    tv.codigo_anterior_valido_hasta = None  # ROTATION-07: limpiar también la expiración guardada
     tv.codigo_hoy = _generar_codigo_unico()
     tv.estado = "activa"
     tv.tipo_acceso = cuenta.tipo_acceso_virtual  # por si el admin lo cambió mientras estaba suspendida
@@ -240,9 +241,11 @@ def wallet_pass(usuario_actual):
 
         key_data = json.loads(service_key)
         issuer_id = current_app.config.get("GOOGLE_ISSUER_ID", "")
-        # Google no acepta guiones en el object id — se quitan del uuid
-        uuid_limpio = str(tv.uuid_publico).replace("-", "")
-        object_id = f"{issuer_id}.tv{uuid_limpio}"
+        # ROTATION-07: object_id generado por la función centralizada — antes
+        # se armaba inline acá y de forma DISTINTA en la tarea nocturna de
+        # mora.py, lo que hacía que esa tarea nunca encontrara el objeto real.
+        from app.services.wallet import wallet_object_id
+        object_id = wallet_object_id(issuer_id, tv.uuid_publico)
         class_id  = f"{issuer_id}.acceso_residencial"
         titular   = residente.usuario
         nombre    = f"{titular.nombre} {titular.apellido}" if titular else "Residente"
@@ -334,46 +337,17 @@ def wallet_pass(usuario_actual):
         return _err("wallet_error", f"No se pudo generar el pase: {str(e)}", 500)
 
 
-@tv_bp.post("/wallet-callback")
-def wallet_callback():
-    """
-    Google Wallet llama a este endpoint cuando el pase del residente expira
-    (a medianoche) para obtener el QR actualizado.
 
-    Google envía un JSON con el objeto del pase que necesita actualizar.
-    El servidor responde con el pase actualizado (nuevo codigo_hoy).
-
-    Este endpoint es público (sin token del residente) — Google se autentica
-    con su propia firma en el cuerpo del request.
-    """
-    data = request.get_json(silent=True) or {}
-    object_id = data.get("objectId", "")
-
-    # El object_id tiene formato: <issuer_id>.tv<uuid_sin_guiones>
-    if ".tv" not in object_id:
-        return _err("invalid_object", "ID de objeto inválido", 400)
-
-    uuid_hex = object_id.split(".tv")[-1]
-    # Reconstruir el UUID con guiones (8-4-4-4-12)
-    if len(uuid_hex) == 32:
-        uuid_str = f"{uuid_hex[0:8]}-{uuid_hex[8:12]}-{uuid_hex[12:16]}-{uuid_hex[16:20]}-{uuid_hex[20:32]}"
-    else:
-        uuid_str = uuid_hex
-    tv = TarjetaVirtual.query.filter_by(uuid_publico=uuid_str, estado="activa").first()
-    if not tv:
-        return jsonify({"error": "Pass not found or inactive"}), 404
-
-    if tv.cuenta.bloqueada:
-        # Pase bloqueado por mora — Google lo marcará como expirado
-        return jsonify({"result": "PASS_SHOULD_BE_UPDATED", "expiredTimeMillis": 0}), 200
-
-    # Responder con el nuevo QR (Google lo actualiza silenciosamente en la Wallet)
-    return jsonify({
-        "result": "PASS_SHOULD_BE_UPDATED",
-        "updatedObject": {
-            "barcode": {
-                "type": "QR_CODE",
-                "value": tv.codigo_hoy,
-            }
-        }
-    })
+# ROTATION-07 (Auditoría Día 35): existía acá un endpoint público
+# POST /wallet-callback que afirmaba "Google llama a este endpoint... se
+# autentica con su propia firma en el cuerpo del request" — pero el código
+# nunca verificaba ninguna firma, y la URL nunca se registró ante Google en
+# ningún campo de la clase/objeto (callbackOptions), así que Google jamás
+# la llamaba de verdad. En la práctica era un endpoint público, sin
+# autenticación, que devolvía el código QR de acceso VÁLIDO de cualquier
+# residente con solo adivinar o construir su object_id (uuid sin guiones).
+# Eliminado por completo: la actualización real de los pases de Wallet ya
+# no depende de que Google "pregunte" — se empuja directamente con PATCH
+# desde tasks/mora.py (rotar_tarjetas_virtuales → _notificar_wallet_
+# actualizacion), que es el mecanismo real y documentado de la API de
+# Wallet para pases genéricos.

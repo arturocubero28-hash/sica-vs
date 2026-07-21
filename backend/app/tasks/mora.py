@@ -335,21 +335,28 @@ def rotar_tarjetas_virtuales():
     with app.app_context():
         tarjetas = TarjetaVirtual.query.filter_by(estado="activa").all()
         total = 0
-        ids_actualizados = []
+        pases_a_notificar = []
+        ahora = dt.datetime.utcnow()
+        # ROTATION-07: el código anterior vale 10 minutos EXACTOS desde este
+        # instante (no "hasta que sean las 00:10 UTC" — eso fue el bug).
+        valido_hasta = ahora + dt.timedelta(minutes=10)
         for tv in tarjetas:
             tv.codigo_anterior = tv.codigo_hoy
+            tv.codigo_anterior_valido_hasta = valido_hasta
             while True:
                 nuevo = "SV" + str(secrets.randbelow(10**10)).zfill(10)
                 if not TarjetaVirtual.query.filter_by(codigo_hoy=nuevo).first():
                     break
             tv.codigo_hoy = nuevo
-            tv.rotado_en = dt.datetime.utcnow()
-            ids_actualizados.append(str(tv.uuid_publico))
+            tv.rotado_en = ahora
+            # ROTATION-07: se necesita el código NUEVO acá, no solo el uuid —
+            # la tarea de Wallet tiene que poder mandarlo en el PATCH.
+            pases_a_notificar.append({"uuid": str(tv.uuid_publico), "codigo": nuevo})
             total += 1
         db.session.commit()
 
         # Notificar a Google Wallet (si está configurado)
-        _notificar_wallet_actualizacion.delay(ids_actualizados)
+        _notificar_wallet_actualizacion.delay(pases_a_notificar)
 
         # Rotar también los tokens BLE
         _rotar_credenciales_ble()
@@ -359,30 +366,56 @@ def rotar_tarjetas_virtuales():
 
 def _rotar_credenciales_ble():
     """Rota los tokens BLE a medianoche, igual que las tarjetas virtuales.
-    El token anterior queda válido 10 min (ventana de gracia en el sync)."""
+    El token anterior queda válido 10 min exactos desde la rotación
+    (ROTATION-07: fecha explícita, no una comparación de hora del servidor)."""
     from app.models.cuenta import CredencialBLE
     import secrets
 
+    ahora = dt.datetime.utcnow()
+    valido_hasta = ahora + dt.timedelta(minutes=10)
     creds = CredencialBLE.query.filter_by(estado="activa").all()
     for c in creds:
         c.token_anterior = c.token_hoy
+        c.token_anterior_valido_hasta = valido_hasta
         while True:
             nuevo = "BLE" + secrets.token_hex(8).upper()
             if not CredencialBLE.query.filter_by(token_hoy=nuevo).first():
                 break
         c.token_hoy = nuevo
-        c.rotado_en = dt.datetime.utcnow()
+        c.rotado_en = ahora
     db.session.commit()
 
 
 @celery.task(name="tasks.notificar_wallet_actualizacion")
-def _notificar_wallet_actualizacion(uuids: list):
+def _notificar_wallet_actualizacion(pases: list):
     """
-    Llama a la Google Wallet API para marcar cada pase como desactualizado.
-    Google Wallet luego llama al callback del servidor para obtener el QR nuevo.
+    Empuja el QR nuevo a cada pase de Google Wallet ya emitido, vía PATCH
+    directo a la Wallet REST API — este es el mecanismo real de
+    actualización de pases genéricos (no un callback que Google inicia;
+    ver la nota en tarjeta_virtual.py sobre el endpoint que existía antes
+    y se eliminó por no cumplir ninguna función real).
+
+    ROTATION-07 (Auditoría Día 35) — tres bugs corregidos acá:
+      1. object_id: antes se armaba con un formato DISTINTO al que se usa
+         al crear el pase (tarjeta_virtual.py) — la tarea nunca encontraba
+         el objeto real. Ahora usa la misma función centralizada
+         (app.services.wallet.wallet_object_id) en ambos lugares.
+      2. El PATCH solo mandaba {"state": "ACTIVE"} — nunca tocaba el
+         código QR real (barcode.value). Ahora manda el codigo_hoy nuevo
+         de cada tarjeta, que es lo único que de verdad hace falta
+         actualizar.
+      3. Un 404 se contaba como "actualizado" — en realidad significa que
+         ese residente nunca agregó el pase a su Wallet (normal, no todos
+         lo usan) o que el pase no existe. Ahora se reporta aparte, sin
+         inflar el conteo de éxitos.
+
+    'pases' es una lista de {"uuid": str, "codigo": str} — el código NUEVO
+    que le corresponde a cada tarjeta después de rotar.
+
     Si no está configurado Google Cloud, simplemente no hace nada.
     """
     from app import create_app
+    from app.services.wallet import wallet_object_id
     import json
 
     app = create_app()
@@ -396,7 +429,6 @@ def _notificar_wallet_actualizacion(uuids: list):
             import google.auth.crypt
             import google.auth.transport.requests
             import google.oauth2.service_account
-            import requests as req
 
             creds = google.oauth2.service_account.Credentials.from_service_account_info(
                 json.loads(service_key),
@@ -404,15 +436,24 @@ def _notificar_wallet_actualizacion(uuids: list):
             session = google.auth.transport.requests.AuthorizedSession(creds)
 
             actualizados = 0
-            for uuid_str in uuids:
-                object_id = f"{issuer_id}.tv_{uuid_str}"
-                url = f"https://walletobjects.googleapis.com/walletobjects/v1/genericObject/{object_id}"
-                # PATCH con expire_time = ahora → Google sabe que debe pedir el refresh
-                resp = session.patch(url, json={"state": "ACTIVE"})
-                if resp.status_code in (200, 404):
-                    actualizados += 1
+            sin_pase = 0     # 404 — el residente nunca agregó este pase a su Wallet (normal)
+            errores = 0      # cualquier otra respuesta — esto sí es un problema real a revisar
 
-            return f"Wallet notificado: {actualizados}/{len(uuids)} pases"
+            for p in pases:
+                object_id = wallet_object_id(issuer_id, p["uuid"])
+                url = f"https://walletobjects.googleapis.com/walletobjects/v1/genericObject/{object_id}"
+                resp = session.patch(url, json={
+                    "barcode": {"type": "QR_CODE", "value": p["codigo"]},
+                })
+                if resp.status_code == 200:
+                    actualizados += 1
+                elif resp.status_code == 404:
+                    sin_pase += 1
+                else:
+                    errores += 1
+
+            return (f"Wallet: {actualizados} actualizados, {sin_pase} sin pase en Wallet, "
+                    f"{errores} con error (de {len(pases)} totales)")
         except Exception as e:
             return f"Error notificando Wallet: {e}"
 

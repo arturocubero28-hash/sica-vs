@@ -212,3 +212,10 @@ WHERE residencial_id IS NULL
 -- endpoint de creación, no como constraint de base de datos.
 ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS direccion VARCHAR(255);
 ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS telefono VARCHAR(30);
+
+-- ROTATION-07 (Auditoría Día 35): fecha explícita de expiración del código/
+-- token anterior, en vez de comparar la hora actual contra un rango fijo
+-- (que estaba en UTC mientras la rotación real ocurre a medianoche hora de
+-- Honduras — desfase de 6 horas).
+ALTER TABLE tarjetas_virtuales ADD COLUMN IF NOT EXISTS codigo_anterior_valido_hasta TIMESTAMPTZ;
+ALTER TABLE credenciales_ble ADD COLUMN IF NOT EXISTS token_anterior_valido_hasta TIMESTAMPTZ;

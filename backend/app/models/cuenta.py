@@ -397,9 +397,19 @@ class TarjetaVirtual(db.Model):
 
     # Código activo del día (10 dígitos, prefijado con "SV" para distinguirlo de tarjetas físicas)
     codigo_hoy      = db.Column(db.String(20), nullable=False, unique=True)
-    # Código anterior — válido durante 10 min después de medianoche para evitar
-    # que alguien quede afuera mientras la Pi sincroniza el nuevo código
+    # Código anterior — válido durante 10 min después de la rotación para
+    # evitar que alguien quede afuera mientras la Pi sincroniza el nuevo
+    # código.
     codigo_anterior = db.Column(db.String(20))
+    # ROTATION-07 (Auditoría Día 35): antes la ventana de gracia se
+    # calculaba comparando la hora ACTUAL del servidor contra un rango fijo
+    # ("es medianoche y faltan menos de 10 min") usando UTC, mientras la
+    # rotación real ocurre a medianoche hora de Honduras — un desfase de 6
+    # horas que dejaba la ventana de gracia activa a las 6:00 AM en vez de
+    # a medianoche. Ahora se guarda explícitamente HASTA CUÁNDO es válido
+    # el código anterior (fijado al rotar, sin ambigüedad de zona horaria
+    # ni dependencia de la hora del servidor en el momento de la consulta).
+    codigo_anterior_valido_hasta = db.Column(db.DateTime(timezone=True))
 
     estado       = db.Column(db.String(20), nullable=False, default="activa")  # activa | suspendida
     tipo_acceso  = db.Column(db.String(20), nullable=False, default="peatonal")
@@ -453,6 +463,11 @@ class CredencialBLE(db.Model):
     # Token BLE del día (lo que el teléfono transmite al lector, rota cada 24h)
     token_hoy      = db.Column(db.String(32), nullable=False, unique=True)
     token_anterior = db.Column(db.String(32))  # ventana de gracia de 10 min
+    # ROTATION-07: mismo fix que TarjetaVirtual.codigo_anterior_valido_hasta
+    # — fecha explícita hasta la cual el token anterior sigue siendo válido,
+    # fijada al rotar. Elimina la dependencia de comparar zonas horarias en
+    # el momento de la consulta.
+    token_anterior_valido_hasta = db.Column(db.DateTime(timezone=True))
 
     # Clave secreta para el desafío-respuesta (HMAC). Nunca sale del servidor
     # ni del teléfono en texto plano — se usa para firmar el challenge del lector.

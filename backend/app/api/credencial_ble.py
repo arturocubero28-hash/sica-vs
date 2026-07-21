@@ -142,6 +142,7 @@ def reactivar_ble(usuario_actual):
 
     # Token, clave y contador nuevos — lo anterior queda invalidado
     cred.token_anterior = None
+    cred.token_anterior_valido_hasta = None  # ROTATION-07: limpiar también la expiración guardada
     cred.token_hoy = _generar_token()
     cred.clave_secreta = secrets.token_hex(32)
     cred.contador = 0
