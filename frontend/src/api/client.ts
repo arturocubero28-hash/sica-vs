@@ -12,7 +12,7 @@ import { startRegistration, startAuthentication } from "@simplewebauthn/browser"
 const API_URL = "/api/v1";
 
 // ---- Tipos compartidos (cada módulo amplía los suyos en src/api) ----
-export type Rol = "super_admin" | "admin" | "guardia" | "residente" | "cajero" | "desarrollador";
+export type Rol = "super_admin" | "admin" | "supervisor" | "guardia" | "residente" | "cajero" | "desarrollador";
 
 export interface Usuario {
   id: string;

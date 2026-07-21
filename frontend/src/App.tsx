@@ -639,7 +639,10 @@ function AdminView({ seccion }: { seccion: string }) {
 type NavItem = { id: string; label: string; icon: LucideIcon };
 
 function navParaRol(rol: Rol): NavItem[] {
-  if (rol === "admin" || rol === "super_admin") {
+  // Bases multi-residencial (Día 37): supervisor tiene el mismo nivel de
+  // acceso que admin en toda la app — mismo criterio que ya aplica en el
+  // backend (roles_required trata a supervisor como equivalente a admin).
+  if (rol === "admin" || rol === "super_admin" || rol === "supervisor") {
     return [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
       { id: "monitoreo", label: "Monitoreo", icon: Video },
@@ -688,7 +691,7 @@ function navParaRol(rol: Rol): NavItem[] {
 function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => void }) {
   const navBase = navParaRol(usuario.rol);
   const [esDuenoEdif, setEsDuenoEdif] = useState(false);
-  const esAdmin = usuario.rol === "admin" || usuario.rol === "super_admin";
+  const esAdmin = usuario.rol === "admin" || usuario.rol === "super_admin" || usuario.rol === "supervisor";
   const esResidente = usuario.rol === "residente";
 
   // Detectar si el residente es dueño de algún edificio (para mostrar "Mi edificio")
@@ -731,7 +734,7 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
 
   const iniciales = `${usuario.nombre?.[0] || ""}${usuario.apellido?.[0] || ""}`.toUpperCase();
   const rolLabel: Record<string, string> = {
-    admin: "Administrador", super_admin: "Super Admin",
+    admin: "Administrador", super_admin: "Super Admin", supervisor: "Supervisor",
     guardia: "Guardia", residente: "Residente",
   };
 

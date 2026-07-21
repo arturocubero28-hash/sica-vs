@@ -16,10 +16,10 @@ export function MiPerfil() {
 
   if (!usuario) return <p className="muted">Cargando…</p>;
 
-  const esAdmin = ["admin", "super_admin"].includes(usuario.rol);
+  const esAdmin = ["admin", "super_admin", "supervisor"].includes(usuario.rol);
 
   const rolLabel: Record<string, string> = {
-    admin: "Administrador", super_admin: "Super Admin", guardia: "Guardia", residente: "Residente",
+    admin: "Administrador", super_admin: "Super Admin", supervisor: "Supervisor", guardia: "Guardia", residente: "Residente",
   };
 
   return (
