@@ -15,6 +15,7 @@ from app.models.dispositivo import Dispositivo, generar_token, hash_token
 from app.models.residencial import Residencial
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
+from app.utils.passwords import generar_password_temporal
 
 dev_bp = Blueprint("desarrollador", __name__)
 
@@ -676,3 +677,84 @@ def usuarios_de_residencial(usuario_actual, res_uuid):
         "residentes_count": Usuario.query.filter_by(
             residencial_id=r.id, rol="residente").count(),
     }})
+
+
+@dev_bp.post("/residenciales")
+@roles_required("desarrollador")
+def crear_residencial(usuario_actual):
+    """
+    Crea un cliente nuevo del futuro SaaS: un admin dueño + su Residencial,
+    todo junto en una sola operación. Exclusivo del desarrollador — dar de
+    alta un cliente nuevo es una operación de plataforma, no algo que un
+    admin/supervisor haga sobre sí mismo.
+
+    El admin nuevo recibe una contraseña aleatoria (mismo patrón SEC-01 que
+    guardia/cajero/supervisor) mostrada una sola vez en la respuesta, con
+    cambio obligatorio en su primer login. Esto es temporal: se reemplazará
+    por un correo de activación cuando esté conectado el envío real de
+    emails — por ahora, el desarrollador se la entrega en persona o por
+    el canal que tenga con ese cliente.
+    """
+    body = request.get_json(silent=True) or {}
+
+    # Datos de la residencial (todos obligatorios, según lo acordado)
+    nombre_res = (body.get("nombre_residencial") or "").strip()
+    direccion = (body.get("direccion") or "").strip()
+    telefono_res = (body.get("telefono_residencial") or "").strip()
+
+    # Datos del admin dueño
+    nombre_admin = (body.get("nombre_admin") or "").strip()
+    apellido_admin = (body.get("apellido_admin") or "").strip()
+    email_admin = (body.get("email_admin") or "").strip().lower()
+    telefono_admin = (body.get("telefono_admin") or "").strip()
+
+    faltantes = []
+    if not nombre_res: faltantes.append("nombre de la residencial")
+    if not direccion: faltantes.append("dirección")
+    if not telefono_res: faltantes.append("teléfono de la residencial")
+    if not nombre_admin: faltantes.append("nombre del admin")
+    if not apellido_admin: faltantes.append("apellido del admin")
+    if not email_admin: faltantes.append("correo del admin")
+    if faltantes:
+        return jsonify({"error": {"code": "datos_incompletos",
+                                  "message": "Faltan campos obligatorios: " + ", ".join(faltantes)}}), 400
+
+    if Usuario.query.filter_by(email=email_admin).first():
+        return jsonify({"error": {"code": "email_duplicado",
+                                  "message": "Ya existe un usuario con ese correo"}}), 400
+    if Residencial.query.filter_by(nombre=nombre_res).first():
+        return jsonify({"error": {"code": "nombre_duplicado",
+                                  "message": "Ya existe una residencial con ese nombre"}}), 400
+
+    # 1. Crear el admin dueño (SEC-01: contraseña aleatoria, cambio obligatorio)
+    password_temporal = generar_password_temporal()
+    admin = Usuario(
+        nombre=nombre_admin, apellido=apellido_admin, email=email_admin,
+        telefono=telefono_admin or None,
+        rol="admin", activo=True, debe_cambiar_password=True,
+    )
+    admin.set_password(password_temporal)
+    db.session.add(admin)
+    db.session.flush()  # necesito admin.id antes de crear la Residencial
+
+    # 2. Crear la Residencial, dueña = el admin recién creado
+    residencial = Residencial(
+        admin_id=admin.id, nombre=nombre_res,
+        direccion=direccion, telefono=telefono_res,
+    )
+    db.session.add(residencial)
+    db.session.flush()  # necesito residencial.id
+
+    # 3. Atar al admin a su propia Residencial
+    admin.residencial_id = residencial.id
+
+    db.session.commit()
+
+    return jsonify({"data": {
+        "residencial": residencial.to_dict(),
+        "admin": {
+            "email": admin.email,
+            "nombre": f"{admin.nombre} {admin.apellido}",
+            "password_generica": password_temporal,
+        },
+    }}), 201

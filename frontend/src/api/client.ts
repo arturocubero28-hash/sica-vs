@@ -826,6 +826,11 @@ export const devResidenciales = () => request<ResidencialDTO[]>("/dev/residencia
 export const devUsuariosDeResidencial = (uuid: string) =>
   request<{ residencial: ResidencialDTO; staff: UsuarioResidencialDTO[]; residentes_count: number }>(
     `/dev/residenciales/${uuid}/usuarios`);
+export const devCrearResidencial = (body: {
+  nombre_residencial: string; direccion: string; telefono_residencial: string;
+  nombre_admin: string; apellido_admin: string; email_admin: string; telefono_admin?: string;
+}) => request<{ residencial: ResidencialDTO; admin: { email: string; nombre: string; password_generica: string } }>(
+    "/dev/residenciales", { method: "POST", body: JSON.stringify(body) });
 
 // Intencional: el rol desarrollador se crea una sola vez directo en la BD,
 // no desde la UI. Se mantiene por si a futuro se habilita un flujo de alta.
@@ -1104,6 +1109,8 @@ export const setConfigResidencial = (body: Partial<ConfigResidencial>) =>
 export interface ResidencialDTO {
   id: string;
   nombre: string;
+  direccion: string | null;
+  telefono: string | null;
   logo_archivo: string | null;
   activa: boolean;
   admin: { nombre: string; email: string } | null;

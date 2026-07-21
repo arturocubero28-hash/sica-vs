@@ -204,3 +204,11 @@ WHERE residencial_id IS NULL
 UPDATE accesos_fisicos SET residencial_id = (SELECT id FROM residenciales ORDER BY id LIMIT 1)
 WHERE residencial_id IS NULL
   AND EXISTS (SELECT 1 FROM residenciales);
+
+-- Datos de contacto de la residencial (Día 37, flujo 'crear nueva
+-- residencial' desde el panel del desarrollador). Nullable a nivel de
+-- base: la residencial de Villas del Sol ya existía antes de estos
+-- campos. Para residenciales nuevas, la obligatoriedad se exige en el
+-- endpoint de creación, no como constraint de base de datos.
+ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS direccion VARCHAR(255);
+ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS telefono VARCHAR(30);

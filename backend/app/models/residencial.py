@@ -43,6 +43,13 @@ class Residencial(db.Model):
     # app/utils/passwords.py puede_gestionar_rol()).
     admin_id = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), unique=True, nullable=False)
     nombre = db.Column(db.String(160), nullable=False)
+    # Datos de contacto del cliente (Día 37, flujo 'crear nueva residencial').
+    # Nullable a nivel de base a propósito — la residencial de Villas del
+    # Sol ya existía antes de estos campos y no los tiene cargados. Para
+    # residenciales NUEVAS, la obligatoriedad se exige en el endpoint de
+    # creación (crear_residencial), no como constraint de base de datos.
+    direccion = db.Column(db.String(255))
+    telefono = db.Column(db.String(30))
     logo_archivo = db.Column(db.String(255))  # nombre de archivo guardado (mismo patrón que comunicados/comprobantes)
     activa = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
@@ -55,6 +62,8 @@ class Residencial(db.Model):
         d = {
             "id": str(self.uuid_publico),
             "nombre": self.nombre,
+            "direccion": self.direccion,
+            "telefono": self.telefono,
             "logo_archivo": self.logo_archivo,
             "activa": self.activa,
             "admin": {

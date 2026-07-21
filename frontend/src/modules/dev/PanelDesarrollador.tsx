@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, devCrearResidencial, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO } from "../../api/client";
 import { AlertTriangle, BarChart3, Building2, Construction, Key, Lock, Monitor, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
@@ -1032,10 +1032,22 @@ function PanelResidenciales() {
   const [seleccionada, setSeleccionada] = useState<ResidencialDTO | null>(null);
   const [detalle, setDetalle] = useState<{ staff: UsuarioResidencialDTO[]; residentes_count: number } | null>(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  // Alta de una nueva residencial (cliente nuevo del futuro SaaS)
+  const [mostrarAlta, setMostrarAlta] = useState(false);
+  const [nombreRes, setNombreRes] = useState("");
+  const [direccionRes, setDireccionRes] = useState("");
+  const [telefonoRes, setTelefonoRes] = useState("");
+  const [nombreAdmin, setNombreAdmin] = useState("");
+  const [apellidoAdmin, setApellidoAdmin] = useState("");
+  const [emailAdmin, setEmailAdmin] = useState("");
+  const [telefonoAdmin, setTelefonoAdmin] = useState("");
+  const [creando, setCreando] = useState(false);
+  const [errorAlta, setErrorAlta] = useState("");
+  // Credenciales del admin recién creado, para mostrar una sola vez
+  const [credencialNueva, setCredencialNueva] = useState<{ email: string; nombre: string; pass: string } | null>(null);
 
-  useEffect(() => {
-    devResidenciales().then(setLista).catch(() => setLista([]));
-  }, []);
+  const cargar = () => devResidenciales().then(setLista).catch(() => setLista([]));
+  useEffect(() => { cargar(); }, []);
 
   async function verDetalle(r: ResidencialDTO) {
     setSeleccionada(r);
@@ -1051,6 +1063,40 @@ function PanelResidenciales() {
     }
   }
 
+  function limpiarForm() {
+    setNombreRes(""); setDireccionRes(""); setTelefonoRes("");
+    setNombreAdmin(""); setApellidoAdmin(""); setEmailAdmin(""); setTelefonoAdmin("");
+  }
+
+  async function crearResidencial() {
+    const faltan: string[] = [];
+    if (!nombreRes.trim()) faltan.push("nombre de la residencial");
+    if (!direccionRes.trim()) faltan.push("dirección");
+    if (!telefonoRes.trim()) faltan.push("teléfono de la residencial");
+    if (!nombreAdmin.trim()) faltan.push("nombre del admin");
+    if (!apellidoAdmin.trim()) faltan.push("apellido del admin");
+    if (!emailAdmin.trim()) faltan.push("correo del admin");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAdmin.trim())) faltan.push("correo del admin (formato inválido)");
+    if (faltan.length > 0) { setErrorAlta("Faltan: " + faltan.join(", ")); return; }
+
+    setCreando(true); setErrorAlta("");
+    try {
+      const res = await devCrearResidencial({
+        nombre_residencial: nombreRes.trim(), direccion: direccionRes.trim(), telefono_residencial: telefonoRes.trim(),
+        nombre_admin: nombreAdmin.trim(), apellido_admin: apellidoAdmin.trim(),
+        email_admin: emailAdmin.trim(), telefono_admin: telefonoAdmin.trim() || undefined,
+      });
+      setCredencialNueva({ email: res.admin.email, nombre: res.admin.nombre, pass: res.admin.password_generica });
+      limpiarForm();
+      setMostrarAlta(false);
+      cargar();
+    } catch (err: any) {
+      setErrorAlta(err?.message || "No se pudo crear la residencial");
+    } finally {
+      setCreando(false);
+    }
+  }
+
   if (lista === null) return <p className="muted" style={{ padding: 20 }}>Cargando residenciales…</p>;
 
   return (
@@ -1063,7 +1109,89 @@ function PanelResidenciales() {
 
       <div className="dev-trancas-barra">
         <span className="dev-trancas-total">{lista.length} residencial(es)</span>
+        <button className="dev-tranca-add" onClick={() => { setMostrarAlta((v) => !v); setErrorAlta(""); }}>
+          {mostrarAlta ? "Cancelar" : "+ Nueva residencial"}
+        </button>
       </div>
+
+      {mostrarAlta && (
+        <div className="dev-tranca-alta">
+          <p className="muted small" style={{ marginBottom: 10 }}>
+            Crea un cliente nuevo: un admin dueño con todo lo que él cree colgando de esta residencial.
+          </p>
+          <div className="sub" style={{ marginBottom: 6 }}>Datos de la residencial</div>
+          <div className="dev-tranca-alta-campos">
+            <label>
+              <span>Nombre de la residencial</span>
+              <input type="text" placeholder="Ej: Residencial Las Colinas" maxLength={160}
+                value={nombreRes} onChange={(e) => setNombreRes(e.target.value)} />
+            </label>
+            <label>
+              <span>Dirección</span>
+              <input type="text" placeholder="Ej: Col. Las Colinas, Tegucigalpa" maxLength={255}
+                value={direccionRes} onChange={(e) => setDireccionRes(e.target.value)} />
+            </label>
+            <label>
+              <span>Teléfono de contacto</span>
+              <input type="text" placeholder="Ej: 9999-0000" maxLength={30}
+                value={telefonoRes} onChange={(e) => setTelefonoRes(e.target.value)} />
+            </label>
+          </div>
+
+          <div className="sub" style={{ margin: "14px 0 6px" }}>Datos del administrador dueño (con quien inicia sesión)</div>
+          <div className="dev-tranca-alta-campos">
+            <label>
+              <span>Nombre</span>
+              <input type="text" placeholder="Ej: María" maxLength={120}
+                value={nombreAdmin} onChange={(e) => setNombreAdmin(e.target.value)} />
+            </label>
+            <label>
+              <span>Apellido</span>
+              <input type="text" placeholder="Ej: López" maxLength={120}
+                value={apellidoAdmin} onChange={(e) => setApellidoAdmin(e.target.value)} />
+            </label>
+            <label>
+              <span>Correo (será su usuario)</span>
+              <input type="email" placeholder="admin@lascolinas.hn" maxLength={160}
+                value={emailAdmin} onChange={(e) => setEmailAdmin(e.target.value)} />
+            </label>
+            <label>
+              <span>Teléfono (opcional)</span>
+              <input type="text" placeholder="Ej: 9999-0000" maxLength={30}
+                value={telefonoAdmin} onChange={(e) => setTelefonoAdmin(e.target.value)} />
+            </label>
+            <button className="dev-tranca-btn" style={{ maxWidth: 200 }} disabled={creando} onClick={crearResidencial}>
+              {creando ? "Creando…" : "Crear residencial"}
+            </button>
+          </div>
+          <p className="muted small" style={{ marginTop: 8 }}>
+            Se genera una contraseña aleatoria que se muestra una sola vez — anotala y entregásela al
+            cliente. Deberá cambiarla en su primer ingreso. (Esto se reemplazará por un correo de
+            activación más adelante.)
+          </p>
+          {errorAlta && <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>{errorAlta}</div>}
+        </div>
+      )}
+
+      {credencialNueva && (
+        <div className="dev-modal-overlay" onClick={() => setCredencialNueva(null)}>
+          <div className="dev-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Credenciales de {credencialNueva.nombre}</h3>
+            <p>Entregáselas al cliente. <strong>No se vuelven a mostrar</strong> — si las pierde, un admin
+            puede restablecerlas por correo desde el login.</p>
+            <div className="dev-token-box">
+              <code>{credencialNueva.email} / {credencialNueva.pass}</code>
+              <button className="dev-tranca-btn" style={{ maxWidth: 110 }}
+                onClick={() => navigator.clipboard?.writeText(`${credencialNueva.email} / ${credencialNueva.pass}`)}>
+                Copiar
+              </button>
+            </div>
+            <div className="dev-modal-acciones">
+              <button className="dev-tranca-del-confirm" style={{ background: "#022E45" }} onClick={() => setCredencialNueva(null)}>Ya las copié</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {lista.length === 0 ? (
         <p className="muted" style={{ padding: 20 }}>
@@ -1087,6 +1215,9 @@ function PanelResidenciales() {
               </div>
               <div className="dev-pi-info">
                 {r.admin && <div><span>Admin:</span> {r.admin.nombre} ({r.admin.email})</div>}
+                {(r.direccion || r.telefono) && (
+                  <div><span>Contacto:</span> {r.direccion || "—"}{r.telefono ? ` · ${r.telefono}` : ""}</div>
+                )}
                 {r.stats && (
                   <>
                     <div><span>Guardias:</span> {r.stats.guardias} · <span>Cajeros:</span> {r.stats.cajeros} · <span>Supervisores:</span> {r.stats.supervisores}</div>
