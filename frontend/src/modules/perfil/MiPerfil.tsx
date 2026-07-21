@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesiones,
   registrarHuella, listarCredencialesHuella, eliminarCredencialHuella, soportaHuella,
   getConfigResidencial, setConfigResidencial,
+  getMiResidencial, setMiResidencial, subirLogoResidencial, urlLogoResidencial,
   listarPuntosAcceso, crearPuntoAcceso, editarPuntoAcceso, historialCountPunto,
   type Usuario, type SesionDTO, type CredencialWebAuthnDTO, type ConfigResidencial,
-  type PuntoAccesoDTO } from "../../api/client";
+  type ResidencialDTO, type PuntoAccesoDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
 import { Fingerprint } from "lucide-react";
 
@@ -590,6 +591,8 @@ function ConfigPanel() {
 
   return (
     <div>
+      <MiResidencialPanel />
+
       <div className="dash-card">
         <h3>📅 Cobro mensual</h3>
         <p className="muted small" style={{ marginBottom: 12 }}>
@@ -659,6 +662,122 @@ function ConfigPanel() {
           de 30 días).</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Mi Residencial: nombre y logo (bases multi-residencial, Día 37) ────────
+function MiResidencialPanel() {
+  const [res, setRes] = useState<ResidencialDTO | null>(null);
+  const [nombre, setNombre] = useState("");
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
+  const [subiendoLogo, setSubiendoLogo] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    getMiResidencial()
+      .then((r) => { setRes(r); if (r) setNombre(r.nombre); })
+      .catch(() => setError("No se pudo cargar la información de la residencial"))
+      .finally(() => setCargando(false));
+  }, []);
+
+  async function guardarNombre() {
+    if (!nombre.trim()) { setError("El nombre no puede quedar vacío"); return; }
+    setGuardando(true); setMsg(""); setError("");
+    try {
+      const actualizado = await setMiResidencial({ nombre: nombre.trim() });
+      setRes(actualizado);
+      setMsg("✓ Nombre guardado");
+    } catch (e: any) {
+      setError(e.message || "Error al guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  async function onLogoSeleccionado(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    setSubiendoLogo(true); setMsg(""); setError("");
+    try {
+      const actualizado = await subirLogoResidencial(archivo);
+      setRes(actualizado);
+      setMsg("✓ Logo actualizado");
+    } catch (err: any) {
+      setError(err.message || "No se pudo subir el logo");
+    } finally {
+      setSubiendoLogo(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  if (cargando) return <div className="dash-card"><p className="muted">Cargando…</p></div>;
+
+  if (!res) {
+    // Sin residencial asignada — no debería pasar para un admin normal,
+    // pero se muestra un mensaje claro en vez de una pantalla en blanco.
+    return (
+      <div className="dash-card" style={{ marginBottom: 16 }}>
+        <h3>🏘️ Mi residencial</h3>
+        <p className="muted small">
+          Tu usuario todavía no tiene una residencial asignada. Contactá al desarrollador.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dash-card" style={{ marginBottom: 16 }}>
+      <h3>🏘️ Mi residencial</h3>
+      <p className="muted small" style={{ marginBottom: 14 }}>
+        Nombre y logo que se muestran en la app, la web y los recibos.
+      </p>
+
+      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{
+            width: 96, height: 96, borderRadius: 16, border: "1px solid var(--borde)",
+            background: "var(--fondo)", display: "flex", alignItems: "center", justifyContent: "center",
+            overflow: "hidden", marginBottom: 8,
+          }}>
+            {res.logo_archivo
+              ? <img src={urlLogoResidencial(res.logo_archivo)} alt="Logo"
+                  style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              : <span className="muted small">Sin logo</span>}
+          </div>
+          <button onClick={() => inputRef.current?.click()} disabled={subiendoLogo}
+            className="ghost" style={{ fontSize: 12.5, padding: "5px 12px" }}>
+            {subiendoLogo ? "Subiendo…" : res.logo_archivo ? "Cambiar logo" : "Subir logo"}
+          </button>
+          <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp"
+            style={{ display: "none" }} onChange={onLogoSeleccionado} />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <label className="small muted" style={{ display: "block", marginBottom: 4 }}>
+            Nombre de la residencial
+          </label>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={nombre} onChange={(e) => setNombre(e.target.value)}
+              style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)" }} />
+            <button onClick={guardarNombre} disabled={guardando || nombre.trim() === res.nombre}
+              style={{ padding: "8px 16px" }}>
+              {guardando ? "…" : "Guardar"}
+            </button>
+          </div>
+          {res.admin && (
+            <p className="muted small" style={{ marginTop: 8 }}>
+              Administrador: {res.admin.nombre} ({res.admin.email})
+            </p>
+          )}
+        </div>
+      </div>
+
+      {msg && <p className="ok small" style={{ marginTop: 10 }}>{msg}</p>}
+      {error && <p className="err small" style={{ marginTop: 10 }}>{error}</p>}
     </div>
   );
 }

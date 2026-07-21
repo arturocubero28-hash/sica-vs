@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO } from "../../api/client";
-import { AlertTriangle, BarChart3, Construction, Key, Lock, Monitor, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO } from "../../api/client";
+import { AlertTriangle, BarChart3, Building2, Construction, Key, Lock, Monitor, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
   const [m, setM] = useState<DevMetricasDTO | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad" | "trancas" | "pis">("salud");
+  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad" | "trancas" | "pis" | "residenciales">("salud");
   // Filtros de logs
   const [email, setEmail] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -71,6 +71,7 @@ export function PanelDesarrollador() {
         <button className={`hist-tab ${tab === "seguridad" ? "on" : ""}`} onClick={() => setTab("seguridad")}><Shield size={16} /> Seguridad</button>
         <button className={`hist-tab ${tab === "trancas" ? "on" : ""}`} onClick={() => setTab("trancas")}><Construction size={16} /> Trancas</button>
         <button className={`hist-tab ${tab === "pis" ? "on" : ""}`} onClick={() => setTab("pis")}><Router size={16} /> Raspberry Pi</button>
+        <button className={`hist-tab ${tab === "residenciales" ? "on" : ""}`} onClick={() => setTab("residenciales")}><Building2 size={16} /> Residenciales</button>
       </div>
 
       {tab === "salud" && (
@@ -236,6 +237,7 @@ export function PanelDesarrollador() {
       {tab === "seguridad" && <PanelSeguridad />}
       {tab === "trancas" && <ConfigTrancas />}
       {tab === "pis" && <ConfigPis />}
+      {tab === "residenciales" && <PanelResidenciales />}
     </div>
   );
 }
@@ -774,6 +776,8 @@ function ConfigPis() {
   const [tokenNuevo, setTokenNuevo] = useState<{ nombre: string; token: string } | null>(null);
   // puntos de acceso existentes (sacados de las trancas) para el desplegable
   const [puntos, setPuntos] = useState<string[]>([]);
+  // Bases multi-residencial (Día 37): a qué cliente asignar cada Pi
+  const [residenciales, setResidenciales] = useState<ResidencialDTO[]>([]);
 
   const cargar = useCallback(() => {
     setCargando(true);
@@ -787,8 +791,16 @@ function ConfigPis() {
         setPuntos(ps);
       })
       .catch(() => setPuntos([]));
+    devResidenciales().then(setResidenciales).catch(() => setResidenciales([]));
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
+
+  async function asignarResidencial(d: DispositivoDTO, residencialId: string) {
+    try {
+      await devActualizarDispositivo(d.id, { residencial_id: residencialId || null });
+      cargar();
+    } catch { /* noop */ }
+  }
 
   async function crear() {
     if (!nuevoNombre.trim()) return;
@@ -896,6 +908,18 @@ function ConfigPis() {
                 <div><span>Punto:</span> {d.punto_acceso || <em className="muted">sin asignar</em>}</div>
                 <div><span>Última sincronización:</span> {d.ultima_sync ? new Date(d.ultima_sync).toLocaleString() : "nunca"}</div>
               </div>
+              <div style={{ margin: "8px 0" }}>
+                <label className="muted small" style={{ display: "block", marginBottom: 4 }}>
+                  Residencial <span title="Bases multi-residencial: qué cliente descarga información con esta Pi">ⓘ</span>
+                </label>
+                <select value={d.residencial?.id || ""} onChange={(e) => asignarResidencial(d, e.target.value)}
+                  className="dev-tranca-tipo-sel" style={{ width: "100%" }}>
+                  <option value="">— Sin asignar —</option>
+                  {residenciales.map((r) => (
+                    <option key={r.id} value={r.id}>{r.nombre}</option>
+                  ))}
+                </select>
+              </div>
               <div className="dev-pi-acciones">
                 <button className="dev-tranca-toggle on" onClick={() => regenerar(d)} title="Generar un token nuevo"><Key size={16} /> Token</button>
                 <button className={`dev-tranca-toggle ${d.activo ? "off" : "on"}`} onClick={() => alternarActivo(d)}>
@@ -905,6 +929,125 @@ function ConfigPis() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Residenciales: cuántos admins/clientes hay y qué usuarios tiene cada uno
+// (bases multi-residencial, Día 37) ─────────────────────────────────────────
+const ROL_LABEL_DEV: Record<string, string> = {
+  admin: "Administrador", supervisor: "Supervisor", guardia: "Guardia", cajero: "Cajero",
+};
+
+function PanelResidenciales() {
+  const [lista, setLista] = useState<ResidencialDTO[] | null>(null);
+  const [seleccionada, setSeleccionada] = useState<ResidencialDTO | null>(null);
+  const [detalle, setDetalle] = useState<{ staff: UsuarioResidencialDTO[]; residentes_count: number } | null>(null);
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
+
+  useEffect(() => {
+    devResidenciales().then(setLista).catch(() => setLista([]));
+  }, []);
+
+  async function verDetalle(r: ResidencialDTO) {
+    setSeleccionada(r);
+    setCargandoDetalle(true);
+    setDetalle(null);
+    try {
+      const d = await devUsuariosDeResidencial(r.id);
+      setDetalle({ staff: d.staff, residentes_count: d.residentes_count });
+    } catch {
+      setDetalle({ staff: [], residentes_count: 0 });
+    } finally {
+      setCargandoDetalle(false);
+    }
+  }
+
+  if (lista === null) return <p className="muted" style={{ padding: 20 }}>Cargando residenciales…</p>;
+
+  return (
+    <div className="dev-trancas">
+      <div className="dev-trancas-aviso">
+        <strong><Building2 size={16} /> Residenciales (clientes).</strong> Cada fila es un admin dueño con todo lo que
+        creó bajo él — guardias, cajeros, supervisores y residentes. Hoy, en Villas del Sol, hay una sola. Esta vista
+        se vuelve realmente útil cuando exista un segundo cliente del futuro SaaS.
+      </div>
+
+      <div className="dev-trancas-barra">
+        <span className="dev-trancas-total">{lista.length} residencial(es)</span>
+      </div>
+
+      {lista.length === 0 ? (
+        <p className="muted" style={{ padding: 20 }}>
+          No hay ninguna residencial creada todavía — se crea automáticamente al correr la migración
+          con el admin existente.
+        </p>
+      ) : (
+        <div className="dev-trancas-grid">
+          {lista.map((r) => (
+            <div key={r.id} className={`dev-tranca-card ${!r.activa ? "inactiva" : ""}`}
+              style={{ cursor: "pointer" }} onClick={() => verDetalle(r)}>
+              <div className="dev-tranca-head">
+                <span className="dev-tranca-nombre">{r.nombre}</span>
+                <span className={`dev-tranca-badge ${r.activa ? "ok" : "sin"}`}>{r.activa ? "Activa" : "Inactiva"}</span>
+              </div>
+              <div className="dev-pi-info">
+                {r.admin && <div><span>Admin:</span> {r.admin.nombre} ({r.admin.email})</div>}
+                {r.stats && (
+                  <>
+                    <div><span>Guardias:</span> {r.stats.guardias} · <span>Cajeros:</span> {r.stats.cajeros} · <span>Supervisores:</span> {r.stats.supervisores}</div>
+                    <div><span>Residentes:</span> {r.stats.residentes} · <span>Dispositivos:</span> {r.stats.dispositivos}</div>
+                  </>
+                )}
+              </div>
+              <div className="dev-pi-acciones">
+                <button className="dev-tranca-toggle on" onClick={(e) => { e.stopPropagation(); verDetalle(r); }}>
+                  Ver usuarios →
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {seleccionada && (
+        <div className="dev-modal-overlay" onClick={() => setSeleccionada(null)}>
+          <div className="dev-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <h3>Usuarios de {seleccionada.nombre}</h3>
+            {cargandoDetalle ? (
+              <p className="muted">Cargando…</p>
+            ) : detalle ? (
+              <>
+                <p className="muted small" style={{ marginBottom: 10 }}>
+                  {detalle.residentes_count} residente(s) — no se listan individualmente acá.
+                </p>
+                {detalle.staff.length === 0 ? (
+                  <p className="muted">No hay guardias, cajeros ni supervisores creados todavía.</p>
+                ) : (
+                  <table className="data" style={{ width: "100%" }}>
+                    <thead>
+                      <tr><th>Nombre</th><th>Rol</th><th>Correo</th><th>Estado</th></tr>
+                    </thead>
+                    <tbody>
+                      {detalle.staff.map((u, i) => (
+                        <tr key={i}>
+                          <td>{u.nombre} {u.apellido}</td>
+                          <td>{ROL_LABEL_DEV[u.rol] || u.rol}</td>
+                          <td className="small">{u.email}</td>
+                          <td>{u.activo ? <span className="pill green">Activo</span> : <span className="pill">Inactivo</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </>
+            ) : null}
+            <div className="dev-modal-acciones">
+              <button className="dev-tranca-del-confirm" style={{ background: "#022E45" }} onClick={() => setSeleccionada(null)}>Cerrar</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
