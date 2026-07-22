@@ -65,6 +65,29 @@ def _dispositivo_actual():
     return disp
 
 
+def _guardia_pi_acceso(disp):
+    """
+    PI-ISO-14 (Auditoría Día 39): comprobaciones comunes a los tres endpoints
+    del agente de accesos (/validar-tarjeta, /sincronizar, /reportar).
+
+    Devuelve una respuesta de error si el dispositivo no está habilitado para
+    operar accesos, o None si puede seguir.
+
+    Autenticar el dispositivo (que su token sea válido) no es lo mismo que
+    autorizarlo: hay que comprobar además que sea del tipo correcto y que
+    tenga definido a qué punto pertenece. Sin punto no hay forma de decidir
+    qué trancas le corresponden, así que se rechaza en vez de asumir.
+    """
+    if disp.tipo != "acceso":
+        return _err("tipo_incorrecto",
+                    "Este dispositivo no es un agente de accesos", 403)
+    if not disp.punto_acceso:
+        return _err("dispositivo_sin_punto",
+                    "Dispositivo sin punto de acceso asignado. "
+                    "Asígnelo desde el panel del desarrollador.", 403)
+    return None
+
+
 @acceso_bp.post("/validar-tarjeta")
 @limiter.limit("60 per minute")
 def validar_tarjeta():
@@ -81,6 +104,14 @@ def validar_tarjeta():
         return _err("dispositivo_no_autorizado",
                     "Dispositivo no autorizado para validar accesos", 401)
 
+    # PI-ISO-14 (Auditoría Día 39): antes, este endpoint no comprobaba el
+    # punto en absoluto — bastaba con que el token fuera válido y la tranca
+    # existiera, así que una Pi del punto Norte podía abrir la tranca del Sur
+    # enviando su acceso_id.
+    bloqueo = _guardia_pi_acceso(disp)
+    if bloqueo:
+        return bloqueo
+
     data = request.get_json(silent=True) or {}
     card_uid = (data.get("card_uid") or "").strip()
     acceso_id = data.get("acceso_id")
@@ -92,6 +123,22 @@ def validar_tarjeta():
     acceso = AccesoFisico.query.get(acceso_id) if acceso_id else None
     if not acceso or not acceso.activo:
         return _err("acceso_invalido", "Acceso físico no encontrado o inactivo", 400)
+
+    # PI-ISO-14: la tranca debe pertenecer al MISMO punto que esta Pi.
+    # Política estricta: una tranca sin punto asignado tampoco se acepta
+    # (antes, un punto NULL en cualquiera de los dos lados dejaba pasar
+    # todo). En desarrollo esto obliga a que toda tranca tenga su punto
+    # bien puesto, que es justamente lo que se quiere antes de producción.
+    if acceso.punto_acceso != disp.punto_acceso:
+        return _err("acceso_fuera_de_punto",
+                    "Este acceso físico no pertenece al punto de este dispositivo", 403)
+
+    # PI-ISO-14: y de la misma residencial. Ya se validaba indirectamente
+    # más abajo vía motivo_denegacion(), pero se hace explícito acá para
+    # que el rechazo sea claro y no dependa de la lógica de permisos.
+    if disp.residencial_id is not None and acceso.residencial_id != disp.residencial_id:
+        return _err("acceso_fuera_de_residencial",
+                    "Este acceso físico no pertenece a la residencial de este dispositivo", 403)
 
     def responder(permitido, motivo, tarjeta=None, residente=None):
         """Registra el evento y arma la respuesta."""
@@ -167,10 +214,16 @@ def sincronizar():
         return _err("dispositivo_no_autorizado",
                     "Dispositivo no autorizado o revocado", 401)
 
-    # Trancas del punto de esta Pi (si la Pi no tiene punto, no devuelve trancas)
-    accesos_q = AccesoFisico.query.filter_by(activo=True)
-    if disp.punto_acceso:
-        accesos_q = accesos_q.filter_by(punto_acceso=disp.punto_acceso)
+    # PI-ISO-14 (Auditoría Día 39): antes, el filtro por punto era condicional
+    # (`if disp.punto_acceso:`), así que una Pi sin punto se llevaba TODAS las
+    # trancas activas del sistema — lo contrario del aislamiento que se busca.
+    bloqueo = _guardia_pi_acceso(disp)
+    if bloqueo:
+        return bloqueo
+
+    # Trancas del punto de esta Pi. Filtro incondicional: solo las de su punto.
+    accesos_q = AccesoFisico.query.filter_by(activo=True,
+                                            punto_acceso=disp.punto_acceso)
     # Bases multi-residencial (Día 37): además del punto, la Pi solo recibe
     # trancas de SU residencial. Si la Pi no tiene residencial asignada
     # (disp.residencial_id es None), no se filtra — comportamiento idéntico
@@ -299,6 +352,13 @@ def reportar_eventos():
         return _err("dispositivo_no_autorizado",
                     "Dispositivo no autorizado o revocado", 401)
 
+    # PI-ISO-14 (Auditoría Día 39): sin punto asignado no se reporta nada.
+    # Coherente con /sincronizar y /validar-tarjeta: los tres endpoints del
+    # agente de accesos exigen tipo correcto y punto bien definido.
+    bloqueo = _guardia_pi_acceso(disp)
+    if bloqueo:
+        return bloqueo
+
     body = request.get_json(silent=True) or {}
     eventos = body.get("eventos")
     if not isinstance(eventos, list):
@@ -325,8 +385,11 @@ def reportar_eventos():
             ignorados += 1
             continue
 
-        # Seguridad: la Pi solo puede reportar trancas de su propio punto.
-        if disp.punto_acceso and acceso.punto_acceso and acceso.punto_acceso != disp.punto_acceso:
+        # PI-ISO-14 (Auditoría Día 39): la Pi solo puede reportar trancas de
+        # su propio punto. La condición anterior era permisiva — si la Pi o
+        # la tranca tenían el punto en NULL, el evento pasaba igual. Ahora
+        # la comparación es directa: debe coincidir, sin excepciones por NULL.
+        if acceso.punto_acceso != disp.punto_acceso:
             ignorados += 1
             continue
 
