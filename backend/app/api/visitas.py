@@ -16,7 +16,7 @@ import os
 import uuid as uuid_lib
 import base64
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db
 from app.models.visita import Visita, CodigoQR, EventoAcceso, AccesoFisico
@@ -34,13 +34,35 @@ def _mi_residente(usuario):
 EXTENSIONES_IMAGEN_VALIDAS = {"webp", "jpg", "jpeg", "png"}
 
 
+class ErrorGuardadoFoto(Exception):
+    """
+    PHOTO-15 (Auditoría Día 39): fallo al persistir una foto de evidencia.
+
+    Antes, los helpers de guardado atrapaban cualquier excepción y devolvían
+    None. Como la comprobación de "foto obligatoria" se hacía ANTES de
+    guardar (mirando si el dato venía en la petición), un fallo de disco,
+    de permisos o un base64 corrupto producía una entrada registrada SIN
+    evidencia fotográfica, y nadie se enteraba.
+
+    Ahora el fallo se propaga y el endpoint decide: si la foto era
+    obligatoria, se revierte todo; si era opcional, se continúa sin ella.
+    """
+    pass
+
+
 def _guardar_foto_multipart(archivo, prefijo):
     """Guarda una foto subida como multipart (app móvil o web) y devuelve el nombre.
     Preserva la extensión real del archivo (webp, jpg, png) en vez de forzar .jpg —
     la app comprime a WebP antes de subir, así que forzar .jpg guardaría bytes
-    WebP con extensión incorrecta."""
+    WebP con extensión incorrecta.
+
+    PHOTO-15: si el archivo viene pero no se puede guardar, lanza
+    ErrorGuardadoFoto en vez de devolver None — así el endpoint puede
+    distinguir "no mandó foto" de "mandó foto y falló el guardado".
+    """
     if not archivo or not archivo.filename:
         return None
+    ruta = None
     try:
         os.makedirs("/app/uploads", exist_ok=True)
         ext = archivo.filename.rsplit(".", 1)[-1].lower() if "." in archivo.filename else "jpg"
@@ -49,25 +71,78 @@ def _guardar_foto_multipart(archivo, prefijo):
         nombre = f"{prefijo}_{uuid_lib.uuid4().hex[:12]}.{ext}"
         ruta = f"/app/uploads/{nombre}"
         archivo.save(ruta)
+        # Verificación real: que el archivo exista y no esté vacío. Un save()
+        # que no lanza excepción pero deja 0 bytes (disco lleno) no sirve
+        # como evidencia.
+        if not os.path.exists(ruta) or os.path.getsize(ruta) == 0:
+            raise ErrorGuardadoFoto(f"El archivo {prefijo} quedó vacío al guardarse")
         return nombre
-    except Exception:
-        return None
+    except Exception as e:
+        # El helper limpia SU PROPIO archivo parcial: quien lo llama todavía
+        # no recibió el nombre (la excepción interrumpe la asignación), así
+        # que no tendría forma de saber qué borrar.
+        _borrar_ruta(ruta)
+        if isinstance(e, ErrorGuardadoFoto):
+            raise
+        current_app.logger.error("PHOTO-15: fallo guardando foto %s: %s", prefijo, e)
+        raise ErrorGuardadoFoto(f"No se pudo guardar la foto de {prefijo}") from e
 
 
 def _guardar_foto_base64(b64_data, prefijo):
-    """Guarda una foto base64 en /app/uploads y devuelve la ruta."""
+    """Guarda una foto base64 en /app/uploads y devuelve la ruta.
+
+    PHOTO-15: mismo criterio que _guardar_foto_multipart — si el dato viene
+    pero falla el guardado, lanza ErrorGuardadoFoto en vez de devolver None.
+    """
     if not b64_data:
         return None
+    ruta = None
     try:
         os.makedirs("/app/uploads", exist_ok=True)
         nombre = f"{prefijo}_{uuid_lib.uuid4().hex[:12]}.jpg"
         ruta = f"/app/uploads/{nombre}"
         img_bytes = base64.b64decode(b64_data.split(",")[-1])
+        if not img_bytes:
+            raise ErrorGuardadoFoto(f"La foto de {prefijo} llegó vacía")
         with open(ruta, "wb") as f:
             f.write(img_bytes)
+        if not os.path.exists(ruta) or os.path.getsize(ruta) == 0:
+            raise ErrorGuardadoFoto(f"El archivo {prefijo} quedó vacío al guardarse")
         return nombre
-    except Exception:
-        return None
+    except Exception as e:
+        _borrar_ruta(ruta)
+        if isinstance(e, ErrorGuardadoFoto):
+            raise
+        current_app.logger.error("PHOTO-15: fallo guardando foto base64 %s: %s", prefijo, e)
+        raise ErrorGuardadoFoto(f"No se pudo guardar la foto de {prefijo}") from e
+
+
+def _borrar_ruta(ruta):
+    """PHOTO-15: borra un archivo por su ruta completa, sin fallar si no existe."""
+    if not ruta:
+        return
+    try:
+        if os.path.exists(ruta):
+            os.remove(ruta)
+    except Exception as e:
+        current_app.logger.warning("PHOTO-15: no se pudo limpiar %s: %s", ruta, e)
+
+
+def _borrar_fotos(*nombres):
+    """
+    PHOTO-15: limpia archivos ya escritos cuando la transacción se revierte.
+    Sin esto, un fallo a mitad de camino deja huérfanos en /app/uploads que
+    nadie referencia y nadie borra nunca.
+    """
+    for nombre in nombres:
+        if not nombre:
+            continue
+        try:
+            ruta = f"/app/uploads/{nombre}"
+            if os.path.exists(ruta):
+                os.remove(ruta)
+        except Exception as e:
+            current_app.logger.warning("PHOTO-15: no se pudo limpiar %s: %s", nombre, e)
 
 
 def _generar_codigo_numerico():
@@ -471,7 +546,14 @@ def registrar_acceso_visita(usuario_actual):
                                       "message": "Este código de repartidor ya fue utilizado"}}), 400
         direccion = "entrada"
 
-    # PASO 3 — evidencia fotográfica obligatoria para entradas
+    # PASO 3 — evidencia fotográfica obligatoria para entradas.
+    #
+    # PHOTO-15 (Auditoría Día 39): esta comprobación previa mira si la foto
+    # VINO en la petición, pero no garantiza que se haya podido GUARDAR.
+    # Antes, los helpers devolvían None ante cualquier fallo (disco lleno,
+    # permisos, base64 corrupto) y el evento se registraba igual, sin
+    # evidencia. Ahora se comprueba dos veces: acá que venga, y después
+    # del guardado que realmente esté en disco.
     tiene_foto_id = data.get("foto_identidad") or request.files.get("foto_identidad")
     if direccion == "entrada" and not tiene_foto_id:
         return jsonify({"error": {"code": "foto_requerida",
@@ -483,12 +565,40 @@ def registrar_acceso_visita(usuario_actual):
         return jsonify({"error": {"code": "foto_placa_requerida",
                                   "message": "La foto de la placa es obligatoria para vehículos"}}), 400
 
-    foto_id = (_guardar_foto_multipart(request.files.get("foto_identidad"), "id")
-               or _guardar_foto_base64(data.get("foto_identidad"), "id"))
-    foto_pl = (_guardar_foto_multipart(request.files.get("foto_placa"), "placa")
-               or _guardar_foto_base64(data.get("foto_placa"), "placa"))
-    foto_num = (_guardar_foto_multipart(request.files.get("foto_numero_asignado"), "numero")
-                or _guardar_foto_base64(data.get("foto_numero_asignado"), "numero"))
+    # PHOTO-15: el guardado va dentro de un try. Si falla una foto que era
+    # obligatoria, se revierte la transacción, se limpian los archivos que
+    # sí alcanzaron a escribirse, y se devuelve error — nunca se registra
+    # una entrada sin su evidencia.
+    foto_id = foto_pl = foto_num = None
+    try:
+        foto_id = (_guardar_foto_multipart(request.files.get("foto_identidad"), "id")
+                   or _guardar_foto_base64(data.get("foto_identidad"), "id"))
+        foto_pl = (_guardar_foto_multipart(request.files.get("foto_placa"), "placa")
+                   or _guardar_foto_base64(data.get("foto_placa"), "placa"))
+        foto_num = (_guardar_foto_multipart(request.files.get("foto_numero_asignado"), "numero")
+                    or _guardar_foto_base64(data.get("foto_numero_asignado"), "numero"))
+    except ErrorGuardadoFoto as e:
+        db.session.rollback()
+        _borrar_fotos(foto_id, foto_pl, foto_num)
+        current_app.logger.error("PHOTO-15: acceso rechazado por fallo de evidencia: %s", e)
+        return jsonify({"error": {"code": "error_guardando_foto",
+                                  "message": "No se pudo guardar la evidencia fotográfica. "
+                                             "Intentá de nuevo."}}), 500
+
+    # PHOTO-15: verificación posterior al guardado. Cubre el caso en que el
+    # helper devolvió None sin lanzar excepción (por ejemplo, un archivo
+    # multipart sin filename que no entra por ninguna de las dos ramas).
+    if direccion == "entrada" and not foto_id:
+        db.session.rollback()
+        _borrar_fotos(foto_pl, foto_num)
+        return jsonify({"error": {"code": "foto_requerida",
+                                  "message": "La foto de identidad es obligatoria para dar acceso"}}), 400
+
+    if direccion == "entrada" and visita.en_vehiculo and not foto_pl:
+        db.session.rollback()
+        _borrar_fotos(foto_id, foto_num)
+        return jsonify({"error": {"code": "foto_placa_requerida",
+                                  "message": "La foto de la placa es obligatoria para vehículos"}}), 400
 
     # PASO 4 — el punto de acceso lo decide el PUNTO ASIGNADO AL GUARDIA que
     # está registrando, no el cliente. ACCESS-04 (Auditoría Día 35): antes
@@ -498,6 +608,10 @@ def registrar_acceso_visita(usuario_actual):
     # guardia fijo por teléfono en cada uno; el guardia elige su punto una
     # vez (POST /guardias/mi-punto-acceso) y queda fijo mientras usa la app.
     if not usuario_actual.punto_acceso_actual:
+        # PHOTO-15: este return ocurre DESPUÉS de haber guardado las fotos,
+        # así que hay que limpiarlas o quedan huérfanas en /app/uploads.
+        db.session.rollback()
+        _borrar_fotos(foto_id, foto_pl, foto_num)
         return jsonify({"error": {"code": "sin_punto_asignado",
                                   "message": "No tenés un punto de acceso asignado. "
                                              "Elegí en cuál estás desde el menú del guardia."}}), 400
@@ -510,6 +624,9 @@ def registrar_acceso_visita(usuario_actual):
         q_acceso = q_acceso.filter_by(direccion=direccion_tranca)
     acceso = q_acceso.first()
     if not acceso:
+        # PHOTO-15: mismo caso — limpiar antes de salir.
+        db.session.rollback()
+        _borrar_fotos(foto_id, foto_pl, foto_num)
         return jsonify({"error": {"code": "tranca_no_disponible",
                                   "message": f"Tu punto de acceso no tiene tranca "
                                              f"{tipo_punto} de {direccion_tranca} configurada. "
@@ -538,7 +655,17 @@ def registrar_acceso_visita(usuario_actual):
         visita.estado = "usada"
     qr.usos += 1
 
-    db.session.commit()  # libera el bloqueo de fila aquí
+    # PHOTO-15: si el commit falla (deadlock, caída de la base, violación de
+    # constraint), las fotos ya están escritas en disco pero el evento no
+    # existe — quedarían huérfanas. Se limpian y se devuelve error.
+    try:
+        db.session.commit()  # libera el bloqueo de fila aquí
+    except Exception as e:
+        db.session.rollback()
+        _borrar_fotos(foto_id, foto_pl, foto_num)
+        current_app.logger.error("PHOTO-15: fallo al confirmar el acceso: %s", e)
+        return jsonify({"error": {"code": "error_registrando_acceso",
+                                  "message": "No se pudo registrar el acceso. Intentá de nuevo."}}), 500
 
     # Notificar al residente (async, fuera de la transacción crítica)
     try:
