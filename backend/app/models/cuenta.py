@@ -585,9 +585,23 @@ class Pago(db.Model):
     cuenta   = db.relationship("Cuenta", foreign_keys=[cuenta_id], backref="pagos_de_cuenta")
     uploader = db.relationship("Usuario", foreign_keys=[subido_por])
     revisor  = db.relationship("Usuario", foreign_keys=[revisado_por])
-    # Varios comprobantes por pago (ej. el residente depositó en dos partes
-    # y sube ambas fotos para el mismo pago) — el admin las revisa juntas y
-    # aprueba/rechaza el pago completo, no cada imagen por separado.
+    # PAY-MODEL-21 (Auditoría Día 39). MODELO: varias evidencias, UN monto.
+    #
+    # Un pago cubre el total de la cuota y puede llevar hasta 5 fotos de
+    # respaldo de esa MISMA transacción (el comprobante del banco, el
+    # detalle de la transferencia, una segunda toma si la primera salió
+    # borrosa). El admin las revisa juntas y aprueba o rechaza el pago
+    # completo — no cada imagen por separado.
+    #
+    # NO son depósitos parciales con montos distintos. Esta clase tiene un
+    # único campo 'monto' y ComprobantePago no tiene monto propio, así que
+    # la estructura no puede representar "L500 el lunes + L700 el viernes".
+    # Soportarlo requeriría monto, fecha y referencia por comprobante, más
+    # aprobación individual.
+    #
+    # El comentario anterior decía "el residente depositó en dos partes",
+    # que contradecía la estructura. Fue el origen del hallazgo: la
+    # documentación describía una función que el modelo no tiene.
     comprobantes = db.relationship("ComprobantePago", backref="pago",
                                     order_by="ComprobantePago.created_at",
                                     cascade="all, delete-orphan")
