@@ -112,8 +112,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="http://localhost:5000")
     ap.add_argument("--n", type=int, default=20)
-    ap.add_argument("--email", default="guardia@villasdelsol.hn")
-    ap.add_argument("--password", "--pass", dest="password", default="guardia123")
+    ap.add_argument("--email", default="",
+                    help="Si se omite, prueba credenciales habituales "
+                         "de guardia y admin")
+    ap.add_argument("--password", "--pass", dest="password", default="")
     ap.add_argument("--residente-email", default="",
                     help="Si se omite, prueba democasa1..20@demo.local hasta "
                          "encontrar una cuenta sin mora")
@@ -196,13 +198,40 @@ def main():
     print(f"[2/5] Visita creada — token {token_qr[:16]}…")
 
     # ── 2. Guardia: preparar la sesión ───────────────────────────────
+    #
+    # El registro de acceso exige rol guardia/admin/super_admin. Se prueban
+    # varias credenciales habituales antes de rendirse, porque el correo
+    # del guardia varía entre instalaciones.
     print("[3/5] Iniciando sesión como guardia…")
-    st, r = _peticion(f"{base}/auth/login", "POST",
-                      {"email": args.email, "password": args.password})
-    if st != 200:
-        print(f"      ERROR ({st}): {r}")
+
+    if args.email:
+        intentos = [(args.email, args.password)]
+    else:
+        intentos = [
+            ("guardia@villasdelsol.hn", "guardia123"),
+            ("guardia1@villasdelsol.hn", "guardia123"),
+            ("guardia@demo.local", "demo123"),
+            # El admin también puede registrar accesos — sirve igual para
+            # medir la concurrencia, que es lo que interesa acá.
+            ("admin@villasdelsol.hn", "admin123"),
+        ]
+
+    tok_gua = None
+    for correo, clave in intentos:
+        st, r = _peticion(f"{base}/auth/login", "POST",
+                          {"email": correo, "password": clave})
+        if st == 200:
+            tok_gua = r["data"]["token"]
+            print(f"      OK — {correo}")
+            break
+
+    if not tok_gua:
+        print("      ERROR: no se pudo iniciar sesión con ninguna credencial.")
+        print("      Pasá las correctas con --email y --pass.")
+        print("      Para ver los guardias existentes:")
+        print("        docker compose exec db psql -U sicavs -d sicavs \\")
+        print("          -c \"SELECT email FROM usuarios WHERE rol='guardia';\"")
         return 1
-    tok_gua = r["data"]["token"]
 
     # El guardia necesita punto de acceso asignado (ACCESS-04). La visita
     # de prueba es peatonal, así que hay que elegir un punto que tenga
