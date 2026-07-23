@@ -585,22 +585,25 @@ class Pago(db.Model):
     cuenta   = db.relationship("Cuenta", foreign_keys=[cuenta_id], backref="pagos_de_cuenta")
     uploader = db.relationship("Usuario", foreign_keys=[subido_por])
     revisor  = db.relationship("Usuario", foreign_keys=[revisado_por])
-    # PAY-MODEL-21 (Auditoría Día 39). MODELO: varias evidencias, UN monto.
+    # PAY-MODEL-21 (Auditoría Día 39). MODELO: varios depósitos, UN pago.
     #
-    # Un pago cubre el total de la cuota y puede llevar hasta 5 fotos de
-    # respaldo de esa MISMA transacción (el comprobante del banco, el
-    # detalle de la transferencia, una segunda toma si la primera salió
-    # borrosa). El admin las revisa juntas y aprueba o rechaza el pago
-    # completo — no cada imagen por separado.
+    # CASO REAL: el residente deposita desde bancos distintos — L600 en
+    # Ficohsa + L600 en Atlántida para una cuota de L1,200. Son dos
+    # transferencias, pero un solo Pago por el total. Hasta 5 comprobantes.
     #
-    # NO son depósitos parciales con montos distintos. Esta clase tiene un
-    # único campo 'monto' y ComprobantePago no tiene monto propio, así que
-    # la estructura no puede representar "L500 el lunes + L700 el viernes".
-    # Soportarlo requeriría monto, fecha y referencia por comprobante, más
-    # aprobación individual.
+    # REGLA DE APROBACIÓN: el admin aprueba solo si la suma de los
+    # depósitos cubre el monto completo. Si falta, rechaza y deja una nota
+    # en 'nota_admin' explicando por qué; el residente la recibe por
+    # notificación push. NO existe la aprobación parcial.
+    #
+    # Lo que este modelo NO hace: tratar cada comprobante como un pago
+    # independiente con estado propio (aprobar los L600 de Ficohsa y dejar
+    # los otros pendientes). Requeriría monto, fecha y estado por
+    # comprobante. Esta clase tiene un único 'monto' y ComprobantePago no
+    # tiene monto propio.
     #
     # El comentario anterior decía "el residente depositó en dos partes",
-    # que contradecía la estructura. Fue el origen del hallazgo: la
+    # que sugería pagos parciales. Fue el origen del hallazgo: la
     # documentación describía una función que el modelo no tiene.
     comprobantes = db.relationship("ComprobantePago", backref="pago",
                                     order_by="ComprobantePago.created_at",
