@@ -294,17 +294,30 @@ def create_app(config_class=Config):
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), payment=()"
         # HSTS: fuerza HTTPS (solo tiene efecto sobre https; inofensivo en http local)
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        # Content-Security-Policy: restringe orígenes de scripts/estilos/imágenes.
-        # 'unsafe-inline' se mantiene porque el frontend usa estilos inline y el SW;
-        # se puede endurecer más en una fase posterior.
+        # ── Content-Security-Policy ──────────────────────────────────────
+        # CSP-19 (Auditoría Día 39). El auditor reportó que este CSP tenía
+        # 'unsafe-inline' y 'unsafe-eval' en script-src. Era cierto.
+        #
+        # CONTEXTO IMPORTANTE: este backend NO sirve HTML. De sus 180 rutas,
+        # 179 son /api/ que devuelven JSON, y la única excepción es /static/.
+        # Un CSP es una instrucción al navegador sobre qué puede ejecutar en
+        # una PÁGINA HTML — en una respuesta JSON no tiene nada que hacer.
+        # Quien sirve el HTML es Vite en desarrollo y Nginx en producción, y
+        # ninguno pasa por acá.
+        #
+        # Aun así se endurece al máximo, por dos razones: cuesta nada (la API
+        # no ejecuta scripts, así que no hay nada que romper) y evita que
+        # alguien copie este CSP permisivo pensando que es el bueno.
+        #
+        # El CSP que SÍ importa es el de Nginx, que protege el HTML real.
+        # Está escrito y comentado en deploy/nginx-sicavs.conf. Ver también
+        # docs/CSP_Y_CABECERAS.md para por qué desarrollo y producción
+        # difieren y qué hay que verificar al desplegar.
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "img-src 'self' data: blob:; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "connect-src 'self' ws: wss:; "
-            "media-src 'self' blob:; "
-            "frame-ancestors 'none'"
+            "default-src 'none'; "        # nada permitido salvo lo que se liste
+            "frame-ancestors 'none'; "    # no embebible en ningún iframe
+            "base-uri 'none'; "           # no se puede reescribir la URL base
+            "form-action 'none'"          # ningún formulario puede enviarse
         )
         return response
 
