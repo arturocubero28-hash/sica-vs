@@ -114,7 +114,9 @@ def main():
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--email", default="guardia@villasdelsol.hn")
     ap.add_argument("--password", "--pass", dest="password", default="guardia123")
-    ap.add_argument("--residente-email", default="democasa1@demo.local")
+    ap.add_argument("--residente-email", default="",
+                    help="Si se omite, prueba democasa1..20@demo.local hasta "
+                         "encontrar una cuenta sin mora")
     ap.add_argument("--residente-pass", default="demo123")
     args = ap.parse_args()
 
@@ -127,33 +129,71 @@ def main():
     print()
 
     # ── 1. Residente: crear la visita ────────────────────────────────
-    print("[1/5] Iniciando sesión como residente…")
-    st, r = _peticion(f"{base}/auth/login", "POST",
-                      {"email": args.residente_email, "password": args.residente_pass})
-    if st != 200:
-        print(f"      ERROR ({st}): {r}")
-        print("      Verificá que el backend esté arriba y las credenciales demo existan.")
-        return 1
-    tok_res = r["data"]["token"]
-    print("      OK")
+    #
+    # Se prueban varias cuentas demo porque en desarrollo es normal que
+    # algunas estén bloqueadas por mora (una cuenta bloqueada no puede
+    # generar QR). Se toma la primera que funcione.
+    print("[1/5] Buscando un residente que pueda generar QR…")
 
-    print("[2/5] Creando una visita de tipo 'única'…")
-    # Ruta sin barra final: el blueprint registra @visitas_bp.post("")
-    st, r = _peticion(f"{base}/visitas", "POST", {
-        "nombre_visitante": f"Prueba Concurrencia {uuid.uuid4().hex[:6]}",
-        "tipo": "unica",
-        "en_vehiculo": False,
-    }, token=tok_res)
-    if st not in (200, 201):
-        print(f"      ERROR ({st}): {r}")
+    if args.residente_email:
+        candidatos = [args.residente_email]
+    else:
+        candidatos = [f"democasa{i}@demo.local" for i in range(1, 21)]
+
+    tok_res = None
+    visita = None
+    token_qr = None
+    bloqueadas = []
+
+    for correo in candidatos:
+        st, r = _peticion(f"{base}/auth/login", "POST",
+                          {"email": correo, "password": args.residente_pass})
+        if st != 200:
+            continue
+        tk = r["data"]["token"]
+
+        # Ruta sin barra final: el blueprint registra @visitas_bp.post("")
+        st, r = _peticion(f"{base}/visitas", "POST", {
+            "nombre_visitante": f"Prueba Concurrencia {uuid.uuid4().hex[:6]}",
+            "tipo": "unica",
+            "en_vehiculo": False,
+        }, token=tk)
+
+        if st in (200, 201):
+            tok_res = tk
+            visita = r["data"]
+            # Visita.to_dict() expone el token del QR como 'qr_token'
+            token_qr = visita.get("qr_token")
+            print(f"      OK — {correo}")
+            break
+
+        codigo = (r.get("error") or {}).get("code", "")
+        if codigo == "cuenta_bloqueada":
+            bloqueadas.append(correo)
+            continue
+        print(f"      ERROR con {correo} ({st}): {r}")
         return 1
-    visita = r["data"]
-    # Visita.to_dict() expone el token del QR como 'qr_token'
-    token_qr = visita.get("qr_token")
+
+    if not tok_res:
+        print("      ERROR: ninguna cuenta demo pudo generar un QR.")
+        if bloqueadas:
+            print(f"      {len(bloqueadas)} bloqueadas por mora: "
+                  f"{', '.join(bloqueadas[:5])}"
+                  + (" …" if len(bloqueadas) > 5 else ""))
+            print("      Desbloqueá una desde el panel de admin, o pasá otra")
+            print("      con --residente-email.")
+        else:
+            print("      Verificá las credenciales demo (--residente-email,")
+            print("      --residente-pass).")
+        return 1
+
+    if bloqueadas:
+        print(f"      ({len(bloqueadas)} cuenta(s) omitida(s) por mora)")
+
     if not token_qr:
         print(f"      ERROR: la respuesta no trae qr_token: {visita}")
         return 1
-    print(f"      OK — token {token_qr[:16]}…")
+    print(f"[2/5] Visita creada — token {token_qr[:16]}…")
 
     # ── 2. Guardia: preparar la sesión ───────────────────────────────
     print("[3/5] Iniciando sesión como guardia…")
