@@ -16,7 +16,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from app.config import Config
-from app.extensions import db, migrate, socketio, limiter
+from app.extensions import db, migrate, limiter
 
 
 def create_app(config_class=Config):
@@ -36,7 +36,8 @@ def create_app(config_class=Config):
     # --- Extensiones ---
     db.init_app(app)
     migrate.init_app(app, db)
-    socketio.init_app(app)
+    # SOCKET-17: socketio.init_app() eliminado — era código muerto sin
+    # manejadores ni emisiones. Ver la nota en extensions.py.
     CORS(app, origins=app.config["CORS_ORIGINS"], supports_credentials=True)
 
     # Rate limiter con Redis como almacenamiento (consistente entre workers)

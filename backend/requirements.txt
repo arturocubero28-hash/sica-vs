@@ -2,7 +2,9 @@ Flask==3.0.3
 Flask-SQLAlchemy==3.1.1
 Flask-Migrate==4.0.7
 Flask-Cors==4.0.1
-Flask-SocketIO==5.3.6
+# Flask-SocketIO: eliminado en Día 41 (SOCKET-17). Era código muerto —
+# nunca tuvo manejadores ni emisiones; su único uso previsto lo cubre
+# ahora Firebase Cloud Messaging. Ver nota en app/extensions.py.
 psycopg2-binary==2.9.9
 PyJWT==2.8.0
 # Google Wallet API (firmado de pases y notificaciones de actualización)
@@ -14,7 +16,9 @@ redis==5.0.4
 celery==5.4.0
 python-dotenv==1.0.1
 gunicorn==22.0.0
-eventlet==0.36.1
+# eventlet: eliminado en Día 41 (SOCKET-17). Solo existía para el modo
+# async de Flask-SocketIO. El Dockerfile nunca lo usó (gunicorn arranca
+# sin '-k eventlet') y Celery usa el pool prefork por defecto.
 webauthn==2.2.0
 resend==2.0.0
 marshmallow==3.21.2
