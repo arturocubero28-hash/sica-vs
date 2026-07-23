@@ -207,13 +207,14 @@ def main():
     if args.email:
         intentos = [(args.email, args.password)]
     else:
+        # Solo credenciales de rol 'guardia'. NO se incluye admin: aunque
+        # el endpoint de registro acepta admin/super_admin, solo el rol
+        # guardia puede fijar su punto de acceso, y sin punto el registro
+        # se rechaza antes de llegar al bloqueo que se quiere medir.
         intentos = [
-            ("guardia@villasdelsol.hn", "guardia123"),
             ("guardia1@villasdelsol.hn", "guardia123"),
+            ("guardia@villasdelsol.hn", "guardia123"),
             ("guardia@demo.local", "demo123"),
-            # El admin también puede registrar accesos — sirve igual para
-            # medir la concurrencia, que es lo que interesa acá.
-            ("admin@villasdelsol.hn", "admin123"),
         ]
 
     tok_gua = None
@@ -247,7 +248,24 @@ def main():
         if st2 == 200:
             print(f"      OK — punto '{punto}'")
         else:
-            print(f"      AVISO: no se pudo fijar el punto ({st2}): {r2}")
+            # Cortar acá es importante: sin punto asignado, las 20
+            # peticiones se rechazan con 'sin_punto_asignado' ANTES de
+            # llegar al bloqueo de fila. El resultado se vería prolijo
+            # (20 respuestas idénticas) pero no habría medido nada — un
+            # falso negativo que haría creer que la prueba corrió.
+            print(f"      ERROR ({st2}): no se pudo fijar el punto de acceso.")
+            print(f"      {r2}")
+            if st2 == 403:
+                print()
+                print("      Causa probable: la sesión NO es de rol 'guardia'.")
+                print("      El endpoint /guardias/mi-punto-acceso solo acepta")
+                print("      ese rol, y sin punto asignado el registro de acceso")
+                print("      se rechaza antes de llegar al bloqueo — la prueba")
+                print("      no mediría concurrencia.")
+                print()
+                print("      Corré con las credenciales de un guardia real:")
+                print("        --email guardia1@villasdelsol.hn --pass LA_CLAVE")
+            return 1
     else:
         print("      ERROR: no hay ningún punto de acceso con tranca peatonal.")
         print("      Creá uno desde el panel de admin antes de correr la prueba.")
