@@ -509,7 +509,38 @@ def registrar_acceso_visita(usuario_actual):
         return jsonify({"error": {"code": "qr_revocado",
                                   "message": "Este código fue revocado"}}), 400
 
-    visita = Visita.query.with_for_update(of=Visita).get(qr.visita_id)
+    # QR-CONC-20 (Auditoría Día 39 · Día 41): NO usar Visita.query.get().
+    #
+    # La prueba de concurrencia real encontró que 2 de 20 peticiones
+    # simultáneas lograban registrar entrada con el mismo QR. La causa:
+    #
+    #   Query.get() consulta primero el IDENTITY MAP de la sesión y solo va
+    #   a la base si el objeto no está cargado. La Visita YA estaba en
+    #   memoria — CodigoQR la trae por relación lazy="joined" en la consulta
+    #   de arriba. Así que .get() devolvía la copia en memoria SIN ejecutar
+    #   el SELECT ... FOR UPDATE y SIN releer el estado actualizado.
+    #
+    #   Efecto: la segunda petición esperaba correctamente el candado sobre
+    #   CodigoQR, pero al despertar seguía viendo la Visita en estado
+    #   'activa' (como estaba al cargarla), no el 'usada' que acababa de
+    #   escribir la primera. Y registraba una segunda entrada.
+    #
+    # filter_by().first() siempre emite la consulta, así que el FOR UPDATE
+    # se aplica de verdad y se lee el estado recién confirmado.
+    #
+    # session.refresh() adicional: garantiza que los atributos ya cargados
+    # en memoria se descarten y se relean de la base. Sin esto, aunque la
+    # consulta se emita, SQLAlchemy podría conservar valores viejos de una
+    # carga previa dentro de la misma sesión.
+    visita = (Visita.query
+              .filter_by(id=qr.visita_id)
+              .with_for_update(of=Visita)
+              .first())
+    if not visita:
+        db.session.rollback()
+        return jsonify({"error": {"code": "visita_invalida",
+                                  "message": "La visita asociada no existe"}}), 404
+    db.session.refresh(visita)
     ahora = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc)
 
     # PASO 2 — mismas reglas de validación que antes vivían en validar_qr(),
