@@ -138,7 +138,8 @@ def main():
     print("      OK")
 
     print("[2/5] Creando una visita de tipo 'única'…")
-    st, r = _peticion(f"{base}/visitas/", "POST", {
+    # Ruta sin barra final: el blueprint registra @visitas_bp.post("")
+    st, r = _peticion(f"{base}/visitas", "POST", {
         "nombre_visitante": f"Prueba Concurrencia {uuid.uuid4().hex[:6]}",
         "tipo": "unica",
         "en_vehiculo": False,
@@ -147,9 +148,10 @@ def main():
         print(f"      ERROR ({st}): {r}")
         return 1
     visita = r["data"]
-    token_qr = visita.get("token") or (visita.get("qr") or {}).get("token")
+    # Visita.to_dict() expone el token del QR como 'qr_token'
+    token_qr = visita.get("qr_token")
     if not token_qr:
-        print(f"      ERROR: la respuesta no trae el token del QR: {visita}")
+        print(f"      ERROR: la respuesta no trae qr_token: {visita}")
         return 1
     print(f"      OK — token {token_qr[:16]}…")
 
@@ -162,16 +164,25 @@ def main():
         return 1
     tok_gua = r["data"]["token"]
 
-    # El guardia necesita punto de acceso asignado (ACCESS-04)
+    # El guardia necesita punto de acceso asignado (ACCESS-04). La visita
+    # de prueba es peatonal, así que hay que elegir un punto que tenga
+    # tranca peatonal — si no, el registro falla con 'tranca_no_disponible'.
     st, r = _peticion(f"{base}/acceso/puntos", token=tok_gua)
-    puntos = [p.get("nombre") or p.get("punto_acceso")
-              for p in (r.get("data") or [])] if st == 200 else []
-    if puntos:
-        _peticion(f"{base}/guardias/mi-punto-acceso", "POST",
-                  {"punto_acceso": puntos[0]}, token=tok_gua)
-        print(f"      OK — punto '{puntos[0]}'")
+    puntos = (r.get("data") or []) if st == 200 else []
+    peatonales = [p for p in puntos
+                  if p.get("tiene_peatonal") and not p.get("sin_nombre")]
+    if peatonales:
+        punto = peatonales[0]["punto_acceso"]
+        st2, r2 = _peticion(f"{base}/guardias/mi-punto-acceso", "POST",
+                            {"punto_acceso": punto}, token=tok_gua)
+        if st2 == 200:
+            print(f"      OK — punto '{punto}'")
+        else:
+            print(f"      AVISO: no se pudo fijar el punto ({st2}): {r2}")
     else:
-        print("      OK (sin puntos configurados; puede fallar el registro)")
+        print("      ERROR: no hay ningún punto de acceso con tranca peatonal.")
+        print("      Creá uno desde el panel de admin antes de correr la prueba.")
+        return 1
 
     # ── 3. El disparo simultáneo ─────────────────────────────────────
     print(f"[4/5] Disparando {args.n} peticiones simultáneas…")
@@ -258,16 +269,24 @@ def main():
         for r in otras[:5]:
             print(f"            {r['status']} {r['code']}")
 
-    # Confirmación desde la base: cuántos eventos quedaron realmente
-    st, r = _peticion(f"{base}/visitas/{visita['id']}", token=tok_res)
+    # Confirmación desde la base: en qué estado quedó realmente la visita.
+    # No hay GET /visitas/<id>, así que se busca en la lista del residente.
+    st, r = _peticion(f"{base}/visitas/mias", token=tok_res)
     if st == 200:
-        estado = (r.get("data") or {}).get("estado")
-        print(f"  [INFO ] Estado final de la visita: {estado}")
-        if estado == "usada":
-            print("  [OK   ] La visita quedó marcada como usada")
+        lista = r.get("data") or []
+        mia = next((v for v in lista if v.get("id") == visita["id"]), None)
+        if mia:
+            estado = mia.get("estado")
+            print(f"  [INFO ] Estado final de la visita: {estado}")
+            if estado == "usada":
+                print("  [OK   ] La visita quedó marcada como usada")
+            else:
+                ok = False
+                print(f"  [FALLA] Se esperaba estado 'usada'")
+            if mia.get("hora_entrada"):
+                print(f"  [INFO ] Hora de entrada registrada: {mia['hora_entrada'][:19]}")
         else:
-            ok = False
-            print(f"  [FALLA] Se esperaba estado 'usada'")
+            print("  [AVISO] No se encontró la visita en /mias para confirmar")
 
     print()
     print("=" * 68)
