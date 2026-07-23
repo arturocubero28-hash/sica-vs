@@ -25,7 +25,7 @@ desplegar.
 """
 import datetime as dt
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db, limiter
 from app.auth.security import roles_required
@@ -282,37 +282,56 @@ def sincronizar():
                 "es_virtual": True,
             })
 
-    # Credenciales BLE (Bluetooth). El lector BLE valida el desafío-respuesta
-    # con la clave secreta; la Pi solo necesita conocer los tokens válidos y
-    # sus claves para pasárselas al lector.
-    ble_q = CredencialBLE.query.filter_by(estado="activa")
-    if disp.residencial_id is not None:
-        from app.models.cuenta import Unidad
-        ble_q = (ble_q
-                 .join(Cuenta, CredencialBLE.cuenta_id == Cuenta.id)
-                 .join(Unidad, Cuenta.unidad_id == Unidad.id)
-                 .filter(Unidad.residencial_id == disp.residencial_id))
-    credenciales_ble = ble_q.all()
+    # ---- Credenciales BLE (Bluetooth) ----
+    #
+    # BLE-BE-18 (Auditoría Día 39). CAMBIO IMPORTANTE DE DISEÑO:
+    #
+    # Antes, este bloque enviaba "clave_secreta": c.clave_secreta a CADA Pi,
+    # en cada sincronización. Eso contradecía la documentación del propio
+    # modelo CredencialBLE, que dice que la clave "nunca sale del servidor
+    # ni del teléfono en texto plano", y anulaba el propósito del HMAC: las
+    # claves de todos los residentes quedaban replicadas en el caché local
+    # de todas las Pi. Una Pi comprometida habría entregado las credenciales
+    # de todos.
+    #
+    # Ahora la Pi recibe SOLO tokens — identificadores públicos, sin valor
+    # criptográfico por sí solos. La verificación del HMAC la hace el
+    # servidor en /acceso/validar-ble, que es el único lugar (además del
+    # teléfono dueño) donde la clave tiene que estar.
+    #
+    # Para el modo offline está diseñado un caché de respuestas
+    # precomputadas firmadas por el servidor — ver docs/BLE_PROTOCOLO.md
+    # §3.2 y ble_cripto.precomputar_hmacs(). No se implementa todavía
+    # porque su formato depende del lector que se compre.
+    #
+    # Mientras BLE_FEATURE_ENABLED sea false, ni siquiera se envían tokens:
+    # no hay lector, así que no hay nada que validar.
     ble_out = []
-    for c in credenciales_ble:
-        nombre = None
-        if c.residente and c.residente.usuario:
-            nombre = f"{c.residente.usuario.nombre} {c.residente.usuario.apellido}"
-        ble_out.append({
-            "token": c.token_hoy,
-            "clave_secreta": c.clave_secreta,
-            "contador": c.contador,
-            "tipo_acceso": c.tipo_acceso,
-            "residente": nombre,
-        })
-        if c.token_anterior and c.token_anterior_valido_hasta and ahora < c.token_anterior_valido_hasta:
+    if current_app.config.get("BLE_FEATURE_ENABLED"):
+        ble_q = CredencialBLE.query.filter_by(estado="activa")
+        if disp.residencial_id is not None:
+            from app.models.cuenta import Unidad
+            ble_q = (ble_q
+                     .join(Cuenta, CredencialBLE.cuenta_id == Cuenta.id)
+                     .join(Unidad, Cuenta.unidad_id == Unidad.id)
+                     .filter(Unidad.residencial_id == disp.residencial_id))
+        for c in ble_q.all():
+            nombre = None
+            if c.residente and c.residente.usuario:
+                nombre = f"{c.residente.usuario.nombre} {c.residente.usuario.apellido}"
+            # Sin clave_secreta. Sin contador (lo lleva el servidor).
             ble_out.append({
-                "token": c.token_anterior,
-                "clave_secreta": c.clave_secreta,
-                "contador": c.contador,
+                "token": c.token_hoy,
                 "tipo_acceso": c.tipo_acceso,
                 "residente": nombre,
             })
+            if (c.token_anterior and c.token_anterior_valido_hasta
+                    and ahora < c.token_anterior_valido_hasta):
+                ble_out.append({
+                    "token": c.token_anterior,
+                    "tipo_acceso": c.tipo_acceso,
+                    "residente": nombre,
+                })
 
     # Registrar la última sincronización de esta Pi
     disp.ultima_sync = dt.datetime.utcnow()
@@ -433,6 +452,141 @@ def reportar_eventos():
         "duplicados": duplicados,
         "ignorados": ignorados,
         "recibidos": len(eventos),
+    }})
+
+
+@acceso_bp.post("/validar-ble")
+@limiter.limit("60 per minute")
+def validar_ble():
+    """
+    Verifica una trama BLE. La Pi reenvía lo que recibió del lector y el
+    servidor decide.
+
+    BLE-BE-18 (Auditoría Día 39). Ver docs/BLE_PROTOCOLO.md.
+
+    Este endpoint existe porque la clave secreta NO se le da a la Pi: solo
+    el servidor puede recalcular el HMAC. La Pi transporta y aplica la
+    decisión, pero no verifica firmas.
+
+    Petición:
+        { "token": "BLE7A3F...", "contador": 42, "hmac": "a4f2c9d1...",
+          "acceso_id": 3, "version": 1 }
+
+    Estado actual: implementado y probado, pero inactivo mientras
+    BLE_FEATURE_ENABLED sea false. Falta el advertising en la app y el
+    firmware del lector — ambos dependen del hardware que se compre.
+    """
+    if not current_app.config.get("BLE_FEATURE_ENABLED"):
+        return _err("ble_no_disponible",
+                    "El acceso por Bluetooth no está habilitado", 403)
+
+    disp = _dispositivo_actual()
+    if not disp:
+        return _err("dispositivo_no_autorizado",
+                    "Dispositivo no autorizado o revocado", 401)
+
+    # PI-ISO-14: mismas garantías que el resto de endpoints del agente.
+    bloqueo = _guardia_pi_acceso(disp)
+    if bloqueo:
+        return bloqueo
+
+    data = request.get_json(silent=True) or {}
+    token = (data.get("token") or "").strip().upper()
+    hmac_recibido = (data.get("hmac") or "").strip()
+    acceso_id = data.get("acceso_id")
+    try:
+        contador = int(data.get("contador", -1))
+    except (TypeError, ValueError):
+        contador = -1
+
+    if not token or not hmac_recibido or contador < 0:
+        return _err("datos_incompletos",
+                    "Se requiere token, contador y hmac", 400)
+
+    acceso = AccesoFisico.query.get(acceso_id) if acceso_id else None
+    if not acceso or not acceso.activo:
+        return _err("acceso_invalido", "Acceso físico no encontrado o inactivo", 400)
+    if acceso.punto_acceso != disp.punto_acceso:
+        return _err("acceso_fuera_de_punto",
+                    "Este acceso físico no pertenece al punto de este dispositivo", 403)
+
+    ahora = dt.datetime.now(dt.timezone.utc)
+
+    # Buscar por token actual o anterior (ventana de gracia de la rotación).
+    # SELECT FOR UPDATE: dos lecturas simultáneas de la misma credencial
+    # deben serializarse, o ambas verían el mismo contador y las dos pasarían
+    # (mismo criterio que ACCESS-03 en el registro de visitas).
+    cred = (CredencialBLE.query
+            .filter_by(token_hoy=token)
+            .with_for_update()
+            .first())
+    if not cred:
+        cred = (CredencialBLE.query
+                .filter_by(token_anterior=token)
+                .with_for_update()
+                .first())
+        if cred and not (cred.token_anterior_valido_hasta
+                         and ahora < cred.token_anterior_valido_hasta):
+            db.session.rollback()
+            return _err("token_expirado",
+                        "La credencial rotó y el token anterior ya venció", 403)
+
+    if not cred:
+        db.session.rollback()
+        return _err("credencial_desconocida", "Credencial BLE no reconocida", 403)
+
+    if cred.estado != "activa":
+        db.session.rollback()
+        return _err("credencial_inactiva",
+                    f"Credencial {cred.estado}", 403)
+
+    # Rolling counter: rechazar contadores ya vistos. Sin esto, capturar una
+    # trama y retransmitirla abriría la puerta indefinidamente.
+    if contador <= cred.contador:
+        db.session.rollback()
+        return _err("contador_repetido",
+                    "Contador ya utilizado (posible retransmisión)", 403)
+
+    # La verificación criptográfica, con la clave que nunca salió de acá.
+    from app.services.ble_cripto import verificar_hmac
+    version = data.get("version", 1)
+    if not verificar_hmac(cred.clave_secreta, cred.token_hoy, contador,
+                          hmac_recibido, version):
+        db.session.rollback()
+        return _err("firma_invalida", "La firma no es válida", 403)
+
+    # Permisos de la cuenta (mora, bloqueo, horarios) — mismas reglas que
+    # cualquier otro método de acceso.
+    motivo = motivo_denegacion(cred.cuenta, acceso, ahora)
+    if motivo:
+        db.session.rollback()
+        return _err("acceso_denegado", motivo, 403)
+
+    cred.contador = contador
+    cred.ultimo_uso = ahora
+
+    evento = EventoAcceso(
+        acceso_id=acceso.id,
+        cuenta_id=cred.cuenta_id,
+        dispositivo_id=disp.id,
+        tipo="ble",
+        direccion=acceso.direccion,
+        permitido=True,
+        detalle=f"BLE · {cred.device_nombre or 'dispositivo'}",
+        ocurrido_en=ahora,
+    )
+    db.session.add(evento)
+    db.session.commit()
+
+    titular = None
+    if cred.residente and cred.residente.usuario:
+        titular = f"{cred.residente.usuario.nombre} {cred.residente.usuario.apellido}"
+
+    return jsonify({"data": {
+        "permitido": True,
+        "titular": titular,
+        "tipo_acceso": cred.tipo_acceso,
+        "contador": cred.contador,
     }})
 
 

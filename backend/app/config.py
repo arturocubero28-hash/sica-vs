@@ -29,6 +29,16 @@ class Config:
     # Resend (correo)
     RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
+    # ---- Acceso BLE (Bluetooth) ----
+    # BLE-BE-18 (Auditoría Día 39): apagado por defecto hasta que exista
+    # lector físico y protocolo de trama confirmado. Mientras esté en false:
+    #   - los endpoints de activación/reactivación devuelven 403
+    #   - /sincronizar no envía credenciales BLE a las Pi
+    #   - /validar-ble rechaza toda validación
+    # Las credenciales ya creadas quedan en la base pero inertes.
+    # Ver docs/BLE_PROTOCOLO.md §6 para el procedimiento de activación.
+    BLE_FEATURE_ENABLED = os.environ.get("BLE_FEATURE_ENABLED", "false").lower() == "true"
+
     # WebAuthn (biometría)
     WEBAUTHN_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
     WEBAUTHN_RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "SICA-VS Villas del Sol")

@@ -20,7 +20,7 @@ Endpoints (residente):
 import secrets
 import datetime as dt
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, current_app
 
 from app.extensions import db
 from app.auth.security import token_required
@@ -31,6 +31,25 @@ ble_bp = Blueprint("credencial_ble", __name__)
 
 def _err(code, msg, status=400):
     return jsonify({"error": {"code": code, "message": msg}}), status
+
+
+def _ble_apagado():
+    """
+    BLE-BE-18 (Auditoría Día 39): mientras no exista lector físico ni
+    protocolo de trama confirmado, el backend no debe emitir credenciales
+    con claves criptográficas reales. Generar secretos que no protegen nada
+    da una falsa sensación de seguridad y ensucia la base con material
+    criptográfico que habrá que rotar cuando el sistema sea real.
+
+    Devuelve una respuesta de error si BLE está apagado, o None si puede
+    seguir. Ver docs/BLE_PROTOCOLO.md §6 para activarlo.
+    """
+    if current_app.config.get("BLE_FEATURE_ENABLED"):
+        return None
+    return _err("ble_no_disponible",
+                "El acceso por Bluetooth todavía no está disponible. "
+                "Está en desarrollo y se habilitará cuando esté instalado "
+                "el lector en la entrada.", 403)
 
 
 def _mi_residente(usuario):
@@ -70,6 +89,11 @@ def activar_ble(usuario_actual):
     """Registra el dispositivo actual y genera la credencial BLE.
     Si el residente ya tenía una credencial en otro dispositivo, la revoca
     (máximo 1 dispositivo activo por residente)."""
+    # BLE-BE-18: no emitir claves criptográficas si BLE está apagado.
+    apagado = _ble_apagado()
+    if apagado:
+        return apagado
+
     residente, cuenta = _mi_residente(usuario_actual)
     if not residente:
         return _err("no_residente", "No sos residente activo", 403)
@@ -127,6 +151,12 @@ def suspender_ble(usuario_actual):
 @ble_bp.post("/mi-ble/reactivar")
 @token_required
 def reactivar_ble(usuario_actual):
+    # BLE-BE-18: reactivar genera token y clave nuevos — mismo criterio
+    # que activar.
+    apagado = _ble_apagado()
+    if apagado:
+        return apagado
+
     residente, cuenta = _mi_residente(usuario_actual)
     if not residente:
         return _err("no_residente", "No sos residente activo", 403)
