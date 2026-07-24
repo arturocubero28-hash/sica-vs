@@ -374,13 +374,18 @@ def main():
     print("  VERIFICACIÓN DEFINITIVA (correr en la base):")
     print("  " + "-" * 46)
     print(f"""    docker compose exec db psql -U sicavs -d sicavs -c \\
-      "SELECT COUNT(*) FROM eventos_acceso \\
-       WHERE visita_id={visita['id']} AND direccion='entrada';" """)
+      "SELECT direccion, COUNT(*) FROM eventos_acceso \\
+       WHERE visita_id='{visita['id']}' GROUP BY direccion;" """)
     print()
-    print("    Debe devolver exactamente 1. Si devuelve 2 o más, hay")
-    print("    condición de carrera real. Si devuelve 1, ACCESS-03 está")
-    print("    verificado — sin importar cuántos 201 reporte el HTTP,")
-    print("    porque el HTTP puede adelantarse al commit definitivo.")
+    print("    ACCESS-03 exige: EXACTAMENTE 1 entrada. Nunca 2.")
+    print()
+    print("    Puede aparecer además 1 salida, y es CORRECTO: si dos")
+    print("    escaneos casi simultáneos pasan el bloqueo, el primero")
+    print("    registra la entrada y el segundo —al ver que la persona ya")
+    print("    está adentro— registra la salida. Son 2 respuestas 201")
+    print("    legítimas (1 entrada + 1 salida), no un doble ingreso.")
+    print("    Por eso contar '201' no sirve como veredicto: hay que mirar")
+    print("    la dirección de cada evento en la base.")
 
     print()
     print("=" * 68)
