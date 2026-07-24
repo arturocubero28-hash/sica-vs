@@ -373,9 +373,13 @@ def main():
     print()
     print("  VERIFICACIÓN DEFINITIVA (correr en la base):")
     print("  " + "-" * 46)
+    # OJO: Visita.to_dict() devuelve el uuid_publico como 'id', no el
+    # BigInteger interno. La columna eventos_acceso.visita_id es bigint,
+    # así que hay que unir por visitas.uuid_publico, no comparar directo.
     print(f"""    docker compose exec db psql -U sicavs -d sicavs -c \\
-      "SELECT direccion, COUNT(*) FROM eventos_acceso \\
-       WHERE visita_id='{visita['id']}' GROUP BY direccion;" """)
+      "SELECT e.direccion, COUNT(*) FROM eventos_acceso e \\
+       JOIN visitas v ON v.id = e.visita_id \\
+       WHERE v.uuid_publico = '{visita['id']}' GROUP BY e.direccion;" """)
     print()
     print("    ACCESS-03 exige: EXACTAMENTE 1 entrada. Nunca 2.")
     print()
