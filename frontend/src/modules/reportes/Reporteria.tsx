@@ -124,6 +124,26 @@ function ReporteFinancieroVista() {
       },
     });
 
+    // Tabla de cuentas al día — antes solo estaba en el Excel; se agrega al
+    // PDF para que ambos formatos muestren el mismo detalle. Arranca debajo
+    // de la tabla de morosos. Si no cabe, autoTable la pasa a otra página.
+    const finMorosos = (doc as any).lastAutoTable?.finalY ?? 72;
+    let tituloAlDiaY = finMorosos + 14;
+    // Si no queda espacio para el título + unas filas, empezar página nueva.
+    if (tituloAlDiaY > 260) {
+      doc.addPage();
+      tituloAlDiaY = 20;
+    }
+    doc.setFontSize(11);
+    doc.setTextColor(22, 101, 52);
+    doc.text("Cuentas al día", 14, tituloAlDiaY);
+    autoTable(doc, {
+      startY: tituloAlDiaY + 4,
+      head: [["Unidad", "Titular", "Monto"]],
+      body: data!.al_dia.map(a => [a.unidad, a.titular, L(a.monto)]),
+      headStyles: { fillColor: [22, 101, 52] },
+    });
+
     doc.save(`reporte-financiero-${data!.mes_label.replace(/\s/g, "-")}.pdf`);
   }
 
