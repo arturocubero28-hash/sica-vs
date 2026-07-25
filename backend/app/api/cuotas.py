@@ -374,7 +374,16 @@ def todas_las_cuotas(usuario_actual):
 @cuotas_bp.post("/pagos/<uuid_pago>/revisar")
 @roles_required("admin")
 def revisar_pago(usuario_actual, uuid_pago):
-    pago = Pago.query.filter_by(uuid_publico=uuid_pago).first()
+    # O3.1 (Auditoría Día 42): candado sobre el pago + verificación de que
+    # siga pendiente de revisión. Sin esto, dos aprobaciones simultáneas del
+    # mismo comprobante ejecutaban toda la lógica dos veces (doble marca de
+    # abono pagado, doble intento de completar el arreglo, doble desbloqueo).
+    # El FOR UPDATE serializa las peticiones y el chequeo de estado hace que
+    # la segunda salga sin repetir el efecto.
+    pago = (Pago.query
+            .filter_by(uuid_publico=uuid_pago)
+            .with_for_update()
+            .first())
     if not pago:
         return jsonify({"error": {"code": "NO_ENCONTRADO", "message": "Pago no encontrado"}}), 404
 
@@ -385,6 +394,15 @@ def revisar_pago(usuario_actual, uuid_pago):
         return jsonify({
             "error": {"code": "ACCION_INVALIDA", "message": "accion debe ser 'aprobar' o 'rechazar'"}
         }), 400
+
+    # Solo se revisa un pago que está pendiente de revisión. Si ya fue
+    # aprobado o rechazado (por otra petición o un doble-clic), se corta acá
+    # para no aplicar el efecto dos veces.
+    if pago.estado != "en_revision":
+        return jsonify({
+            "error": {"code": "YA_REVISADO",
+                      "message": f"Este pago ya fue {pago.estado}. Actualizá la lista."}
+        }), 409
 
     nota = (body.get("nota") or "").strip()
     # Al rechazar, la nota es obligatoria: el residente necesita saber por qué

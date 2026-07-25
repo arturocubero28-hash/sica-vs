@@ -101,7 +101,15 @@ def editar_tipo(usuario_actual, uuid):
 @inventario_bp.post("/tipos/<uuid>/stock")
 @roles_required("admin", "super_admin")
 def agregar_stock(usuario_actual, uuid):
-    tipo = TipoTarjeta.query.filter_by(uuid_publico=uuid).first()
+    # O3.1 / O6.1 (Auditoría Día 42): candado sobre el TipoTarjeta. Sin él,
+    # dos ajustes simultáneos leen el mismo tipo.stock y el segundo pisa al
+    # primero (last-write-wins), perdiéndose una entrada de bodega. Es el
+    # mismo tipo de fila que se bloquea en vender_tarjeta (caja.py), así que
+    # ambos flujos quedan coherentes.
+    tipo = (TipoTarjeta.query
+            .filter_by(uuid_publico=uuid)
+            .with_for_update()
+            .first())
     if not tipo:
         return _err("no_encontrado", "Tipo de tarjeta no encontrado", 404)
     data = request.get_json(silent=True) or {}

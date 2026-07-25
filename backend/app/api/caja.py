@@ -62,6 +62,14 @@ def abrir_caja(usuario_actual):
                                   "message": "Ya tenés una caja abierta. Cerrala antes de abrir otra."}}), 400
 
     # Regla de integridad: no puede haber OTRA caja abierta en el sistema.
+    #
+    # O3.1 (Auditoría Día 42): este chequeo tiene una carrera teórica —dos
+    # aperturas simultáneas podrían ambas pasar el SELECT—, pero se decidió
+    # NO protegerlo. La garantía fuerte requeriría un índice único parcial
+    # (migración a la base), y el escenario es muy improbable: exige que dos
+    # cajeros hagan clic en "abrir" en el mismo milisegundo, con muy pocos
+    # cajeros operando. El costo de la migración no justifica el riesgo.
+    # Si en el futuro hay muchos cajeros concurrentes, reconsiderar.
     otra_abierta = SesionCaja.query.filter_by(estado="abierta").first()
     if otra_abierta:
         return jsonify({"error": {"code": "otra_caja_abierta",
@@ -96,7 +104,21 @@ def registrar_pago(usuario_actual):
         return jsonify({"error": {"code": "metodo_invalido",
                                   "message": "Método debe ser efectivo o tarjeta_pos"}}), 400
 
-    cuota = Cuota.query.filter_by(uuid_publico=cuota_uuid).first()
+    # O3.1 (Auditoría Día 42): SELECT ... FOR UPDATE sobre la cuota.
+    # Sin el candado, dos peticiones simultáneas (doble-clic del cajero, o
+    # dos cajeros a la vez) podían leer ambas cuota.estado != "pagada",
+    # crear cada una su Pago y cobrar DOS VECES la misma cuota. Es el mismo
+    # patrón que ACCESS-03/QR-CONC-20, pero con dinero.
+    #
+    # with_for_update() bloquea la fila hasta el commit: la segunda petición
+    # espera, y al despertar ve la cuota ya "pagada" y sale por el 400 de
+    # abajo. Se usa filter_by().first() (no .get()) porque .get() puede
+    # devolver una copia de la sesión sin ejecutar el FOR UPDATE — lección
+    # aprendida en QR-CONC-20.
+    cuota = (Cuota.query
+             .filter_by(uuid_publico=cuota_uuid)
+             .with_for_update()
+             .first())
     if not cuota:
         return jsonify({"error": {"code": "cuota_no_encontrada", "message": "Cuota no encontrada"}}), 404
     if cuota.estado == "pagada":
@@ -156,7 +178,14 @@ def vender_tarjeta(usuario_actual):
         return jsonify({"error": {"code": "metodo_invalido",
                                   "message": "Método debe ser efectivo o tarjeta_pos"}}), 400
 
-    tipo = TipoTarjeta.query.filter_by(uuid_publico=tipo_uuid).first()
+    # O3.1 (Auditoría Día 42): candado sobre el TipoTarjeta para que dos
+    # ventas simultáneas del último ítem no dejen el stock en negativo.
+    # Sin el FOR UPDATE, ambas leen tipo.stock == 1, ambas restan, y queda
+    # en -1. Con el candado, la segunda espera y ve stock 0.
+    tipo = (TipoTarjeta.query
+            .filter_by(uuid_publico=tipo_uuid)
+            .with_for_update()
+            .first())
     if not tipo or not tipo.activo:
         return jsonify({"error": {"code": "tipo_invalido",
                                   "message": "Tipo de tarjeta no encontrado o inactivo"}}), 404
