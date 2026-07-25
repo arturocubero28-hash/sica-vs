@@ -2311,7 +2311,12 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .btn-quitar-miembro { color: #991b1b !important; border-color: #fecaca !important; }
 .btn-quitar-miembro:hover:not(:disabled) { background: #fee2e2 !important; color: #991b1b !important; box-shadow: none !important; transform: none !important; }
 .datos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
-.dato-item { display: flex; flex-direction: column; gap: 2px; }
+/* UX Día 43 — fix: un correo largo sin espacios se desbordaba de su celda y
+   se montaba sobre el campo de al lado (teléfono). min-width:0 permite que el
+   item de grid se encoja por debajo del ancho de su contenido, y
+   overflow-wrap parte el texto largo en vez de desbordarlo. */
+.dato-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dato-item span { overflow-wrap: anywhere; word-break: break-word; }
 .datos-editar { display: flex; flex-direction: column; gap: 8px; }
 .datos-editar .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .datos-editar .row input { flex: 1; min-width: 140px; }
