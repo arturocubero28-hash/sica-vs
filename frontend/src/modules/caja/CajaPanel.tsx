@@ -6,6 +6,7 @@ import {
   type SesionCajaDTO, type CuentaCajaDTO, type TipoTarjetaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
+import { InfoTip } from "../../components/InfoTip";
 import { LectorTarjeta } from "../unidades/LectorTarjeta";
 import { AlertTriangle, Banknote, CreditCard, FileText, LockOpen, Receipt, Ticket } from "lucide-react";
 
@@ -147,7 +148,7 @@ function AbrirCaja({ onAbierta }: { onAbierta: () => void }) {
                 : "Primera apertura: el fondo es el saldo inicial configurado del sistema."}
             </p>
             <div className="caja-fondo-fijo">
-              <span className="muted small">Fondo de apertura</span>
+              <span className="muted small">Fondo de apertura <InfoTip texto="Es el efectivo con el que arranca la caja: el dinero que quedó del cierre anterior (o el saldo inicial configurado, si es la primera vez). Contá el efectivo físico y verificá que coincida antes de abrir." /></span>
               <span className="caja-fondo-monto">{L(info?.saldo_apertura ?? 0)}</span>
               {info?.tiene_cierre_anterior && info.cerrada_en && (
                 <span className="muted small">Cierre anterior: {new Date(info.cerrada_en).toLocaleString("es-HN")}</span>

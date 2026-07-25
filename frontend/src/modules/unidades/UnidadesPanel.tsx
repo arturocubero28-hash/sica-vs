@@ -9,6 +9,7 @@ import {
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO, type SolicitudBajaDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
+import { InfoTip } from "../../components/InfoTip";
 import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle } from "lucide-react";
 
 /** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
@@ -716,13 +717,13 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
                 </select>
               </div>
               {ocupacion === "estudiante" && (
-                <div className="row">
+                <div className="row campo-condicional">
                   <input placeholder="Centro de estudios" value={centroEstudios}
                     onChange={(e) => setCentroEstudios(e.target.value)} />
                 </div>
               )}
               {ocupacion === "profesional" && (
-                <div className="row">
+                <div className="row campo-condicional">
                   <input placeholder="Lugar de trabajo" value={lugarTrabajo}
                     onChange={(e) => setLugarTrabajo(e.target.value)} />
                 </div>
@@ -1565,18 +1566,6 @@ function GestionTarifas() {
 }
 
 /** "i" azul de información con tooltip al pasar el mouse (o tocar en móvil). */
-function InfoTip({ texto }: { texto: string }) {
-  const [abierto, setAbierto] = useState(false);
-  return (
-    <span className="infotip"
-      onMouseEnter={() => setAbierto(true)}
-      onMouseLeave={() => setAbierto(false)}
-      onClick={(e) => { e.stopPropagation(); setAbierto(v => !v); }}>
-      <Info size={15} />
-      {abierto && <span className="infotip-bubble">{texto}</span>}
-    </span>
-  );
-}
 
 /* ═══════════════════════════════════════════════════════════════════
    PESTAÑA: SOLICITUDES DE BAJA

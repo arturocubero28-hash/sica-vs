@@ -3016,6 +3016,17 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   color: #022E45; border-bottom-color: #F48723;
 }
 
+/* UX Día 43 — aparición suave de campos condicionales (ej. centro de
+   estudios / lugar de trabajo según ocupación). Antes "saltaban" de golpe
+   y desorientaban; ahora se deslizan con un fundido corto. */
+@keyframes campo-aparece {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.campo-condicional {
+  animation: campo-aparece .18s ease-out;
+}
+
 /* "i" azul de info con burbuja */
 .infotip { position: relative; display: inline-flex; align-items: center; color: #2563eb; cursor: help; }
 .infotip-bubble {
