@@ -21,6 +21,7 @@ from app.extensions import db
 from app.models.cuenta import Cuota, Pago, Residente, Cuenta, ComprobantePago
 from app.auth.security import token_required, roles_required
 from app.utils.archivos import guardar_imagen_segura, servir_archivo_seguro, EXT_DOCUMENTO
+from app.utils import dinero
 
 cuotas_bp = Blueprint("cuotas", __name__)
 
@@ -89,7 +90,7 @@ def mis_cuotas(usuario_actual):
                 "arreglo_id": str(arreglo.uuid_publico),
                 "numero": a.numero,
                 "total_abonos": arreglo.num_abonos,
-                "monto": float(a.monto),
+                "monto": dinero.a_float(a.monto),
                 "fecha_pactada": a.fecha_pactada.isoformat(),
                 "estado": a.estado,
             })
@@ -115,7 +116,7 @@ def mis_cuotas(usuario_actual):
         historial.append({
             "id": str(p.uuid_publico),
             "etiqueta": etiqueta,
-            "monto": float(p.monto),
+            "monto": dinero.a_float(p.monto),
             "metodo": p.metodo,
             "numero_recibo": p.numero_recibo,
             "fecha": (p.revisado_en or p.created_at).isoformat(),
@@ -202,10 +203,10 @@ def subir_comprobante(usuario_actual, uuid_cuota):
     # Validar monto
     monto_str = request.form.get("monto", "")
     try:
-        monto = float(monto_str)
+        monto = dinero.a_decimal(monto_str)  # O3.2: Decimal, se guarda en Numeric
         if monto <= 0:
             raise ValueError
-    except ValueError:
+    except (ValueError, ArithmeticError):
         return jsonify({"error": {"code": "MONTO_INVALIDO", "message": "Indicá un monto válido"}}), 400
 
     referencia = request.form.get("referencia", "")[:120]
@@ -264,7 +265,7 @@ def subir_comprobante_abono(usuario_actual, uuid_abono):
     if "comprobante" not in request.files:
         return jsonify({"error": {"code": "SIN_ARCHIVO", "message": "Adjuntá el comprobante"}}), 400
     try:
-        monto = float(request.form.get("monto", ""))
+        monto = dinero.a_decimal(request.form.get("monto", ""))
         if monto <= 0:
             raise ValueError
     except ValueError:
@@ -516,7 +517,7 @@ def generar_cuotas_manual(usuario_actual):
         vencimiento = _dt.date(hoy.year, hoy.month, dia)
         cuota = Cuota(
             cuenta_id=cuenta.id, periodo=periodo,
-            monto=float(cuenta.tarifa.monto),
+            monto=dinero.a_decimal(cuenta.tarifa.monto),
             fecha_vencimiento=vencimiento, estado="pendiente",
         )
         db.session.add(cuota)
@@ -607,7 +608,7 @@ def historial_pagos(usuario_actual):
         filtrados.append({
             "id": str(p.uuid_publico),
             "fecha": p.created_at.isoformat() if p.created_at else None,
-            "monto": float(p.monto),
+            "monto": dinero.a_float(p.monto),
             "metodo": p.metodo,
             "referencia": p.referencia,
             "identificador": identificador or "—",

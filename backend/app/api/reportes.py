@@ -10,6 +10,7 @@ from flask import Blueprint, jsonify, request
 
 from app.models.cuenta import Cuota, Pago, Cuenta
 from app.auth.security import roles_required
+from app.utils import dinero
 
 reportes_bp = Blueprint("reportes", __name__)
 
@@ -61,16 +62,21 @@ def reporte_financiero(usuario_actual):
                 f = f.replace(tzinfo=dt.timezone.utc)
             return f
 
-        total_recaudado = sum(float(p.monto) for p in pagos_rango)
-        por_metodo = {"efectivo": 0.0, "tarjeta_pos": 0.0, "transferencia": 0.0, "linea": 0.0}
+        # O3.2: aritmética con Decimal (exacta). Los montos ya vienen como
+        # Decimal desde la base (Numeric); antes se convertían a float y el
+        # error de redondeo se acumulaba al sumar muchos pagos. Se convierte
+        # a float solo al serializar (ver a_float más abajo).
+        total_recaudado = dinero.suma(p.monto for p in pagos_rango)
+        por_metodo = {"efectivo": dinero.CERO, "tarjeta_pos": dinero.CERO,
+                      "transferencia": dinero.CERO, "linea": dinero.CERO}
         detalle_pagos = []
         for p in pagos_rango:
             m = p.metodo or "transferencia"
             if m == "pasarela":
                 m = "linea"
             if m not in por_metodo:
-                por_metodo[m] = 0.0
-            por_metodo[m] += float(p.monto)
+                por_metodo[m] = dinero.CERO
+            por_metodo[m] += dinero.a_decimal(p.monto)
             cuenta = p.cuenta
             unidad = cuenta.unidad.identificador if cuenta and cuenta.unidad else "—"
             titular = "—"
@@ -80,7 +86,7 @@ def reporte_financiero(usuario_actual):
                     titular = f"{tit.usuario.nombre} {tit.usuario.apellido}"
             fe = fecha_efectiva(p)
             detalle_pagos.append({
-                "unidad": unidad, "titular": titular, "monto": float(p.monto),
+                "unidad": unidad, "titular": titular, "monto": dinero.a_float(p.monto),
                 "metodo": m, "fecha": fe.isoformat() if fe else None,
             })
         detalle_pagos.sort(key=lambda x: x["fecha"] or "", reverse=True)
@@ -90,14 +96,14 @@ def reporte_financiero(usuario_actual):
             "periodo": desde.isoformat(),
             "mes_label": label,
             "total_esperado": 0.0,
-            "total_recaudado": round(total_recaudado, 2),
+            "total_recaudado": dinero.a_float(total_recaudado),
             "total_pendiente": 0.0,
             "pct_cobranza": 0.0,
             "recaudado_por_metodo": {
-                "efectivo": round(por_metodo.get("efectivo", 0.0), 2),
-                "tarjeta_pos": round(por_metodo.get("tarjeta_pos", 0.0), 2),
-                "transferencia": round(por_metodo.get("transferencia", 0.0), 2),
-                "linea": round(por_metodo.get("linea", 0.0), 2),
+                "efectivo": dinero.a_float(por_metodo.get("efectivo", dinero.CERO)),
+                "tarjeta_pos": dinero.a_float(por_metodo.get("tarjeta_pos", dinero.CERO)),
+                "transferencia": dinero.a_float(por_metodo.get("transferencia", dinero.CERO)),
+                "linea": dinero.a_float(por_metodo.get("linea", dinero.CERO)),
             },
             "al_dia": [],
             "morosos": [],
@@ -113,13 +119,14 @@ def reporte_financiero(usuario_actual):
     label = periodo.strftime("%B %Y")
     cuotas = Cuota.query.filter_by(periodo=periodo).all()
 
-    total_esperado = 0.0
-    total_recaudado = 0.0
+    # O3.2: acumuladores en Decimal; los montos que van al JSON usan a_float.
+    total_esperado = dinero.CERO
+    total_recaudado = dinero.CERO
     al_dia = []
     morosos = []
 
     for c in cuotas:
-        monto = float(c.monto)
+        monto = dinero.a_decimal(c.monto)
         total_esperado += monto
         cuenta = c.cuenta
         unidad = cuenta.unidad.identificador if cuenta and cuenta.unidad else "—"
@@ -129,20 +136,21 @@ def reporte_financiero(usuario_actual):
             if tit and tit.usuario:
                 titular = f"{tit.usuario.nombre} {tit.usuario.apellido}"
 
+        monto_json = dinero.a_float(monto)
         if c.estado == "pagada":
             total_recaudado += monto
-            al_dia.append({"unidad": unidad, "titular": titular, "monto": monto})
+            al_dia.append({"unidad": unidad, "titular": titular, "monto": monto_json})
         else:
             dias_atraso = (hoy - c.fecha_vencimiento).days
             morosos.append({
-                "unidad": unidad, "titular": titular, "monto": monto,
+                "unidad": unidad, "titular": titular, "monto": monto_json,
                 "estado": c.estado,
                 "vencimiento": c.fecha_vencimiento.isoformat(),
                 "dias_atraso": dias_atraso if dias_atraso > 0 else 0,
             })
 
     total_pendiente = total_esperado - total_recaudado
-    pct_cobranza = (total_recaudado / total_esperado * 100) if total_esperado > 0 else 0
+    pct_cobranza = float(total_recaudado / total_esperado * 100) if total_esperado > 0 else 0
 
     # Ordenar morosos por días de atraso (más atrasados primero)
     morosos.sort(key=lambda m: m["dias_atraso"], reverse=True)
@@ -150,7 +158,8 @@ def reporte_financiero(usuario_actual):
     # ── Desglose de lo recaudado por método de pago ──────────────────────────
     # Tomamos los pagos APROBADOS de las cuotas de este período y los agrupamos.
     cuota_ids = [c.id for c in cuotas]
-    por_metodo = {"efectivo": 0.0, "tarjeta_pos": 0.0, "transferencia": 0.0, "linea": 0.0, "pasarela": 0.0}
+    por_metodo = {"efectivo": dinero.CERO, "tarjeta_pos": dinero.CERO,
+                  "transferencia": dinero.CERO, "linea": dinero.CERO, "pasarela": dinero.CERO}
     if cuota_ids:
         pagos = Pago.query.filter(
             Pago.cuota_id.in_(cuota_ids), Pago.estado == "aprobado"
@@ -158,10 +167,10 @@ def reporte_financiero(usuario_actual):
         for p in pagos:
             m = p.metodo or "transferencia"
             if m not in por_metodo:
-                por_metodo[m] = 0.0
-            por_metodo[m] += float(p.monto)
+                por_metodo[m] = dinero.CERO
+            por_metodo[m] += dinero.a_decimal(p.monto)
     # Unificar pasarela dentro de linea (pago en línea de la plataforma)
-    por_metodo["linea"] += por_metodo.pop("pasarela", 0.0)
+    por_metodo["linea"] += por_metodo.pop("pasarela", dinero.CERO)
 
     # Tendencia: recaudación de los últimos 6 meses
     tendencia = []
@@ -173,27 +182,27 @@ def reporte_financiero(usuario_actual):
             a -= 1
         p = dt.date(a, m, 1)
         qs = Cuota.query.filter_by(periodo=p).all()
-        esperado = sum(float(x.monto) for x in qs)
-        recaudado = sum(float(x.monto) for x in qs if x.estado == "pagada")
+        esperado = dinero.suma(x.monto for x in qs)
+        recaudado = dinero.suma(x.monto for x in qs if x.estado == "pagada")
         tendencia.append({
             "mes_label": p.strftime("%b %Y"),
-            "esperado": esperado,
-            "recaudado": recaudado,
+            "esperado": dinero.a_float(esperado),
+            "recaudado": dinero.a_float(recaudado),
         })
 
     return jsonify({"data": {
         "periodo": periodo.isoformat(),
         "mes_label": label,
         "modo": "mes",
-        "total_esperado": total_esperado,
-        "total_recaudado": total_recaudado,
-        "total_pendiente": total_pendiente,
+        "total_esperado": dinero.a_float(total_esperado),
+        "total_recaudado": dinero.a_float(total_recaudado),
+        "total_pendiente": dinero.a_float(total_pendiente),
         "pct_cobranza": round(pct_cobranza, 1),
         "recaudado_por_metodo": {
-            "efectivo": round(por_metodo.get("efectivo", 0.0), 2),
-            "tarjeta_pos": round(por_metodo.get("tarjeta_pos", 0.0), 2),
-            "transferencia": round(por_metodo.get("transferencia", 0.0), 2),
-            "linea": round(por_metodo.get("linea", 0.0), 2),
+            "efectivo": dinero.a_float(por_metodo.get("efectivo", dinero.CERO)),
+            "tarjeta_pos": dinero.a_float(por_metodo.get("tarjeta_pos", dinero.CERO)),
+            "transferencia": dinero.a_float(por_metodo.get("transferencia", dinero.CERO)),
+            "linea": dinero.a_float(por_metodo.get("linea", dinero.CERO)),
         },
         "cuentas_al_dia": len(al_dia),
         "cuentas_morosas": len(morosos),
@@ -222,7 +231,7 @@ def mora_por_casa(usuario_actual):
         por_cuenta[c.cuenta_id].append(c)
 
     casas = []
-    total_general = 0.0
+    total_general = dinero.CERO
     for cuenta_id, lista in por_cuenta.items():
         cuenta = lista[0].cuenta
         if not cuenta:
@@ -237,15 +246,15 @@ def mora_por_casa(usuario_actual):
                 telefono = tit.usuario.telefono
 
         meses = []
-        total_casa = 0.0
+        total_casa = dinero.CERO
         for c in sorted(lista, key=lambda x: x.periodo):
-            monto = float(c.monto)
+            monto = dinero.a_decimal(c.monto)
             total_casa += monto
             dias = (hoy - c.fecha_vencimiento).days
             meses.append({
                 "periodo": c.periodo.isoformat(),
                 "mes_label": c.periodo.strftime("%B %Y"),
-                "monto": monto,
+                "monto": dinero.a_float(monto),
                 "estado": c.estado,
                 "vencimiento": c.fecha_vencimiento.isoformat(),
                 "dias_atraso": dias if dias > 0 else 0,
@@ -256,7 +265,7 @@ def mora_por_casa(usuario_actual):
             "titular": titular,
             "telefono": telefono,
             "cantidad_meses": len(meses),
-            "total_adeudado": round(total_casa, 2),
+            "total_adeudado": dinero.a_float(total_casa),
             "meses": meses,
             "max_dias_atraso": max((m["dias_atraso"] for m in meses), default=0),
         })
@@ -267,9 +276,10 @@ def mora_por_casa(usuario_actual):
     # Aging de cartera: clasificar cada cuota vencida por antigüedad de la deuda.
     # Es la lectura que un contador/tesorero hace para medir el riesgo de cobro.
     # El tramo 90+ es la "cartera de difícil cobro".
-    aging = {"d_1_30": 0.0, "d_31_60": 0.0, "d_61_90": 0.0, "d_90_mas": 0.0, "sin_vencer": 0.0}
+    aging = {"d_1_30": dinero.CERO, "d_31_60": dinero.CERO, "d_61_90": dinero.CERO,
+             "d_90_mas": dinero.CERO, "sin_vencer": dinero.CERO}
     for c in cuotas:
-        monto = float(c.monto)
+        monto = dinero.a_decimal(c.monto)
         dias = (hoy - c.fecha_vencimiento).days
         if dias <= 0:
             aging["sin_vencer"] += monto
@@ -281,7 +291,7 @@ def mora_por_casa(usuario_actual):
             aging["d_61_90"] += monto
         else:
             aging["d_90_mas"] += monto
-    aging = {k: round(v, 2) for k, v in aging.items()}
+    aging = {k: dinero.a_float(v) for k, v in aging.items()}
 
     # % de morosidad de la comunidad (casas en mora / total de cuentas activas)
     total_cuentas = Cuenta.query.filter_by(activa=True).count()
@@ -290,7 +300,7 @@ def mora_por_casa(usuario_actual):
     return jsonify({"data": {
         "casas": casas,
         "total_casas_mora": len(casas),
-        "total_general_adeudado": round(total_general, 2),
+        "total_general_adeudado": dinero.a_float(total_general),
         "aging": aging,
         "total_cuentas_activas": total_cuentas,
         "pct_morosidad": pct_morosidad,
@@ -534,36 +544,36 @@ def reporte_inventario(usuario_actual):
 
     # Vendidas y recaudado por tipo en el período
     vendidas_por_tipo = {}
-    total_recaudado = 0.0
+    total_recaudado = dinero.CERO
     for v in ventas:
-        total_recaudado += float(v.precio)
-        d = vendidas_por_tipo.setdefault(v.tipo_tarjeta_id, {"cantidad": 0, "recaudado": 0.0})
+        total_recaudado += dinero.a_decimal(v.precio)
+        d = vendidas_por_tipo.setdefault(v.tipo_tarjeta_id, {"cantidad": 0, "recaudado": dinero.CERO})
         d["cantidad"] += 1
-        d["recaudado"] += float(v.precio)
+        d["recaudado"] += dinero.a_decimal(v.precio)
 
     filas = []
     stock_total = 0
     bajo_stock = 0
     for t in tipos:
-        vt = vendidas_por_tipo.get(t.id, {"cantidad": 0, "recaudado": 0.0})
+        vt = vendidas_por_tipo.get(t.id, {"cantidad": 0, "recaudado": dinero.CERO})
         stock_total += t.stock
         if t.activo and t.stock <= 5:
             bajo_stock += 1
         filas.append({
             "nombre": t.nombre,
             "tipo_acceso": t.tipo_acceso,
-            "precio": float(t.precio),
+            "precio": dinero.a_float(t.precio),
             "stock": t.stock,
             "activo": t.activo,
             "vendidas_periodo": vt["cantidad"],
-            "recaudado_periodo": round(vt["recaudado"], 2),
+            "recaudado_periodo": dinero.a_float(vt["recaudado"]),
             "bajo_stock": t.activo and t.stock <= 5,
         })
 
     return jsonify({"data": {
         "periodo_label": label,
         "total_vendidas": len(ventas),
-        "total_recaudado": round(total_recaudado, 2),
+        "total_recaudado": dinero.a_float(total_recaudado),
         "stock_total": stock_total,
         "tipos_bajo_stock": bajo_stock,
         "tipos": filas,
@@ -595,15 +605,16 @@ def reporte_ejecutivo(usuario_actual):
 
     # ── Cobranza del mes (cuotas cuyo periodo es este mes) ──
     cuotas_mes = Cuota.query.filter(Cuota.periodo == ini_mes).all()
-    total_esperado = sum(float(c.monto) for c in cuotas_mes)
-    total_recaudado = sum(float(c.monto) for c in cuotas_mes if c.estado == "pagada")
-    pct_cobranza = round((total_recaudado / total_esperado * 100), 1) if total_esperado else 0.0
+    # O3.2: suma exacta con Decimal, se serializa con a_float.
+    total_esperado = dinero.suma(c.monto for c in cuotas_mes)
+    total_recaudado = dinero.suma(c.monto for c in cuotas_mes if c.estado == "pagada")
+    pct_cobranza = round(float(total_recaudado / total_esperado * 100), 1) if total_esperado else 0.0
 
     # ── Cartera vencida total (todas las cuotas no pagadas ya vencidas) ──
     cuotas_vencidas = (Cuota.query
                        .filter(Cuota.estado != "pagada", Cuota.fecha_vencimiento < hoy)
                        .all())
-    cartera_vencida = sum(float(c.monto) for c in cuotas_vencidas)
+    cartera_vencida = dinero.suma(c.monto for c in cuotas_vencidas)
     casas_en_mora = len({c.cuenta_id for c in cuotas_vencidas})
 
     # ── Morosidad: % de cuentas activas con al menos una cuota vencida ──
@@ -627,10 +638,10 @@ def reporte_ejecutivo(usuario_actual):
                          fecha_sql >= ini_dt, fecha_sql <= fin_dt,
                          Pago.cuota_id.isnot(None))
                  .all())
-    recuperado = 0.0
-    total_pagado_mes = 0.0
+    recuperado = dinero.CERO
+    total_pagado_mes = dinero.CERO
     for p in pagos_mes:
-        monto = float(p.monto)
+        monto = dinero.a_decimal(p.monto)
         total_pagado_mes += monto
         cuota = Cuota.query.get(p.cuota_id)
         if cuota:
@@ -638,16 +649,16 @@ def reporte_ejecutivo(usuario_actual):
             fecha_pago = f.date() if f else hoy
             if cuota.fecha_vencimiento < fecha_pago:
                 recuperado += monto
-    pct_recuperacion = round((recuperado / total_pagado_mes * 100), 1) if total_pagado_mes else 0.0
+    pct_recuperacion = round(float(recuperado / total_pagado_mes * 100), 1) if total_pagado_mes else 0.0
 
     return jsonify({"data": {
         "mes_label": mes_label,
         "anio": anio, "mes": mes,
-        "total_esperado": round(total_esperado, 2),
-        "total_recaudado": round(total_recaudado, 2),
-        "total_pendiente": round(total_esperado - total_recaudado, 2),
+        "total_esperado": dinero.a_float(total_esperado),
+        "total_recaudado": dinero.a_float(total_recaudado),
+        "total_pendiente": dinero.a_float(total_esperado - total_recaudado),
         "pct_cobranza": pct_cobranza,
-        "cartera_vencida": round(cartera_vencida, 2),
+        "cartera_vencida": dinero.a_float(cartera_vencida),
         "casas_en_mora": casas_en_mora,
         "cuentas_activas": cuentas_activas,
         "pct_morosidad": pct_morosidad,

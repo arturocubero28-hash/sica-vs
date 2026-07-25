@@ -13,6 +13,7 @@ from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja, SalidaCaja
 from app.models.cuenta import Cuenta, Cuota, Pago, Tarjeta, Residente, TipoTarjeta, MovimientoStock, VentaTarjeta
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
+from app.utils import dinero
 
 caja_bp = Blueprint("caja", __name__)
 
@@ -212,7 +213,7 @@ def vender_tarjeta(usuario_actual):
             return jsonify({"error": {"code": "residente_invalido",
                                       "message": "El portador no pertenece a esta casa"}}), 400
 
-    precio = float(tipo.precio)
+    precio = dinero.a_decimal(tipo.precio)
 
     # 1. Crear la tarjeta física asignada a la casa
     tarjeta = Tarjeta(
@@ -284,9 +285,9 @@ def cerrar_caja(usuario_actual):
         }}), 409
 
     try:
-        efectivo_contado = float(data.get("efectivo_contado", 0))
-        pos_contado = float(data.get("pos_contado", 0))
-    except ValueError:
+        efectivo_contado = dinero.a_decimal(data.get("efectivo_contado", 0))
+        pos_contado = dinero.a_decimal(data.get("pos_contado", 0))
+    except (ValueError, ArithmeticError):
         return jsonify({"error": {"code": "monto_invalido", "message": "Montos contados inválidos"}}), 400
 
     # Desglose de billetes (opcional pero recomendado). Si viene, se valida que
@@ -298,7 +299,7 @@ def cerrar_caja(usuario_actual):
         total_billetes = sum(int(desglose.get(str(d), 0) or 0) * d for d in DENOMINACIONES)
         # Si el cajero contó billetes, el efectivo contado se toma del desglose
         if total_billetes > 0:
-            efectivo_contado = float(total_billetes)
+            efectivo_contado = dinero.a_decimal(total_billetes)
         sesion.desglose_billetes = _json.dumps({str(d): int(desglose.get(str(d), 0) or 0)
                                                 for d in DENOMINACIONES})
 
@@ -374,7 +375,7 @@ def buscar_cuenta(usuario_actual):
                     "abono_id": str(a.uuid_publico),
                     "numero": a.numero,
                     "total_abonos": arr.num_abonos,
-                    "monto": float(a.monto),
+                    "monto": dinero.a_float(a.monto),
                     "fecha_pactada": a.fecha_pactada.isoformat(),
                     "estado": a.estado,
                 })
@@ -399,7 +400,7 @@ def buscar_cuenta(usuario_actual):
             "cuotas_pendientes": [{
                 "cuota_id": str(q2.uuid_publico),
                 "mes_label": q2.periodo.strftime("%B %Y"),
-                "monto": float(q2.monto),
+                "monto": dinero.a_float(q2.monto),
                 "estado": q2.estado,
             } for q2 in pendientes],
             "abonos_arreglo": abonos_por_cuenta.get(c.id, []),
@@ -512,7 +513,7 @@ def constancia_pdf(usuario_actual, uuid_sesion):
     fila_d("Cajero:", nombre_cajero, y);                y -= 6*mm
     fila_d("Apertura:", abierta_str, y);                y -= 6*mm
     fila_d("Cierre:", cerrada_str, y);                  y -= 6*mm
-    fila_d("Fondo inicial:", f"L {float(s.monto_inicial):,.2f}", y); y -= 8*mm
+    fila_d("Fondo inicial:", f"L {dinero.a_decimal(s.monto_inicial):,.2f}", y); y -= 8*mm
 
     cv.setStrokeColor(colors.HexColor("#e3e9f2")); cv.setLineWidth(0.6)
     cv.line(15*mm, y, W - 15*mm, y); y -= 8*mm
@@ -524,7 +525,7 @@ def constancia_pdf(usuario_actual, uuid_sesion):
     pagos = Pago.query.filter_by(sesion_caja_id=s.id, estado="aprobado").order_by(Pago.created_at).all()
     met_label = {"efectivo": "Efectivo", "tarjeta_pos": "Tarjeta POS",
                  "transferencia": "Transf.", "linea": "En línea", "pasarela": "En línea"}
-    total_ef = total_pos = 0.0
+    total_ef = total_pos = dinero.CERO
 
     if not pagos:
         cv.setFont("Helvetica-Oblique", 9); cv.setFillColor(GRIS)
@@ -536,7 +537,7 @@ def constancia_pdf(usuario_actual, uuid_sesion):
             unidad = cuenta.unidad.identificador if cuenta and cuenta.unidad else "—"
             tit = next((r for r in cuenta.residentes if r.rol_cuenta == "titular"), None) if cuenta else None
             titular = (f"{tit.usuario.nombre} {tit.usuario.apellido}"[:24] if tit and tit.usuario else "—")
-            monto = float(p.monto)
+            monto = dinero.a_decimal(p.monto)
             if p.metodo == "efectivo": total_ef += monto
             elif p.metodo == "tarjeta_pos": total_pos += monto
             tdata.append([str(i), unidad, titular, met_label.get(p.metodo, p.metodo), f"L {monto:,.2f}"])
@@ -560,7 +561,7 @@ def constancia_pdf(usuario_actual, uuid_sesion):
         cv.drawString(15*mm, y, "Salidas e ingresos extraordinarios"); y -= 7*mm
         sdata = [["Tipo", "Concepto", "Estado", "Monto"]]
         for sa in salidas:
-            monto = float(sa.monto)
+            monto = dinero.a_decimal(sa.monto)
             es_ingreso = monto < 0
             tipo = "Ingreso" if es_ingreso else "Salida"
             concepto = (sa.concepto or "—").replace("[INGRESO]", "").strip()[:40]
@@ -622,8 +623,8 @@ def constancia_pdf(usuario_actual, uuid_sesion):
     cv.drawString(15*mm, y, "Resumen del arqueo"); y -= 7*mm
 
     d = s.to_dict()
-    ef_esperado = float(d.get("efectivo_esperado", 0))
-    ef_contado  = float(s.efectivo_contado or 0)
+    ef_esperado = dinero.a_decimal(d.get("efectivo_esperado", 0))
+    ef_contado  = dinero.a_decimal(s.efectivo_contado or 0)
     dif         = ef_contado - ef_esperado if s.cerrada_en else 0
 
     def fila_a(label, valor, color_v=None):
@@ -633,7 +634,7 @@ def constancia_pdf(usuario_actual, uuid_sesion):
         cv.setFont("Helvetica-Bold", 9); cv.setFillColor(color_v or AZUL)
         cv.drawRightString(W - 15*mm, y, valor); y -= 6*mm
 
-    fila_a("Fondo inicial de apertura:", f"L {float(s.monto_inicial):,.2f}")
+    fila_a("Fondo inicial de apertura:", f"L {dinero.a_decimal(s.monto_inicial):,.2f}")
     fila_a("Cobros en efectivo:", f"L {total_ef:,.2f}")
     fila_a("Cobros con tarjeta POS:", f"L {total_pos:,.2f}")
     fila_a("Efectivo esperado en caja:", f"L {ef_esperado:,.2f}")
@@ -696,7 +697,7 @@ def modificar_saldo_inicial(usuario_actual):
     data = request.get_json(silent=True) or {}
     clave = data.get("clave_dev")
     try:
-        nuevo = float(data.get("saldo_inicial"))
+        nuevo = dinero.a_decimal(data.get("saldo_inicial"))
     except (TypeError, ValueError):
         return jsonify({"error": {"code": "monto_invalido", "message": "Saldo inicial inválido"}}), 400
 
@@ -706,7 +707,7 @@ def modificar_saldo_inicial(usuario_actual):
                                   "message": "Clave de desarrollador incorrecta"}}), 403
 
     cfg = ConfigCaja.get()
-    anterior = float(cfg.saldo_inicial)
+    anterior = dinero.a_decimal(cfg.saldo_inicial)
     cfg.saldo_inicial = nuevo
     cfg.actualizado_por = usuario_actual.id
 
@@ -735,7 +736,7 @@ def ajuste_conteo(usuario_actual):
     clave = data.get("clave_dev")
     motivo = (data.get("motivo") or "").strip()[:255]
     try:
-        saldo_real = float(data.get("saldo_real"))
+        saldo_real = dinero.a_decimal(data.get("saldo_real"))
     except (TypeError, ValueError):
         return jsonify({"error": {"code": "monto_invalido", "message": "Saldo real inválido"}}), 400
 
@@ -779,7 +780,7 @@ def reportar_descuadre(usuario_actual):
     tipo = data.get("tipo")  # sobrante | faltante
     motivo = (data.get("motivo") or "")[:255]
     try:
-        monto = abs(float(data.get("monto")))
+        monto = abs(dinero.a_decimal(data.get("monto")))
     except (TypeError, ValueError):
         return jsonify({"error": {"code": "monto_invalido", "message": "Monto inválido"}}), 400
 
@@ -860,7 +861,7 @@ def solicitar_salida(usuario_actual):
         return jsonify({"error": {"code": "concepto_requerido",
                                   "message": "Indicá el concepto (ej. Depósito banco Ficohsa)"}}), 400
     try:
-        monto = float(data.get("monto"))
+        monto = dinero.a_decimal(data.get("monto"))
         if monto <= 0:
             raise ValueError
     except (TypeError, ValueError):
@@ -944,7 +945,7 @@ def solicitar_ingreso(usuario_actual):
         return jsonify({"error": {"code": "concepto_requerido",
                                   "message": "Indicá el concepto (ej. Efectivo traído del banco)"}}), 400
     try:
-        monto = float(data.get("monto"))
+        monto = dinero.a_decimal(data.get("monto"))
         if monto <= 0:
             raise ValueError
     except (TypeError, ValueError):
