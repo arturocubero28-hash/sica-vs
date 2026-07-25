@@ -778,6 +778,11 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   const [msg, setMsg] = useState("");
   const [miembroEnlace, setMiembroEnlace] = useState<{ email: string; url: string } | null>(null);
   const [mostrarAgregar, setMostrarAgregar] = useState(false);
+  // UX Día 43: el detalle de cuenta se separa en pestañas (datos / miembros /
+  // accesos) para eliminar el scroll largo. Antes todas las secciones se
+  // apilaban verticalmente. La lógica de cada sección no cambia, solo se
+  // agrupa bajo su pestaña.
+  const [tabDetalle, setTabDetalle] = useState<"datos" | "miembros" | "accesos">("datos");
   const [mErrors, setMErrors] = useState<Record<string, string>>({});
   const [msgMiembro, setMsgMiembro] = useState("");
   function clearMError(k: string) { setMErrors(prev => { const c = { ...prev }; delete c[k]; return c; }); }
@@ -889,6 +894,21 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           <button className="ghost mini" onClick={onCerrar}>Cerrar</button>
         </div>
 
+        {/* UX Día 43: barra de pestañas para no apilar todo en scroll */}
+        <div className="detalle-tabs">
+          <button className={tabDetalle === "datos" ? "on" : ""}
+            onClick={() => setTabDetalle("datos")}>Datos</button>
+          <button className={tabDetalle === "miembros" ? "on" : ""}
+            onClick={() => setTabDetalle("miembros")}>
+            {cuenta.tipo_cuenta === "edificio_contenedor" ? "Administrador" : "Miembros"}
+          </button>
+          <button className={tabDetalle === "accesos" ? "on" : ""}
+            onClick={() => setTabDetalle("accesos")}>Accesos</button>
+        </div>
+
+        {/* ══════ PESTAÑA: DATOS ══════ */}
+        {tabDetalle === "datos" && (<>
+
         {/* Información general de la cuenta: estado de pago, cuota, unidad */}
         {cuenta.tipo_cuenta === "edificio_admin" && (
           <div className="banner-admin-edificio">
@@ -958,6 +978,12 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           </>
         )}
 
+        </>)}
+        {/* ══════ FIN PESTAÑA DATOS ══════ */}
+
+        {/* ══════ PESTAÑA: ACCESOS ══════ */}
+        {tabDetalle === "accesos" && (<>
+
         {/* Configuraciones: QR recurrente + límite de apartamentos (solo edificios) */}
         <div className="sub">Configuración</div>
         <div className="detalle-config-box">
@@ -1024,6 +1050,12 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
           )}
           {msgConfig && <p className="muted small" style={{ marginTop: 6 }}>{msgConfig}</p>}
         </div>
+
+        </>)}
+        {/* ══════ FIN bloque Configuración de ACCESOS ══════ */}
+
+        {/* ══════ PESTAÑA: MIEMBROS ══════ */}
+        {tabDetalle === "miembros" && (<>
 
         {/* Lista de apartamentos bajo el edificio (contenedor o admin-residente) */}
         {(cuenta.tipo_cuenta === "edificio_contenedor" || cuenta.tipo_cuenta === "edificio_admin") && (
@@ -1171,6 +1203,12 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         </>
         )}
 
+        </>)}
+        {/* ══════ FIN PESTAÑA MIEMBROS ══════ */}
+
+        {/* ══════ PESTAÑA: ACCESOS (parte 2 — tarjetas) ══════ */}
+        {tabDetalle === "accesos" && (<>
+
         <div className="sub">Tarjetas de proximidad ({(cuenta.tarjetas || []).length})</div>
         <div className="scroll-x"><table className="data">
           <thead>
@@ -1230,6 +1268,9 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
 
           <button className="mini" onClick={addTarjeta} disabled={!cardUid}>+ Asignar tarjeta</button>
         </div>
+
+        </>)}
+        {/* ══════ FIN PESTAÑA ACCESOS ══════ */}
 
         {msg && <div className="error">{msg}</div>}
       </div>

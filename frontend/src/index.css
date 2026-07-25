@@ -2994,6 +2994,23 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   margin-bottom: 8px;
 }
 
+/* UX Día 43 — pestañas del modal de detalle de cuenta (datos/miembros/accesos).
+   Reemplazan el scroll largo por navegación a un clic. */
+.detalle-tabs {
+  display: flex; gap: 4px; margin: 4px 0 16px;
+  border-bottom: 2px solid #e2e8f0;
+}
+.detalle-tabs button {
+  background: none; border: none; padding: 9px 16px; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; color: #64748b;
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  transition: color .15s, border-color .15s;
+}
+.detalle-tabs button:hover { color: #022E45; }
+.detalle-tabs button.on {
+  color: #022E45; border-bottom-color: #F48723;
+}
+
 /* "i" azul de info con burbuja */
 .infotip { position: relative; display: inline-flex; align-items: center; color: #2563eb; cursor: help; }
 .infotip-bubble {
