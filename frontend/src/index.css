@@ -2947,7 +2947,10 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 }
 .btn-alta:hover:not(:disabled) { background: #db7615 !important; transform: translateY(-1px); }
 
-.modal-alta { max-width: 640px; width: 92%; padding: 0; max-height: 90vh; display: flex; flex-direction: column; }
+/* UX Día 43: ancho subido de 640 a 780px para que las filas de dos columnas
+   respiren y se reduzca la altura total (menos scroll). Sigue siendo 92% en
+   pantallas chicas, así que no rompe el responsive. */
+.modal-alta { max-width: 780px; width: 92%; padding: 0; max-height: 90vh; display: flex; flex-direction: column; }
 .modal-alta-head {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
   padding: 20px 22px 16px; border-bottom: 1px solid #eef2f7;
@@ -2975,6 +2978,20 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; border-radius: 50%; background: #022E45; color: #fff;
   font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+
+/* UX Día 43 — bloque plegable de datos opcionales del titular.
+   Reduce el scroll: los campos opcionales no se muestran hasta pedirlos. */
+.alta-adic-toggle {
+  margin-top: 4px; color: #2563eb; font-weight: 600;
+}
+.alta-datos-adic {
+  margin-top: 8px; padding: 12px; border: 1px dashed #cbd5e1;
+  border-radius: 10px; background: #f8fafc;
+}
+.alta-adic-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
 }
 
 /* "i" azul de info con burbuja */

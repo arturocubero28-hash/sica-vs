@@ -256,6 +256,11 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
   const [mostrarSug, setMostrarSug] = useState(false);
   // Modo de selección de unidad: "nueva" (crear) es lo más común al dar de alta
   const [modoUnidad, setModoUnidad] = useState<"nueva" | "existente">("nueva");
+  // UX Día 43: los datos opcionales del titular (RTN, ocupación, centro de
+  // estudios, lugar de trabajo) empiezan plegados para reducir el scroll del
+  // formulario. El backend los trata como opcionales, así que ocultarlos no
+  // afecta la creación. Se despliegan solo si el admin los necesita.
+  const [mostrarDatosAdic, setMostrarDatosAdic] = useState(false);
 
   // Para "agregar apto a edificio existente": solo edificios
   const sugerenciasEdificios = unidades.filter(u =>
@@ -655,7 +660,12 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
                 onChange={(e) => { setDni(formatearDNI(e.target.value)); clearFieldError("dni"); }} />
               {fieldErrors.dni && <span className="campo-error">{fieldErrors.dni}</span>}
             </div>
-            <input placeholder="RTN (opcional)" value={rtn} onChange={(e) => setRtn(e.target.value)} />
+            <div className="campo-con-error">
+              <input placeholder="Profesión *" value={profesion}
+                className={fieldErrors.profesion ? "input-error" : ""}
+                onChange={(e) => { setProfesion(e.target.value); clearFieldError("profesion"); }} />
+              {fieldErrors.profesion && <span className="campo-error">{fieldErrors.profesion}</span>}
+            </div>
           </div>
           <div className="row">
             <div className="campo-con-error">
@@ -664,24 +674,6 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
                 onChange={(e) => { setDireccionExacta(e.target.value); clearFieldError("direccion"); }} />
               {fieldErrors.direccion && <span className="campo-error">{fieldErrors.direccion}</span>}
             </div>
-            <div className="campo-con-error">
-              <input placeholder="Profesión *" value={profesion}
-                className={fieldErrors.profesion ? "input-error" : ""}
-                onChange={(e) => { setProfesion(e.target.value); clearFieldError("profesion"); }} />
-              {fieldErrors.profesion && <span className="campo-error">{fieldErrors.profesion}</span>}
-            </div>
-            <select value={ocupacion} onChange={(e) => setOcupacion(e.target.value)} style={{ marginTop: 6 }}>
-              <option value="">— Ocupación (opcional) —</option>
-              <option value="estudiante">Estudiante</option>
-              <option value="profesional">Profesional / Empleado</option>
-              <option value="otro">Otro</option>
-            </select>
-            {ocupacion === "estudiante" && (
-              <input placeholder="Centro de estudios" value={centroEstudios} onChange={(e) => setCentroEstudios(e.target.value)} style={{ marginTop: 6 }} />
-            )}
-            {ocupacion === "profesional" && (
-              <input placeholder="Lugar de trabajo" value={lugarTrabajo} onChange={(e) => setLugarTrabajo(e.target.value)} style={{ marginTop: 6 }} />
-            )}
           </div>
           <div className="row">
             <div className="campo-con-error">
@@ -697,6 +689,46 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
               {fieldErrors.emergTel && <span className="campo-error">{fieldErrors.emergTel}</span>}
             </div>
           </div>
+
+          {/* UX Día 43: datos opcionales plegados para reducir el scroll.
+              El backend los acepta como opcionales (rtn/ocupacion/centro_
+              estudios/lugar_trabajo → None si vienen vacíos). */}
+          {!mostrarDatosAdic ? (
+            <button type="button" className="ghost mini alta-adic-toggle"
+              onClick={() => setMostrarDatosAdic(true)}>
+              + Agregar datos adicionales (RTN, ocupación)
+            </button>
+          ) : (
+            <div className="alta-datos-adic">
+              <div className="alta-adic-head">
+                <span className="muted small">Datos adicionales (opcionales)</span>
+                <button type="button" className="ghost mini"
+                  onClick={() => setMostrarDatosAdic(false)}>Ocultar</button>
+              </div>
+              <div className="row">
+                <input placeholder="RTN (opcional)" value={rtn}
+                  onChange={(e) => setRtn(e.target.value)} />
+                <select value={ocupacion} onChange={(e) => setOcupacion(e.target.value)}>
+                  <option value="">— Ocupación (opcional) —</option>
+                  <option value="estudiante">Estudiante</option>
+                  <option value="profesional">Profesional / Empleado</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+              {ocupacion === "estudiante" && (
+                <div className="row">
+                  <input placeholder="Centro de estudios" value={centroEstudios}
+                    onChange={(e) => setCentroEstudios(e.target.value)} />
+                </div>
+              )}
+              {ocupacion === "profesional" && (
+                <div className="row">
+                  <input placeholder="Lugar de trabajo" value={lugarTrabajo}
+                    onChange={(e) => setLugarTrabajo(e.target.value)} />
+                </div>
+              )}
+            </div>
+          )}
           </div>
 
           <div className="info-box">
