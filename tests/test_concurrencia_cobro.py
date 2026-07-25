@@ -64,6 +64,8 @@ def main():
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--email", default="", help="cajero/admin; si se omite prueba admin")
     ap.add_argument("--password", "--pass", dest="password", default="")
+    ap.add_argument("--cuota-id", default="",
+                    help="uuid de una cuota pendiente concreta (evita la búsqueda)")
     args = ap.parse_args()
 
     base = args.url.rstrip("/") + "/api/v1"
@@ -113,9 +115,11 @@ def main():
 
     # ── 3. Buscar una cuota pendiente ────────────────────────────────
     print("[3/4] Buscando una cuenta con cuota pendiente…")
-    cuota_id = None
-    # Buscar por términos amplios que matcheen cuentas demo
-    for termino in ["demo", "casa", "a", "e", "o"]:
+    cuota_id = args.cuota_id or None
+    if cuota_id:
+        print(f"      Usando cuota indicada: {cuota_id[:16]}…")
+    # Términos que matchean los identificadores demo reales ("DEMO Casa 5").
+    for termino in ([] if cuota_id else ["DEMO Casa", "DEMO", "Casa", "demo"]):
         st, r = _peticion(f"{base}/caja/buscar-cuenta?q={termino}", token=tok)
         if st != 200:
             continue
@@ -131,7 +135,11 @@ def main():
 
     if not cuota_id:
         print("      ERROR: no se encontró ninguna cuenta con cuota pendiente.")
-        print("      Necesitás una cuenta demo con al menos una cuota sin pagar.")
+        print("      Pasá una cuota directamente con --cuota-id <uuid>.")
+        print("      Para obtener una desde la base:")
+        print("        docker compose exec db psql -U sicavs -d sicavs -c \\")
+        print("          \"SELECT uuid_publico FROM cuotas WHERE estado IN\"")
+        print("          \"('pendiente','vencida') LIMIT 1;\"")
         return 1
 
     # ── 4. Disparar N cobros simultáneos ─────────────────────────────
