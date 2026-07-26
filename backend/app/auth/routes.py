@@ -39,13 +39,34 @@ def validar_password(password):
     return None
 
 
-def _generar_token_temporal(email, proposito, horas=48):
-    """Genera un JWT de corta vida para activación o recuperación."""
+def _huella_password(usuario):
+    """O1.4: huella corta del hash de contraseña actual del usuario.
+
+    Se incrusta en los tokens de reset para hacerlos de un solo uso SIN
+    necesidad de guardar tokens usados en la base: cuando el reset cambia la
+    contraseña, el hash cambia, la huella deja de coincidir y el token queda
+    automáticamente inválido. Un segundo intento con el mismo enlace falla.
+    Se usa un tramo del hash (no el hash completo) para no exponerlo en el JWT.
+    """
+    if not usuario or not usuario.password_hash:
+        return ""
+    import hashlib
+    return hashlib.sha256(usuario.password_hash.encode("utf-8")).hexdigest()[:16]
+
+
+def _generar_token_temporal(email, proposito, horas=48, huella=None):
+    """Genera un JWT de corta vida para activación o recuperación.
+
+    Si se pasa 'huella' (O1.4), se incrusta para atar el token al estado
+    actual de la contraseña, haciéndolo de un solo uso.
+    """
     payload = {
         "sub": email,
         "proposito": proposito,
         "exp": dt.datetime.utcnow() + dt.timedelta(hours=horas),
     }
+    if huella is not None:
+        payload["huella"] = huella
     return jwt.encode(payload, current_app.config["JWT_SECRET"], algorithm="HS256")
 
 
@@ -56,6 +77,15 @@ def _verificar_token_temporal(token_str, proposito_esperado):
         if p.get("proposito") != proposito_esperado:
             return None
         return p.get("sub")
+    except jwt.PyJWTError:
+        return None
+
+
+def _huella_de_token(token_str):
+    """Devuelve la huella incrustada en el token (o None si no tiene)."""
+    try:
+        p = jwt.decode(token_str, current_app.config["JWT_SECRET"], algorithms=["HS256"])
+        return p.get("huella")
     except jwt.PyJWTError:
         return None
 
@@ -213,7 +243,11 @@ def solicitar_recuperacion():
     if not usuario:
         return jsonify({"data": {"message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."}})
 
-    token_reset = _generar_token_temporal(email, "reset", horas=2)
+    # O1.4: el token se ata a la contraseña actual (huella). Cuando el reset
+    # la cambie, esta huella dejará de coincidir y el enlace no servirá otra
+    # vez — de un solo uso, sin guardar tokens usados en la base.
+    token_reset = _generar_token_temporal(email, "reset", horas=2,
+                                          huella=_huella_password(usuario))
 
     # TODO: Integrar Resend para enviar el correo con el link
     # resend.Emails.send({
@@ -257,6 +291,13 @@ def restablecer_password():
     if not usuario:
         return jsonify({"error": {"code": "usuario_no_encontrado",
                                   "message": "No se encontró el usuario"}}), 404
+
+    # O1.4: rechazar el token si ya fue usado (su huella no coincide con la
+    # contraseña actual). Enlace de un solo uso, sin tabla de tokens usados.
+    huella_token = _huella_de_token(token_str)
+    if huella_token is not None and huella_token != _huella_password(usuario):
+        return jsonify({"error": {"code": "token_usado",
+                                  "message": "Este enlace ya fue utilizado o expiró. Solicitá uno nuevo."}}), 400
 
     usuario.set_password(password)
     if not usuario.activo:

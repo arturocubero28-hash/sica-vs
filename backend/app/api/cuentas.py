@@ -890,10 +890,14 @@ def generar_codigo_enrolamiento(usuario_actual):
                         f"{edificio.max_apartamentos}. Solicitá a la administración dar de baja "
                         f"una cuenta antes de generar un nuevo código.", 400)
 
-    # Generar código numérico único de 6 dígitos
-    import random
+    # Generar código numérico único de 6 dígitos.
+    # O4.1 (Auditoría Día 42): se usa secrets (criptográficamente seguro) en
+    # vez de random (predecible). Era el único uso de random inseguro en todo
+    # el backend. Aunque validar el código requiere rol admin (lo que ya
+    # mitigaba el riesgo), se empareja con el estándar del resto del proyecto
+    # por defensa en profundidad.
     for _ in range(20):
-        codigo = f"{random.randint(0, 999999):06d}"
+        codigo = f"{secrets.randbelow(1000000):06d}"
         if not CodigoEnrolamiento.query.filter_by(codigo=codigo).first():
             break
     else:
