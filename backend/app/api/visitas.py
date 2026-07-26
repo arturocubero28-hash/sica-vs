@@ -370,6 +370,14 @@ def validar_qr(usuario_actual):
     visita = qr.visita
     ahora = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc)
 
+    # CRÍTICO (aislación multi-residencial): el guardia solo puede validar QR de
+    # visitas de SU residencial. Sin esto, un guardia de otra residencial podía
+    # previsualizar y luego registrar el acceso de una visita ajena.
+    from app.utils.residencial import visita_en_residencial_de
+    if not visita_en_residencial_de(visita, usuario_actual):
+        return jsonify({"error": {"code": "qr_otra_residencial",
+                                  "message": "Este código no pertenece a tu residencial"}}), 403
+
     # ¿La visita está adentro? (último evento fue una entrada sin salida posterior)
     ultimo_evento = (
         EventoAcceso.query
@@ -540,6 +548,17 @@ def registrar_acceso_visita(usuario_actual):
         db.session.rollback()
         return jsonify({"error": {"code": "visita_invalida",
                                   "message": "La visita asociada no existe"}}), 404
+
+    # CRÍTICO (aislación multi-residencial): el guardia solo registra accesos de
+    # visitas de SU residencial. Este es el endpoint que REALMENTE abre la
+    # tranca, así que el chequeo acá es el que de verdad importa. rollback para
+    # soltar el candado de fila antes de salir.
+    from app.utils.residencial import visita_en_residencial_de
+    if not visita_en_residencial_de(visita, usuario_actual):
+        db.session.rollback()
+        return jsonify({"error": {"code": "qr_otra_residencial",
+                                  "message": "Este código no pertenece a tu residencial"}}), 403
+
     db.session.refresh(visita)
     ahora = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc)
 

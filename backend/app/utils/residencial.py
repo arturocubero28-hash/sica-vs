@@ -149,7 +149,37 @@ def scope_sesiones_caja(query, usuario_actual):
                  .filter(Usuario.residencial_id == rid))
 
 
-def scope_por_sesion_caja(query, modelo, campo_sesion, usuario_actual):
+def visita_en_residencial_de(visita, usuario_actual):
+    """
+    True si la visita pertenece a la residencial del usuario (guardia/admin).
+
+    CRÍTICO (aislación de acceso físico): un guardia solo puede validar y
+    registrar accesos de visitas de SU residencial. Sin esto, un guardia de la
+    Residencial B puede escanear y autorizar el QR de una visita de la
+    Residencial A.
+
+    - super_admin/desarrollador: siempre True (roles de plataforma).
+    - Si el usuario no tiene residencial asignada (None): True, para no romper
+      el modo de una sola residencial sin residencial_id (comportamiento
+      histórico previo al multi-tenant).
+    - En otro caso: compara la residencial de la visita (vía
+      cuenta→unidad→residencial_id) con la del usuario.
+    """
+    if usuario_actual is None:
+        return True
+    if usuario_actual.rol in ("super_admin", "desarrollador"):
+        return True
+    rid_usuario = usuario_actual.residencial_id
+    if rid_usuario is None:
+        return True
+    cuenta = getattr(visita, "cuenta", None)
+    if cuenta is None:
+        return True  # sin cuenta no se puede determinar; no bloquear datos legacy
+    unidad = getattr(cuenta, "unidad", None)
+    rid_visita = getattr(unidad, "residencial_id", None) if unidad else None
+    if rid_visita is None:
+        return True  # datos sin residencial asignada: no bloquear
+    return rid_visita == rid_usuario
     """Filtra por residencial un modelo ligado a una sesión de caja
     (AjusteCaja.sesion_caja_id, SalidaCaja.sesion_id) uniendo
     SesionCaja→cajero→residencial. super_admin/desarrollador: sin filtro."""
