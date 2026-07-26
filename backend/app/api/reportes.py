@@ -11,6 +11,8 @@ from flask import Blueprint, jsonify, request
 from app.models.cuenta import Cuota, Pago, Cuenta
 from app.auth.security import roles_required
 from app.utils import dinero
+from app.utils.residencial import (scope_cuotas, scope_pagos, scope_cuentas,
+                                   scope_eventos)
 
 reportes_bp = Blueprint("reportes", __name__)
 
@@ -51,7 +53,7 @@ def reporte_financiero(usuario_actual):
         # para no cargar todo el histórico de pagos en memoria.
         from sqlalchemy import func
         fecha_sql = func.coalesce(Pago.revisado_en, Pago.created_at)
-        pagos_rango = (Pago.query
+        pagos_rango = (scope_pagos(Pago.query, usuario_actual)
                        .filter(Pago.estado == "aprobado",
                                fecha_sql >= ini, fecha_sql <= fin)
                        .all())
@@ -117,7 +119,8 @@ def reporte_financiero(usuario_actual):
     mes = int(request.args.get("mes", hoy.month))
     periodo = dt.date(anio, mes, 1)
     label = periodo.strftime("%B %Y")
-    cuotas = Cuota.query.filter_by(periodo=periodo).all()
+    cuotas = scope_cuotas(Cuota.query, usuario_actual).filter(
+        Cuota.periodo == periodo).all()
 
     # O3.2: acumuladores en Decimal; los montos que van al JSON usan a_float.
     total_esperado = dinero.CERO
@@ -181,7 +184,8 @@ def reporte_financiero(usuario_actual):
             m += 12
             a -= 1
         p = dt.date(a, m, 1)
-        qs = Cuota.query.filter_by(periodo=p).all()
+        qs = scope_cuotas(Cuota.query, usuario_actual).filter(
+            Cuota.periodo == p).all()
         esperado = dinero.suma(x.monto for x in qs)
         recaudado = dinero.suma(x.monto for x in qs if x.estado == "pagada")
         tendencia.append({
@@ -223,7 +227,8 @@ def mora_por_casa(usuario_actual):
     hoy = dt.date.today()
 
     # Todas las cuotas no pagadas (pendiente, vencida, en_arreglo, etc.)
-    cuotas = Cuota.query.filter(Cuota.estado != "pagada").order_by(Cuota.periodo.asc()).all()
+    cuotas = scope_cuotas(Cuota.query, usuario_actual).filter(
+        Cuota.estado != "pagada").order_by(Cuota.periodo.asc()).all()
 
     # Agrupar por cuenta
     por_cuenta = defaultdict(list)
@@ -294,7 +299,8 @@ def mora_por_casa(usuario_actual):
     aging = {k: dinero.a_float(v) for k, v in aging.items()}
 
     # % de morosidad de la comunidad (casas en mora / total de cuentas activas)
-    total_cuentas = Cuenta.query.filter_by(activa=True).count()
+    total_cuentas = scope_cuentas(Cuenta.query, usuario_actual).filter(
+        Cuenta.activa == True).count()
     pct_morosidad = round((len(casas) / total_cuentas * 100), 1) if total_cuentas else 0.0
 
     return jsonify({"data": {
@@ -324,7 +330,9 @@ def reporte_caja(usuario_actual):
     hasta_str = request.args.get("hasta")
     cajero_uuid = request.args.get("cajero_id")
 
-    q = SesionCaja.query.filter(SesionCaja.estado == "cerrada")
+    from app.utils.residencial import scope_sesiones_caja
+    q = scope_sesiones_caja(SesionCaja.query, usuario_actual).filter(
+        SesionCaja.estado == "cerrada")
 
     if desde_str and hasta_str:
         try:
@@ -426,7 +434,8 @@ def reporte_accesos(usuario_actual):
     hasta_str = request.args.get("hasta")
     tipo_filtro = request.args.get("tipo")
 
-    q = Visita.query
+    from app.utils.residencial import scope_visitas
+    q = scope_visitas(Visita.query, usuario_actual)
     if desde_str and hasta_str:
         try:
             desde = dt.date.fromisoformat(desde_str)
@@ -518,7 +527,8 @@ def reporte_inventario(usuario_actual):
     desde_str = request.args.get("desde")
     hasta_str = request.args.get("hasta")
 
-    q = VentaTarjeta.query
+    from app.utils.residencial import scope_ventas_tarjeta
+    q = scope_ventas_tarjeta(VentaTarjeta.query, usuario_actual)
     if desde_str and hasta_str:
         try:
             desde = dt.date.fromisoformat(desde_str)
@@ -604,27 +614,29 @@ def reporte_ejecutivo(usuario_actual):
     mes_label = f"{meses_es[mes]} {anio}"
 
     # ── Cobranza del mes (cuotas cuyo periodo es este mes) ──
-    cuotas_mes = Cuota.query.filter(Cuota.periodo == ini_mes).all()
+    cuotas_mes = scope_cuotas(Cuota.query, usuario_actual).filter(
+        Cuota.periodo == ini_mes).all()
     # O3.2: suma exacta con Decimal, se serializa con a_float.
     total_esperado = dinero.suma(c.monto for c in cuotas_mes)
     total_recaudado = dinero.suma(c.monto for c in cuotas_mes if c.estado == "pagada")
     pct_cobranza = round(float(total_recaudado / total_esperado * 100), 1) if total_esperado else 0.0
 
     # ── Cartera vencida total (todas las cuotas no pagadas ya vencidas) ──
-    cuotas_vencidas = (Cuota.query
+    cuotas_vencidas = (scope_cuotas(Cuota.query, usuario_actual)
                        .filter(Cuota.estado != "pagada", Cuota.fecha_vencimiento < hoy)
                        .all())
     cartera_vencida = dinero.suma(c.monto for c in cuotas_vencidas)
     casas_en_mora = len({c.cuenta_id for c in cuotas_vencidas})
 
     # ── Morosidad: % de cuentas activas con al menos una cuota vencida ──
-    cuentas_activas = Cuenta.query.filter_by(activa=True).count()
+    cuentas_activas = scope_cuentas(Cuenta.query, usuario_actual).filter(
+        Cuenta.activa == True).count()
     pct_morosidad = round((casas_en_mora / cuentas_activas * 100), 1) if cuentas_activas else 0.0
 
     # ── Accesos del mes (eventos de residentes) ──
     ini_dt = dt.datetime.combine(ini_mes, dt.time.min).replace(tzinfo=dt.timezone.utc)
     fin_dt = dt.datetime.combine(fin_mes, dt.time.max).replace(tzinfo=dt.timezone.utc)
-    accesos_mes = (EventoAcceso.query
+    accesos_mes = (scope_eventos(EventoAcceso.query, usuario_actual)
                    .filter(EventoAcceso.ocurrido_en >= ini_dt,
                            EventoAcceso.ocurrido_en <= fin_dt)
                    .count())
@@ -633,7 +645,7 @@ def reporte_ejecutivo(usuario_actual):
     # De los pagos aprobados este mes, cuántos correspondían a cuotas que ya
     # estaban vencidas al momento de pagar (= recuperación de cartera vieja).
     fecha_sql = func.coalesce(Pago.revisado_en, Pago.created_at)
-    pagos_mes = (Pago.query
+    pagos_mes = (scope_pagos(Pago.query, usuario_actual)
                  .filter(Pago.estado == "aprobado",
                          fecha_sql >= ini_dt, fecha_sql <= fin_dt,
                          Pago.cuota_id.isnot(None))

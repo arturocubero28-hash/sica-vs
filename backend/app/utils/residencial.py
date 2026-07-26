@@ -88,3 +88,62 @@ def scope_eventos(query, usuario_actual):
     from app.models.visita import EventoAcceso, AccesoFisico
     return (query.join(AccesoFisico, EventoAcceso.acceso_id == AccesoFisico.id)
                  .filter(AccesoFisico.residencial_id == rid))
+
+
+def scope_cuotas(query, usuario_actual):
+    """Filtra una query de Cuota por la residencial del admin (vía
+    Cuenta→Unidad). super_admin/desarrollador: sin filtro."""
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    from app.models.cuenta import Cuota, Cuenta, Unidad
+    return (query.join(Cuenta, Cuota.cuenta_id == Cuenta.id)
+                 .join(Unidad, Cuenta.unidad_id == Unidad.id)
+                 .filter(Unidad.residencial_id == rid))
+
+
+def scope_pagos(query, usuario_actual):
+    """Filtra una query de Pago por la residencial del admin (vía
+    Cuenta→Unidad). super_admin/desarrollador: sin filtro."""
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    from app.models.cuenta import Pago, Cuenta, Unidad
+    return (query.join(Cuenta, Pago.cuenta_id == Cuenta.id)
+                 .join(Unidad, Cuenta.unidad_id == Unidad.id)
+                 .filter(Unidad.residencial_id == rid))
+
+
+def scope_cuentas(query, usuario_actual):
+    """Filtra una query de Cuenta por la residencial del admin (vía Unidad).
+    super_admin/desarrollador: sin filtro."""
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    from app.models.cuenta import Cuenta, Unidad
+    return (query.join(Unidad, Cuenta.unidad_id == Unidad.id)
+                 .filter(Unidad.residencial_id == rid))
+
+
+def scope_ventas_tarjeta(query, usuario_actual):
+    """Filtra una query de VentaTarjeta por la residencial del admin (vía
+    Cuenta→Unidad). super_admin/desarrollador: sin filtro."""
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    from app.models.cuenta import VentaTarjeta, Cuenta, Unidad
+    return (query.join(Cuenta, VentaTarjeta.cuenta_id == Cuenta.id)
+                 .join(Unidad, Cuenta.unidad_id == Unidad.id)
+                 .filter(Unidad.residencial_id == rid))
+
+
+def scope_sesiones_caja(query, usuario_actual):
+    """Filtra una query de SesionCaja por la residencial del admin (vía el
+    cajero → Usuario.residencial_id). super_admin/desarrollador: sin filtro."""
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    from app.models.caja import SesionCaja
+    from app.models.usuario import Usuario
+    return (query.join(Usuario, SesionCaja.cajero_id == Usuario.id)
+                 .filter(Usuario.residencial_id == rid))
