@@ -29,29 +29,54 @@ def metricas(usuario_actual):
     # Convertir a UTC naive para comparar con created_at (que se guarda en UTC)
     hoy_inicio = inicio_hn.astimezone(dt.timezone.utc).replace(tzinfo=None)
 
+    # Aislación multi-residencial: cada métrica se filtra por la residencial
+    # del admin. super_admin/desarrollador ven todo. Los helpers scope_* hacen
+    # los joins; residencial_id_filtro decide si aplica filtro.
+    from app.utils.residencial import (residencial_id_filtro, scope_visitas,
+                                       scope_eventos)
+    rid = residencial_id_filtro(usuario_actual)
+
     # QR generados hoy
-    qr_hoy = Visita.query.filter(Visita.created_at >= hoy_inicio).count()
+    qr_hoy = scope_visitas(Visita.query, usuario_actual).filter(
+        Visita.created_at >= hoy_inicio).count()
 
     # Visitas activas (QR vigente, no usado ni expirado)
-    activas = Visita.query.filter(Visita.estado == "activa").count()
+    activas = scope_visitas(Visita.query, usuario_actual).filter(
+        Visita.estado == "activa").count()
 
     # QR utilizados (visitas con estado usada)
-    usados = Visita.query.filter(Visita.estado == "usada").count()
+    usados = scope_visitas(Visita.query, usuario_actual).filter(
+        Visita.estado == "usada").count()
 
     # QR expirados
-    expirados = Visita.query.filter(Visita.estado == "expirada").count()
+    expirados = scope_visitas(Visita.query, usuario_actual).filter(
+        Visita.estado == "expirada").count()
 
-    # Totales generales del sistema
-    total_unidades = Unidad.query.filter_by(activa=True).count()
-    total_cuentas = Cuenta.query.count()
-    total_residentes = Residente.query.filter_by(activo=True).count()
-    cuentas_bloqueadas = Cuenta.query.filter_by(bloqueada=True).count()
+    # Totales generales — filtrados por residencial del admin
+    unidades_q = Unidad.query.filter_by(activa=True)
+    cuentas_q = Cuenta.query
+    residentes_q = Residente.query.filter_by(activo=True)
+    bloqueadas_q = Cuenta.query.filter_by(bloqueada=True)
+    if rid is not None:
+        unidades_q = unidades_q.filter(Unidad.residencial_id == rid)
+        cuentas_q = cuentas_q.join(Unidad, Cuenta.unidad_id == Unidad.id).filter(
+            Unidad.residencial_id == rid)
+        bloqueadas_q = bloqueadas_q.join(Unidad, Cuenta.unidad_id == Unidad.id).filter(
+            Unidad.residencial_id == rid)
+        residentes_q = (residentes_q.join(Cuenta, Residente.cuenta_id == Cuenta.id)
+                        .join(Unidad, Cuenta.unidad_id == Unidad.id)
+                        .filter(Unidad.residencial_id == rid))
+    total_unidades = unidades_q.count()
+    total_cuentas = cuentas_q.count()
+    total_residentes = residentes_q.count()
+    cuentas_bloqueadas = bloqueadas_q.count()
 
     # Accesos registrados hoy
-    accesos_hoy = EventoAcceso.query.filter(EventoAcceso.ocurrido_en >= hoy_inicio).count()
+    accesos_hoy = scope_eventos(EventoAcceso.query, usuario_actual).filter(
+        EventoAcceso.ocurrido_en >= hoy_inicio).count()
 
     # Visitas actualmente DENTRO de la residencial (entraron y no han salido)
-    adentro_ahora = len(_visitas_adentro())
+    adentro_ahora = len(_visitas_adentro(usuario_actual))
 
     return jsonify({"data": {
         "qr_generados_hoy": qr_hoy,
@@ -72,8 +97,9 @@ def metricas(usuario_actual):
 def visitas_tabla(usuario_actual):
     """Tabla de visitas recientes. El estado mostrado refleja el ÚLTIMO evento de acceso."""
     from sqlalchemy.orm import joinedload
+    from app.utils.residencial import scope_visitas
 
-    visitas = (Visita.query
+    visitas = (scope_visitas(Visita.query, usuario_actual)
                .options(joinedload(Visita.eventos),
                         joinedload(Visita.residente))
                .order_by(Visita.created_at.desc())
@@ -125,15 +151,19 @@ def visitas_tabla(usuario_actual):
 # =====================================================================
 # VISITAS ACTUALMENTE DENTRO DE LA RESIDENCIAL
 # =====================================================================
-def _visitas_adentro():
+def _visitas_adentro(usuario_actual=None):
     """
     Devuelve las visitas que entraron pero aún no han salido.
     Una visita está 'adentro' si su último evento de acceso es una 'entrada'.
 
     Trae las visitas con entrada y carga TODOS sus eventos en una sola query
     (joinedload), en vez de una query por visita (evita N+1).
+
+    Aislación multi-residencial: si se pasa usuario_actual, solo cuenta las
+    visitas de SU residencial (admin); super_admin/desarrollador ven todas.
     """
     from sqlalchemy.orm import joinedload
+    from app.utils.residencial import scope_visitas
 
     # IDs de visitas que tienen al menos un evento de entrada
     ids_con_entrada = [
@@ -147,9 +177,10 @@ def _visitas_adentro():
     if not ids_con_entrada:
         return []
 
-    # Cargar esas visitas con todos sus eventos de una sola vez
+    # Cargar esas visitas con todos sus eventos de una sola vez, filtradas por
+    # la residencial del admin.
     visitas = (
-        Visita.query
+        scope_visitas(Visita.query, usuario_actual)
         .options(joinedload(Visita.eventos))
         .filter(Visita.id.in_(ids_con_entrada))
         .all()
@@ -182,7 +213,7 @@ def visitas_activas(usuario_actual):
     Incluye: quién generó el QR, placa, horas de creación/entrada/salida,
     guardia que autorizó, y fotos tomadas en el ingreso.
     """
-    adentro = _visitas_adentro()
+    adentro = _visitas_adentro(usuario_actual)
 
     filas = []
     for v, eventos in adentro:
@@ -269,7 +300,9 @@ def historial_accesos(usuario_actual):
     # Solo eventos de VISITAS (los de tarjeta de residente van en su propio
     # historial). Antes traía todos; ahora que existen accesos por tarjeta,
     # cada historial filtra por su origen.
-    q = EventoAcceso.query.filter(EventoAcceso.origen == "visita")
+    from app.utils.residencial import scope_eventos
+    q = scope_eventos(EventoAcceso.query, usuario_actual).filter(
+        EventoAcceso.origen == "visita")
     if desde:
         try:
             q = q.filter(EventoAcceso.ocurrido_en >= dt.datetime.fromisoformat(desde))
@@ -392,7 +425,9 @@ def historial_accesos_tarjeta(usuario_actual):
     pagina = max(1, int(request.args.get("pagina", 1)))
     por_pagina = 30
 
-    q = EventoAcceso.query.filter(EventoAcceso.origen == "residente")
+    from app.utils.residencial import scope_eventos
+    q = scope_eventos(EventoAcceso.query, usuario_actual).filter(
+        EventoAcceso.origen == "residente")
 
     if desde:
         try:

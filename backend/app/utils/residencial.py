@@ -33,3 +33,58 @@ def residencial_id_heredado(usuario_actual):
     if usuario_actual.rol in ("admin", "supervisor"):
         return usuario_actual.residencial_id
     return None
+
+
+def residencial_id_filtro(usuario_actual):
+    """
+    Determina por qué residencial_id se deben FILTRAR las lecturas (listados,
+    métricas, historial) que hace usuario_actual. Es la contraparte de lectura
+    de residencial_id_heredado (que es para escritura).
+
+    - admin / supervisor: su propio residencial_id → solo ve lo de SU cliente.
+    - super_admin / desarrollador: None → son roles de plataforma, ven TODO
+      (no se aplica filtro). Coherente con que administran el SaaS completo.
+
+    Uso típico en un endpoint de listado:
+
+        rid = residencial_id_filtro(usuario_actual)
+        q = Cuenta.query
+        if rid is not None:
+            q = q.join(Unidad).filter(Unidad.residencial_id == rid)
+
+    Con una sola residencial (hoy), admin devuelve su id y el filtro no cambia
+    nada visible (todo pertenece a esa misma residencial). El día que haya un
+    segundo cliente, cada admin queda automáticamente aislado sin tocar más
+    código.
+    """
+    if usuario_actual is None:
+        return None
+    if usuario_actual.rol in ("admin", "supervisor"):
+        return usuario_actual.residencial_id
+    return None
+
+
+def scope_visitas(query, usuario_actual):
+    """Filtra una query de Visita por la residencial del admin (vía
+    Cuenta→Unidad). super_admin/desarrollador: sin filtro. Uso:
+        q = scope_visitas(Visita.query, usuario_actual)
+    """
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    from app.models.cuenta import Cuenta, Unidad
+    from app.models.visita import Visita
+    return (query.join(Cuenta, Visita.cuenta_id == Cuenta.id)
+                 .join(Unidad, Cuenta.unidad_id == Unidad.id)
+                 .filter(Unidad.residencial_id == rid))
+
+
+def scope_eventos(query, usuario_actual):
+    """Filtra una query de EventoAcceso por la residencial del admin (vía
+    AccesoFisico). super_admin/desarrollador: sin filtro."""
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    from app.models.visita import EventoAcceso, AccesoFisico
+    return (query.join(AccesoFisico, EventoAcceso.acceso_id == AccesoFisico.id)
+                 .filter(AccesoFisico.residencial_id == rid))

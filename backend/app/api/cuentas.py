@@ -111,7 +111,14 @@ def _crear_usuario_pendiente(nombre, apellido, email, telefono=None, extra=None,
 @cuentas_bp.get("")
 @token_required
 def listar_unidades(usuario_actual):
-    unidades = Unidad.query.filter_by(activa=True).order_by(Unidad.identificador).all()
+    # Aislación multi-residencial: un admin/supervisor solo ve las unidades de
+    # SU residencial; super_admin/desarrollador ven todas (filtro None).
+    from app.utils.residencial import residencial_id_filtro
+    q = Unidad.query.filter_by(activa=True)
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is not None:
+        q = q.filter(Unidad.residencial_id == rid)
+    unidades = q.order_by(Unidad.identificador).all()
     return jsonify({"data": [u.to_dict() for u in unidades]})
 
 
@@ -153,6 +160,15 @@ def listar_cuentas(usuario_actual):
     pagina_arg = request.args.get("pagina")
 
     base = Cuenta.query.order_by(Cuenta.id.desc())
+
+    # Aislación multi-residencial: un admin/supervisor solo ve las cuentas de
+    # SU residencial (unidas por Unidad→residencial_id); super_admin y
+    # desarrollador ven todas (filtro None). Ver residencial_id_filtro.
+    from app.utils.residencial import residencial_id_filtro
+    _rid = residencial_id_filtro(usuario_actual)
+    if _rid is not None:
+        base = base.join(Unidad, Cuenta.unidad_id == Unidad.id).filter(
+            Unidad.residencial_id == _rid)
 
     # Conteo de cuotas pendientes/vencidas por cuenta, en UNA query (evita N+1).
     pendientes_raw = (db.session.query(Cuota.cuenta_id, func.count(Cuota.id))
