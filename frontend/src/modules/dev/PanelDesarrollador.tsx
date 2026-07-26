@@ -70,7 +70,7 @@ export function PanelDesarrollador() {
         <button className={`hist-tab ${tab === "codigo" ? "on" : ""}`} onClick={() => setTab("codigo")}><BarChart3 size={16} /> Métricas de código</button>
         <button className={`hist-tab ${tab === "seguridad" ? "on" : ""}`} onClick={() => setTab("seguridad")}><Shield size={16} /> Seguridad</button>
         <button className={`hist-tab ${tab === "trancas" ? "on" : ""}`} onClick={() => setTab("trancas")}><Construction size={16} /> Trancas</button>
-        <button className={`hist-tab ${tab === "pis" ? "on" : ""}`} onClick={() => setTab("pis")}><Router size={16} /> Raspberry Pi</button>
+        <button className={`hist-tab ${tab === "pis" ? "on" : ""}`} onClick={() => setTab("pis")}><Router size={16} /> Controladores de acceso</button>
         <button className={`hist-tab ${tab === "residenciales" ? "on" : ""}`} onClick={() => setTab("residenciales")}><Building2 size={16} /> Residenciales</button>
       </div>
 
@@ -824,6 +824,7 @@ function ConfigPis() {
   const [cargando, setCargando] = useState(true);
   const [mostrarAlta, setMostrarAlta] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
+  const [nuevoTipo, setNuevoTipo] = useState<"acceso" | "lector_ct9">("acceso");
   const [nuevoPunto, setNuevoPunto] = useState("");
   const [nuevaResidencial, setNuevaResidencial] = useState("");
   const [errorAlta, setErrorAlta] = useState("");
@@ -840,7 +841,12 @@ function ConfigPis() {
     // Cargar dispositivos y puntos por separado: si una falla, la otra igual
     // funciona (ej. si la tabla de dispositivos aún no existe, los puntos se
     // cargan igual desde los accesos).
-    devDispositivos().then(setPis).catch(() => setPis([])).finally(() => setCargando(false));
+    // Esta pestaña es "Controladores de acceso": solo Pi de acceso y
+    // lectores CT9, NO las Pi de cámara (que tienen su propia gestión).
+    devDispositivos()
+      .then((todos) => setPis(todos.filter((d) => d.tipo !== "camara")))
+      .catch(() => setPis([]))
+      .finally(() => setCargando(false));
     devAccesosFisicos()
       .then((accesos) => {
         const ps = Array.from(new Set(accesos.map((a) => a.punto_acceso).filter(Boolean))) as string[];
@@ -872,16 +878,19 @@ function ConfigPis() {
 
   async function crear() {
     if (!nuevoNombre.trim()) return;
-    if (!nuevaResidencial) { setErrorAlta("Elegí a qué residencial pertenece esta Pi — así queda atada desde el momento en que se crea."); return; }
+    if (!nuevaResidencial) { setErrorAlta("Elegí a qué residencial pertenece este controlador — así queda atado desde el momento en que se crea."); return; }
     setErrorAlta("");
     setCreando(true);
     try {
-      const d = await devCrearDispositivo({ nombre: nuevoNombre.trim(), punto_acceso: nuevoPunto.trim(), residencial_id: nuevaResidencial });
+      const d = await devCrearDispositivo({
+        nombre: nuevoNombre.trim(), tipo: nuevoTipo,
+        punto_acceso: nuevoPunto.trim(), residencial_id: nuevaResidencial,
+      });
       if (d.token) setTokenNuevo({ nombre: d.nombre, token: d.token });
-      setNuevoNombre(""); setNuevoPunto(""); setNuevaResidencial(""); setMostrarAlta(false);
+      setNuevoNombre(""); setNuevoTipo("acceso"); setNuevoPunto(""); setNuevaResidencial(""); setMostrarAlta(false);
       cargar();
     } catch (err: any) {
-      setErrorAlta(err?.message || "No se pudo crear la Pi");
+      setErrorAlta(err?.message || "No se pudo crear el controlador");
     } finally { setCreando(false); }
   }
 
@@ -911,15 +920,16 @@ function ConfigPis() {
   return (
     <div className="dev-trancas">
       <div className="dev-trancas-aviso">
-        <strong><Router size={16} /> Raspberry Pi de los accesos.</strong> Cada punto de acceso tiene su propia Pi, que descarga
-        su copia de residentes con permiso y valida localmente. Cada Pi se identifica con un <code>token</code> único
-        y secreto. El <code>punto de acceso</code> debe coincidir con el de las trancas de ese punto.
+        <strong><Router size={16} /> Controladores de acceso.</strong> Cada punto de acceso tiene su propio
+        controlador —una Raspberry Pi o un lector inteligente (CT9)— que descarga su copia de residentes
+        con permiso y valida localmente. Cada uno se identifica con un <code>token</code> único y secreto.
+        El <code>punto de acceso</code> debe coincidir con el de las trancas de ese punto.
       </div>
 
       <div className="dev-trancas-barra">
-        <span className="dev-trancas-total">{pis?.length || 0} dispositivo(s)</span>
+        <span className="dev-trancas-total">{pis?.length || 0} controlador(es)</span>
         <button className="dev-tranca-add" onClick={() => setMostrarAlta((v) => !v)}>
-          {mostrarAlta ? "Cancelar" : "+ Agregar Raspberry Pi"}
+          {mostrarAlta ? "Cancelar" : "+ Agregar controlador"}
         </button>
       </div>
 
@@ -930,6 +940,14 @@ function ConfigPis() {
               <span>Nombre</span>
               <input type="text" placeholder="Ej: Pi Acceso Principal" maxLength={80}
                 value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} />
+            </label>
+            <label>
+              <span>Tipo de controlador</span>
+              <select className="dev-tranca-tipo-sel" value={nuevoTipo}
+                onChange={(e) => setNuevoTipo(e.target.value as "acceso" | "lector_ct9")}>
+                <option value="acceso">Raspberry Pi</option>
+                <option value="lector_ct9">Lector inteligente (CT9)</option>
+              </select>
             </label>
             <label>
               <span>Punto de acceso</span>
@@ -950,9 +968,16 @@ function ConfigPis() {
             </button>
           </div>
           <p className="muted small" style={{ marginTop: 8 }}>
-            * Obligatoria: la Pi queda atada a esa residencial desde el momento en que se crea — evita
+            * Obligatoria: el controlador queda atado a esa residencial desde el momento en que se crea — evita
             crear dispositivos sueltos que después haya que andar asignando.
           </p>
+          {nuevoTipo === "lector_ct9" && (
+            <div className="dev-tranca-msg" style={{ marginTop: 10, background: "#fef2d5", color: "#92651c" }}>
+              El lector CT9 todavía no sincroniza con el servidor — falta construir el adaptador que
+              traduce su protocolo (pendiente del SDK de Civintec). Podés registrarlo ya para tener su
+              token y nombre listos, pero no va a validar accesos hasta que esa integración esté lista.
+            </div>
+          )}
           {errorAlta && (
             <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>{errorAlta}</div>
           )}
@@ -968,7 +993,7 @@ function ConfigPis() {
         <div className="dev-modal-overlay" onClick={() => setTokenNuevo(null)}>
           <div className="dev-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Token de {tokenNuevo.nombre}</h3>
-            <p>Copiá este token y configuralo en la Raspberry Pi. <strong>No se vuelve a mostrar</strong> por seguridad. Si lo perdés, podés regenerarlo (y actualizarlo en la Pi).</p>
+            <p>Copiá este token y configuralo en el controlador (Raspberry Pi o CT9). <strong>No se vuelve a mostrar</strong> por seguridad. Si lo perdés, podés regenerarlo (y actualizarlo en el dispositivo).</p>
             <div className="dev-token-box">
               <code>{tokenNuevo.token}</code>
               <button className="dev-tranca-btn" style={{ maxWidth: 110 }} onClick={() => copiar(tokenNuevo.token)}>Copiar</button>
@@ -981,7 +1006,7 @@ function ConfigPis() {
       )}
 
       {(!pis || pis.length === 0) ? (
-        <p className="muted" style={{ padding: 20 }}>No hay Raspberry Pi registradas. Agregá la primera con el botón de arriba.</p>
+        <p className="muted" style={{ padding: 20 }}>No hay controladores registrados. Agregá el primero con el botón de arriba.</p>
       ) : (
         <div className="dev-trancas-grid">
           {pis.map((d) => (
@@ -990,13 +1015,21 @@ function ConfigPis() {
                 <span className="dev-tranca-nombre">{d.nombre}</span>
                 <span className={`dev-tranca-badge ${d.activo ? "ok" : "sin"}`}>{d.activo ? "Activa" : "Revocada"}</span>
               </div>
+              <div className="muted small" style={{ marginBottom: 6 }}>
+                {d.tipo === "lector_ct9" ? "Lector inteligente (CT9)" : "Raspberry Pi"}
+              </div>
+              {d.tipo === "lector_ct9" && (
+                <div className="dev-tranca-msg" style={{ background: "#fef2d5", color: "#92651c", marginBottom: 8 }}>
+                  Integración pendiente — este CT9 aún no sincroniza (falta el adaptador del SDK).
+                </div>
+              )}
               <div className="dev-pi-info">
                 <div><span>Punto:</span> {d.punto_acceso || <em className="muted">sin asignar</em>}</div>
                 <div><span>Última sincronización:</span> {d.ultima_sync ? new Date(d.ultima_sync).toLocaleString() : "nunca"}</div>
               </div>
               <div style={{ margin: "8px 0" }}>
                 <label className="muted small" style={{ display: "block", marginBottom: 4 }}>
-                  Residencial <span title="Bases multi-residencial: qué cliente descarga información con esta Pi">ⓘ</span>
+                  Residencial <span title="Bases multi-residencial: qué cliente descarga información con este controlador">ⓘ</span>
                 </label>
                 <select value={d.residencial?.id || ""} onChange={(e) => asignarResidencial(d, e.target.value)}
                   className="dev-tranca-tipo-sel" style={{ width: "100%" }}>

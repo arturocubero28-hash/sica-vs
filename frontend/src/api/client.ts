@@ -797,6 +797,7 @@ export const devEliminarAcceso = (id: number) =>
 export interface DispositivoDTO {
   id: string;
   nombre: string;
+  tipo: "acceso" | "camara" | "lector_ct9";
   punto_acceso: string | null;
   activo: boolean;
   ultima_sync: string | null;
@@ -807,7 +808,7 @@ export interface DispositivoDTO {
   residencial: { id: string; nombre: string } | null;
 }
 export const devDispositivos = () => request<DispositivoDTO[]>("/dev/dispositivos");
-export const devCrearDispositivo = (body: { nombre: string; punto_acceso?: string; residencial_id?: string }) =>
+export const devCrearDispositivo = (body: { nombre: string; tipo?: "acceso" | "camara" | "lector_ct9"; punto_acceso?: string; residencial_id?: string }) =>
   request<DispositivoDTO>("/dev/dispositivos", { method: "POST", body: JSON.stringify(body) });
 export const devActualizarDispositivo = (id: string, body: { nombre?: string; punto_acceso?: string; activo?: boolean; residencial_id?: string | null }) =>
   request<DispositivoDTO>(`/dev/dispositivos/${id}`, { method: "PUT", body: JSON.stringify(body) });

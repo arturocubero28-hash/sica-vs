@@ -546,7 +546,13 @@ def crear_dispositivo(usuario_actual):
     nombre = (body.get("nombre") or "").strip()
     punto = (body.get("punto_acceso") or "").strip() or None
     tipo = (body.get("tipo") or "acceso").strip()
-    if tipo not in ("acceso", "camara"):
+    # Día 46: 'lector_ct9' se suma como tercer tipo de controlador de acceso,
+    # junto a la Raspberry Pi ('acceso'). Registrar el hardware (nombre, punto,
+    # token, residencial) ya funciona igual para los tres tipos — lo que aún
+    # NO existe es el adaptador que traduce el protocolo HTTP propio del CT9;
+    # eso llega con el SDK de Civintec. Por ahora el CT9 se puede dar de alta
+    # mostrando ese estado, sin prometer que ya sincroniza.
+    if tipo not in ("acceso", "camara", "lector_ct9"):
         tipo = "acceso"
     if not nombre:
         return jsonify({"error": {"code": "nombre_requerido",
