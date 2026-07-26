@@ -211,6 +211,16 @@ def create_app(config_class=Config):
             "ALTER TABLE sesiones_caja ADD COLUMN IF NOT EXISTS desglose_billetes TEXT",
             # Dueño del edificio que avala inquilinos (Día 10)
             "ALTER TABLE unidades ADD COLUMN IF NOT EXISTS propietario_id BIGINT REFERENCES usuarios(id)",
+            # Aislación multi-residencial (Día 46): comunicados, tarifas e
+            # inventario pasan de catálogo global a propios de cada residencial.
+            # Las filas existentes se asignan a la residencial base (Villas del
+            # Sol, id=1) para no dejarlas huérfanas. Idempotente por IF NOT EXISTS.
+            "ALTER TABLE comunicados ADD COLUMN IF NOT EXISTS residencial_id BIGINT REFERENCES residenciales(id)",
+            "ALTER TABLE tarifas ADD COLUMN IF NOT EXISTS residencial_id BIGINT REFERENCES residenciales(id)",
+            "ALTER TABLE tipos_tarjeta ADD COLUMN IF NOT EXISTS residencial_id BIGINT REFERENCES residenciales(id)",
+            "UPDATE comunicados SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
+            "UPDATE tarifas SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
+            "UPDATE tipos_tarjeta SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
             # Login biométrico WebAuthn (Día 17): columnas que pudieron faltar si la
             # tabla se creó parcialmente en un arranque anterior.
             "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS nombre_dispositivo VARCHAR(120)",

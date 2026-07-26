@@ -25,7 +25,16 @@ def _carpeta():
 @comunicados_bp.get("")
 @token_required
 def listar(usuario_actual):
-    comunicados = Comunicado.query.order_by(Comunicado.created_at.desc()).all()
+    # Multi-residencial (Día 46): un residente/guardia/admin solo ve los
+    # comunicados de SU residencial. A diferencia del resto de los scopes
+    # (pensados solo para el panel admin), acá se filtra para TODOS los roles
+    # que consumen este contenido, no solo admin.
+    from app.utils.residencial import residencial_id_de_usuario, scope_directo
+    rid = residencial_id_de_usuario(usuario_actual)
+    q = Comunicado.query
+    if rid is not None:
+        q = q.filter(Comunicado.residencial_id == rid)
+    comunicados = q.order_by(Comunicado.created_at.desc()).all()
     return jsonify({"data": [c.to_dict() for c in comunicados]})
 
 
@@ -51,9 +60,11 @@ def crear(usuario_actual):
         if error:
             return jsonify({"error": {"code": "imagen_invalida", "message": error}}), 400
 
+    from app.utils.residencial import residencial_id_heredado
     com = Comunicado(
         titulo=titulo, cuerpo=cuerpo, imagen=nombre_imagen,
         creado_por=usuario_actual.id,
+        residencial_id=residencial_id_heredado(usuario_actual),
     )
     db.session.add(com)
     db.session.commit()

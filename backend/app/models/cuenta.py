@@ -273,6 +273,9 @@ class Tarifa(db.Model):
     __tablename__ = "tarifas"
 
     id = db.Column(db.BigInteger, primary_key=True)
+    # Multi-residencial (Día 46): cada residencial define sus propias tarifas.
+    # Nullable por compatibilidad con filas antiguas.
+    residencial_id = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     nombre = db.Column(db.String(80), nullable=False)
     monto = db.Column(db.Numeric(10, 2), nullable=False)
     descripcion = db.Column(db.String(255))
@@ -913,6 +916,10 @@ class TipoTarjeta(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True)
     uuid_publico = _uuid_col()
+    # Multi-residencial (Día 46): cada residencial tiene su propio catálogo de
+    # tipos de tarjeta (precio y stock propios). Nullable por compatibilidad
+    # con filas antiguas; la migración las asigna a la residencial base.
+    residencial_id = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     nombre = db.Column(db.String(80), nullable=False)          # "Tarjeta vehicular UHF"
     tipo_acceso = db.Column(db.String(20), nullable=False, default="vehicular")  # vehicular | peatonal
     precio = db.Column(db.Numeric(10, 2), nullable=False, default=0)

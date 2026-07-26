@@ -193,6 +193,36 @@ def visita_en_residencial_de(visita, usuario_actual):
                  .filter(Usuario.residencial_id == rid))
 
 
+def residencial_id_de_usuario(usuario_actual):
+    """
+    A diferencia de residencial_id_filtro (que solo filtra para admin/
+    supervisor, pensado para el panel administrativo), esta devuelve la
+    residencial_id de CUALQUIER usuario autenticado — residente, guardia,
+    cajero, admin — excepto los roles de plataforma (super_admin,
+    desarrollador), que ven todo.
+
+    Se usa para contenido que TODOS los roles consumen y que debe aislarse
+    igual para todos, como los comunicados: un residente o guardia de una
+    residencial no debe ver los anuncios de otra.
+    """
+    if usuario_actual is None:
+        return None
+    if usuario_actual.rol in ("super_admin", "desarrollador"):
+        return None
+    return usuario_actual.residencial_id
+
+
+def scope_directo(query, modelo, usuario_actual):
+    """Filtra por residencial cualquier modelo que tenga residencial_id
+    DIRECTO (TipoTarjeta, Tarifa, Comunicado, etc.). super_admin/desarrollador:
+    sin filtro. Filas con residencial_id NULL (legacy) se excluyen para un
+    admin normal — deben migrarse, no mostrarse a todos."""
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    return query.filter(modelo.residencial_id == rid)
+
+
 def scope_usuarios(query, usuario_actual):
     """Filtra una query de Usuario por la residencial del admin (directo, ya
     que Usuario tiene residencial_id). super_admin/desarrollador: sin filtro."""

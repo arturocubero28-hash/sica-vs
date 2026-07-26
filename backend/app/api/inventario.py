@@ -28,7 +28,9 @@ def _err(code, msg, status):
 @inventario_bp.get("/tipos")
 @roles_required("admin", "super_admin", "cajero", "desarrollador")
 def listar_tipos(usuario_actual):
-    tipos = TipoTarjeta.query.order_by(TipoTarjeta.nombre.asc()).all()
+    from app.utils.residencial import scope_directo
+    tipos = scope_directo(TipoTarjeta.query, TipoTarjeta, usuario_actual).order_by(
+        TipoTarjeta.nombre.asc()).all()
     return jsonify({"data": [t.to_dict() for t in tipos]})
 
 
@@ -57,8 +59,10 @@ def crear_tipo(usuario_actual):
     if stock_inicial < 0:
         stock_inicial = 0
 
+    from app.utils.residencial import residencial_id_heredado
     tipo = TipoTarjeta(nombre=nombre, tipo_acceso=tipo_acceso,
-                       precio=precio, stock=stock_inicial)
+                       precio=precio, stock=stock_inicial,
+                       residencial_id=residencial_id_heredado(usuario_actual))
     db.session.add(tipo)
     db.session.flush()  # para tener el id
 

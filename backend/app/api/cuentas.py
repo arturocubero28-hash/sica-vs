@@ -770,7 +770,8 @@ def asignar_tarjeta(usuario_actual, cuenta_uuid):
 @cuentas_bp.get("/tarifas")
 @token_required
 def listar_tarifas(usuario_actual):
-    tarifas = Tarifa.query.filter_by(activa=True).all()
+    from app.utils.residencial import scope_directo
+    tarifas = scope_directo(Tarifa.query, Tarifa, usuario_actual).filter_by(activa=True).all()
     return jsonify({"data": [t.to_dict() for t in tarifas]})
 
 
@@ -787,8 +788,10 @@ def crear_tarifa(usuario_actual):
             raise ValueError
     except (TypeError, ValueError):
         return _err("monto_invalido", "El monto debe ser un número válido", 400)
+    from app.utils.residencial import residencial_id_heredado
     tarifa = Tarifa(nombre=nombre, monto=monto,
-                    descripcion=(data.get("descripcion") or "").strip() or None, activa=True)
+                    descripcion=(data.get("descripcion") or "").strip() or None, activa=True,
+                    residencial_id=residencial_id_heredado(usuario_actual))
     db.session.add(tarifa)
     db.session.commit()
     return jsonify({"data": tarifa.to_dict()}), 201

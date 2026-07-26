@@ -12,6 +12,10 @@ class Comunicado(db.Model):
 
     id           = db.Column(db.BigInteger, primary_key=True)
     uuid_publico = db.Column(PG_UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
+    # Multi-residencial (Día 46): cada comunicado pertenece a UNA residencial;
+    # los residentes de otra no deben verlo. Nullable por compatibilidad con
+    # filas antiguas (migradas a la residencial base en __init__.py).
+    residencial_id = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     titulo       = db.Column(db.String(160), nullable=False)
     cuerpo       = db.Column(db.Text, nullable=False)
     imagen       = db.Column(db.String(255))            # nombre de archivo opcional
