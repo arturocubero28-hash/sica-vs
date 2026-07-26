@@ -147,3 +147,40 @@ def scope_sesiones_caja(query, usuario_actual):
     from app.models.usuario import Usuario
     return (query.join(Usuario, SesionCaja.cajero_id == Usuario.id)
                  .filter(Usuario.residencial_id == rid))
+
+
+def scope_por_sesion_caja(query, modelo, campo_sesion, usuario_actual):
+    """Filtra por residencial un modelo ligado a una sesión de caja
+    (AjusteCaja.sesion_caja_id, SalidaCaja.sesion_id) uniendo
+    SesionCaja→cajero→residencial. super_admin/desarrollador: sin filtro."""
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    from app.models.caja import SesionCaja
+    from app.models.usuario import Usuario
+    return (query.join(SesionCaja, campo_sesion == SesionCaja.id)
+                 .join(Usuario, SesionCaja.cajero_id == Usuario.id)
+                 .filter(Usuario.residencial_id == rid))
+
+
+def scope_usuarios(query, usuario_actual):
+    """Filtra una query de Usuario por la residencial del admin (directo, ya
+    que Usuario tiene residencial_id). super_admin/desarrollador: sin filtro."""
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    from app.models.usuario import Usuario
+    return query.filter(Usuario.residencial_id == rid)
+
+
+def scope_por_cuenta(query, modelo, usuario_actual):
+    """Filtra por residencial cualquier modelo que tenga cuenta_id (ArregloPago,
+    SolicitudBaja, etc.) uniendo Cuenta→Unidad→residencial.
+    super_admin/desarrollador: sin filtro."""
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is None:
+        return query
+    from app.models.cuenta import Cuenta, Unidad
+    return (query.join(Cuenta, modelo.cuenta_id == Cuenta.id)
+                 .join(Unidad, Cuenta.unidad_id == Unidad.id)
+                 .filter(Unidad.residencial_id == rid))

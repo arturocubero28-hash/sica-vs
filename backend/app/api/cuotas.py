@@ -562,7 +562,8 @@ def historial_pagos(usuario_actual):
     pagina = max(1, int(request.args.get("pagina", 1)))
     por_pagina = 30
 
-    q = Pago.query.filter(Pago.estado == "aprobado")
+    from app.utils.residencial import scope_pagos
+    q = scope_pagos(Pago.query, usuario_actual).filter(Pago.estado == "aprobado")
 
     if desde:
         try:

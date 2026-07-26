@@ -22,7 +22,8 @@ def listar_usuarios(usuario_actual):
     rol = request.args.get("rol")          # filtro opcional por rol
     buscar = (request.args.get("buscar") or "").strip().lower()
 
-    q = Usuario.query
+    from app.utils.residencial import scope_usuarios
+    q = scope_usuarios(Usuario.query, usuario_actual)
     if rol:
         q = q.filter_by(rol=rol)
     usuarios = q.order_by(Usuario.created_at.desc()).all()

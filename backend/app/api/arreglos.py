@@ -38,10 +38,11 @@ def _money(x):
 @arreglos_bp.get("")
 @roles_required("admin", "super_admin", "cajero")
 def listar_arreglos(usuario_actual):
+    from app.utils.residencial import scope_por_cuenta
     estado = request.args.get("estado")
-    q = ArregloPago.query
+    q = scope_por_cuenta(ArregloPago.query, ArregloPago, usuario_actual)
     if estado:
-        q = q.filter_by(estado=estado)
+        q = q.filter(ArregloPago.estado == estado)
     q = q.order_by(ArregloPago.created_at.desc())
     arreglos = q.all()
     return jsonify({"data": [a.to_dict() for a in arreglos]})

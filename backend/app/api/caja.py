@@ -414,7 +414,9 @@ def buscar_cuenta(usuario_actual):
 @caja_bp.get("/sesiones")
 @roles_required("admin", "super_admin", "desarrollador")
 def listar_sesiones(usuario_actual):
-    sesiones = SesionCaja.query.order_by(SesionCaja.abierta_en.desc()).limit(100).all()
+    from app.utils.residencial import scope_sesiones_caja
+    sesiones = (scope_sesiones_caja(SesionCaja.query, usuario_actual)
+                .order_by(SesionCaja.abierta_en.desc()).limit(100).all())
     return jsonify({"data": [s.to_dict() for s in sesiones]})
 
 
@@ -429,10 +431,15 @@ def resumen_caja(usuario_actual):
     g = calcular_saldo_global()
     cfg = ConfigCaja.get()
 
-    descuadres_pendientes = AjusteCaja.query.filter(
+    from app.utils.residencial import scope_por_sesion_caja
+    descuadres_pendientes = scope_por_sesion_caja(
+        AjusteCaja.query, AjusteCaja, AjusteCaja.sesion_caja_id, usuario_actual
+    ).filter(
         AjusteCaja.tipo.in_(["sobrante", "faltante"]), AjusteCaja.estado == "pendiente"
     ).count()
-    salidas_pend = SalidaCaja.query.filter_by(estado="pendiente").count()
+    salidas_pend = scope_por_sesion_caja(
+        SalidaCaja.query, SalidaCaja, SalidaCaja.sesion_id, usuario_actual
+    ).filter(SalidaCaja.estado == "pendiente").count()
 
     return jsonify({"data": {
         "saldo_inicial": g["saldo_inicial"],
@@ -805,9 +812,12 @@ def reportar_descuadre(usuario_actual):
 @roles_required("admin", "super_admin", "desarrollador")
 def listar_descuadres(usuario_actual):
     estado = request.args.get("estado")  # filtro opcional
-    q = AjusteCaja.query.filter(AjusteCaja.tipo.in_(["sobrante", "faltante"]))
+    from app.utils.residencial import scope_por_sesion_caja
+    q = scope_por_sesion_caja(AjusteCaja.query, AjusteCaja,
+                              AjusteCaja.sesion_caja_id, usuario_actual).filter(
+        AjusteCaja.tipo.in_(["sobrante", "faltante"]))
     if estado:
-        q = q.filter_by(estado=estado)
+        q = q.filter(AjusteCaja.estado == estado)
     ajustes = q.order_by(AjusteCaja.created_at.desc()).limit(100).all()
     return jsonify({"data": [a.to_dict() for a in ajustes]})
 
@@ -881,9 +891,11 @@ def solicitar_salida(usuario_actual):
 def listar_salidas(usuario_actual):
     """Lista todas las salidas. El admin ve los depósitos al banco históricos."""
     estado = request.args.get("estado")
-    q = SalidaCaja.query
+    from app.utils.residencial import scope_por_sesion_caja
+    q = scope_por_sesion_caja(SalidaCaja.query, SalidaCaja,
+                              SalidaCaja.sesion_id, usuario_actual)
     if estado:
-        q = q.filter_by(estado=estado)
+        q = q.filter(SalidaCaja.estado == estado)
     salidas = q.order_by(SalidaCaja.created_at.desc()).limit(200).all()
     return jsonify({"data": [s.to_dict() for s in salidas]})
 

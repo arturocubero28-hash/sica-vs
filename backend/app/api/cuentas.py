@@ -1183,9 +1183,10 @@ def crear_solicitud_baja(usuario_actual):
 def listar_solicitudes_baja(usuario_actual):
     """Lista todas las solicitudes de baja (para el panel admin)."""
     estado = request.args.get("estado", "pendiente")
-    q = SolicitudBaja.query
+    from app.utils.residencial import scope_por_cuenta
+    q = scope_por_cuenta(SolicitudBaja.query, SolicitudBaja, usuario_actual)
     if estado != "todas":
-        q = q.filter_by(estado=estado)
+        q = q.filter(SolicitudBaja.estado == estado)
     solicitudes = q.order_by(SolicitudBaja.created_at.desc()).all()
     return jsonify({"data": [s.to_dict() for s in solicitudes]})
 
