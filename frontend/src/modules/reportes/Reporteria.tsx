@@ -3,6 +3,7 @@ import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos, rep
   type ReporteFinancieroDTO, type MoraPorCasaDTO, type CasaMoraDTO,
   type ReporteCajaDTO, type ReporteAccesosDTO, type ReporteInventarioDTO, type ReporteEjecutivoDTO } from "../../api/client";
 import { L } from "../../utils/formato";
+import { useMiResidencial } from "../../hooks/useMiResidencial";
 import { GraficoBarras, GraficoDona, GraficoLinea, GraficoBarrasCant, GraficoBarrasHoriz } from "./Graficos";
 import {
   Star, DollarSign, FileText, Landmark, ShieldCheck, Ticket,
@@ -26,6 +27,9 @@ function rangoMesActual(): [string, string] {
 
 export function Reporteria() {
   const [tab, setTab] = useState<"ejecutivo" | "financiero" | "mora" | "caja" | "accesos" | "inventario">("ejecutivo");
+  // Día 46: nombre real de la residencial (en vez de "Villas del Sol" fijo),
+  // cargado una vez acá y pasado a cada sub-reporte para sus exportaciones.
+  const { nombre: nombreResidencial } = useMiResidencial();
   return (
     <div className="reporteria">
       <div className="historial-tabs" style={{ marginBottom: 14 }}>
@@ -48,17 +52,17 @@ export function Reporteria() {
           <Ticket size={15} /> Inventario
         </button>
       </div>
-      {tab === "ejecutivo" && <ReporteEjecutivoVista />}
-      {tab === "financiero" && <ReporteFinancieroVista />}
-      {tab === "mora" && <ReporteMoraPorCasa />}
-      {tab === "caja" && <ReporteCajaVista />}
-      {tab === "accesos" && <ReporteAccesosVista />}
-      {tab === "inventario" && <ReporteInventarioVista />}
+      {tab === "ejecutivo" && <ReporteEjecutivoVista nombreResidencial={nombreResidencial} />}
+      {tab === "financiero" && <ReporteFinancieroVista nombreResidencial={nombreResidencial} />}
+      {tab === "mora" && <ReporteMoraPorCasa nombreResidencial={nombreResidencial} />}
+      {tab === "caja" && <ReporteCajaVista nombreResidencial={nombreResidencial} />}
+      {tab === "accesos" && <ReporteAccesosVista nombreResidencial={nombreResidencial} />}
+      {tab === "inventario" && <ReporteInventarioVista nombreResidencial={nombreResidencial} />}
     </div>
   );
 }
 
-function ReporteFinancieroVista() {
+function ReporteFinancieroVista({ nombreResidencial }: { nombreResidencial: string }) {
   const hoy = new Date();
   const [modo, setModo] = useState<"mes" | "rango">("mes");
   const [anio, setAnio] = useState(hoy.getFullYear());
@@ -101,7 +105,7 @@ function ReporteFinancieroVista() {
     doc.text("Reporte Financiero", 14, 13);
     doc.setFontSize(10);
     doc.setTextColor(245, 197, 24);
-    doc.text("Residencial Villas del Sol", 14, 21);
+    doc.text(`Residencial ${nombreResidencial}`, 14, 21);
 
     doc.setTextColor(40, 52, 64);
     doc.setFontSize(12);
@@ -152,7 +156,7 @@ function ReporteFinancieroVista() {
     const wb = XLSX.utils.book_new();
 
     const resumen = [
-      ["Reporte Financiero — Villas del Sol"],
+      [`Reporte Financiero — ${nombreResidencial}`],
       ["Periodo", data!.mes_label],
       [],
       ["Total esperado", data!.total_esperado],
@@ -432,7 +436,7 @@ function ReporteFinancieroVista() {
   );
 }
 
-function ReporteMoraPorCasa() {
+function ReporteMoraPorCasa({ nombreResidencial }: { nombreResidencial: string }) {
   const [data, setData] = useState<MoraPorCasaDTO | null>(null);
   const [cargando, setCargando] = useState(true);
   const [expandida, setExpandida] = useState<string | null>(null);
@@ -450,7 +454,7 @@ function ReporteMoraPorCasa() {
     doc.setFontSize(16); doc.setTextColor("#022E45");
     doc.text("Reporte de Mora por Casa", 14, 20);
     doc.setFontSize(10); doc.setTextColor("#6b7280");
-    doc.text("Residencial Villas del Sol", 14, 27);
+    doc.text(`Residencial ${nombreResidencial}`, 14, 27);
     doc.text(`Generado: ${new Date(data.generado).toLocaleDateString("es-HN")}`, 14, 33);
     doc.text(`Total adeudado: ${L(data.total_general_adeudado)}  ·  ${data.total_casas_mora} casas en mora`, 14, 39);
     let startY = 45;
@@ -492,7 +496,7 @@ function ReporteMoraPorCasa() {
     // Hoja 1: resumen + antigüedad de la deuda (aging)
     const resumen: (string | number)[][] = [
       ["Reporte de Mora por Casa"],
-      ["Residencial Villas del Sol"],
+      [`Residencial ${nombreResidencial}`],
       ["Generado", new Date(data.generado).toLocaleDateString("es-HN")],
       [],
       ["Total adeudado", data.total_general_adeudado],
@@ -639,7 +643,7 @@ function ReporteMoraPorCasa() {
 // ════════════════════════════════════════════════════════════════
 // REPORTE DE CAJA Y ARQUEO (tesorero)
 // ════════════════════════════════════════════════════════════════
-function ReporteCajaVista() {
+function ReporteCajaVista({ nombreResidencial }: { nombreResidencial: string }) {
   const [ini, fin] = rangoMesActual();
   const [desde, setDesde] = useState(ini);
   const [hasta, setHasta] = useState(fin);
@@ -662,7 +666,7 @@ function ReporteCajaVista() {
     doc.setTextColor(255); doc.setFontSize(16);
     doc.text("Reporte de Caja y Arqueo", 14, 13);
     doc.setFontSize(10);
-    doc.text(`Villas del Sol · ${data.periodo_label}`, 14, 21);
+    doc.text(`${nombreResidencial} · ${data.periodo_label}`, 14, 21);
     doc.setTextColor(0);
 
     autoTable(doc, {
@@ -695,7 +699,7 @@ function ReporteCajaVista() {
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const resumen = [
-      ["Reporte de Caja — Villas del Sol"], [data.periodo_label], [],
+      [`Reporte de Caja — ${nombreResidencial}`], [data.periodo_label], [],
       ["Sesiones cerradas", data.total_sesiones],
       ["Total efectivo", data.total_efectivo],
       ["Total POS", data.total_pos],
@@ -790,7 +794,7 @@ function ReporteCajaVista() {
 // ════════════════════════════════════════════════════════════════
 // REPORTE DE ACCESOS Y SEGURIDAD (administrador)
 // ════════════════════════════════════════════════════════════════
-function ReporteAccesosVista() {
+function ReporteAccesosVista({ nombreResidencial }: { nombreResidencial: string }) {
   const [ini, fin] = rangoMesActual();
   const [desde, setDesde] = useState(ini);
   const [hasta, setHasta] = useState(fin);
@@ -818,7 +822,7 @@ function ReporteAccesosVista() {
     doc.setTextColor(255); doc.setFontSize(16);
     doc.text("Reporte de Accesos y Seguridad", 14, 13);
     doc.setFontSize(10);
-    doc.text(`Villas del Sol · ${data.periodo_label}`, 14, 21);
+    doc.text(`${nombreResidencial} · ${data.periodo_label}`, 14, 21);
     doc.setTextColor(0);
     autoTable(doc, {
       startY: 34,
@@ -847,7 +851,7 @@ function ReporteAccesosVista() {
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const resumen = [
-      ["Reporte de Accesos — Villas del Sol"], [data.periodo_label], [],
+      [`Reporte de Accesos — ${nombreResidencial}`], [data.periodo_label], [],
       ["Total de visitas", data.total_visitas],
       ["Entradas registradas", data.total_entradas],
       ["Visitas únicas", data.por_tipo.unica],
@@ -948,7 +952,7 @@ function ReporteAccesosVista() {
 // ════════════════════════════════════════════════════════════════
 // REPORTE DE INVENTARIO DE TARJETAS (administración)
 // ════════════════════════════════════════════════════════════════
-function ReporteInventarioVista() {
+function ReporteInventarioVista({ nombreResidencial }: { nombreResidencial: string }) {
   const [ini, fin] = rangoMesActual();
   const [desde, setDesde] = useState(ini);
   const [hasta, setHasta] = useState(fin);
@@ -971,7 +975,7 @@ function ReporteInventarioVista() {
     doc.setTextColor(255); doc.setFontSize(16);
     doc.text("Reporte de Inventario de Tarjetas", 14, 13);
     doc.setFontSize(10);
-    doc.text(`Villas del Sol · ${data.periodo_label}`, 14, 21);
+    doc.text(`${nombreResidencial} · ${data.periodo_label}`, 14, 21);
     doc.setTextColor(0);
     autoTable(doc, {
       startY: 34,
@@ -1000,7 +1004,7 @@ function ReporteInventarioVista() {
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const resumen = [
-      ["Reporte de Inventario — Villas del Sol"], [data.periodo_label], [],
+      [`Reporte de Inventario — ${nombreResidencial}`], [data.periodo_label], [],
       ["Tarjetas vendidas (período)", data.total_vendidas],
       ["Recaudado (período)", data.total_recaudado],
       ["Stock total en bodega", data.stock_total],
@@ -1075,7 +1079,7 @@ function ReporteInventarioVista() {
 }
 
 
-function ReporteEjecutivoVista() {
+function ReporteEjecutivoVista({ nombreResidencial }: { nombreResidencial: string }) {
   const hoy = new Date();
   const fmtL = (n: number) => new Intl.NumberFormat("es-HN", { style: "currency", currency: "HNL", maximumFractionDigits: 0 }).format(n);
   const [mes, setMes] = useState(hoy.getMonth() + 1);
@@ -1101,7 +1105,7 @@ function ReporteEjecutivoVista() {
     doc.setFillColor(2, 46, 69); doc.rect(0, 0, 210, 30, "F");
     doc.setTextColor(255); doc.setFontSize(18);
     doc.text("Resumen Ejecutivo", 14, 14);
-    doc.setFontSize(11); doc.text("Residencial Villas del Sol", 14, 22);
+    doc.setFontSize(11); doc.text(`Residencial ${nombreResidencial}`, 14, 22);
     doc.setTextColor(244, 135, 35); doc.setFontSize(12);
     doc.text(data.mes_label, 196, 22, { align: "right" });
 

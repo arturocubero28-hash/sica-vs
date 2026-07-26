@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { listarComunicados, urlImagenComunicado, type ComunicadoDTO } from "../../api/client";
+import { useMiResidencial } from "../../hooks/useMiResidencial";
 import { Megaphone } from "lucide-react";
 
 export function HomeResidente() {
+  const { nombre: nombreResidencial } = useMiResidencial();
   const [comunicados, setComunicados] = useState<ComunicadoDTO[]>([]);
   const [cargando, setCargando] = useState(true);
   const [abierto, setAbierto] = useState<ComunicadoDTO | null>(null);
@@ -16,7 +18,7 @@ export function HomeResidente() {
   return (
     <div className="home-residente">
       <div className="home-saludo">
-        <h2>Comunidad Villas del Sol</h2>
+        <h2>Comunidad {nombreResidencial}</h2>
         <p className="muted">Anuncios y comunicados de la administración</p>
       </div>
 

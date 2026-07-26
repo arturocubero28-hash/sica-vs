@@ -216,7 +216,7 @@ function FormUsuario({ tipo, onCerrar, onCreado }: {
     if (!apellido.trim()) e.apellido  = "El apellido es obligatorio.";
     if (!email.trim())    e.email     = "El correo electrónico es obligatorio.";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
-                          e.email     = "El correo no tiene un formato válido (ej. juan@villasdelsol.hn).";
+                          e.email     = "El correo no tiene un formato válido (ej. juan@ejemplo.com).";
     if (telefono.trim() && !/^[\d\s\-+()]{7,15}$/.test(telefono.trim()))
                           e.telefono  = "El teléfono no parece válido.";
     setErrors(e);
@@ -243,8 +243,8 @@ function FormUsuario({ tipo, onCerrar, onCreado }: {
   }
 
   const titulo = tipo === "cajero" ? "Nuevo cajero" : tipo === "supervisor" ? "Nuevo supervisor" : "Nuevo guardia";
-  const ph = tipo === "cajero" ? "cajero@villasdelsol.hn"
-    : tipo === "supervisor" ? "supervisor@villasdelsol.hn" : "guardia@villasdelsol.hn";
+  const ph = tipo === "cajero" ? "cajero@ejemplo.com"
+    : tipo === "supervisor" ? "supervisor@ejemplo.com" : "guardia@ejemplo.com";
 
   return (
     <div className="modal" onClick={onCerrar}>

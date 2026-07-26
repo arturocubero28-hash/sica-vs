@@ -5,6 +5,7 @@ import {
   type MetricasDTO, type VisitaTablaDTO, type VisitaActivaDTO, type CasaMoraDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
+import { useMiResidencial } from "../../hooks/useMiResidencial";
 import { Building2, Car, Circle, FileText, PartyPopper, Search, Users } from "lucide-react";
 
 function horaCorta(iso?: string): string {
@@ -21,6 +22,7 @@ const tiposVisita: Record<string, string> = {
 };
 
 export function DashboardAdmin() {
+  const { nombre: nombreResidencial } = useMiResidencial();
   const [m, setM] = useState<MetricasDTO | null>(null);
   const [visitas, setVisitas] = useState<VisitaTablaDTO[]>([]);
   const [vistaActivas, setVistaActivas] = useState(false);
@@ -69,7 +71,7 @@ export function DashboardAdmin() {
       <div className="dash-header-pro">
         <div>
           <h2 className="dash-titulo">Panel de control</h2>
-          <span className="muted">Residencial Villas del Sol</span>
+          <span className="muted">Residencial {nombreResidencial}</span>
         </div>
         <div className="dash-fecha">
           <span className="dash-fecha-dia">{new Date().toLocaleDateString("es-HN", { weekday: "long" })}</span>

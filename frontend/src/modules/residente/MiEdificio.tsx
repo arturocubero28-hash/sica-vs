@@ -4,8 +4,10 @@ import {
   misCodigosEnrolamiento, borrarCodigoEnrolamiento, crearSolicitudBaja,
   type Unidad, type Cuenta, type CodigoEnrolamiento,
 } from "../../api/client";
+import { useMiResidencial } from "../../hooks/useMiResidencial";
 
 export function MiEdificio() {
+  const { nombre: nombreResidencial } = useMiResidencial();
   const [edificios, setEdificios] = useState<Unidad[]>([]);
   const [codigos, setCodigos] = useState<CodigoEnrolamiento[]>([]);
   const [apartamentos, setApartamentos] = useState<Cuenta[]>([]);
@@ -72,7 +74,7 @@ export function MiEdificio() {
   }
 
   function compartir(c: CodigoEnrolamiento) {
-    const msg = `Hola, para enrolarte como inquilino en ${c.edificio} de Residencial Villas del Sol, ` +
+    const msg = `Hola, para enrolarte como inquilino en ${c.edificio} de Residencial ${nombreResidencial}, ` +
       `andá a la oficina de administración y dictá este código: ${c.codigo}` +
       (c.apartamento_sugerido ? ` (Apartamento ${c.apartamento_sugerido})` : "");
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");

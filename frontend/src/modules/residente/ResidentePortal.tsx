@@ -7,15 +7,16 @@ import { CuotasResidente } from "./CuotasResidente";
 import { HomeResidente } from "./HomeResidente";
 import { MiEdificio } from "./MiEdificio";
 import { TarjetaQR, descargarTarjetaQR, generarTarjetaQR } from "../../components/TarjetaQR";
+import { useMiResidencial } from "../../hooks/useMiResidencial";
 import { Car, Package, RefreshCw, User, AlertTriangle } from "lucide-react";
 
 // Comparte el QR por WhatsApp (descarga la imagen y abre WhatsApp con mensaje)
-async function compartirWhatsApp(visita: VisitaDTO) {
+async function compartirWhatsApp(visita: VisitaDTO, nombreResidencial: string) {
   const vigencia = visita.valido_hasta
     ? new Date(visita.valido_hasta).toLocaleString()
     : "";
   const mensaje =
-    `Hola ${visita.nombre_visitante}, aquí está tu código de acceso para Residencial Villas del Sol. ` +
+    `Hola ${visita.nombre_visitante}, aquí está tu código de acceso para Residencial ${nombreResidencial}. ` +
     `Preséntalo al guardia en la entrada.` +
     (vigencia ? ` Válido hasta: ${vigencia}.` : "");
 
@@ -36,12 +37,12 @@ async function compartirWhatsApp(visita: VisitaDTO) {
 }
 
 // Comparte el código numérico de delivery por WhatsApp (texto, sin imagen)
-async function compartirCodigoWhatsApp(visita: VisitaDTO) {
+async function compartirCodigoWhatsApp(visita: VisitaDTO, nombreResidencial: string) {
   const vigencia = visita.valido_hasta
     ? new Date(visita.valido_hasta).toLocaleString()
     : "";
   const mensaje =
-    `Hola ${visita.nombre_visitante}, tu código de acceso para Residencial Villas del Sol es: ` +
+    `Hola ${visita.nombre_visitante}, tu código de acceso para Residencial ${nombreResidencial} es: ` +
     `*${visita.codigo_numerico}*. Dáselo al guardia en la entrada.` +
     (vigencia ? ` Válido hasta: ${vigencia}.` : "");
   window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, "_blank");
@@ -57,6 +58,7 @@ async function descargarQR(visita: VisitaDTO) {
 }
 
 export function ResidentePortal({ seccion = "home" }: { seccion?: string }) {
+  const { nombre: nombreResidencial } = useMiResidencial();
   const [cuenta, setCuenta] = useState<MiCuentaDTO | null>(null);
 
   useEffect(() => {
@@ -177,7 +179,7 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
             </div>
             <p>Dale este código a <b>{resultado.nombre_visitante}</b>. El guardia lo ingresará manualmente en la caseta. No necesita escanear nada.</p>
             <div className="row-btns">
-              <button onClick={() => compartirCodigoWhatsApp(resultado)}>
+              <button onClick={() => compartirCodigoWhatsApp(resultado, nombreResidencial)}>
                 Compartir por WhatsApp
               </button>
             </div>
@@ -187,7 +189,7 @@ function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
             <TarjetaQR visita={resultado} className="qr-imagen" />
             <p>Compartí esta imagen con <b>{resultado.nombre_visitante}</b> para que la presente al guardia.</p>
             <div className="row-btns">
-              <button onClick={() => compartirWhatsApp(resultado)}>
+              <button onClick={() => compartirWhatsApp(resultado, nombreResidencial)}>
                 Compartir por WhatsApp
               </button>
               <button onClick={() => descargarQR(resultado)}>
@@ -392,7 +394,7 @@ function ModalCompartirCodigo({ visita, onCerrar }: { visita: VisitaDTO; onCerra
               <span className="codigo-delivery-numero">{visita.codigo_numerico}</span>
             </div>
             <p className="muted small">Dale este código a {visita.nombre_visitante}. El guardia lo ingresa manualmente.</p>
-            <button className="cuota-btn-pagar full" onClick={() => compartirCodigoWhatsApp(visita)}>
+            <button className="cuota-btn-pagar full" onClick={() => compartirCodigoWhatsApp(visita, nombreResidencial)}>
               Compartir por WhatsApp
             </button>
           </>
@@ -401,7 +403,7 @@ function ModalCompartirCodigo({ visita, onCerrar }: { visita: VisitaDTO; onCerra
             <TarjetaQR visita={visita} className="qr-imagen" />
             <p className="muted small">Compartí esta imagen con {visita.nombre_visitante}.</p>
             <div className="row-btns">
-              <button onClick={() => compartirWhatsApp(visita)}>Compartir por WhatsApp</button>
+              <button onClick={() => compartirWhatsApp(visita, nombreResidencial)}>Compartir por WhatsApp</button>
               <button className="ghost" onClick={() => descargarQR(visita)}>Descargar</button>
             </div>
           </>
