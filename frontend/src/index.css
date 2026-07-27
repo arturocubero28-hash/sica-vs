@@ -2278,8 +2278,13 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 /* Dos botones de saldo en supervisión */
 .saldo-botones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.saldo-editar-btn.secundario { background: transparent; color: var(--marca-azul); border: 1px solid #c0d8f0; opacity: 0.85; }
-.saldo-editar-btn.secundario:hover { opacity: 1; background: #f1f6fc; }
+/* Bug encontrado por el usuario (Día 47): .secundario estaba pensado para
+   fondo claro (texto azul), pero se usa dentro de .saldo-caja-card que
+   tiene fondo azul oscuro — el texto quedaba casi invisible (azul sobre
+   azul). Ahora usa blanco tenue, igual familia visual que el botón
+   primario pero con menor peso (borde más sutil, sin relleno). */
+.saldo-editar-btn.secundario { background: transparent; color: rgba(255,255,255,.85); border: 1px solid rgba(255,255,255,.35); opacity: 0.9; }
+.saldo-editar-btn.secundario:hover { opacity: 1; background: rgba(255,255,255,.12); }
 
 /* Comparativo en el modal de ajuste por conteo */
 .conteo-comparativo { background: #f9fbfd; border: 1px solid #eef2f7; border-radius: 10px; padding: 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 8px; }

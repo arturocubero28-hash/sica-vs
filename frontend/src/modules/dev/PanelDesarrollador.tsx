@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devCrearAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, devCrearResidencial, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, devCrearResidencial, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO } from "../../api/client";
 import { AlertTriangle, BarChart3, Building2, Construction, Key, Lock, Monitor, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
@@ -504,13 +504,9 @@ function ConfigTrancas() {
   const [edits, setEdits] = useState<Record<number, { nombre: string; tipo: string; relay_pin: string; pulso_ms: string; punto_acceso: string; direccion: string }>>({});
   const [guardando, setGuardando] = useState<number | null>(null);
   const [msg, setMsg] = useState<{ id: number; texto: string; ok: boolean } | null>(null);
-  // Alta
-  const [mostrarAlta, setMostrarAlta] = useState(false);
-  const [nuevoNombre, setNuevoNombre] = useState("");
-  const [nuevoTipo, setNuevoTipo] = useState("vehicular");
-  const [nuevoPunto, setNuevoPunto] = useState("");
-  const [creando, setCreando] = useState(false);
-  const [msgAlta, setMsgAlta] = useState("");
+  // Día 47: se quitaron los estados del formulario de alta (mostrarAlta,
+  // nuevoNombre, nuevoTipo, nuevoPunto, creando, msgAlta) — el admin crea
+  // las trancas desde Mi Perfil, no el panel dev.
   // Baja
   const [borrar, setBorrar] = useState<{ acceso: AccesoFisicoDTO; eventos: number } | null>(null);
   const [borrando, setBorrando] = useState(false);
@@ -590,22 +586,6 @@ function ConfigTrancas() {
     } catch { /* noop */ }
   }
 
-  async function crear() {
-    const nombre = nuevoNombre.trim();
-    if (!nombre) { setMsgAlta("El nombre es obligatorio"); return; }
-    setCreando(true);
-    setMsgAlta("");
-    try {
-      await devCrearAcceso({ nombre, tipo: nuevoTipo, punto_acceso: nuevoPunto.trim() });
-      setNuevoNombre(""); setNuevoTipo("vehicular"); setNuevoPunto(""); setMostrarAlta(false);
-      cargar();
-    } catch (err: any) {
-      setMsgAlta(err?.message || "No se pudo crear");
-    } finally {
-      setCreando(false);
-    }
-  }
-
   async function pedirBorrar(a: AccesoFisicoDTO) {
     try {
       const { eventos } = await devHistorialCount(a.id);
@@ -678,44 +658,21 @@ function ConfigTrancas() {
             )}
           </div>
         )}
-        <button className="dev-tranca-add" onClick={() => { setMostrarAlta((v) => !v); setMsgAlta(""); }}>
-          {mostrarAlta ? "Cancelar" : "+ Agregar acceso"}
-        </button>
       </div>
 
-      {mostrarAlta && (
-        <div className="dev-tranca-alta">
-          <div className="dev-tranca-alta-campos">
-            <label>
-              <span>Nombre</span>
-              <input type="text" placeholder="Ej: Entrada Principal Vehicular" maxLength={80}
-                value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} />
-            </label>
-            <label>
-              <span>Tipo</span>
-              <select value={nuevoTipo} onChange={(e) => setNuevoTipo(e.target.value)}>
-                <option value="vehicular">Vehicular</option>
-                <option value="peatonal">Peatonal</option>
-              </select>
-            </label>
-            <label>
-              <span>Punto de acceso</span>
-              <input type="text" placeholder="Ej: Acceso Principal" maxLength={80} list="puntos-existentes"
-                value={nuevoPunto} onChange={(e) => setNuevoPunto(e.target.value)} />
-              <datalist id="puntos-existentes">
-                {puntos.filter(Boolean).map((p) => <option key={p} value={p as string} />)}
-              </datalist>
-            </label>
-            <button className="dev-tranca-btn" style={{ maxWidth: 140 }} disabled={creando} onClick={crear}>
-              {creando ? "Creando…" : "Crear acceso"}
-            </button>
-          </div>
-          {msgAlta && <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>{msgAlta}</div>}
-        </div>
-      )}
+      {/* Día 47: se quitó el botón "+ Agregar acceso" y su formulario — era
+          una vía duplicada e inferior a la que ya tiene el admin en
+          Mi Perfil → Puntos de acceso (esa hereda la residencial
+          automáticamente; esta dejaba crear sin pedirla y asignarla
+          después, por separado). El panel dev sigue siendo el lugar
+          correcto para configurar relay_pin/pulso_ms de trancas YA
+          creadas por el admin — eso sí es exclusivo del desarrollador. */}
 
       {(!accesos || accesos.length === 0) ? (
-        <p className="muted" style={{ padding: 20 }}>No hay accesos físicos. Agregá el primero con el botón de arriba.</p>
+        <p className="muted" style={{ padding: 20 }}>
+          No hay accesos físicos todavía. El admin de cada residencial los crea desde
+          Mi Perfil → Puntos de acceso; una vez creados, aparecen acá para configurar su hardware.
+        </p>
       ) : (
         grupos.map((g) => (
           <div key={g.punto || "sin-punto"} className="dev-punto-grupo">
@@ -831,8 +788,11 @@ function ConfigPis() {
   const [creando, setCreando] = useState(false);
   // token recién generado para mostrar una vez
   const [tokenNuevo, setTokenNuevo] = useState<{ nombre: string; token: string } | null>(null);
-  // puntos de acceso existentes (sacados de las trancas) para el desplegable
-  const [puntos, setPuntos] = useState<string[]>([]);
+  // Día 47: se guarda la lista completa de accesos (con su residencial),
+  // no solo los nombres de punto — así el desplegable de "Punto de acceso"
+  // se puede filtrar según la residencial elegida, en vez de mezclar los
+  // puntos de todas las residenciales.
+  const [accesosTodos, setAccesosTodos] = useState<AccesoFisicoDTO[]>([]);
   // Bases multi-residencial (Día 37): a qué cliente asignar cada Pi
   const [residenciales, setResidenciales] = useState<ResidencialDTO[]>([]);
 
@@ -848,14 +808,23 @@ function ConfigPis() {
       .catch(() => setPis([]))
       .finally(() => setCargando(false));
     devAccesosFisicos()
-      .then((accesos) => {
-        const ps = Array.from(new Set(accesos.map((a) => a.punto_acceso).filter(Boolean))) as string[];
-        setPuntos(ps);
-      })
-      .catch(() => setPuntos([]));
+      .then(setAccesosTodos)
+      .catch(() => setAccesosTodos([]));
     devResidenciales().then(setResidenciales).catch(() => setResidenciales([]));
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Puntos de acceso DE LA RESIDENCIAL elegida únicamente — antes se
+  // mezclaban los de todas. Sin residencial elegida todavía, no hay nada
+  // que mostrar (se fuerza a elegir residencial primero).
+  const puntosFiltrados = nuevaResidencial
+    ? Array.from(new Set(
+        accesosTodos
+          .filter((a) => a.residencial?.id === nuevaResidencial)
+          .map((a) => a.punto_acceso)
+          .filter(Boolean)
+      )) as string[]
+    : [];
 
   async function asignarResidencial(d: DispositivoDTO, residencialId: string) {
     // Reasignar la residencial de una Pi ya en uso es una acción sensible
@@ -949,19 +918,33 @@ function ConfigPis() {
                 <option value="lector_ct9">Lector inteligente (CT9)</option>
               </select>
             </label>
-            <label>
-              <span>Punto de acceso</span>
-              <select className="dev-tranca-tipo-sel" value={nuevoPunto} onChange={(e) => setNuevoPunto(e.target.value)}>
-                <option value="">— Elegí un punto —</option>
-                {puntos.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </label>
+            {/* Día 47: Residencial va ANTES que Punto de acceso — el punto
+                elegible depende de la residencial, no al revés. Antes se
+                preguntaba el punto primero con TODOS los puntos de TODAS
+                las residenciales mezclados en un mismo desplegable. */}
             <label>
               <span>Residencial *</span>
-              <select className="dev-tranca-tipo-sel" value={nuevaResidencial} onChange={(e) => setNuevaResidencial(e.target.value)}>
+              <select className="dev-tranca-tipo-sel" value={nuevaResidencial}
+                onChange={(e) => { setNuevaResidencial(e.target.value); setNuevoPunto(""); }}>
                 <option value="">— Elegí una residencial —</option>
                 {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
               </select>
+            </label>
+            <label>
+              <span>Punto de acceso</span>
+              <select className="dev-tranca-tipo-sel" value={nuevoPunto} onChange={(e) => setNuevoPunto(e.target.value)}
+                disabled={!nuevaResidencial}>
+                <option value="">
+                  {nuevaResidencial ? "— Elegí un punto —" : "Elegí primero una residencial"}
+                </option>
+                {puntosFiltrados.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+              {nuevaResidencial && puntosFiltrados.length === 0 && (
+                <span className="muted small">
+                  Esta residencial todavía no tiene puntos de acceso creados (los crea su admin
+                  desde Mi Perfil).
+                </span>
+              )}
             </label>
             <button className="dev-tranca-btn" style={{ maxWidth: 160 }} disabled={creando} onClick={crear}>
               {creando ? "Creando…" : "Crear Pi"}
@@ -980,11 +963,6 @@ function ConfigPis() {
           )}
           {errorAlta && (
             <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>{errorAlta}</div>
-          )}
-          {puntos.length === 0 && (
-            <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>
-              No hay puntos de acceso todavía. Primero creá trancas con su punto en la pestaña <Construction size={16} /> Trancas.
-            </div>
           )}
         </div>
       )}
