@@ -308,17 +308,29 @@ def ver_comprobante(usuario_actual, nombre_archivo):
         return jsonify({"error": {"code": "no_encontrado",
                                   "message": "Comprobante no encontrado"}}), 404
 
-    # FILES-05: quién puede ver este comprobante — el staff (ya podía) o el
-    # propio residente dueño del pago (antes NO podía ver su propio
-    # comprobante desde este endpoint, un hueco de autorización encontrado
-    # de paso al revisar el control de acceso a archivos).
-    es_staff = usuario_actual.rol in ("admin", "super_admin", "cajero", "desarrollador")
+    # FILES-05: quién puede ver este comprobante — el staff DE SU MISMA
+    # RESIDENCIAL (ya podía verlo, pero antes sin chequear cuál —
+    # hallazgo de auditoría Día 48: un admin o cajero de otra residencial
+    # podía ver comprobantes de pago ajenos, documentos financieros
+    # sensibles, con solo conocer el nombre de archivo), o el propio
+    # residente dueño del pago (antes NO podía ver su propio comprobante
+    # desde este endpoint, un hueco de autorización encontrado de paso al
+    # revisar el control de acceso a archivos).
+    es_plataforma = usuario_actual.rol in ("super_admin", "desarrollador")
+    es_staff_de_su_residencial = False
+    if usuario_actual.rol in ("admin", "cajero") and not es_plataforma:
+        unidad = pago.cuenta.unidad if pago.cuenta else None
+        rid_pago = unidad.residencial_id if unidad else None
+        es_staff_de_su_residencial = (
+            rid_pago is None or usuario_actual.residencial_id is None
+            or rid_pago == usuario_actual.residencial_id
+        )
     es_dueno = False
-    if not es_staff:
+    if not (es_plataforma or es_staff_de_su_residencial):
         residente = Residente.query.filter_by(usuario_id=usuario_actual.id, activo=True).first()
         es_dueno = bool(residente and pago.cuenta_id == residente.cuenta_id)
 
-    if not (es_staff or es_dueno):
+    if not (es_plataforma or es_staff_de_su_residencial or es_dueno):
         return jsonify({"error": {"code": "acceso_denegado",
                                   "message": "No tenés permiso para ver este comprobante"}}), 403
 
@@ -329,7 +341,8 @@ def ver_comprobante(usuario_actual, nombre_archivo):
 @cuotas_bp.get("/pendientes/count")
 @roles_required("admin")
 def contar_pendientes(usuario_actual):
-    n = Pago.query.filter_by(estado="en_revision").count()
+    from app.utils.residencial import scope_pagos
+    n = scope_pagos(Pago.query, usuario_actual).filter(Pago.estado == "en_revision").count()
     return jsonify({"data": {"pendientes": n}})
 
 
@@ -337,9 +350,13 @@ def contar_pendientes(usuario_actual):
 @cuotas_bp.get("/pendientes")
 @roles_required("admin")
 def pagos_pendientes(usuario_actual):
+    # Día 48 — hallazgo de auditoría: sin filtrar, un admin veía los
+    # comprobantes de pago EN REVISIÓN de todas las residenciales —
+    # incluye monto, unidad y periodo de residentes ajenos.
+    from app.utils.residencial import scope_pagos
     pagos = (
-        Pago.query
-        .filter_by(estado="en_revision")
+        scope_pagos(Pago.query, usuario_actual)
+        .filter(Pago.estado == "en_revision")
         .order_by(Pago.created_at.asc())
         .all()
     )
@@ -357,10 +374,14 @@ def pagos_pendientes(usuario_actual):
 @cuotas_bp.get("/todas")
 @roles_required("admin")
 def todas_las_cuotas(usuario_actual):
+    # Día 48 — hallazgo de auditoría: sin filtrar, mostraba las cuotas de
+    # TODAS las residenciales (monto, estado, unidad) — un admin podía ver
+    # la situación financiera completa de residentes ajenos.
+    from app.utils.residencial import scope_cuotas
     estado = request.args.get("estado")  # filtro opcional
-    q = Cuota.query
+    q = scope_cuotas(Cuota.query, usuario_actual)
     if estado:
-        q = q.filter_by(estado=estado)
+        q = q.filter(Cuota.estado == estado)
     cuotas = q.order_by(Cuota.periodo.desc()).all()
 
     resultado = []
@@ -387,6 +408,19 @@ def revisar_pago(usuario_actual, uuid_pago):
             .first())
     if not pago:
         return jsonify({"error": {"code": "NO_ENCONTRADO", "message": "Pago no encontrado"}}), 404
+
+    # Día 48 — hallazgo de auditoría: sin este chequeo, un admin podía
+    # aprobar o rechazar el pago de una residencial ajena con solo
+    # conocer su UUID — una acción que mueve dinero real (desbloquea
+    # cuenta, marca cuota pagada). Se verifica DESPUÉS del FOR UPDATE
+    # (mantiene la protección de concurrencia intacta) pero ANTES de
+    # aplicar cualquier efecto.
+    if usuario_actual.rol not in ("super_admin", "desarrollador") and usuario_actual.residencial_id:
+        unidad = pago.cuenta.unidad if pago.cuenta else None
+        rid_pago = unidad.residencial_id if unidad else None
+        if rid_pago is not None and rid_pago != usuario_actual.residencial_id:
+            db.session.rollback()  # soltar el candado antes de salir
+            return jsonify({"error": {"code": "NO_ENCONTRADO", "message": "Pago no encontrado"}}), 404
 
     body = request.get_json() or {}
     accion = body.get("accion")  # "aprobar" | "rechazar"
