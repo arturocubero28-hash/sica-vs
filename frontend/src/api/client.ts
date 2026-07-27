@@ -705,7 +705,11 @@ export const registrarPagoCaja = (body: { cuota_id: string; metodo: string; refe
   request<{ pago: any; sesion: SesionCajaDTO }>("/caja/pago", { method: "POST", body: JSON.stringify(body) });
 export const cerrarCaja = (body: { efectivo_contado: number; pos_contado: number; nota?: string; forzar?: boolean; desglose_billetes?: Record<string, number> }) =>
   request<SesionCajaDTO>("/caja/cerrar", { method: "POST", body: JSON.stringify(body) });
-export const listarSesionesCaja = () => request<SesionCajaDTO[]>("/caja/sesiones");
+// Día 47: residencialId opcional — lo usan super_admin/desarrollador para
+// elegir con cuál residencial trabajar (no pertenecen a ninguna propia). Un
+// admin/cajero normal lo omite: el backend resuelve la suya automáticamente.
+export const listarSesionesCaja = (residencialId?: string) =>
+  request<SesionCajaDTO[]>(`/caja/sesiones${residencialId ? `?residencial_id=${residencialId}` : ""}`);
 export const detalleSesionCaja = (uuid: string) => request<SesionCajaDTO>(`/caja/sesiones/${uuid}`);
 
 // ── RESUMEN DE CAJA (saldo del sistema) ───────────────────────────────────────
@@ -720,7 +724,8 @@ export interface ResumenCajaDTO {
   salidas_pendientes?: number;
   actualizado_en?: string;
 }
-export const resumenCaja = () => request<ResumenCajaDTO>("/caja/resumen");
+export const resumenCaja = (residencialId?: string) =>
+  request<ResumenCajaDTO>(`/caja/resumen${residencialId ? `?residencial_id=${residencialId}` : ""}`);
 
 // ── PANEL DESARROLLADOR ───────────────────────────────────────────────────────
 export interface DevMetricasDTO {
@@ -839,14 +844,14 @@ export const crearDesarrollador = (body: { nombre: string; apellido: string; ema
   request<UsuarioAdminDTO>("/usuarios/desarrolladores", { method: "POST", body: JSON.stringify(body) });
 
 // ── SALDO INICIAL Y DESCUADRES ────────────────────────────────────────────────
-export const modificarSaldoInicial = (saldoInicial: number, claveDev: string) =>
+export const modificarSaldoInicial = (saldoInicial: number, claveDev: string, residencialId?: string) =>
   request<{ saldo_inicial: number }>("/caja/saldo-inicial", {
-    method: "POST", body: JSON.stringify({ saldo_inicial: saldoInicial, clave_dev: claveDev }),
+    method: "POST", body: JSON.stringify({ saldo_inicial: saldoInicial, clave_dev: claveDev, residencial_id: residencialId }),
   });
-export const ajustarSaldoConteo = (saldoReal: number, claveDev: string, motivo?: string) =>
+export const ajustarSaldoConteo = (saldoReal: number, claveDev: string, motivo?: string, residencialId?: string) =>
   request<{ saldo_anterior?: number; saldo_nuevo?: number; diferencia?: number; sin_cambios?: boolean }>(
     "/caja/ajuste-conteo", {
-      method: "POST", body: JSON.stringify({ saldo_real: saldoReal, clave_dev: claveDev, motivo }),
+      method: "POST", body: JSON.stringify({ saldo_real: saldoReal, clave_dev: claveDev, motivo, residencial_id: residencialId }),
     });
 
 export interface DescuadreDTO {
@@ -855,8 +860,13 @@ export interface DescuadreDTO {
 }
 export const reportarDescuadre = (body: { tipo: string; monto: number; motivo?: string }) =>
   request<DescuadreDTO>("/caja/descuadre", { method: "POST", body: JSON.stringify(body) });
-export const listarDescuadres = (estado?: string) =>
-  request<DescuadreDTO[]>(`/caja/descuadres${estado ? "?estado=" + estado : ""}`);
+export const listarDescuadres = (estado?: string, residencialId?: string) => {
+  const q = new URLSearchParams();
+  if (estado) q.set("estado", estado);
+  if (residencialId) q.set("residencial_id", residencialId);
+  const qs = q.toString();
+  return request<DescuadreDTO[]>(`/caja/descuadres${qs ? "?" + qs : ""}`);
+};
 export const resolverDescuadre = (uuid: string, accion: string, claveDev?: string) =>
   request<DescuadreDTO>(`/caja/descuadres/${uuid}/resolver`, {
     method: "POST", body: JSON.stringify({ accion, clave_dev: claveDev }),
@@ -890,8 +900,13 @@ export interface SalidaCajaDTO {
 }
 export const solicitarSalida = (body: { monto: number; concepto: string }) =>
   request<SalidaCajaDTO>("/caja/salida", { method: "POST", body: JSON.stringify(body) });
-export const listarSalidas = (estado?: string) =>
-  request<SalidaCajaDTO[]>(`/caja/salidas${estado ? "?estado=" + estado : ""}`);
+export const listarSalidas = (estado?: string, residencialId?: string) => {
+  const q = new URLSearchParams();
+  if (estado) q.set("estado", estado);
+  if (residencialId) q.set("residencial_id", residencialId);
+  const qs = q.toString();
+  return request<SalidaCajaDTO[]>(`/caja/salidas${qs ? "?" + qs : ""}`);
+};
 export const autorizarSalida = (uuid: string, accion: string, clave?: string) =>
   request<SalidaCajaDTO>(`/caja/salidas/${uuid}/autorizar`, {
     method: "POST", body: JSON.stringify({ accion, clave }),

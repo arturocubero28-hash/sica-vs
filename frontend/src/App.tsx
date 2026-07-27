@@ -620,7 +620,7 @@ function ResetPassword({ token, onOk }: { token: string; onOk: () => void }) {
 }
 
 // ─── Vista admin con pestañas ────────────────────────────────
-function AdminView({ seccion }: { seccion: string }) {
+function AdminView({ seccion, usuario }: { seccion: string; usuario: Usuario }) {
   if (seccion === "casas") return <UnidadesPanel embedded />;
   if (seccion === "pagos") return <PagosAdmin />;
   if (seccion === "monitoreo") return <MonitoreoCamaras />;
@@ -630,7 +630,7 @@ function AdminView({ seccion }: { seccion: string }) {
   if (seccion === "arreglos") return <ArreglosPanel />;
   if (seccion === "historial") return <HistorialAccesos />;
   if (seccion === "usuarios") return <UsuariosAdmin />;
-  if (seccion === "caja") return <SupervisionCaja />;
+  if (seccion === "caja") return <SupervisionCaja usuario={usuario} />;
   if (seccion === "perfil") return <MiPerfil />;
   return <DashboardAdmin />;
 }
@@ -790,10 +790,10 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
         </header>
 
         <main className="content">
-          {esAdmin && <AdminView seccion={seccion} />}
+          {esAdmin && <AdminView seccion={seccion} usuario={usuario} />}
           {usuario.rol === "desarrollador" && (
             seccion === "perfil" ? <div className="card wide"><MiPerfil /></div>
-            : seccion === "caja" ? <SupervisionCaja />
+            : seccion === "caja" ? <SupervisionCaja usuario={usuario} />
             : <PanelDesarrollador />
           )}
           {usuario.rol === "cajero" && (

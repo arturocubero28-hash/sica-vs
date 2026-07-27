@@ -2,13 +2,23 @@ import { useState, useEffect } from "react";
 import {
   listarSesionesCaja, detalleSesionCaja, resumenCaja,
   modificarSaldoInicial, ajustarSaldoConteo, listarDescuadres, resolverDescuadre,
-  listarSalidas, autorizarSalida, urlConstanciaCaja,
+  listarSalidas, autorizarSalida, urlConstanciaCaja, devResidenciales,
   type SesionCajaDTO, type ResumenCajaDTO, type DescuadreDTO, type SalidaCajaDTO,
+  type ResidencialDTO, type Usuario,
 } from "../../api/client";
 import { L } from "../../utils/formato";
 import { FileText } from "lucide-react";
 
-export function SupervisionCaja() {
+export function SupervisionCaja({ usuario }: { usuario: Usuario }) {
+  // Día 47: desarrollador/super_admin son roles de plataforma sin
+  // residencial propia — cada residencial opera su caja de forma
+  // independiente (decisión del usuario), así que estos roles deben elegir
+  // explícitamente con cuál trabajar. Un admin normal no ve este selector:
+  // el backend resuelve su propia residencial automáticamente.
+  const esPlataforma = usuario.rol === "desarrollador" || usuario.rol === "super_admin";
+  const [residenciales, setResidenciales] = useState<ResidencialDTO[]>([]);
+  const [residencialId, setResidencialId] = useState<string>("");
+
   const [sesiones, setSesiones] = useState<SesionCajaDTO[]>([]);
   const [resumen, setResumen] = useState<ResumenCajaDTO | null>(null);
   const [descuadres, setDescuadres] = useState<DescuadreDTO[]>([]);
@@ -18,12 +28,54 @@ export function SupervisionCaja() {
   const [editarSaldo, setEditarSaldo] = useState(false);
   const [ajusteConteo, setAjusteConteo] = useState(false);
 
+  // Cargar la lista de residenciales una sola vez, solo si hace falta elegir.
+  useEffect(() => {
+    if (esPlataforma) devResidenciales().then(setResidenciales).catch(() => {});
+  }, [esPlataforma]);
+
   function recargar() {
-    Promise.all([listarSesionesCaja(), resumenCaja(), listarDescuadres(), listarSalidas()])
+    // Un rol de plataforma sin residencial elegida todavía: no hay nada que
+    // pedir — se espera a que elija en el selector.
+    if (esPlataforma && !residencialId) { setCargando(false); return; }
+    const rid = esPlataforma ? residencialId : undefined;
+    setCargando(true);
+    Promise.all([
+      listarSesionesCaja(rid), resumenCaja(rid), listarDescuadres(undefined, rid), listarSalidas(undefined, rid),
+    ])
       .then(([s, r, d, sl]) => { setSesiones(s); setResumen(r); setDescuadres(d); setSalidas(sl); })
       .catch(() => {}).finally(() => setCargando(false));
   }
-  useEffect(() => { recargar(); }, []);
+  useEffect(() => { recargar(); }, [residencialId]);
+
+  // El selector de residencial se muestra SIEMPRE para roles de plataforma,
+  // incluso mientras no se eligió nada — así saben que tienen que elegir.
+  if (esPlataforma && !residencialId) {
+    return (
+      <div className="supervision">
+        <div className="dash-header-pro">
+          <div>
+            <h2 className="dash-titulo">Supervisión de caja</h2>
+            <span className="muted">Elegí con qué residencial querés trabajar</span>
+          </div>
+        </div>
+        <div className="dash-card">
+          <p className="muted small">
+            Cada residencial opera su caja de forma independiente — no hay una vista combinada
+            de todas juntas, porque sumar el efectivo de negocios distintos no tiene sentido.
+          </p>
+          <div className="form-field">
+            <label>Residencial</label>
+            <select value={residencialId} onChange={e => setResidencialId(e.target.value)}>
+              <option value="">— Elegí una residencial —</option>
+              {residenciales.map(r => (
+                <option key={r.id} value={r.id}>{r.nombre}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (cargando) return <p className="muted">Cargando…</p>;
 
@@ -39,7 +91,12 @@ export function SupervisionCaja() {
       <div className="dash-header-pro">
         <div>
           <h2 className="dash-titulo">Supervisión de caja</h2>
-          <span className="muted">Saldos y sesiones de los cajeros</span>
+          <span className="muted">
+            {esPlataforma
+              ? <>Residencial: <b>{residenciales.find(r => r.id === residencialId)?.nombre || "…"}</b>{" "}
+                  <button className="ghost mini" onClick={() => setResidencialId("")}>Cambiar</button></>
+              : "Saldos y sesiones de los cajeros"}
+          </span>
         </div>
       </div>
 
@@ -275,13 +332,13 @@ export function SupervisionCaja() {
       )}
 
       {editarSaldo && resumen && (
-        <ModalSaldoInicial saldoActual={resumen.saldo_inicial}
+        <ModalSaldoInicial saldoActual={resumen.saldo_inicial} residencialId={esPlataforma ? residencialId : undefined}
           onCerrar={() => setEditarSaldo(false)}
           onGuardado={() => { setEditarSaldo(false); recargar(); }} />
       )}
 
       {ajusteConteo && resumen && (
-        <ModalAjusteConteo saldoSistema={resumen.saldo_actual}
+        <ModalAjusteConteo saldoSistema={resumen.saldo_actual} residencialId={esPlataforma ? residencialId : undefined}
           onCerrar={() => setAjusteConteo(false)}
           onGuardado={() => { setAjusteConteo(false); recargar(); }} />
       )}
@@ -332,8 +389,8 @@ function DescuadreItem({ descuadre, onResuelto }: { descuadre: DescuadreDTO; onR
   );
 }
 
-function ModalSaldoInicial({ saldoActual, onCerrar, onGuardado }: {
-  saldoActual: number; onCerrar: () => void; onGuardado: () => void;
+function ModalSaldoInicial({ saldoActual, residencialId, onCerrar, onGuardado }: {
+  saldoActual: number; residencialId?: string; onCerrar: () => void; onGuardado: () => void;
 }) {
   const [monto, setMonto] = useState(String(saldoActual));
   const [clave, setClave] = useState("");
@@ -345,7 +402,7 @@ function ModalSaldoInicial({ saldoActual, onCerrar, onGuardado }: {
     if (isNaN(m) || m < 0) { setError("Monto inválido"); return; }
     if (!clave) { setError("Ingresá la clave del desarrollador"); return; }
     setGuardando(true); setError("");
-    try { await modificarSaldoInicial(m, clave); onGuardado(); }
+    try { await modificarSaldoInicial(m, clave, residencialId); onGuardado(); }
     catch (e) { setError((e as Error).message); setGuardando(false); }
   }
 
@@ -379,8 +436,8 @@ function ModalSaldoInicial({ saldoActual, onCerrar, onGuardado }: {
   );
 }
 
-function ModalAjusteConteo({ saldoSistema, onCerrar, onGuardado }: {
-  saldoSistema: number; onCerrar: () => void; onGuardado: () => void;
+function ModalAjusteConteo({ saldoSistema, residencialId, onCerrar, onGuardado }: {
+  saldoSistema: number; residencialId?: string; onCerrar: () => void; onGuardado: () => void;
 }) {
   const [monto, setMonto] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -396,7 +453,7 @@ function ModalAjusteConteo({ saldoSistema, onCerrar, onGuardado }: {
     if (isNaN(m) || m < 0) { setError("Ingresá el saldo real contado"); return; }
     if (!clave) { setError("Ingresá la clave del desarrollador"); return; }
     setGuardando(true); setError("");
-    try { await ajustarSaldoConteo(m, clave, motivo); onGuardado(); }
+    try { await ajustarSaldoConteo(m, clave, motivo, residencialId); onGuardado(); }
     catch (e) { setError((e as Error).message); setGuardando(false); }
   }
 
