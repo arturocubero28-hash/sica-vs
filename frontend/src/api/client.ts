@@ -1128,6 +1128,10 @@ export interface ResidencialDTO {
   direccion: string | null;
   telefono: string | null;
   logo_archivo: string | null;
+  // Día 47: siempre vienen con un valor (el elegido, o el de fábrica si la
+  // residencial nunca lo personalizó) — nunca llegan en null.
+  color_primario: string;
+  color_secundario: string;
   activa: boolean;
   admin: { nombre: string; email: string } | null;
   created_at: string | null;

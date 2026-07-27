@@ -8,10 +8,11 @@ import {
 import {
   login, getMe, logout, getToken, setToken,
   activarCuenta, solicitarRecuperacion, restablecerPassword, cambiarPassword,
-  contarPagosPendientes, misEdificios,
+  contarPagosPendientes, misEdificios, getMiResidencial,
   loginConHuella, soportaHuella, estadisticasPublicas,
   type Usuario, type Rol,
 } from "./api/client";
+import { aplicarColoresResidencial } from "./utils/colores";
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
 import { ResidentePortal } from "./modules/residente/ResidentePortal";
 import { GuardiaPanel } from "./modules/guardia/GuardiaPanel";
@@ -50,6 +51,19 @@ export function App() {
       setCargando(false);
     }
   }, []);
+
+  // Día 47 — colores personalizables: apenas se resuelve la sesión (login
+  // fresco u ONLINE con token guardado — ambos casos terminan poniendo
+  // `usuario`), se piden los colores de SU residencial y se aplican una
+  // sola vez acá, arriba de todo. Un cambio en las variables CSS de :root
+  // alcanza a toda la app sin tener que tocar cada componente. Silencioso
+  // si falla: la app se queda con los colores de fábrica.
+  useEffect(() => {
+    if (!usuario) return;
+    getMiResidencial()
+      .then((r) => { if (r) aplicarColoresResidencial(r.color_primario, r.color_secundario); })
+      .catch(() => { /* se queda con los colores de fábrica */ });
+  }, [usuario]);
 
   function onLogin(u: Usuario) { setUsuario(u); setVista("login"); }
   function onLogout() { logout(); setUsuario(null); setVista("landing"); }
