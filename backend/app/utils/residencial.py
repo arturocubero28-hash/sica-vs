@@ -244,3 +244,52 @@ def scope_por_cuenta(query, modelo, usuario_actual):
     return (query.join(Cuenta, modelo.cuenta_id == Cuenta.id)
                  .join(Unidad, Cuenta.unidad_id == Unidad.id)
                  .filter(Unidad.residencial_id == rid))
+
+
+def resolver_residencial_caja(usuario_actual, request):
+    """
+    Día 47: cada residencial opera su caja de forma INDEPENDIENTE (decisión
+    del usuario) — no existe una vista combinada de "todas juntas", porque
+    sumar el efectivo de negocios distintos no tiene sentido operativo. Todo
+    endpoint de caja necesita saber a qué residencial aplica.
+
+    - cajero / admin / supervisor: su propia residencial_id (usan
+      residencial_id_de_usuario, que a diferencia de residencial_id_filtro
+      cubre TODOS los roles de cliente, no solo admin — un cajero también
+      tiene la suya).
+    - super_admin / desarrollador: no pertenecen a ninguna, así que deben
+      indicarla explícitamente con ?residencial_id=<uuid> (o en el body del
+      POST). Si no la mandan, se devuelve un error pidiendo que elijan una
+      — nunca se asume ni se combinan residenciales.
+
+    Devuelve (residencial_id_interno, respuesta_de_error). Uso típico:
+
+        rid, err = resolver_residencial_caja(usuario_actual, request)
+        if err:
+            return err
+    """
+    rid = residencial_id_de_usuario(usuario_actual)
+    if rid is not None:
+        return rid, None
+
+    # Rol de plataforma sin residencial propia: exigir que la indique.
+    uuid_pedido = request.args.get("residencial_id")
+    if not uuid_pedido and request.method in ("POST", "PUT"):
+        body = request.get_json(silent=True) or {}
+        uuid_pedido = body.get("residencial_id")
+
+    if not uuid_pedido:
+        from flask import jsonify
+        return None, (jsonify({"error": {
+            "code": "elegi_residencial",
+            "message": "Como desarrollador/super_admin, indicá con qué residencial "
+                       "querés trabajar (?residencial_id=<uuid>) — no hay una vista "
+                       "combinada de todas juntas."}}), 400)
+
+    from app.models.residencial import Residencial
+    r = Residencial.query.filter_by(uuid_publico=uuid_pedido).first()
+    if not r:
+        from flask import jsonify
+        return None, (jsonify({"error": {"code": "residencial_no_encontrada",
+                                         "message": "No se encontró esa residencial"}}), 404)
+    return r.id, None

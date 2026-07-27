@@ -42,10 +42,18 @@ def estado_caja(usuario_actual):
 @caja_bp.get("/saldo-apertura")
 @roles_required("cajero", "admin", "super_admin")
 def saldo_apertura(usuario_actual):
-    """Devuelve el fondo con que debe abrir la próxima caja (del cierre anterior)."""
+    """Devuelve el fondo con que debe abrir la próxima caja (del cierre anterior),
+    de LA RESIDENCIAL de usuario_actual — cada una opera su caja aparte."""
     from app.models.caja import ConfigCaja
-    sugerido = ConfigCaja.saldo_apertura_sugerido()
+    from app.utils.residencial import resolver_residencial_caja
+    rid, err = resolver_residencial_caja(usuario_actual, request)
+    if err:
+        return err
+    sugerido = ConfigCaja.saldo_apertura_sugerido(rid)
+    from app.models.usuario import Usuario
     ultima = (SesionCaja.query.filter_by(estado="cerrada")
+              .join(Usuario, SesionCaja.cajero_id == Usuario.id)
+              .filter(Usuario.residencial_id == rid)
               .order_by(SesionCaja.cerrada_en.desc()).first())
     return jsonify({"data": {
         "saldo_apertura": round(sugerido, 2),
@@ -62,24 +70,37 @@ def abrir_caja(usuario_actual):
         return jsonify({"error": {"code": "ya_abierta",
                                   "message": "Ya tenés una caja abierta. Cerrala antes de abrir otra."}}), 400
 
-    # Regla de integridad: no puede haber OTRA caja abierta en el sistema.
+    from app.utils.residencial import resolver_residencial_caja
+    rid, err = resolver_residencial_caja(usuario_actual, request)
+    if err:
+        return err
+
+    # Regla de integridad: no puede haber OTRA caja abierta EN ESTA
+    # RESIDENCIAL (Día 47: cada residencial opera su caja de forma
+    # independiente — decisión del usuario. Antes esta regla era global a
+    # todo el sistema).
     #
     # O3.1 (Auditoría Día 42): este chequeo tiene una carrera teórica —dos
-    # aperturas simultáneas podrían ambas pasar el SELECT—, pero se decidió
-    # NO protegerlo. La garantía fuerte requeriría un índice único parcial
-    # (migración a la base), y el escenario es muy improbable: exige que dos
-    # cajeros hagan clic en "abrir" en el mismo milisegundo, con muy pocos
-    # cajeros operando. El costo de la migración no justifica el riesgo.
-    # Si en el futuro hay muchos cajeros concurrentes, reconsiderar.
-    otra_abierta = SesionCaja.query.filter_by(estado="abierta").first()
+    # aperturas simultáneas en la misma residencial podrían ambas pasar el
+    # SELECT—, pero se decidió NO protegerlo. La garantía fuerte requeriría
+    # un índice único parcial (migración a la base), y el escenario es muy
+    # improbable: exige que dos cajeros de LA MISMA residencial hagan clic
+    # en "abrir" en el mismo milisegundo. Si en el futuro hay muchos
+    # cajeros concurrentes por residencial, reconsiderar.
+    from app.models.usuario import Usuario
+    otra_abierta = (SesionCaja.query
+                    .join(Usuario, SesionCaja.cajero_id == Usuario.id)
+                    .filter(SesionCaja.estado == "abierta", Usuario.residencial_id == rid)
+                    .first())
     if otra_abierta:
         return jsonify({"error": {"code": "otra_caja_abierta",
                                   "message": f"Ya hay una caja abierta por {otra_abierta.cajero.nombre if otra_abierta.cajero else 'otro usuario'}. Debe cerrarse antes de abrir otra."}}), 400
 
     # El fondo de apertura NO lo decide el cajero: viene del cierre anterior
-    # (o del saldo inicial del sistema si es la primera vez).
+    # de ESTA residencial (o de su saldo inicial configurado si es la
+    # primera vez).
     from app.models.caja import ConfigCaja
-    monto_inicial = ConfigCaja.saldo_apertura_sugerido()
+    monto_inicial = ConfigCaja.saldo_apertura_sugerido(rid)
 
     sesion = SesionCaja(cajero_id=usuario_actual.id, monto_inicial=monto_inicial, estado="abierta")
     db.session.add(sesion)
@@ -414,8 +435,18 @@ def buscar_cuenta(usuario_actual):
 @caja_bp.get("/sesiones")
 @roles_required("admin", "super_admin", "desarrollador")
 def listar_sesiones(usuario_actual):
-    from app.utils.residencial import scope_sesiones_caja
-    sesiones = (scope_sesiones_caja(SesionCaja.query, usuario_actual)
+    """Día 47: usa el MISMO resolver que resumen_caja, para que la lista de
+    sesiones siempre corresponda a la residencial que se está mirando —
+    antes un rol de plataforma veía sesiones de TODAS mezcladas mientras el
+    saldo de arriba ya estaba scopeado a una sola. Inconsistente."""
+    from app.utils.residencial import resolver_residencial_caja
+    rid, err = resolver_residencial_caja(usuario_actual, request)
+    if err:
+        return err
+    from app.models.usuario import Usuario
+    sesiones = (SesionCaja.query
+                .join(Usuario, SesionCaja.cajero_id == Usuario.id)
+                .filter(Usuario.residencial_id == rid)
                 .order_by(SesionCaja.abierta_en.desc()).limit(100).all())
     return jsonify({"data": [s.to_dict() for s in sesiones]})
 
@@ -424,22 +455,35 @@ def listar_sesiones(usuario_actual):
 @roles_required("admin", "super_admin", "desarrollador")
 def resumen_caja(usuario_actual):
     """
-    Saldo de caja del sistema. La fórmula vive en UN solo lugar:
+    Saldo de caja DE UNA RESIDENCIAL. La fórmula vive en UN solo lugar:
     models/caja.py -> calcular_saldo_global(). Acá solo se arma la respuesta.
-    """
-    from app.models.caja import calcular_saldo_global
-    g = calcular_saldo_global()
-    cfg = ConfigCaja.get()
 
-    from app.utils.residencial import scope_por_sesion_caja
-    descuadres_pendientes = scope_por_sesion_caja(
-        AjusteCaja.query, AjusteCaja, AjusteCaja.sesion_caja_id, usuario_actual
-    ).filter(
-        AjusteCaja.tipo.in_(["sobrante", "faltante"]), AjusteCaja.estado == "pendiente"
-    ).count()
-    salidas_pend = scope_por_sesion_caja(
-        SalidaCaja.query, SalidaCaja, SalidaCaja.sesion_id, usuario_actual
-    ).filter(SalidaCaja.estado == "pendiente").count()
+    Día 47: cada residencial opera su caja aparte, así que primero se
+    resuelve a CUÁL — la del usuario si es admin, o la que indique
+    explícitamente si es super_admin/desarrollador (ver
+    resolver_residencial_caja). Todo el resto del endpoint usa ese MISMO
+    rid, para que el saldo y los conteos de pendientes sean coherentes
+    entre sí (antes los conteos usaban un scope distinto al del saldo).
+    """
+    from app.utils.residencial import resolver_residencial_caja
+    rid, err = resolver_residencial_caja(usuario_actual, request)
+    if err:
+        return err
+
+    from app.models.caja import calcular_saldo_global
+    g = calcular_saldo_global(rid)
+    cfg = ConfigCaja.get(rid)
+
+    from app.models.usuario import Usuario
+    descuadres_pendientes = AjusteCaja.query.filter(
+        AjusteCaja.residencial_id == rid,
+        AjusteCaja.tipo.in_(["sobrante", "faltante"]),
+        AjusteCaja.estado == "pendiente").count()
+    salidas_pend = (SalidaCaja.query
+        .join(SesionCaja, SalidaCaja.sesion_id == SesionCaja.id)
+        .join(Usuario, SesionCaja.cajero_id == Usuario.id)
+        .filter(Usuario.residencial_id == rid, SalidaCaja.estado == "pendiente")
+        .count())
 
     return jsonify({"data": {
         "saldo_inicial": g["saldo_inicial"],
@@ -697,8 +741,9 @@ def _validar_clave_dev(clave):
 @roles_required("admin", "super_admin", "desarrollador")
 def modificar_saldo_inicial(usuario_actual):
     """
-    CONFIGURACIÓN INICIAL del sistema (se usa una sola vez al implementar).
-    Define el dinero base que había en caja cuando arrancó SICA-VS.
+    CONFIGURACIÓN INICIAL de UNA residencial (se usa una sola vez al
+    implementar SICA-VS en ese cliente). Define el dinero base que había en
+    su caja antes de empezar a usar el sistema.
     Para correcciones de operación usar /caja/ajuste-conteo en su lugar.
     """
     data = request.get_json(silent=True) or {}
@@ -713,16 +758,22 @@ def modificar_saldo_inicial(usuario_actual):
         return jsonify({"error": {"code": "clave_invalida",
                                   "message": "Clave de desarrollador incorrecta"}}), 403
 
-    cfg = ConfigCaja.get()
+    from app.utils.residencial import resolver_residencial_caja
+    rid, err = resolver_residencial_caja(usuario_actual, request)
+    if err:
+        return err
+
+    cfg = ConfigCaja.get(rid)
     anterior = dinero.a_decimal(cfg.saldo_inicial)
     cfg.saldo_inicial = nuevo
     cfg.actualizado_por = usuario_actual.id
 
     ajuste = AjusteCaja(
         tipo="saldo_inicial", monto=(nuevo - anterior),
-        motivo=f"Saldo inicial del sistema: L{anterior:.2f} -> L{nuevo:.2f}",
+        motivo=f"Saldo inicial de la residencial: L{anterior:.2f} -> L{nuevo:.2f}",
         estado="aprobado", reportado_por=usuario_actual.id, aprobado_por=dev.id,
         resuelto_en=dt.datetime.now(dt.timezone.utc),
+        residencial_id=rid,
     )
     db.session.add(ajuste)
     db.session.commit()
@@ -752,10 +803,15 @@ def ajuste_conteo(usuario_actual):
         return jsonify({"error": {"code": "clave_invalida",
                                   "message": "Clave de desarrollador incorrecta"}}), 403
 
-    # Calcular el saldo actual que el sistema tiene registrado
-    # (fórmula centralizada en models/caja.py -> calcular_saldo_global)
+    from app.utils.residencial import resolver_residencial_caja
+    rid, err = resolver_residencial_caja(usuario_actual, request)
+    if err:
+        return err
+
+    # Calcular el saldo actual que el sistema tiene registrado PARA ESTA
+    # RESIDENCIAL (fórmula centralizada en models/caja.py -> calcular_saldo_global)
     from app.models.caja import calcular_saldo_global
-    saldo_sistema = calcular_saldo_global()["saldo_actual"]
+    saldo_sistema = calcular_saldo_global(rid)["saldo_actual"]
 
     diferencia = round(saldo_real - saldo_sistema, 2)
     if abs(diferencia) < 0.01:
@@ -766,6 +822,7 @@ def ajuste_conteo(usuario_actual):
         motivo=motivo or f"Ajuste por conteo físico: sistema L{saldo_sistema:.2f} -> real L{saldo_real:.2f}",
         estado="aprobado", reportado_por=usuario_actual.id, aprobado_por=dev.id,
         resuelto_en=dt.datetime.now(dt.timezone.utc),
+        residencial_id=rid,
     )
     db.session.add(ajuste)
     db.session.commit()
@@ -802,6 +859,7 @@ def reportar_descuadre(usuario_actual):
         tipo=tipo, monto=monto_con_signo, motivo=motivo,
         estado="pendiente", reportado_por=usuario_actual.id,
         sesion_caja_id=sesion.id if sesion else None,
+        residencial_id=usuario_actual.residencial_id,
     )
     db.session.add(ajuste)
     db.session.commit()
@@ -811,10 +869,15 @@ def reportar_descuadre(usuario_actual):
 @caja_bp.get("/descuadres")
 @roles_required("admin", "super_admin", "desarrollador")
 def listar_descuadres(usuario_actual):
+    """Día 47: mismo resolver que el resto de la sección de caja, por
+    consistencia (ver listar_sesiones)."""
     estado = request.args.get("estado")  # filtro opcional
-    from app.utils.residencial import scope_por_sesion_caja
-    q = scope_por_sesion_caja(AjusteCaja.query, AjusteCaja,
-                              AjusteCaja.sesion_caja_id, usuario_actual).filter(
+    from app.utils.residencial import resolver_residencial_caja
+    rid, err = resolver_residencial_caja(usuario_actual, request)
+    if err:
+        return err
+    q = AjusteCaja.query.filter(
+        AjusteCaja.residencial_id == rid,
         AjusteCaja.tipo.in_(["sobrante", "faltante"]))
     if estado:
         q = q.filter(AjusteCaja.estado == estado)
@@ -889,11 +952,18 @@ def solicitar_salida(usuario_actual):
 @caja_bp.get("/salidas")
 @roles_required("admin", "super_admin", "desarrollador")
 def listar_salidas(usuario_actual):
-    """Lista todas las salidas. El admin ve los depósitos al banco históricos."""
+    """Lista todas las salidas de UNA residencial. Día 47: mismo resolver
+    que el resto de la sección de caja, por consistencia."""
     estado = request.args.get("estado")
-    from app.utils.residencial import scope_por_sesion_caja
-    q = scope_por_sesion_caja(SalidaCaja.query, SalidaCaja,
-                              SalidaCaja.sesion_id, usuario_actual)
+    from app.utils.residencial import resolver_residencial_caja
+    rid, err = resolver_residencial_caja(usuario_actual, request)
+    if err:
+        return err
+    from app.models.usuario import Usuario
+    q = (SalidaCaja.query
+         .join(SesionCaja, SalidaCaja.sesion_id == SesionCaja.id)
+         .join(Usuario, SesionCaja.cajero_id == Usuario.id)
+         .filter(Usuario.residencial_id == rid))
     if estado:
         q = q.filter(SalidaCaja.estado == estado)
     salidas = q.order_by(SalidaCaja.created_at.desc()).limit(200).all()

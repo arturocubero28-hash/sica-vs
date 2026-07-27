@@ -113,22 +113,47 @@ class SesionCaja(db.Model):
 
 class ConfigCaja(db.Model):
     """
-    Configuración global de caja (una sola fila, id=1).
-    Mantiene el saldo inicial del sistema (cuando se implementa en una
-    residencial que ya venía operando con otro sistema) y permite ajustes
-    manuales, siempre protegidos por la clave del desarrollador.
+    Configuración de caja POR RESIDENCIAL (Día 47 — antes era una sola fila
+    global, id=1). Mantiene el saldo inicial de cada residencial (cuando se
+    implementa en un cliente que ya venía operando con otro sistema) y
+    permite ajustes manuales, siempre protegidos por la clave del
+    desarrollador.
+
+    Sin UNIQUE a nivel de base de datos (coherente con el resto de las
+    migraciones inline del proyecto, que solo agregan columnas). La
+    unicidad de "una fila por residencial" la garantiza get(): siempre
+    busca antes de crear.
     """
     __tablename__ = "config_caja"
 
     id              = db.Column(db.BigInteger, primary_key=True)
+    residencial_id  = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     saldo_inicial   = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     actualizado_en  = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
     actualizado_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
 
     @classmethod
-    def get(cls):
-        """Devuelve la fila única de configuración, creándola si no existe."""
-        cfg = cls.query.get(1)
+    def get(cls, residencial_id=None):
+        """
+        Devuelve la fila de configuración de UNA residencial, creándola si
+        no existe (con saldo_inicial=0).
+
+        residencial_id=None es el caso de compatibilidad: devuelve la fila
+        legacy (residencial_id IS NULL o, si no hay ninguna así, la más
+        antigua) — solo debería ocurrir para instalaciones muy viejas antes
+        de la migración del Día 47. Todo código nuevo debe pasar un
+        residencial_id explícito.
+        """
+        if residencial_id is not None:
+            cfg = cls.query.filter_by(residencial_id=residencial_id).first()
+            if not cfg:
+                cfg = cls(residencial_id=residencial_id, saldo_inicial=0)
+                db.session.add(cfg)
+                db.session.commit()
+            return cfg
+        # Compatibilidad: sin residencial_id, usar la fila legacy (id=1) si
+        # aún existe, o la primera que haya.
+        cfg = cls.query.get(1) or cls.query.order_by(cls.id).first()
         if not cfg:
             cfg = cls(id=1, saldo_inicial=0)
             db.session.add(cfg)
@@ -136,20 +161,26 @@ class ConfigCaja(db.Model):
         return cfg
 
     @classmethod
-    def saldo_apertura_sugerido(cls):
+    def saldo_apertura_sugerido(cls, residencial_id=None):
         """
-        Calcula el fondo con el que DEBE abrir la próxima sesión de caja.
-        Es el efectivo real contado en el último cierre. Si nunca hubo
-        un cierre, usa el saldo inicial configurado del sistema.
-        Este valor NO es editable por el cajero: garantiza la continuidad.
+        Calcula el fondo con el que DEBE abrir la próxima sesión de caja DE
+        ESA RESIDENCIAL. Es el efectivo real contado en el último cierre de
+        esa residencial. Si nunca hubo un cierre ahí, usa el saldo inicial
+        configurado de esa residencial. Este valor NO es editable por el
+        cajero: garantiza la continuidad.
+
+        residencial_id=None es el caso de compatibilidad (ver ConfigCaja.get)
+        y no filtra por residencial — no debería usarse en código nuevo.
         """
-        ultima_cerrada = (SesionCaja.query
-                          .filter_by(estado="cerrada")
-                          .order_by(SesionCaja.cerrada_en.desc())
-                          .first())
+        q = SesionCaja.query.filter_by(estado="cerrada")
+        if residencial_id is not None:
+            from app.models.usuario import Usuario
+            q = q.join(Usuario, SesionCaja.cajero_id == Usuario.id).filter(
+                Usuario.residencial_id == residencial_id)
+        ultima_cerrada = q.order_by(SesionCaja.cerrada_en.desc()).first()
         if ultima_cerrada and ultima_cerrada.efectivo_contado is not None:
             return float(ultima_cerrada.efectivo_contado)
-        return float(cls.get().saldo_inicial)
+        return float(cls.get(residencial_id).saldo_inicial)
 
     def to_dict(self):
         return {
@@ -173,6 +204,11 @@ class AjusteCaja(db.Model):
     motivo        = db.Column(db.String(255))
     estado        = db.Column(db.String(15), nullable=False, default="pendiente")  # pendiente | aprobado | rechazado
 
+    # Día 47: residencial_id DIRECTO (no solo inferible vía sesion_caja_id),
+    # porque los ajustes de tipo 'saldo_inicial' y 'conteo' son correcciones
+    # a nivel de residencial sin sesión asociada — sesion_caja_id queda NULL
+    # para esos dos tipos, así que un join a través de la sesión los perdería.
+    residencial_id = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     sesion_caja_id = db.Column(db.BigInteger, db.ForeignKey("sesiones_caja.id"))
     reportado_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
     aprobado_por  = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
@@ -241,14 +277,20 @@ class SalidaCaja(db.Model):
         }
 
 
-def calcular_saldo_global():
+def calcular_saldo_global(residencial_id):
     """
-    FÓRMULA ÚNICA del saldo global del sistema:
-        saldo inicial configurado
-        + cobros en efectivo históricos
+    FÓRMULA ÚNICA del saldo de caja DE UNA RESIDENCIAL:
+        saldo inicial configurado (de esa residencial)
+        + cobros en efectivo históricos (de sus cajeros)
         - salidas autorizadas históricas (depósitos al banco)
-        + ingresos autorizados históricos (efectivo traído del banco)
+        + ingresos autorizados históricas (efectivo traído del banco)
         + ajustes aprobados (sobrantes/faltantes/conteos)
+
+    Día 47: cada residencial opera su caja de forma independiente (decisión
+    del usuario), así que residencial_id es OBLIGATORIO — no existe una
+    vista combinada de "todas las residenciales juntas", porque sumar el
+    efectivo de negocios distintos no tiene sentido operativo. El llamador
+    (resumen_caja) debe resolver primero a qué residencial mirar.
 
     NOTA: el monto_inicial de cada sesión NO se suma, porque el fondo de
     apertura proviene del cierre anterior (dinero ya contado). Sumarlo
@@ -257,10 +299,16 @@ def calcular_saldo_global():
     Devuelve un dict con todos los componentes para que las vistas armen
     su respuesta sin recalcular nada. Único lugar de esta regla financiera.
     """
-    cfg = ConfigCaja.get()
+    from app.models.usuario import Usuario
+
+    cfg = ConfigCaja.get(residencial_id)
     saldo_inicial = float(cfg.saldo_inicial)
 
-    sesiones = SesionCaja.query.all()
+    # Sesiones DE ESTA RESIDENCIAL (vía el cajero que las abrió).
+    sesiones = (SesionCaja.query
+                .join(Usuario, SesionCaja.cajero_id == Usuario.id)
+                .filter(Usuario.residencial_id == residencial_id)
+                .all())
     total_efectivo = total_pos = total_salidas = total_ingresos = 0.0
     efectivo_en_cajas_abiertas = 0.0
     cajas_abiertas = 0
@@ -274,7 +322,13 @@ def calcular_saldo_global():
             cajas_abiertas += 1
             efectivo_en_cajas_abiertas += s.efectivo_esperado(resumen=r)
 
-    ajustes_aprobados = AjusteCaja.query.filter_by(estado="aprobado").all()
+    # Día 47: filtro DIRECTO por residencial_id (no join vía sesión) — los
+    # ajustes de saldo_inicial/conteo no tienen sesión asociada y se
+    # perderían con un join. Ver comentario en el modelo AjusteCaja.
+    ajustes_aprobados = (AjusteCaja.query
+                         .filter(AjusteCaja.residencial_id == residencial_id,
+                                 AjusteCaja.estado == "aprobado")
+                         .all())
     total_ajustes = sum(float(a.monto) for a in ajustes_aprobados
                         if a.tipo in ("sobrante", "faltante", "conteo"))
 

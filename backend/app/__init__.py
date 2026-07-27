@@ -221,6 +221,29 @@ def create_app(config_class=Config):
             "UPDATE comunicados SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
             "UPDATE tarifas SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
             "UPDATE tipos_tarjeta SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
+            # Saldo de caja por residencial (Día 47): config_caja era un
+            # singleton (una sola fila, id=1) con el saldo inicial de TODO el
+            # sistema. Ahora hay una fila POR residencial. La fila existente
+            # (id=1) se asigna a la residencial base; de ahí en adelante cada
+            # residencial nueva obtiene su propia fila con saldo_inicial=0
+            # (ver ConfigCaja.get(residencial_id)). Sin UNIQUE todavía —se
+            # agrega en la misma migración, protegido con un bloque que la
+            # aplica solo si no existe, porque IF NOT EXISTS no aplica a
+            # constraints como sí aplica a columnas.
+            "ALTER TABLE config_caja ADD COLUMN IF NOT EXISTS residencial_id BIGINT REFERENCES residenciales(id)",
+            "UPDATE config_caja SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
+            # AjusteCaja necesita residencial_id DIRECTO (no solo vía sesión):
+            # los ajustes de tipo 'saldo_inicial' y 'conteo' son correcciones
+            # a nivel de residencial, no atadas a ninguna sesión de caja en
+            # particular (sesion_caja_id queda NULL para esos dos tipos). Sin
+            # esta columna, esos ajustes quedarían invisibles para el cálculo
+            # de saldo de cualquier residencial.
+            "ALTER TABLE ajustes_caja ADD COLUMN IF NOT EXISTS residencial_id BIGINT REFERENCES residenciales(id)",
+            "UPDATE ajustes_caja a SET residencial_id = ("
+            "  SELECT u.residencial_id FROM sesiones_caja s "
+            "  JOIN usuarios u ON u.id = s.cajero_id WHERE s.id = a.sesion_caja_id"
+            ") WHERE a.residencial_id IS NULL AND a.sesion_caja_id IS NOT NULL",
+            "UPDATE ajustes_caja SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
             # Login biométrico WebAuthn (Día 17): columnas que pudieron faltar si la
             # tabla se creó parcialmente en un arranque anterior.
             "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS nombre_dispositivo VARCHAR(120)",
