@@ -244,6 +244,13 @@ def create_app(config_class=Config):
             "  JOIN usuarios u ON u.id = s.cajero_id WHERE s.id = a.sesion_caja_id"
             ") WHERE a.residencial_id IS NULL AND a.sesion_caja_id IS NOT NULL",
             "UPDATE ajustes_caja SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
+            # Colores personalizables por residencial (Día 47). NULL =
+            # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
+            # residencial.py) — no hace falta backfill, a diferencia de
+            # las migraciones anteriores: null ya significa "sin
+            # personalizar" para este campo, no un dato huérfano.
+            "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS color_primario VARCHAR(7)",
+            "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS color_secundario VARCHAR(7)",
             # Login biométrico WebAuthn (Día 17): columnas que pudieron faltar si la
             # tabla se creó parcialmente en un arranque anterior.
             "ALTER TABLE credenciales_webauthn ADD COLUMN IF NOT EXISTS nombre_dispositivo VARCHAR(120)",

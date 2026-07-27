@@ -1058,8 +1058,10 @@ def ver_mi_residencial(usuario_actual):
 @cuentas_bp.put("/mi-residencial")
 @roles_required("admin", "super_admin")
 def editar_mi_residencial(usuario_actual):
-    """El admin (o supervisor, vía roles_required) edita el nombre de su
-    residencial. El logo se sube aparte (multipart) en el endpoint de abajo."""
+    """El admin (o supervisor, vía roles_required) edita el nombre y los
+    colores de su residencial. El logo se sube aparte (multipart) en el
+    endpoint de abajo."""
+    import re
     from app.models.residencial import Residencial
     if not usuario_actual.residencial_id:
         return jsonify({"error": {"code": "sin_residencial",
@@ -1079,6 +1081,27 @@ def editar_mi_residencial(usuario_actual):
             return jsonify({"error": {"code": "nombre_largo",
                                       "message": "El nombre no puede superar 160 caracteres"}}), 400
         r.nombre = nombre
+
+    # Día 47 — colores personalizables. Se valida el formato acá (no como
+    # constraint de base) porque el valor termina inyectado directo en CSS
+    # del lado del cliente (document.documentElement.style.setProperty) —
+    # un formato inesperado ahí podría romper el estilo de toda la app o,
+    # en el peor caso, dar pie a un intento de inyección. Solo se acepta
+    # hex de 6 dígitos: #RRGGBB, nada de nombres de color CSS ni funciones
+    # (rgb(), var(), url(), etc.) que un navegador también interpretaría.
+    patron_hex = re.compile(r"^#[0-9A-Fa-f]{6}$")
+    for campo in ("color_primario", "color_secundario"):
+        if campo in body:
+            valor = (body[campo] or "").strip()
+            if valor == "":
+                setattr(r, campo, None)  # "" = volver al color de fábrica
+                continue
+            if not patron_hex.match(valor):
+                return jsonify({"error": {"code": "color_invalido",
+                                          "message": f"El color debe tener formato hexadecimal "
+                                                     f"(ej. #022E45): {campo}"}}), 400
+            setattr(r, campo, valor.upper())
+
     db.session.commit()
     return jsonify({"data": r.to_dict()})
 

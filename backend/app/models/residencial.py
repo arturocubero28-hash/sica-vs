@@ -30,6 +30,13 @@ import datetime as dt
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.extensions import db
 
+# Día 47 — colores personalizables. Estos son los mismos valores que ya
+# tenía el CSS por defecto (var(--marca-azul)/var(--marca-naranja)) antes
+# de que existiera la personalización — una residencial que nunca elige sus
+# propios colores ve exactamente lo mismo que veía antes de este cambio.
+DEFAULT_COLOR_PRIMARIO = "#022E45"
+DEFAULT_COLOR_SECUNDARIO = "#F48723"
+
 
 class Residencial(db.Model):
     __tablename__ = "residenciales"
@@ -51,6 +58,14 @@ class Residencial(db.Model):
     direccion = db.Column(db.String(255))
     telefono = db.Column(db.String(30))
     logo_archivo = db.Column(db.String(255))  # nombre de archivo guardado (mismo patrón que comunicados/comprobantes)
+    # Día 47 — colores personalizables. Formato hex ("#022E45"), validado en
+    # el endpoint de escritura, no como constraint de base (mismo criterio
+    # que el resto de este modelo: la obligatoriedad/formato se exige al
+    # escribir, no a nivel de columna). NULL = usa el valor por defecto de
+    # fábrica (ver DEFAULT_COLOR_PRIMARIO/SECUNDARIO más abajo) — así una
+    # residencial que nunca toca esto no tiene que tener nada guardado.
+    color_primario = db.Column(db.String(7))    # el azul, el que más resalta
+    color_secundario = db.Column(db.String(7))  # el naranja, de acento
     activa = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow,
@@ -65,6 +80,11 @@ class Residencial(db.Model):
             "direccion": self.direccion,
             "telefono": self.telefono,
             "logo_archivo": self.logo_archivo,
+            # Día 47: siempre se devuelve un color EFECTIVO (el elegido, o
+            # el de fábrica si nunca se personalizó) — el frontend nunca
+            # tiene que lidiar con null ni duplicar el valor por defecto.
+            "color_primario": self.color_primario or DEFAULT_COLOR_PRIMARIO,
+            "color_secundario": self.color_secundario or DEFAULT_COLOR_SECUNDARIO,
             "activa": self.activa,
             "admin": {
                 "nombre": f"{self.admin.nombre} {self.admin.apellido}",
