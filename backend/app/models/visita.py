@@ -159,10 +159,24 @@ class Visita(db.Model):
                 f"{self.residente.usuario.nombre} {self.residente.usuario.apellido}"
                 if self.residente and self.residente.usuario else None
             ),
+            # Día 47, a pedido del usuario (referencia de otra app con más
+            # datos en la tarjeta): la casa/apartamento del residente que
+            # generó el código. Residente no tiene relación ORM directa a
+            # Cuenta (solo cuenta_id crudo), así que se consulta manual.
+            "direccion": self._direccion_residente(),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "hora_entrada": self._hora_evento("entrada"),
             "hora_salida": self._hora_evento("salida"),
         }
+
+    def _direccion_residente(self):
+        if not self.residente or not self.residente.cuenta_id:
+            return None
+        from app.models.cuenta import Cuenta
+        cuenta = Cuenta.query.get(self.residente.cuenta_id)
+        if not cuenta or not cuenta.unidad:
+            return None
+        return cuenta.unidad.identificador
 
     def _hora_evento(self, direccion):
         """Devuelve la hora del primer evento de entrada / último de salida."""
