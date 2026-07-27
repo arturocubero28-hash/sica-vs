@@ -20,7 +20,9 @@ camaras_bp = Blueprint("camaras", __name__)
 @camaras_bp.get("")
 @roles_required("admin", "super_admin")
 def listar_camaras(usuario_actual):
-    camaras = Camara.query.order_by(Camara.orden.asc(), Camara.id.asc()).all()
+    from app.utils.residencial import scope_directo
+    camaras = scope_directo(Camara.query, Camara, usuario_actual) \
+        .order_by(Camara.orden.asc(), Camara.id.asc()).all()
     return jsonify({"data": [c.to_dict() for c in camaras]})
 
 
@@ -32,6 +34,7 @@ def crear_camara(usuario_actual):
         return jsonify({"error": {"code": "datos_incompletos",
                                   "message": "Nombre e IP son obligatorios"}}), 400
 
+    from app.utils.residencial import residencial_id_heredado
     cam = Camara(
         nombre=body["nombre"],
         ip=body["ip"],
@@ -43,6 +46,7 @@ def crear_camara(usuario_actual):
         acceso_id=body.get("acceso_id"),
         activa=body.get("activa", True),
         orden=int(body.get("orden", 0)),
+        residencial_id=residencial_id_heredado(usuario_actual),
     )
     db.session.add(cam)
     db.session.commit()
@@ -52,8 +56,13 @@ def crear_camara(usuario_actual):
 @camaras_bp.put("/<uuid_camara>")
 @roles_required("admin", "super_admin")
 def editar_camara(usuario_actual, uuid_camara):
+    from app.utils.residencial import pertenece_a_mi_residencial
     cam = Camara.query.filter_by(uuid_publico=uuid_camara).first()
-    if not cam:
+    # Día 48 — hallazgo de auditoría: antes solo se buscaba por UUID, sin
+    # verificar residencial. Un admin de otra residencial podía editar una
+    # cámara ajena si conocía (o adivinaba) su UUID. 404 en vez de 403
+    # para no dejarle saber a quien prueba UUIDs si existe o no.
+    if not cam or not pertenece_a_mi_residencial(cam, usuario_actual):
         return jsonify({"error": {"code": "no_encontrada", "message": "Cámara no encontrada"}}), 404
 
     body = request.get_json() or {}
@@ -75,8 +84,9 @@ def editar_camara(usuario_actual, uuid_camara):
 @camaras_bp.delete("/<uuid_camara>")
 @roles_required("admin", "super_admin")
 def eliminar_camara(usuario_actual, uuid_camara):
+    from app.utils.residencial import pertenece_a_mi_residencial
     cam = Camara.query.filter_by(uuid_publico=uuid_camara).first()
-    if not cam:
+    if not cam or not pertenece_a_mi_residencial(cam, usuario_actual):
         return jsonify({"error": {"code": "no_encontrada", "message": "Cámara no encontrada"}}), 404
     db.session.delete(cam)
     db.session.commit()
@@ -87,8 +97,9 @@ def eliminar_camara(usuario_actual, uuid_camara):
 @camaras_bp.post("/<uuid_camara>/probar")
 @roles_required("admin", "super_admin")
 def probar_camara(usuario_actual, uuid_camara):
+    from app.utils.residencial import pertenece_a_mi_residencial
     cam = Camara.query.filter_by(uuid_publico=uuid_camara).first()
-    if not cam:
+    if not cam or not pertenece_a_mi_residencial(cam, usuario_actual):
         return jsonify({"error": {"code": "no_encontrada", "message": "Cámara no encontrada"}}), 404
 
     try:
@@ -153,8 +164,17 @@ def _generar_mjpeg(url_rtsp):
 @camaras_bp.get("/<uuid_camara>/stream")
 @token_required
 def stream_camara(usuario_actual, uuid_camara):
+    # Día 48 — hallazgo de auditoría, el más grave de los cuatro: este
+    # endpoint usa @token_required (CUALQUIER rol autenticado — residente,
+    # guardia, cajero, no solo admin), y antes no verificaba residencial
+    # en absoluto. Cualquier usuario logueado de CUALQUIER residencial
+    # podía ver el STREAM DE VIDEO EN VIVO de una cámara ajena con solo
+    # conocer su UUID. pertenece_a_mi_residencial() funciona para
+    # cualquier rol (no solo admin), a diferencia de otros helpers de
+    # este archivo pensados solo para el panel admin.
+    from app.utils.residencial import pertenece_a_mi_residencial
     cam = Camara.query.filter_by(uuid_publico=uuid_camara).first()
-    if not cam or not cam.activa:
+    if not cam or not cam.activa or not pertenece_a_mi_residencial(cam, usuario_actual):
         return jsonify({"error": {"code": "no_disponible",
                                   "message": "Cámara no disponible"}}), 404
 

@@ -180,17 +180,33 @@ def visita_en_residencial_de(visita, usuario_actual):
     if rid_visita is None:
         return True  # datos sin residencial asignada: no bloquear
     return rid_visita == rid_usuario
-    """Filtra por residencial un modelo ligado a una sesión de caja
-    (AjusteCaja.sesion_caja_id, SalidaCaja.sesion_id) uniendo
-    SesionCaja→cajero→residencial. super_admin/desarrollador: sin filtro."""
-    rid = residencial_id_filtro(usuario_actual)
-    if rid is None:
-        return query
-    from app.models.caja import SesionCaja
-    from app.models.usuario import Usuario
-    return (query.join(SesionCaja, campo_sesion == SesionCaja.id)
-                 .join(Usuario, SesionCaja.cajero_id == Usuario.id)
-                 .filter(Usuario.residencial_id == rid))
+
+
+def pertenece_a_mi_residencial(recurso, usuario_actual):
+    """
+    True si `recurso` (cualquier modelo con residencial_id DIRECTO —
+    Camara, AjusteCaja, etc.) pertenece a la residencial del usuario.
+    Mismo criterio que visita_en_residencial_de, generalizado para no
+    repetir la lógica en cada modelo nuevo que la necesite.
+
+    - super_admin/desarrollador: siempre True (roles de plataforma).
+    - Si el usuario no tiene residencial asignada (None): True, para no
+      romper el modo de una sola residencial sin residencial_id.
+    - Si el recurso no tiene residencial asignada (None, datos legacy sin
+      backfill): True, no bloquear datos viejos.
+    - En otro caso: compara directamente.
+    """
+    if usuario_actual is None:
+        return True
+    if usuario_actual.rol in ("super_admin", "desarrollador"):
+        return True
+    rid_usuario = usuario_actual.residencial_id
+    if rid_usuario is None:
+        return True
+    rid_recurso = getattr(recurso, "residencial_id", None)
+    if rid_recurso is None:
+        return True
+    return rid_recurso == rid_usuario
 
 
 def residencial_id_de_usuario(usuario_actual):

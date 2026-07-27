@@ -244,6 +244,22 @@ def create_app(config_class=Config):
             "  JOIN usuarios u ON u.id = s.cajero_id WHERE s.id = a.sesion_caja_id"
             ") WHERE a.residencial_id IS NULL AND a.sesion_caja_id IS NOT NULL",
             "UPDATE ajustes_caja SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
+            # Cámaras por residencial (Día 48 — hallazgo de auditoría de
+            # seguridad: un admin de otra residencial podía editar, borrar
+            # o ver el STREAM DE VIDEO EN VIVO de una cámara ajena, porque
+            # Camara no tenía ninguna forma confiable de saber de quién
+            # era). Backfill en dos pasos: primero se intenta inferir la
+            # residencial real vía acceso_id o dispositivo_id (más
+            # preciso); lo que quede sin resolver se asigna a la
+            # residencial base, igual que el resto de las migraciones.
+            "ALTER TABLE camaras ADD COLUMN IF NOT EXISTS residencial_id BIGINT REFERENCES residenciales(id)",
+            "UPDATE camaras c SET residencial_id = ("
+            "  SELECT a.residencial_id FROM accesos_fisicos a WHERE a.id = c.acceso_id"
+            ") WHERE c.residencial_id IS NULL AND c.acceso_id IS NOT NULL",
+            "UPDATE camaras c SET residencial_id = ("
+            "  SELECT d.residencial_id FROM dispositivos_pi d WHERE d.id = c.dispositivo_id"
+            ") WHERE c.residencial_id IS NULL AND c.dispositivo_id IS NOT NULL",
+            "UPDATE camaras SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de

@@ -12,6 +12,14 @@ class Camara(db.Model):
 
     id           = db.Column(db.BigInteger, primary_key=True)
     uuid_publico = db.Column(PG_UUID(as_uuid=True), unique=True, nullable=False, default=uuid.uuid4)
+    # Día 48 — hallazgo de auditoría: Camara no tenía NINGUNA columna de
+    # residencial, ni siquiera indirecta confiable — acceso_id y
+    # dispositivo_id son ambos opcionales (NULL), así que una cámara sin
+    # ninguno de los dos quedaba sin forma de saber a qué residencial
+    # pertenecía. Se agrega residencial_id DIRECTO, igual criterio que
+    # AjusteCaja (Día 47): la relación indirecta no es lo bastante
+    # confiable para aislar accesos.
+    residencial_id = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     nombre       = db.Column(db.String(100), nullable=False)
     ip           = db.Column(db.String(45), nullable=False)
     puerto_rtsp  = db.Column(db.Integer, nullable=False, default=554)
