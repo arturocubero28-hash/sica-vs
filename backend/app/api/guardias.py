@@ -71,7 +71,17 @@ def fijar_mi_punto_acceso(usuario_actual):
         return jsonify({"error": {"code": "punto_requerido",
                                   "message": "Indicá el punto de acceso"}}), 400
 
-    existe = AccesoFisico.query.filter_by(punto_acceso=nombre_punto, activo=True).first()
+    # Día 48 — hallazgo de auditoría: antes se buscaba SOLO por el nombre
+    # del punto (texto libre), sin filtrar por residencial. Si dos
+    # residenciales nombran su punto igual (ej. "Portón Principal", muy
+    # probable), un guardia podía quedar asignado al punto de OTRA
+    # residencial sin darse cuenta — y de ahí en adelante ver y abrir
+    # trancas ajenas (ver mis_trancas_disponibles y abrir_tranca_manual,
+    # más abajo, con el mismo fix).
+    existe = AccesoFisico.query.filter_by(
+        punto_acceso=nombre_punto, activo=True,
+        residencial_id=usuario_actual.residencial_id,
+    ).first()
     if not existe:
         return jsonify({"error": {"code": "punto_invalido",
                                   "message": "Ese punto de acceso no existe o está inactivo"}}), 400
@@ -94,8 +104,11 @@ def mis_trancas_disponibles(usuario_actual):
         return jsonify({"error": {"code": "sin_punto_asignado",
                                   "message": "No tenés un punto de acceso asignado"}}), 400
 
+    # Día 48: mismo fix que fijar_mi_punto_acceso — filtrar también por
+    # residencial, no solo por el nombre del punto.
     trancas = AccesoFisico.query.filter_by(
-        punto_acceso=usuario_actual.punto_acceso_actual, activo=True
+        punto_acceso=usuario_actual.punto_acceso_actual, activo=True,
+        residencial_id=usuario_actual.residencial_id,
     ).order_by(AccesoFisico.tipo, AccesoFisico.direccion).all()
 
     return jsonify({"data": {
@@ -134,7 +147,14 @@ def abrir_tranca_manual(usuario_actual):
                                   "message": "Esa tranca no existe o está inactiva"}}), 400
 
     # El guardia solo puede abrir trancas de SU punto asignado — no las de otro.
-    if acceso.punto_acceso != usuario_actual.punto_acceso_actual:
+    # Día 48: se agrega también el chequeo de residencial (defensa en
+    # profundidad) — aunque el punto de acceso ya venga filtrado por
+    # residencial más arriba en el flujo (fijar_mi_punto_acceso,
+    # mis_trancas_disponibles), este endpoint es el que REALMENTE abre la
+    # tranca, así que verifica por su cuenta en vez de confiar en que los
+    # pasos anteriores ya lo garantizaron.
+    if acceso.punto_acceso != usuario_actual.punto_acceso_actual \
+            or acceso.residencial_id != usuario_actual.residencial_id:
         return jsonify({"error": {"code": "tranca_fuera_de_tu_punto",
                                   "message": "Esa tranca no pertenece a tu punto de acceso"}}), 403
 
