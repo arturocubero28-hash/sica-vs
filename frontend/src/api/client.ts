@@ -766,12 +766,13 @@ export interface SeguridadDTO {
   timeline_7d: { dia: string; fallidos: number }[];
 }
 export const devSeguridad = () => request<SeguridadDTO>("/dev/seguridad");
-export const devLogs = (params?: { email?: string; endpoint?: string; errores?: string; pagina?: number }) => {
+export const devLogs = (params?: { email?: string; endpoint?: string; errores?: string; pagina?: number; residencialId?: string }) => {
   const q = new URLSearchParams();
   if (params?.email) q.set("email", params.email);
   if (params?.endpoint) q.set("endpoint", params.endpoint);
   if (params?.errores) q.set("errores", params.errores);
   if (params?.pagina) q.set("pagina", String(params.pagina));
+  if (params?.residencialId) q.set("residencial_id", params.residencialId);
   return request<any>(`/dev/logs?${q.toString()}`);
 };
 

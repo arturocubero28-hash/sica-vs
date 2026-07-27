@@ -15,6 +15,9 @@ export function PanelDesarrollador() {
   const [totalPags, setTotalPags] = useState(1);
   const [totalLogs, setTotalLogs] = useState(0);
   const [cargandoLogs, setCargandoLogs] = useState(false);
+  // Día 48, a pedido del usuario: filtro de logs por residencial.
+  const [residencialLog, setResidencialLog] = useState("");
+  const [residencialesLog, setResidencialesLog] = useState<ResidencialDTO[]>([]);
 
   const cargarMetricas = useCallback(() => {
     devMetricas().then(setM).catch(() => {}).finally(() => setCargando(false));
@@ -22,13 +25,13 @@ export function PanelDesarrollador() {
 
   const cargarLogs = useCallback(() => {
     setCargandoLogs(true);
-    devLogs({ email, endpoint, errores: soloErrores ? "1" : "", pagina })
+    devLogs({ email, endpoint, errores: soloErrores ? "1" : "", pagina, residencialId: residencialLog || undefined })
       .then((r: any) => {
         setLogs(r.logs || []);
         setTotalPags(r.total_paginas || 1);
         setTotalLogs(r.total || 0);
       }).catch(() => {}).finally(() => setCargandoLogs(false));
-  }, [email, endpoint, soloErrores, pagina]);
+  }, [email, endpoint, soloErrores, pagina, residencialLog]);
 
   useEffect(() => {
     cargarMetricas();
@@ -37,7 +40,12 @@ export function PanelDesarrollador() {
   }, [cargarMetricas]);
 
   useEffect(() => {
-    if (tab === "logs") cargarLogs();
+    if (tab === "logs") {
+      cargarLogs();
+      if (residencialesLog.length === 0) {
+        devResidenciales().then(setResidencialesLog).catch(() => {});
+      }
+    }
   }, [tab, cargarLogs]);
 
   function Barra({ pct, color }: { pct: number; color: string }) {
@@ -177,6 +185,13 @@ export function PanelDesarrollador() {
               <input placeholder="/api/v1/auth/login…" value={endpoint} onChange={e => setEndpoint(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && cargarLogs()} />
             </div>
+            <div className="filtro-campo flex1">
+              <label>Residencial</label>
+              <select value={residencialLog} onChange={e => setResidencialLog(e.target.value)}>
+                <option value="">Todas</option>
+                {residencialesLog.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+              </select>
+            </div>
             <div className="filtro-campo" style={{ justifyContent: "flex-end", paddingTop: 20 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
                 <input type="checkbox" checked={soloErrores} onChange={e => setSoloErrores(e.target.checked)} />
@@ -185,7 +200,7 @@ export function PanelDesarrollador() {
             </div>
             <div className="filtro-botones">
               <button className="cuota-btn-pagar" style={{ maxWidth: 110 }} onClick={() => { setPagina(1); cargarLogs(); }}>Filtrar</button>
-              <button className="ghost mini" onClick={() => { setEmail(""); setEndpoint(""); setSoloErrores(false); setPagina(1); setTimeout(cargarLogs, 0); }}>Limpiar</button>
+              <button className="ghost mini" onClick={() => { setEmail(""); setEndpoint(""); setSoloErrores(false); setResidencialLog(""); setPagina(1); setTimeout(cargarLogs, 0); }}>Limpiar</button>
             </div>
           </div>
 
@@ -197,7 +212,7 @@ export function PanelDesarrollador() {
                 <div className="scroll-x">
                   <table className="data">
                     <thead>
-                      <tr><th>Fecha / Hora</th><th>Usuario</th><th>Acción</th><th>Status</th><th>IP</th></tr>
+                      <tr><th>Fecha / Hora</th><th>Usuario</th><th>Residencial</th><th>Acción</th><th>Status</th><th>IP</th></tr>
                     </thead>
                     <tbody>
                       {logs.map((l: any, i: number) => (
@@ -209,6 +224,7 @@ export function PanelDesarrollador() {
                               <br/><span className="pill" style={{ fontSize: 10 }}>{l.rol}</span>
                             </div>
                           </td>
+                          <td className="small muted">{l.residencial?.nombre || "—"}</td>
                           <td>
                             <div style={{ lineHeight: 1.4 }}>
                               <span style={{ fontSize: 13 }}>{l.descripcion}</span>

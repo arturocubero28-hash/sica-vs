@@ -112,6 +112,11 @@ def logs(usuario_actual):
     email_q   = (request.args.get("email") or "").strip().lower()
     endpoint_q = (request.args.get("endpoint") or "").strip().lower()
     solo_errores = request.args.get("errores") == "1"
+    # Día 48: filtro por residencial, a pedido del usuario. Se resuelve por
+    # uuid_publico (nunca se expone el id interno) y se aplica uniendo con
+    # Usuario -> residencial_id, ya que LogAuditoria no guarda una columna
+    # propia (ver comentario en el modelo, to_dict()).
+    residencial_uuid = (request.args.get("residencial_id") or "").strip()
     pagina   = max(1, int(request.args.get("pagina", 1)))
     por_pagina = 50
 
@@ -122,6 +127,15 @@ def logs(usuario_actual):
         q = q.filter(LogAuditoria.endpoint.ilike(f"%{endpoint_q}%"))
     if solo_errores:
         q = q.filter(LogAuditoria.status_code >= 400)
+    if residencial_uuid:
+        from app.models.residencial import Residencial
+        from app.models.usuario import Usuario
+        r = Residencial.query.filter_by(uuid_publico=residencial_uuid).first()
+        if not r:
+            return jsonify({"error": {"code": "residencial_no_encontrada",
+                                      "message": "No se encontró esa residencial"}}), 404
+        q = q.join(Usuario, LogAuditoria.usuario_id == Usuario.id) \
+             .filter(Usuario.residencial_id == r.id)
 
     total = q.count()
     total_paginas = max(1, (total + por_pagina - 1) // por_pagina)

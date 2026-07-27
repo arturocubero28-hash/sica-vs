@@ -198,6 +198,22 @@ class LogAuditoria(db.Model):
         return f"{accion} {ruta}"
 
     def to_dict(self):
+        # Día 48, a pedido del usuario: mostrar a qué residencial pertenece
+        # cada entrada, para poder filtrar. Se resuelve vía el usuario
+        # relacionado (Usuario.residencial_id) en vez de guardar una
+        # columna propia — así siempre refleja la residencial ACTUAL del
+        # usuario, sin necesitar backfill ni arriesgar que quede
+        # desactualizada si un usuario cambia de residencial. Si no hay
+        # usuario asociado (login fallido con email inexistente, o
+        # endpoints de dispositivos Pi sin usuario), no hay residencial
+        # que mostrar — son entradas que no pertenecen a ninguna en
+        # particular.
+        residencial = None
+        if self.usuario and self.usuario.residencial_id:
+            from app.models.residencial import Residencial
+            r = Residencial.query.get(self.usuario.residencial_id)
+            if r:
+                residencial = {"id": str(r.uuid_publico), "nombre": r.nombre}
         return {
             "id":           self.id,
             "email":        self.email or "—",
@@ -207,5 +223,6 @@ class LogAuditoria(db.Model):
             "descripcion":  self.descripcion(),
             "status_code":  self.status_code,
             "ip":           self.ip,
+            "residencial":  residencial,
             "created_at":   self.created_at.isoformat() if self.created_at else None,
         }
