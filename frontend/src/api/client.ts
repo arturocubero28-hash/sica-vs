@@ -1144,7 +1144,7 @@ export interface ResidencialDTO {
 export const getMiResidencial = () =>
   request<ResidencialDTO | null>("/unidades/mi-residencial");
 
-export const setMiResidencial = (body: { nombre?: string }) =>
+export const setMiResidencial = (body: { nombre?: string; color_primario?: string; color_secundario?: string }) =>
   request<ResidencialDTO>("/unidades/mi-residencial", { method: "PUT", body: JSON.stringify(body) });
 
 export async function subirLogoResidencial(archivo: File): Promise<ResidencialDTO> {

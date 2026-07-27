@@ -7,7 +7,15 @@ import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesion
   type Usuario, type SesionDTO, type CredencialWebAuthnDTO, type ConfigResidencial,
   type ResidencialDTO, type PuntoAccesoDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
+import { aplicarColoresResidencial } from "../../utils/colores";
 import { Fingerprint } from "lucide-react";
+
+// Día 47 — colores de fábrica, deben coincidir con backend/app/models/
+// residencial.py (DEFAULT_COLOR_PRIMARIO/SECUNDARIO). Solo se usan acá
+// como valor inicial del selector antes de que cargue res.* y para el
+// botón "Restablecer" — la fuente de verdad real sigue siendo el backend.
+const COLOR_PRIMARIO_FABRICA = "#022E45";
+const COLOR_SECUNDARIO_FABRICA = "#F48723";
 
 export function MiPerfil() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -670,6 +678,12 @@ function ConfigPanel() {
 function MiResidencialPanel() {
   const [res, setRes] = useState<ResidencialDTO | null>(null);
   const [nombre, setNombre] = useState("");
+  // Día 47 — colores personalizables. Los valores que llegan de res.*
+  // siempre son "efectivos" (el elegido, o el de fábrica si nunca se
+  // personalizó) — nunca hay que lidiar con null acá.
+  const [colorPrimario, setColorPrimario] = useState(COLOR_PRIMARIO_FABRICA);
+  const [colorSecundario, setColorSecundario] = useState(COLOR_SECUNDARIO_FABRICA);
+  const [guardandoColores, setGuardandoColores] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [subiendoLogo, setSubiendoLogo] = useState(false);
@@ -679,7 +693,14 @@ function MiResidencialPanel() {
 
   useEffect(() => {
     getMiResidencial()
-      .then((r) => { setRes(r); if (r) setNombre(r.nombre); })
+      .then((r) => {
+        setRes(r);
+        if (r) {
+          setNombre(r.nombre);
+          setColorPrimario(r.color_primario);
+          setColorSecundario(r.color_secundario);
+        }
+      })
       .catch(() => setError("No se pudo cargar la información de la residencial"))
       .finally(() => setCargando(false));
   }, []);
@@ -711,6 +732,45 @@ function MiResidencialPanel() {
     } finally {
       setSubiendoLogo(false);
       if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function guardarColores() {
+    setGuardandoColores(true); setMsg(""); setError("");
+    try {
+      const actualizado = await setMiResidencial({
+        color_primario: colorPrimario, color_secundario: colorSecundario,
+      });
+      setRes(actualizado);
+      // Ya se venía previsualizando en vivo mientras elegía (ver el
+      // onChange de los <input type="color">), pero se vuelve a aplicar
+      // acá con los valores CONFIRMADOS por el servidor (por si el
+      // backend normalizó algo, ej. pasar a mayúsculas).
+      aplicarColoresResidencial(actualizado.color_primario, actualizado.color_secundario);
+      setMsg("✓ Colores guardados");
+    } catch (e: any) {
+      setError(e.message || "No se pudieron guardar los colores");
+    } finally {
+      setGuardandoColores(false);
+    }
+  }
+
+  async function restablecerColores() {
+    setGuardandoColores(true); setMsg(""); setError("");
+    try {
+      // "" en el backend significa "volver al color de fábrica" (ver
+      // PUT /unidades/mi-residencial) — el servidor responde con los
+      // valores efectivos ya resueltos, no hace falta adivinarlos acá.
+      const actualizado = await setMiResidencial({ color_primario: "", color_secundario: "" });
+      setRes(actualizado);
+      setColorPrimario(actualizado.color_primario);
+      setColorSecundario(actualizado.color_secundario);
+      aplicarColoresResidencial(actualizado.color_primario, actualizado.color_secundario);
+      setMsg("✓ Colores restablecidos a los de fábrica");
+    } catch (e: any) {
+      setError(e.message || "No se pudo restablecer");
+    } finally {
+      setGuardandoColores(false);
     }
   }
 
@@ -773,6 +833,51 @@ function MiResidencialPanel() {
               Administrador: {res.admin.nombre} ({res.admin.email})
             </p>
           )}
+        </div>
+      </div>
+
+      {/* Día 47 — colores personalizables. Vista previa en vivo: cada
+          input dispara aplicarColoresResidencial de inmediato mientras el
+          admin elige, así ve el efecto en toda la pantalla (sidebar,
+          botones, pestañas) antes de decidir guardar. Solo se persiste al
+          apretar "Guardar colores" — si navega sin guardar, la próxima
+          carga de sesión vuelve a aplicar lo que esté guardado de verdad. */}
+      <div style={{ borderTop: "1px solid var(--borde)", marginTop: 18, paddingTop: 16 }}>
+        <label className="small muted" style={{ display: "block", marginBottom: 8 }}>
+          Colores de la residencial
+        </label>
+        <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="color" value={colorPrimario}
+              onChange={(e) => { setColorPrimario(e.target.value); aplicarColoresResidencial(e.target.value, colorSecundario); }}
+              style={{ width: 44, height: 34, padding: 2, borderRadius: 8, border: "1px solid var(--borde)", cursor: "pointer" }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Primario</div>
+              <div className="muted small">El que más resalta (barra lateral, botones)</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="color" value={colorSecundario}
+              onChange={(e) => { setColorSecundario(e.target.value); aplicarColoresResidencial(colorPrimario, e.target.value); }}
+              style={{ width: 44, height: 34, padding: 2, borderRadius: 8, border: "1px solid var(--borde)", cursor: "pointer" }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Secundario</div>
+              <div className="muted small">Color de acento (detalles, resaltados)</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+          <button onClick={guardarColores}
+            disabled={guardandoColores || (
+              colorPrimario.toUpperCase() === res.color_primario.toUpperCase()
+              && colorSecundario.toUpperCase() === res.color_secundario.toUpperCase()
+            )}
+            style={{ padding: "8px 16px" }}>
+            {guardandoColores ? "…" : "Guardar colores"}
+          </button>
+          <button onClick={restablecerColores} disabled={guardandoColores} className="ghost" style={{ padding: "8px 16px" }}>
+            Restablecer a los de fábrica
+          </button>
         </div>
       </div>
 
