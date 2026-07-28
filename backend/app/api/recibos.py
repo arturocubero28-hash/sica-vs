@@ -25,10 +25,17 @@ def asignar_recibo(pago):
     Asigna un número de recibo correlativo a un pago aprobado, si aún no tiene.
     Idempotente: si el pago ya tiene número, no hace nada.
     NOTA: el caller es responsable del commit.
+
+    Día 48: la residencial se resuelve DESDE EL PROPIO PAGO (vía
+    cuenta→unidad), no desde quien llama — así los tres call sites
+    (caja.py, cuotas.py, arreglos.py) no necesitan cambios, y el
+    correlativo que se asigna siempre es el de la residencial correcta.
     """
     if pago.numero_recibo:
         return pago.numero_recibo
-    cfg = ConfigRecibo.get()
+    unidad = pago.cuenta.unidad if pago.cuenta else None
+    rid = unidad.residencial_id if unidad else None
+    cfg = ConfigRecibo.get(rid)
     pago.numero_recibo = cfg.siguiente_correlativo()
     return pago.numero_recibo
 
@@ -43,13 +50,24 @@ def _err(code, msg, status):
 @recibos_bp.get("/config")
 @roles_required("admin", "super_admin")
 def ver_config(usuario_actual):
-    return jsonify({"data": ConfigRecibo.get().to_dict()})
+    # Día 48: mismo resolver que ya usa Caja (genérico pese al nombre —
+    # admin/supervisor -> su propia residencial; super_admin/desarrollador
+    # -> deben indicarla explícita con ?residencial_id).
+    from app.utils.residencial import resolver_residencial_caja
+    rid, err = resolver_residencial_caja(usuario_actual, request)
+    if err:
+        return err
+    return jsonify({"data": ConfigRecibo.get(rid).to_dict()})
 
 
 @recibos_bp.put("/config")
 @roles_required("admin", "super_admin")
 def editar_config(usuario_actual):
-    cfg = ConfigRecibo.get()
+    from app.utils.residencial import resolver_residencial_caja
+    rid, err = resolver_residencial_caja(usuario_actual, request)
+    if err:
+        return err
+    cfg = ConfigRecibo.get(rid)
     data = request.get_json(silent=True) or {}
     # Datos del emisor (Fase 1)
     for campo in ["nombre_emisor", "rtn_emisor", "direccion_emisor", "telefono_emisor", "prefijo"]:
@@ -68,25 +86,42 @@ def recibo_pdf(usuario_actual, pago_uuid):
     pago = Pago.query.filter_by(uuid_publico=pago_uuid).first()
     if not pago:
         return _err("no_encontrado", "Pago no encontrado", 404)
+
+    # Día 48 — hallazgo de auditoría: antes había DOS chequeos de
+    # autorización en esta función (uno más abajo, preexistente) que
+    # trataban admin/cajero/guardia/desarrollador como "ven cualquier
+    # recibo" SIN verificar residencial — cualquiera de esos roles podía
+    # generar/ver el PDF de un pago ajeno (nombre, monto, unidad de un
+    # residente de otra residencial) con solo conocer el UUID. Se
+    # consolida en un solo chequeo correcto, manteniendo que
+    # admin/cajero/guardia SÍ ven cualquier recibo — pero solo de SU
+    # propia residencial.
+    unidad = pago.cuenta.unidad if pago.cuenta else None
+    rid_pago = unidad.residencial_id if unidad else None
+
+    es_plataforma = usuario_actual.rol in ("super_admin", "desarrollador")
+    es_staff_de_su_residencial = (
+        usuario_actual.rol in ("admin", "cajero", "guardia")
+        and (rid_pago is None or usuario_actual.residencial_id is None
+             or rid_pago == usuario_actual.residencial_id)
+    )
+    es_dueno = False
+    if not (es_plataforma or es_staff_de_su_residencial):
+        cuenta = pago.cuenta
+        es_dueno = bool(cuenta and any(
+            r.usuario_id == usuario_actual.id and r.activo for r in cuenta.residentes))
+    if not (es_plataforma or es_staff_de_su_residencial or es_dueno):
+        return _err("sin_permiso", "No tenés permiso para ver este recibo", 403)
+
     if pago.estado != "aprobado":
         return _err("no_aprobado", "Solo se generan recibos de pagos aprobados", 400)
-
-    # Autorización: roles administrativos/operativos ven cualquier recibo.
-    # Un residente solo puede ver el recibo de un pago de SU cuenta.
-    roles_admin = ("admin", "super_admin", "cajero", "guardia", "desarrollador")
-    if usuario_actual.rol not in roles_admin:
-        cuenta = pago.cuenta
-        es_suyo = cuenta and any(
-            r.usuario_id == usuario_actual.id and r.activo for r in cuenta.residentes)
-        if not es_suyo:
-            return _err("sin_permiso", "No tenés permiso para ver este recibo", 403)
 
     # Asignar correlativo si por alguna razón no lo tiene
     if not pago.numero_recibo:
         asignar_recibo(pago)
         db.session.commit()
 
-    cfg = ConfigRecibo.get()
+    cfg = ConfigRecibo.get(rid_pago)
     pdf_bytes = _generar_pdf_recibo(pago, cfg)
     return send_file(
         io.BytesIO(pdf_bytes),

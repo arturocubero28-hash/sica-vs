@@ -778,13 +778,18 @@ class AbonoArreglo(db.Model):
 
 class ConfigRecibo(db.Model):
     """
-    Configuración de recibos (una sola fila, id=1).
+    Configuración de recibos POR RESIDENCIAL (Día 48 — hallazgo de
+    auditoría: antes era una sola fila global, id=1, igual patrón que
+    tenía ConfigCaja antes del Día 47. Incluía hasta el CORRELATIVO de
+    facturas compartido — si hubiera dos residenciales, sus números de
+    recibo se habrían mezclado entre sí).
     FASE 1: datos del emisor + correlativo interno.
     FASE 2 (preparado): CAI, rango autorizado y fecha límite de la SAR.
     """
     __tablename__ = "config_recibo"
 
     id                 = db.Column(db.BigInteger, primary_key=True)
+    residencial_id     = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     # Datos del emisor (Fase 1)
     nombre_emisor      = db.Column(db.String(160), default="Residencial Villas del Sol")
     rtn_emisor         = db.Column(db.String(20))
@@ -805,8 +810,20 @@ class ConfigRecibo(db.Model):
     actualizado_en     = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
     @classmethod
-    def get(cls):
-        cfg = cls.query.get(1)
+    def get(cls, residencial_id=None):
+        """
+        Devuelve la config de UNA residencial, creándola si no existe.
+        residencial_id=None es compatibilidad legacy (fila id=1) — todo
+        código nuevo debe pasar un residencial_id explícito.
+        """
+        if residencial_id is not None:
+            cfg = cls.query.filter_by(residencial_id=residencial_id).first()
+            if not cfg:
+                cfg = cls(residencial_id=residencial_id)
+                db.session.add(cfg)
+                db.session.commit()
+            return cfg
+        cfg = cls.query.get(1) or cls.query.order_by(cls.id).first()
         if not cfg:
             cfg = cls(id=1)
             db.session.add(cfg)

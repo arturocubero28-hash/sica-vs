@@ -260,6 +260,12 @@ def create_app(config_class=Config):
             "  SELECT d.residencial_id FROM dispositivos_pi d WHERE d.id = c.dispositivo_id"
             ") WHERE c.residencial_id IS NULL AND c.dispositivo_id IS NOT NULL",
             "UPDATE camaras SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
+            # Recibos por residencial (Día 48 — hallazgo de auditoría:
+            # ConfigRecibo era una sola fila global, igual patrón que
+            # ConfigCaja antes del Día 47 — incluía el CORRELATIVO de
+            # facturas compartido entre residenciales).
+            "ALTER TABLE config_recibo ADD COLUMN IF NOT EXISTS residencial_id BIGINT REFERENCES residenciales(id)",
+            "UPDATE config_recibo SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de
