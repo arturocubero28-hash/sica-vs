@@ -253,7 +253,12 @@ def crear_cuenta(usuario_actual):
         pass
     else:
         tarifa = Tarifa.query.get(data.get("tarifa_id"))
-        if not tarifa:
+        # Día 48 — hallazgo de auditoría (menor, pero real): sin este
+        # chequeo, se podía crear una cuenta con una tarifa de OTRA
+        # residencial (un admin normalmente solo ve las suyas en el
+        # desplegable, pero nada lo impedía a nivel de API).
+        from app.utils.residencial import pertenece_a_mi_residencial
+        if not tarifa or not pertenece_a_mi_residencial(tarifa, usuario_actual):
             return _err("tarifa_invalida", "La tarifa indicada no existe", 400)
         dia_pago = data.get("dia_pago")
         if not isinstance(dia_pago, int) or not (1 <= dia_pago <= 28):
