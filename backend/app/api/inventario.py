@@ -80,8 +80,12 @@ def crear_tipo(usuario_actual):
 @inventario_bp.put("/tipos/<uuid>")
 @roles_required("admin", "super_admin")
 def editar_tipo(usuario_actual, uuid):
+    from app.utils.residencial import pertenece_a_mi_residencial
     tipo = TipoTarjeta.query.filter_by(uuid_publico=uuid).first()
-    if not tipo:
+    # Día 48 — hallazgo de auditoría: sin este chequeo, un admin de otra
+    # residencial podía editar precio/nombre/stock de un tipo de tarjeta
+    # ajeno con solo conocer el UUID.
+    if not tipo or not pertenece_a_mi_residencial(tipo, usuario_actual):
         return _err("no_encontrado", "Tipo de tarjeta no encontrado", 404)
     data = request.get_json(silent=True) or {}
     if "nombre" in data and data["nombre"].strip():
@@ -115,6 +119,10 @@ def agregar_stock(usuario_actual, uuid):
             .with_for_update()
             .first())
     if not tipo:
+        return _err("no_encontrado", "Tipo de tarjeta no encontrado", 404)
+    from app.utils.residencial import pertenece_a_mi_residencial
+    if not pertenece_a_mi_residencial(tipo, usuario_actual):
+        db.session.rollback()  # soltar el candado antes de salir
         return _err("no_encontrado", "Tipo de tarjeta no encontrado", 404)
     data = request.get_json(silent=True) or {}
     try:

@@ -113,8 +113,13 @@ def _crear_usuario_rol(req, rol, usuario_actual):
 @usuarios_bp.post("/<uuid_usuario>/reset-password")
 @roles_required("admin", "super_admin")
 def reset_password(usuario_actual, uuid_usuario):
+    from app.utils.residencial import pertenece_a_mi_residencial
     u = Usuario.query.filter_by(uuid_publico=uuid_usuario).first()
-    if not u:
+    # Día 48 — hallazgo de auditoría, el más grave del día: sin este
+    # chequeo, un admin de otra residencial podía resetear la contraseña
+    # de un guardia/cajero ajeno y ver la clave nueva generada — un
+    # secuestro de cuenta completo, con solo conocer el UUID del usuario.
+    if not u or not pertenece_a_mi_residencial(u, usuario_actual):
         return jsonify({"error": {"code": "no_encontrado", "message": "Usuario no encontrado"}}), 404
 
     # SEC-01: un usuario no puede resetearse su propia contraseña por esta vía
@@ -151,8 +156,12 @@ def reset_password(usuario_actual, uuid_usuario):
 @usuarios_bp.put("/<uuid_usuario>")
 @roles_required("admin", "super_admin")
 def editar_usuario(usuario_actual, uuid_usuario):
+    from app.utils.residencial import pertenece_a_mi_residencial
     u = Usuario.query.filter_by(uuid_publico=uuid_usuario).first()
-    if not u:
+    # Día 48 — hallazgo de auditoría: sin este chequeo, un admin de otra
+    # residencial podía editar o desactivar un usuario ajeno con solo
+    # conocer su UUID.
+    if not u or not pertenece_a_mi_residencial(u, usuario_actual):
         return jsonify({"error": {"code": "no_encontrado", "message": "Usuario no encontrado"}}), 404
 
     # SEC-01: jerarquía de roles — un admin no puede editar/desactivar a un

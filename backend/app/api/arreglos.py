@@ -27,6 +27,26 @@ def _err(code, msg, status):
     return jsonify({"error": {"code": code, "message": msg}}), status
 
 
+def _arreglo_es_mio(arreglo, usuario_actual):
+    """
+    Día 48: True si el arreglo pertenece a la residencial del usuario.
+    Mismo criterio que pertenece_a_mi_residencial (utils/residencial.py),
+    pero ArregloPago no tiene residencial_id directo — se resuelve vía
+    cuenta→unidad, como el resto de las entidades financieras.
+    """
+    if usuario_actual.rol in ("super_admin", "desarrollador"):
+        return True
+    rid_usuario = usuario_actual.residencial_id
+    if rid_usuario is None:
+        return True
+    cuenta = arreglo.cuenta
+    unidad = cuenta.unidad if cuenta else None
+    rid_arreglo = unidad.residencial_id if unidad else None
+    if rid_arreglo is None:
+        return True
+    return rid_arreglo == rid_usuario
+
+
 def _money(x):
     """Redondea a 2 decimales de forma contable."""
     return Decimal(str(x)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -55,7 +75,10 @@ def listar_arreglos(usuario_actual):
 @roles_required("admin", "super_admin", "cajero")
 def detalle_arreglo(usuario_actual, uuid):
     arreglo = ArregloPago.query.filter_by(uuid_publico=uuid).first()
-    if not arreglo:
+    # Día 48 — hallazgo de auditoría: sin este chequeo, un admin/cajero de
+    # otra residencial podía ver el detalle de un arreglo de pago ajeno
+    # (deuda, plan de cuotas de un residente) con solo conocer el UUID.
+    if not arreglo or not _arreglo_es_mio(arreglo, usuario_actual):
         return _err("no_encontrado", "Arreglo no encontrado", 404)
     return jsonify({"data": arreglo.to_dict(con_detalle=True)})
 
@@ -235,7 +258,7 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
     admin lo aprueba, igual que una cuota normal).
     """
     arreglo = ArregloPago.query.filter_by(uuid_publico=uuid).first()
-    if not arreglo:
+    if not arreglo or not _arreglo_es_mio(arreglo, usuario_actual):
         return _err("no_encontrado", "Arreglo no encontrado", 404)
     if arreglo.estado != "activo":
         return _err("arreglo_no_activo",
@@ -312,7 +335,7 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
 @roles_required("admin", "super_admin")
 def cancelar_arreglo(usuario_actual, uuid):
     arreglo = ArregloPago.query.filter_by(uuid_publico=uuid).first()
-    if not arreglo:
+    if not arreglo or not _arreglo_es_mio(arreglo, usuario_actual):
         return _err("no_encontrado", "Arreglo no encontrado", 404)
     if arreglo.estado != "activo":
         return _err("no_activo", "Solo se puede cancelar un arreglo activo", 400)
