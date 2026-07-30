@@ -1126,8 +1126,13 @@ function ConfigPis() {
         El <code>punto de acceso</code> debe coincidir con el de las trancas de ese punto.
       </div>
 
-      <div className="dev-trancas-barra">
-        <span className="dev-trancas-total">{pis?.length || 0} controlador(es)</span>
+      <div className="dev-trancas-barra" style={{ flexWrap: "wrap", gap: 10 }}>
+        <span className="dev-trancas-total">
+          {filtroResidencialLista ? (pis || []).filter((d) => d.residencial?.id === filtroResidencialLista).length : (pis?.length || 0)} controlador(es)
+        </span>
+        {residenciales.length > 0 && (
+          <BuscadorResidencial residenciales={residenciales} valor={filtroResidencialLista} onChange={setFiltroResidencialLista} />
+        )}
         <button className="dev-tranca-add" onClick={() => setMostrarAlta((v) => !v)}>
           {mostrarAlta ? "Cancelar" : "+ Agregar controlador"}
         </button>
@@ -1245,12 +1250,6 @@ function ConfigPis() {
 
           return (
             <>
-              {residenciales.length > 0 && (
-                <div className="dev-trancas-barra" style={{ marginBottom: 16 }}>
-                  <span className="dev-trancas-total">{listaFiltrada.length} controlador(es)</span>
-                  <BuscadorResidencial residenciales={residenciales} valor={filtroResidencialLista} onChange={setFiltroResidencialLista} />
-                </div>
-              )}
               {listaFiltrada.length === 0 ? (
                 <p className="muted" style={{ padding: 20 }}>Ningún controlador coincide con ese filtro.</p>
               ) : (
