@@ -60,6 +60,7 @@ def create_app(config_class=Config):
     from app.models.dispositivo import Dispositivo  # noqa: F401  Raspberry Pi de accesos
     from app.models.residencial import Residencial  # noqa: F401  bases multi-residencial (Día 37)
     from app.models.plan import Plan  # noqa: F401  planes de suscripción (Día 50)
+    from app.models.foto_acceso import FotoAcceso  # noqa: F401  cuota de almacenamiento (Día 50)
     from app.models.dispositivo_movil import DispositivoMovil  # noqa: F401  tokens FCM push
     from app.models.cuenta import ConfigResidencial  # noqa: F401  config global residencial
 

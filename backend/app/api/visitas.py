@@ -12,8 +12,6 @@ Guardia:
     GET  /api/v1/accesos/recientes          -> últimos eventos de acceso
 """
 import datetime as dt
-import os
-import uuid as uuid_lib
 import base64
 
 from flask import Blueprint, request, jsonify, current_app
@@ -22,6 +20,8 @@ from app.extensions import db
 from app.models.visita import Visita, CodigoQR, EventoAcceso, AccesoFisico
 from app.models.cuenta import Cuenta, Residente
 from app.auth.security import token_required, roles_required
+from app.services.cuota_almacenamiento import guardar_foto_con_cuota
+from app.services.storage import eliminar_archivo
 
 visitas_bp = Blueprint("visitas", __name__)
 
@@ -50,8 +50,8 @@ class ErrorGuardadoFoto(Exception):
     pass
 
 
-def _guardar_foto_multipart(archivo, prefijo):
-    """Guarda una foto subida como multipart (app móvil o web) y devuelve el nombre.
+def _guardar_foto_multipart(archivo, prefijo, residencial_id=None):
+    """Guarda una foto subida como multipart (app móvil o web) y devuelve la clave.
     Preserva la extensión real del archivo (webp, jpg, png) en vez de forzar .jpg —
     la app comprime a WebP antes de subir, así que forzar .jpg guardaría bytes
     WebP con extensión incorrecta.
@@ -59,90 +59,105 @@ def _guardar_foto_multipart(archivo, prefijo):
     PHOTO-15: si el archivo viene pero no se puede guardar, lanza
     ErrorGuardadoFoto en vez de devolver None — así el endpoint puede
     distinguir "no mandó foto" de "mandó foto y falló el guardado".
+
+    Día 50 — sistema de suscripciones: antes escribía directo a
+    /app/uploads con os.open(), sin pasar por services/storage.py (la
+    abstracción que ya sabe guardar en DigitalOcean Spaces según
+    configuración). Eso significaba que, aunque se activara Spaces en
+    producción, las fotos de accesos igual quedaban solo en el disco
+    local del servidor, sin que nadie se diera cuenta. Ahora pasa por
+    guardar_foto_con_cuota(), que además registra el tamaño contra la
+    residencial dueña y aplica su cuota de almacenamiento.
     """
     if not archivo or not archivo.filename:
         return None
-    ruta = None
     try:
-        os.makedirs("/app/uploads", exist_ok=True)
         ext = archivo.filename.rsplit(".", 1)[-1].lower() if "." in archivo.filename else "jpg"
         if ext not in EXTENSIONES_IMAGEN_VALIDAS:
             ext = "jpg"
-        nombre = f"{prefijo}_{uuid_lib.uuid4().hex[:12]}.{ext}"
-        ruta = f"/app/uploads/{nombre}"
-        archivo.save(ruta)
-        # Verificación real: que el archivo exista y no esté vacío. Un save()
-        # que no lanza excepción pero deja 0 bytes (disco lleno) no sirve
-        # como evidencia.
-        if not os.path.exists(ruta) or os.path.getsize(ruta) == 0:
+        contenido_tipo = archivo.mimetype or "image/jpeg"
+        clave = guardar_foto_con_cuota(
+            archivo.stream, residencial_id, subcarpeta="",
+            content_type=contenido_tipo, extension=ext,
+        )
+        if not clave:
             raise ErrorGuardadoFoto(f"El archivo {prefijo} quedó vacío al guardarse")
-        return nombre
+        return clave
     except Exception as e:
-        # El helper limpia SU PROPIO archivo parcial: quien lo llama todavía
-        # no recibió el nombre (la excepción interrumpe la asignación), así
-        # que no tendría forma de saber qué borrar.
-        _borrar_ruta(ruta)
         if isinstance(e, ErrorGuardadoFoto):
             raise
         current_app.logger.error("PHOTO-15: fallo guardando foto %s: %s", prefijo, e)
         raise ErrorGuardadoFoto(f"No se pudo guardar la foto de {prefijo}") from e
 
 
-def _guardar_foto_base64(b64_data, prefijo):
-    """Guarda una foto base64 en /app/uploads y devuelve la ruta.
+def _guardar_foto_base64(b64_data, prefijo, residencial_id=None):
+    """Guarda una foto base64 y devuelve la clave (ver nota de Día 50 en
+    _guardar_foto_multipart — mismo cambio de fondo acá).
 
-    PHOTO-15: mismo criterio que _guardar_foto_multipart — si el dato viene
-    pero falla el guardado, lanza ErrorGuardadoFoto en vez de devolver None.
+    PHOTO-15: mismo criterio — si el dato viene pero falla el guardado,
+    lanza ErrorGuardadoFoto en vez de devolver None.
     """
     if not b64_data:
         return None
-    ruta = None
     try:
-        os.makedirs("/app/uploads", exist_ok=True)
-        nombre = f"{prefijo}_{uuid_lib.uuid4().hex[:12]}.jpg"
-        ruta = f"/app/uploads/{nombre}"
         img_bytes = base64.b64decode(b64_data.split(",")[-1])
         if not img_bytes:
             raise ErrorGuardadoFoto(f"La foto de {prefijo} llegó vacía")
-        with open(ruta, "wb") as f:
-            f.write(img_bytes)
-        if not os.path.exists(ruta) or os.path.getsize(ruta) == 0:
+        import io
+        clave = guardar_foto_con_cuota(
+            io.BytesIO(img_bytes), residencial_id, subcarpeta="",
+            content_type="image/jpeg", extension="jpg",
+        )
+        if not clave:
             raise ErrorGuardadoFoto(f"El archivo {prefijo} quedó vacío al guardarse")
-        return nombre
+        return clave
     except Exception as e:
-        _borrar_ruta(ruta)
         if isinstance(e, ErrorGuardadoFoto):
             raise
         current_app.logger.error("PHOTO-15: fallo guardando foto base64 %s: %s", prefijo, e)
         raise ErrorGuardadoFoto(f"No se pudo guardar la foto de {prefijo}") from e
 
 
-def _borrar_ruta(ruta):
-    """PHOTO-15: borra un archivo por su ruta completa, sin fallar si no existe."""
-    if not ruta:
+def _borrar_ruta(clave):
+    """PHOTO-15: borra una foto ya guardada por su clave, sin fallar si no existe.
+    Día 50: usa la abstracción de storage (eliminar_archivo), no os.remove()
+    directo — funciona igual en modo local o en modo Spaces."""
+    if not clave:
         return
     try:
-        if os.path.exists(ruta):
-            os.remove(ruta)
+        eliminar_archivo(clave)
     except Exception as e:
-        current_app.logger.warning("PHOTO-15: no se pudo limpiar %s: %s", ruta, e)
+        current_app.logger.warning("PHOTO-15: no se pudo limpiar %s: %s", clave, e)
 
 
-def _borrar_fotos(*nombres):
+def _borrar_fotos(*claves):
     """
-    PHOTO-15: limpia archivos ya escritos cuando la transacción se revierte.
-    Sin esto, un fallo a mitad de camino deja huérfanos en /app/uploads que
+    PHOTO-15: limpia archivos ya guardados cuando la transacción se
+    revierte. Sin esto, un fallo a mitad de camino deja huérfanos que
     nadie referencia y nadie borra nunca.
+
+    Día 50: usa eliminar_archivo() (funciona en local o en Spaces, no
+    solo /app/uploads), y además deshace el registro de cuota — si no
+    se revirtiera también el FotoAcceso y el contador de la residencial,
+    un rollback dejaría "fantasmas" contando espacio que en realidad se
+    liberó.
     """
-    for nombre in nombres:
-        if not nombre:
+    for clave in claves:
+        if not clave:
             continue
         try:
-            ruta = f"/app/uploads/{nombre}"
-            if os.path.exists(ruta):
-                os.remove(ruta)
+            eliminar_archivo(clave)
+            from app.models.foto_acceso import FotoAcceso
+            registro = FotoAcceso.query.filter_by(clave=clave).first()
+            if registro:
+                residencial = registro.residencial
+                if residencial:
+                    residencial.almacenamiento_usado_bytes = max(
+                        0, (residencial.almacenamiento_usado_bytes or 0) - registro.tamano_bytes)
+                db.session.delete(registro)
+                db.session.commit()
         except Exception as e:
-            current_app.logger.warning("PHOTO-15: no se pudo limpiar %s: %s", nombre, e)
+            current_app.logger.warning("PHOTO-15: no se pudo limpiar %s: %s", clave, e)
 
 
 def _generar_codigo_numerico():
@@ -621,12 +636,12 @@ def registrar_acceso_visita(usuario_actual):
     # una entrada sin su evidencia.
     foto_id = foto_pl = foto_num = None
     try:
-        foto_id = (_guardar_foto_multipart(request.files.get("foto_identidad"), "id")
-                   or _guardar_foto_base64(data.get("foto_identidad"), "id"))
-        foto_pl = (_guardar_foto_multipart(request.files.get("foto_placa"), "placa")
-                   or _guardar_foto_base64(data.get("foto_placa"), "placa"))
-        foto_num = (_guardar_foto_multipart(request.files.get("foto_numero_asignado"), "numero")
-                    or _guardar_foto_base64(data.get("foto_numero_asignado"), "numero"))
+        foto_id = (_guardar_foto_multipart(request.files.get("foto_identidad"), "id", usuario_actual.residencial_id)
+                   or _guardar_foto_base64(data.get("foto_identidad"), "id", usuario_actual.residencial_id))
+        foto_pl = (_guardar_foto_multipart(request.files.get("foto_placa"), "placa", usuario_actual.residencial_id)
+                   or _guardar_foto_base64(data.get("foto_placa"), "placa", usuario_actual.residencial_id))
+        foto_num = (_guardar_foto_multipart(request.files.get("foto_numero_asignado"), "numero", usuario_actual.residencial_id)
+                    or _guardar_foto_base64(data.get("foto_numero_asignado"), "numero", usuario_actual.residencial_id))
     except ErrorGuardadoFoto as e:
         db.session.rollback()
         _borrar_fotos(foto_id, foto_pl, foto_num)
