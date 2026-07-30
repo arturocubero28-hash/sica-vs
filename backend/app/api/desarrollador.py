@@ -13,6 +13,7 @@ from app.models.auditoria import LogAuditoria
 from app.models.visita import AccesoFisico, EventoAcceso
 from app.models.dispositivo import Dispositivo, generar_token, hash_token
 from app.models.residencial import Residencial
+from app.models.plan import Plan
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
 from app.utils.passwords import generar_password_temporal
@@ -844,3 +845,105 @@ def crear_residencial(usuario_actual):
             "password_generica": password_temporal,
         },
     }}), 201
+
+
+# ── Planes de suscripción (Día 50) ──────────────────────────────────────────
+@dev_bp.get("/planes")
+@roles_required("desarrollador")
+def listar_planes(usuario_actual):
+    """Todos los planes, activos e inactivos — el desarrollador necesita
+    ver los retirados también, para saber qué residenciales siguen en uno."""
+    planes = Plan.query.order_by(Plan.orden.asc(), Plan.id.asc()).all()
+    return jsonify({"data": [p.to_dict(incluir_stats=True) for p in planes]})
+
+
+@dev_bp.post("/planes")
+@roles_required("desarrollador")
+def crear_plan(usuario_actual):
+    body = request.get_json(silent=True) or {}
+    nombre = (body.get("nombre") or "").strip()
+    if not nombre:
+        return jsonify({"error": {"code": "nombre_requerido", "message": "El nombre es obligatorio"}}), 400
+
+    def entero_positivo(campo, minimo=1):
+        v = body.get(campo)
+        try:
+            v = int(v)
+        except (TypeError, ValueError):
+            return None, f"{campo} debe ser un número entero"
+        if v < minimo:
+            return None, f"{campo} debe ser al menos {minimo}"
+        return v, None
+
+    max_casas, err = entero_positivo("max_casas")
+    if err:
+        return jsonify({"error": {"code": "dato_invalido", "message": err}}), 400
+    max_usuarios, err = entero_positivo("max_usuarios")
+    if err:
+        return jsonify({"error": {"code": "dato_invalido", "message": err}}), 400
+    almacenamiento_gb, err = entero_positivo("almacenamiento_gb")
+    if err:
+        return jsonify({"error": {"code": "dato_invalido", "message": err}}), 400
+
+    try:
+        precio = float(body.get("precio_mensual", 0))
+        if precio < 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": {"code": "precio_invalido", "message": "El precio debe ser un número mayor o igual a 0"}}), 400
+
+    plan = Plan(
+        nombre=nombre, max_casas=max_casas, max_usuarios=max_usuarios,
+        almacenamiento_gb=almacenamiento_gb, precio_mensual=precio,
+        orden=int(body.get("orden", 0)),
+    )
+    db.session.add(plan)
+    db.session.commit()
+    return jsonify({"data": plan.to_dict()}), 201
+
+
+@dev_bp.put("/planes/<int:plan_id>")
+@roles_required("desarrollador")
+def editar_plan(usuario_actual, plan_id):
+    plan = Plan.query.get(plan_id)
+    if not plan:
+        return jsonify({"error": {"code": "no_encontrado", "message": "Plan no encontrado"}}), 404
+
+    body = request.get_json(silent=True) or {}
+    if "nombre" in body:
+        nombre = (body["nombre"] or "").strip()
+        if not nombre:
+            return jsonify({"error": {"code": "nombre_requerido", "message": "El nombre no puede quedar vacío"}}), 400
+        plan.nombre = nombre
+
+    for campo in ("max_casas", "max_usuarios", "almacenamiento_gb"):
+        if campo in body:
+            try:
+                v = int(body[campo])
+                if v < 1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                return jsonify({"error": {"code": "dato_invalido",
+                                          "message": f"{campo} debe ser un número entero mayor a 0"}}), 400
+            setattr(plan, campo, v)
+
+    if "precio_mensual" in body:
+        try:
+            precio = float(body["precio_mensual"])
+            if precio < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return jsonify({"error": {"code": "precio_invalido",
+                                      "message": "El precio debe ser un número mayor o igual a 0"}}), 400
+        plan.precio_mensual = precio
+
+    if "activo" in body:
+        plan.activo = bool(body["activo"])
+    if "orden" in body:
+        try:
+            plan.orden = int(body["orden"])
+        except (TypeError, ValueError):
+            pass  # el orden es solo cosmético, no vale la pena bloquear el guardado por esto
+
+    db.session.commit()
+    return jsonify({"data": plan.to_dict()})

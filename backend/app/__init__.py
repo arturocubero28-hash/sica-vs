@@ -59,6 +59,7 @@ def create_app(config_class=Config):
     from app.models.credencial_webauthn import CredencialWebAuthn  # noqa: F401  biometría WebAuthn
     from app.models.dispositivo import Dispositivo  # noqa: F401  Raspberry Pi de accesos
     from app.models.residencial import Residencial  # noqa: F401  bases multi-residencial (Día 37)
+    from app.models.plan import Plan  # noqa: F401  planes de suscripción (Día 50)
     from app.models.dispositivo_movil import DispositivoMovil  # noqa: F401  tokens FCM push
     from app.models.cuenta import ConfigResidencial  # noqa: F401  config global residencial
 
@@ -283,6 +284,17 @@ def create_app(config_class=Config):
             "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS wiegand_d1_pin INTEGER",
             "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS relay_canal INTEGER",
             "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS lector_direccion_osdp INTEGER",
+            # Día 50 — sistema de suscripciones. La tabla 'planes' la crea
+            # db.create_all() más arriba (tabla nueva); acá solo van las
+            # columnas nuevas en 'residenciales', que sí es una tabla
+            # existente. Todo nullable/con default a propósito: una
+            # residencial sin plan asignado (como Villas del Sol hoy)
+            # nunca se considera suspendida — ver Residencial.esta_suspendida().
+            "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS plan_id BIGINT REFERENCES planes(id)",
+            "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS fecha_proximo_pago DATE",
+            "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS dias_gracia INTEGER NOT NULL DEFAULT 5",
+            "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS almacenamiento_usado_bytes BIGINT NOT NULL DEFAULT 0",
+            "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS upgrade_solicitado BOOLEAN NOT NULL DEFAULT false",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de

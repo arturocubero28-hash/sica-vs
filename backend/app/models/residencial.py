@@ -67,11 +67,44 @@ class Residencial(db.Model):
     color_primario = db.Column(db.String(7))    # el azul, el que más resalta
     color_secundario = db.Column(db.String(7))  # el naranja, de acento
     activa = db.Column(db.Boolean, nullable=False, default=True)
+    # Día 50 — sistema de suscripciones. plan_id NULL = sin plan asignado
+    # todavía (por ejemplo, Villas del Sol al momento de esta migración) —
+    # una residencial sin plan NUNCA se considera suspendida, la
+    # suspensión no tiene sentido sin un plan de referencia. El
+    # desarrollador le asigna un plan cuando corresponda.
+    plan_id = db.Column(db.BigInteger, db.ForeignKey("planes.id"))
+    fecha_proximo_pago = db.Column(db.Date)
+    # Días después de fecha_proximo_pago durante los cuales el servicio
+    # sigue activo aunque no haya pagado todavía. Default de 5 días —
+    # ajustable por residencial, no es un valor fijo del sistema.
+    dias_gracia = db.Column(db.Integer, nullable=False, default=5)
+    # Contador de uso de almacenamiento (fotos de accesos), en bytes —
+    # se mantiene actualizado en cada carga/borrado de foto (Etapa 3),
+    # para no tener que consultar DigitalOcean Spaces en cada chequeo.
+    almacenamiento_usado_bytes = db.Column(db.BigInteger, nullable=False, default=0)
+    # Señal para el desarrollador: el admin chocó con el límite de su plan
+    # (casas o usuarios) y pidió que se lo suban — no cambia nada solo,
+    # es un aviso que el desarrollador atiende manualmente (Etapa 2).
+    upgrade_solicitado = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow,
                            onupdate=dt.datetime.utcnow)
 
     admin = db.relationship("Usuario", foreign_keys=[admin_id], lazy="joined")
+    plan = db.relationship("Plan", foreign_keys=[plan_id], lazy="joined")
+
+    def esta_suspendida(self):
+        """
+        Día 50: el estado de suspensión se CALCULA, no se guarda — así
+        nunca puede desincronizarse ni depende de que corra un proceso
+        aparte que lo actualice. Sin plan asignado, o sin fecha de pago
+        cargada todavía, nunca se considera suspendida (no hay referencia
+        contra la cual juzgarla).
+        """
+        if not self.plan_id or not self.fecha_proximo_pago:
+            return False
+        limite = self.fecha_proximo_pago + dt.timedelta(days=self.dias_gracia or 0)
+        return dt.date.today() > limite
 
     def to_dict(self, incluir_stats=False):
         d = {
@@ -86,6 +119,13 @@ class Residencial(db.Model):
             "color_primario": self.color_primario or DEFAULT_COLOR_PRIMARIO,
             "color_secundario": self.color_secundario or DEFAULT_COLOR_SECUNDARIO,
             "activa": self.activa,
+            # Día 50 — sistema de suscripciones.
+            "plan": self.plan.to_dict() if self.plan else None,
+            "fecha_proximo_pago": self.fecha_proximo_pago.isoformat() if self.fecha_proximo_pago else None,
+            "dias_gracia": self.dias_gracia,
+            "suspendida": self.esta_suspendida(),
+            "almacenamiento_usado_bytes": self.almacenamiento_usado_bytes,
+            "upgrade_solicitado": self.upgrade_solicitado,
             "admin": {
                 "nombre": f"{self.admin.nombre} {self.admin.apellido}",
                 "email": self.admin.email,
