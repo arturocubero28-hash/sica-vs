@@ -97,6 +97,38 @@ def _usuario_desde_request():
     return Usuario.query.filter_by(uuid_publico=payload["sub"], activo=True).first()
 
 
+def _bloqueado_por_suspension(usuario):
+    """
+    Día 50 — sistema de suscripciones. Chequeo centralizado: si la
+    residencial del usuario está suspendida (venció su plan y ya pasó el
+    período de gracia), se bloquea el acceso a TODA la API para
+    cualquier rol bajo esa residencial — admin, supervisor, guardia,
+    cajero, residente. Vive acá (no en cada endpoint) para que se
+    aplique automáticamente a todo lo protegido con @token_required o
+    @roles_required, sin tener que acordarse de agregarlo en cada uno.
+
+    super_admin y desarrollador son roles de PLATAFORMA, no de un
+    cliente — nunca deben quedar bloqueados por la suscripción de un
+    cliente, sin importar qué residencial estén mirando en un momento
+    dado. Import perezoso (adentro de la función) para no arriesgar un
+    import circular en un módulo que se carga muy temprano.
+
+    Devuelve None si puede pasar; si no, devuelve la respuesta de error
+    lista para que el decorador la retorne directo.
+    """
+    if usuario.rol in ("super_admin", "desarrollador"):
+        return None
+    if not usuario.residencial_id:
+        return None
+    from app.models.residencial import Residencial
+    residencial = Residencial.query.get(usuario.residencial_id)
+    if residencial and residencial.esta_suspendida():
+        return jsonify({"error": {"code": "suscripcion_suspendida",
+                                  "message": "El servicio de tu residencial está suspendido por falta de pago. "
+                                             "Contactá a tu administrador."}}), 402
+    return None
+
+
 def token_required(f):
     """Exige un token válido. Inyecta usuario_actual como primer argumento."""
     @wraps(f)
@@ -106,6 +138,9 @@ def token_required(f):
         if not usuario:
             return jsonify({"error": {"code": "no_autorizado",
                                       "message": "Token inválido o ausente"}}), 401
+        bloqueo = _bloqueado_por_suspension(usuario)
+        if bloqueo:
+            return bloqueo
         g.usuario_actual = usuario   # disponible para el hook de auditoría
         return f(usuario, *args, **kwargs)
     return wrapper
@@ -143,6 +178,9 @@ def roles_required(*roles_permitidos):
             if not permitido:
                 return jsonify({"error": {"code": "prohibido",
                                           "message": "No tienes permiso para esta acción"}}), 403
+            bloqueo = _bloqueado_por_suspension(usuario)
+            if bloqueo:
+                return bloqueo
             g.usuario_actual = usuario
             return f(usuario, *args, **kwargs)
         return wrapper

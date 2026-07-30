@@ -33,6 +33,13 @@ def crear_guardia(usuario_actual):
         return jsonify({"error": {"code": "email_duplicado",
                                   "message": "Ya existe un usuario con ese correo"}}), 400
 
+    # Día 50 — sistema de suscripciones.
+    from app.utils.residencial import limite_usuarios_alcanzado
+    if limite_usuarios_alcanzado(usuario_actual.residencial_id):
+        return jsonify({"error": {"code": "limite_usuarios",
+                                  "message": "Tu plan actual no permite más usuarios. "
+                                             "Pedile a tu desarrollador que te suba de plan."}}), 402
+
     # SEC-01: contraseña aleatoria por usuario — antes era una fija
     # compartida ('VillasDelSol2026') para todos los guardias nuevos.
     password_temporal = generar_password_temporal()

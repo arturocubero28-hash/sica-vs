@@ -309,3 +309,42 @@ def resolver_residencial_caja(usuario_actual, request):
         return None, (jsonify({"error": {"code": "residencial_no_encontrada",
                                          "message": "No se encontró esa residencial"}}), 404)
     return r.id, None
+
+
+def limite_casas_alcanzado(residencial_id):
+    """
+    Día 50 — sistema de suscripciones. True si la residencial ya está en
+    (o por encima de) el tope de casas de su plan. Sin residencial_id o
+    sin plan asignado, nunca bloquea (no hay límite contra el cual medir).
+    """
+    if not residencial_id:
+        return False
+    from app.models.residencial import Residencial
+    from app.models.cuenta import Cuenta, Unidad
+    residencial = Residencial.query.get(residencial_id)
+    if not residencial or not residencial.plan_id:
+        return False
+    actuales = (
+        Cuenta.query.join(Unidad, Cuenta.unidad_id == Unidad.id)
+        .filter(Unidad.residencial_id == residencial_id)
+        .count()
+    )
+    return actuales >= residencial.plan.max_casas
+
+
+def limite_usuarios_alcanzado(residencial_id):
+    """
+    Mismo criterio que limite_casas_alcanzado(), pero para usuarios.
+    Cuenta TODOS los roles bajo la residencial (admin incluido) contra
+    Plan.max_usuarios — es el tope total de cuentas de acceso al
+    sistema, no solo residentes.
+    """
+    if not residencial_id:
+        return False
+    from app.models.residencial import Residencial
+    from app.models.usuario import Usuario
+    residencial = Residencial.query.get(residencial_id)
+    if not residencial or not residencial.plan_id:
+        return False
+    actuales = Usuario.query.filter_by(residencial_id=residencial_id).count()
+    return actuales >= residencial.plan.max_usuarios

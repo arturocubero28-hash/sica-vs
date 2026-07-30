@@ -73,6 +73,16 @@ def _crear_usuario_pendiente(nombre, apellido, email, telefono=None, extra=None,
     if Usuario.query.filter_by(email=email).first():
         return None, f"Ya existe un usuario con el email {email}"
 
+    # Día 50 — sistema de suscripciones. Acá adentro (no en cada llamador
+    # por separado) porque esta función la usan DOS endpoints distintos
+    # (crear cuenta nueva, y agregar un residente a una ya existente) — así
+    # el límite se aplica igual en los dos casos, sin arriesgarse a que se
+    # nos olvide agregarlo en alguno.
+    if usuario_actual is not None:
+        from app.utils.residencial import limite_usuarios_alcanzado
+        if limite_usuarios_alcanzado(usuario_actual.residencial_id):
+            return None, "Tu plan actual no permite más usuarios. Pedile a tu desarrollador que te suba de plan."
+
     extra = extra or {}
     u = Usuario(
         nombre=nombre.strip(),
@@ -212,6 +222,15 @@ def crear_cuenta(usuario_actual):
       }
     """
     data = request.get_json(silent=True) or {}
+
+    # Día 50 — sistema de suscripciones: el límite de CASAS se chequea acá
+    # (es específico de esta operación). El límite de USUARIOS ya lo
+    # verifica _crear_usuario_pendiente() más abajo, adentro de la función
+    # compartida — no hace falta repetirlo acá.
+    from app.utils.residencial import limite_casas_alcanzado
+    if limite_casas_alcanzado(usuario_actual.residencial_id):
+        return _err("limite_casas", "Tu plan actual no permite más casas. "
+                    "Pedile a tu desarrollador que te suba de plan.", 402)
 
     # La unidad puede venir ya existente (unidad_id) o crearse sobre la marcha
     # (unidad_nueva: {tipo, identificador}), para no requerir un paso previo.
@@ -1111,7 +1130,30 @@ def editar_mi_residencial(usuario_actual):
     return jsonify({"data": r.to_dict()})
 
 
-@cuentas_bp.post("/mi-residencial/logo")
+@cuentas_bp.post("/mi-residencial/solicitar-upgrade")
+@roles_required("admin", "super_admin")
+def solicitar_upgrade(usuario_actual):
+    """
+    Día 50 — sistema de suscripciones. El admin llegó al límite de su
+    plan (casas o usuarios) y pide que se lo suban. Esto NO cambia el
+    plan solo, ni pasa automáticamente al chocar contra el límite —
+    es una acción explícita del admin. Solo deja una señal
+    (upgrade_solicitado) para que el desarrollador la vea y lo llame.
+    """
+    from app.models.residencial import Residencial
+    if not usuario_actual.residencial_id:
+        return jsonify({"error": {"code": "sin_residencial",
+                                  "message": "Tu usuario no tiene una residencial asignada"}}), 400
+    r = Residencial.query.get(usuario_actual.residencial_id)
+    if not r:
+        return jsonify({"error": {"code": "no_encontrada",
+                                  "message": "Residencial no encontrada"}}), 404
+    r.upgrade_solicitado = True
+    db.session.commit()
+    return jsonify({"data": r.to_dict()})
+
+
+
 @roles_required("admin", "super_admin")
 def subir_logo_residencial(usuario_actual):
     """Sube/reemplaza el logo de la residencial del admin. Mismo patrón de
