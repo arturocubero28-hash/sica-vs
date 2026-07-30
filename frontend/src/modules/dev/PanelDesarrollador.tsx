@@ -585,6 +585,24 @@ function ConfigTrancas() {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
   }
 
+  // Día 49, corrección a pedido del usuario: la tecnología es una decisión
+  // POR PUNTO, no por tranca — antes el selector estaba repetido en cada
+  // tarjeta, y nada impedía dejar la tranca de entrada en un modo y la de
+  // salida en otro, sin sentido físico (las tres del mismo punto comparten
+  // un solo Pi y un solo hardware). Esta función actualiza el modo de
+  // TODAS las trancas del grupo a la vez, en el estado local — cada una se
+  // sigue guardando por separado (el canal/pin sí es distinto por tranca),
+  // pero ya no se pueden desincronizar entre sí.
+  function cambiarModoDelPunto(items: AccesoFisicoDTO[], nuevoModo: "gpio" | "modbus") {
+    setEdits((prev) => {
+      const siguiente = { ...prev };
+      items.forEach((a) => {
+        siguiente[a.id] = { ...siguiente[a.id], modo_control: nuevoModo };
+      });
+      return siguiente;
+    });
+  }
+
   async function guardar(a: AccesoFisicoDTO) {
     const ed = edits[a.id];
     const nombre = ed.nombre.trim();
@@ -747,6 +765,28 @@ function ConfigTrancas() {
               <span className="dev-punto-ic"><Router size={16} /></span>
               <span>{g.punto || "Sin punto asignado"}</span>
               <span className="dev-punto-sub">{g.punto ? `Raspberry Pi · ${g.items.length} dispositivo(s)` : `${g.items.length} acceso(s) sin asignar a una Pi`}</span>
+              {g.punto && (
+                <div className="dev-modo-selector dev-modo-selector-punto">
+                  <button type="button"
+                    className={`dev-modo-btn ${(edits[g.items[0]?.id]?.modo_control || "gpio") === "gpio" ? "sel" : ""}`}
+                    onClick={() => cambiarModoDelPunto(g.items, "gpio")}>
+                    <Cpu size={16} />
+                    <span className="dev-modo-btn-texto">
+                      <strong>Económico</strong>
+                      <span>Wiegand + GPIO</span>
+                    </span>
+                  </button>
+                  <button type="button"
+                    className={`dev-modo-btn ${(edits[g.items[0]?.id]?.modo_control || "gpio") === "modbus" ? "sel" : ""}`}
+                    onClick={() => cambiarModoDelPunto(g.items, "modbus")}>
+                    <Radio size={16} />
+                    <span className="dev-modo-btn-texto">
+                      <strong>Premium</strong>
+                      <span>Cidron + OSDP/Modbus</span>
+                    </span>
+                  </button>
+                </div>
+              )}
             </div>
             <div className="dev-trancas-grid">
               {g.items.map((a) => {
@@ -799,33 +839,16 @@ function ConfigTrancas() {
                         {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
                       </select>
                     </label>
-                    {/* Día 49: selector de tecnología — se elige UNA VEZ
-                        por punto de acceso, nunca mezclado dentro del
-                        mismo punto. Determina qué campos de hardware
-                        aparecen debajo. */}
-                    <label className="dev-tranca-punto">
-                      <span>Tecnología de este punto</span>
-                      <div className="dev-modo-selector">
-                        <button type="button"
-                          className={`dev-modo-btn ${ed.modo_control === "gpio" ? "sel" : ""}`}
-                          onClick={() => setCampo(a.id, "modo_control", "gpio")}>
-                          <Cpu size={17} />
-                          <span className="dev-modo-btn-texto">
-                            <strong>Económico</strong>
-                            <span>Wiegand + GPIO directo</span>
-                          </span>
-                        </button>
-                        <button type="button"
-                          className={`dev-modo-btn ${ed.modo_control === "modbus" ? "sel" : ""}`}
-                          onClick={() => setCampo(a.id, "modo_control", "modbus")}>
-                          <Radio size={17} />
-                          <span className="dev-modo-btn-texto">
-                            <strong>Premium</strong>
-                            <span>Cidron + OSDP/Modbus</span>
-                          </span>
-                        </button>
-                      </div>
-                    </label>
+                    {/* Día 49, corregido: la tecnología ya no se elige acá
+                        — se eligió una sola vez arriba, en el encabezado
+                        del punto (ver cambiarModoDelPunto), para que no se
+                        pueda desincronizar entre las trancas de un mismo
+                        punto. Esto es solo un indicador de solo lectura,
+                        para confirmar cuál está activa sin poder tocarla. */}
+                    <div className="dev-tranca-modo-indicador">
+                      {ed.modo_control === "gpio" ? <Cpu size={13} /> : <Radio size={13} />}
+                      <span>{ed.modo_control === "gpio" ? "Económico — Wiegand + GPIO" : "Premium — Cidron + OSDP/Modbus"}</span>
+                    </div>
 
                     {ed.modo_control === "gpio" ? (
                       <div className="dev-tranca-campos">

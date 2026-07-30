@@ -2874,16 +2874,28 @@ table.data tbody tr:hover td { background: #f1f6fd; }
 .dev-punto-titulo {
   display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 14px;
   background: linear-gradient(135deg, var(--marca-azul), var(--marca-azul-2)); border-radius: 11px; color: #fff;
+  flex-wrap: wrap;
 }
 .dev-punto-ic { font-size: 17px; }
 .dev-punto-titulo > span:nth-child(2) { font-weight: 700; font-size: 15px; }
 .dev-punto-sub { margin-left: auto; font-size: 12px; color: rgba(255,255,255,.7); font-weight: 500; }
+/* Día 49: el selector de tecnología vive en el encabezado del punto (no
+   repetido en cada tarjeta) — al ancho completo, en su propia fila, para
+   no apretarlo junto al ícono/título/subtítulo en una sola línea. */
+.dev-modo-selector-punto { flex-basis: 100%; margin-top: 2px; }
 .dev-tranca-punto { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
 .dev-tranca-punto span { font-size: 11px; font-weight: 600; color: #4b5563; text-transform: uppercase; letter-spacing: 0.04em; }
 .dev-tranca-punto input {
   width: 100%; padding: 8px 10px; border: 1px solid var(--borde, #e3e9f2); border-radius: 9px; font-size: 13.5px; color: var(--marca-azul); background: #fff;
 }
 .dev-tranca-punto input:focus { outline: none; border-color: var(--marca-naranja); box-shadow: 0 0 0 3px rgba(244,135,35,.15); }
+/* Día 49: indicador de solo lectura dentro de cada tarjeta (reemplaza el
+   selector interactivo que estaba repetido acá antes de la corrección). */
+.dev-tranca-modo-indicador {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 12px;
+  padding: 6px 10px; border-radius: 8px; background: #f4f7fb; color: #5a6472;
+  font-size: 11.5px; font-weight: 600;
+}
 
 /* ── Panel dev: Raspberry Pi ── */
 .dev-pi-info { font-size: 13px; color: #4b5563; margin-bottom: 14px; line-height: 1.7; }
