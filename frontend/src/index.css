@@ -2878,6 +2878,14 @@ table.data tbody tr:hover td { background: #f1f6fd; }
 }
 .dev-punto-ic { font-size: 17px; }
 .dev-punto-titulo > span:nth-child(2) { font-weight: 700; font-size: 15px; }
+/* Día 49, a pedido del usuario: nombre de la residencial junto al del
+   punto — pequeña etiqueta translúcida, distinta del texto plano, para
+   que no se confunda con el nombre del punto ni con el subtítulo. */
+.dev-punto-residencial {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(255,255,255,.15); border-radius: 6px; padding: 2px 8px;
+  font-size: 11px; font-weight: 600; color: rgba(255,255,255,.9);
+}
 .dev-punto-sub { margin-left: auto; font-size: 12px; color: rgba(255,255,255,.7); font-weight: 500; }
 /* Día 49: el selector de tecnología vive en el encabezado del punto (no
    repetido en cada tarjeta) — al ancho completo, en su propia fila, para

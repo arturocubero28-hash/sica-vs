@@ -721,7 +721,7 @@ function ConfigTrancas() {
       </div>
 
       <div className="dev-trancas-barra" style={{ flexWrap: "wrap", gap: 10 }}>
-        <span className="dev-trancas-total">{lista.length} acceso(s) registrado(s)</span>
+        <span className="dev-trancas-total">{lista.length} tranca(s)/torniquete(s) registrado(s)</span>
         {residenciales.length > 0 && (
           <div style={{
             display: "flex", alignItems: "center", gap: 8,
@@ -759,11 +759,24 @@ function ConfigTrancas() {
           Mi Perfil → Puntos de acceso; una vez creados, aparecen acá para configurar su hardware.
         </p>
       ) : (
-        grupos.map((g) => (
+        grupos.map((g) => {
+          // Día 49, a pedido del usuario: mostrar a qué residencial
+          // pertenece cada grupo, para que sea más entendible de un
+          // vistazo (sobre todo con varias residenciales mezcladas en la
+          // misma pantalla). Se toma del primer ítem del grupo — todas
+          // las trancas de un mismo punto deberían tener la misma
+          // residencial, ya que se hereda al crearlas desde Mi Perfil.
+          const residencialDelGrupo = g.items[0]?.residencial?.nombre;
+          return (
           <div key={g.punto || "sin-punto"} className="dev-punto-grupo">
             <div className="dev-punto-titulo">
               <span className="dev-punto-ic"><Router size={16} /></span>
               <span>{g.punto || "Sin punto asignado"}</span>
+              {residencialDelGrupo && (
+                <span className="dev-punto-residencial">
+                  <Building2 size={12} /> {residencialDelGrupo}
+                </span>
+              )}
               <span className="dev-punto-sub">{g.punto ? `Raspberry Pi · ${g.items.length} dispositivo(s)` : `${g.items.length} acceso(s) sin asignar a una Pi`}</span>
               {g.punto && (
                 <div className="dev-modo-selector dev-modo-selector-punto">
@@ -906,7 +919,8 @@ function ConfigTrancas() {
               })}
             </div>
           </div>
-        ))
+          );
+        })
       )}
 
       {borrar && (
