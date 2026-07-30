@@ -514,6 +514,68 @@ function PanelSeguridad() {
 }
 
 
+// Día 49, a pedido del usuario: buscador de residencial con texto libre,
+// para usarlo tanto en Trancas como en Controladores de acceso — antes
+// cada pantalla tenía (o iba a necesitar) su propio <select> chico y
+// escondido, doloroso de usar con muchas residenciales (imaginate con
+// 50: desplazarte por una lista entera en vez de poder escribir).
+// Reutilizable: recibe la lista completa y devuelve el id elegido (o ""
+// para "todas").
+function BuscadorResidencial({
+  residenciales, valor, onChange, placeholder = "Buscar residencial…",
+}: {
+  residenciales: ResidencialDTO[];
+  valor: string;
+  onChange: (id: string) => void;
+  placeholder?: string;
+}) {
+  const [texto, setTexto] = useState("");
+  const [abierto, setAbierto] = useState(false);
+  const seleccionada = residenciales.find((r) => r.id === valor);
+  // Mientras no se está escribiendo de nuevo, el input muestra el nombre
+  // de la elegida (si hay una); si el usuario empieza a tipear, se ve lo
+  // que escribe, no el nombre viejo.
+  const textoVisible = seleccionada && !abierto ? seleccionada.nombre : texto;
+  const filtradas = texto.trim()
+    ? residenciales.filter((r) => r.nombre.toLowerCase().includes(texto.trim().toLowerCase()))
+    : residenciales;
+
+  return (
+    <div className="dev-buscador-res">
+      <Search size={16} className="dev-buscador-res-ic" />
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={textoVisible}
+        onChange={(e) => { setTexto(e.target.value); setAbierto(true); if (valor) onChange(""); }}
+        onFocus={() => setAbierto(true)}
+        onBlur={() => setTimeout(() => setAbierto(false), 150)}
+      />
+      {valor && (
+        <button type="button" className="dev-buscador-res-clear"
+          onMouseDown={(e) => { e.preventDefault(); onChange(""); setTexto(""); }} title="Quitar filtro">✕</button>
+      )}
+      {abierto && (
+        <div className="dev-buscador-res-lista">
+          <div className="dev-buscador-res-opcion todas" onMouseDown={() => { onChange(""); setTexto(""); setAbierto(false); }}>
+            Todas las residenciales
+          </div>
+          {filtradas.length === 0 ? (
+            <div className="dev-buscador-res-vacio">Sin resultados para "{texto}"</div>
+          ) : (
+            filtradas.map((r) => (
+              <div key={r.id} className="dev-buscador-res-opcion"
+                onMouseDown={() => { onChange(r.id); setTexto(""); setAbierto(false); }}>
+                {r.nombre}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConfigTrancas() {
   const [accesos, setAccesos] = useState<AccesoFisicoDTO[] | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -723,25 +785,7 @@ function ConfigTrancas() {
       <div className="dev-trancas-barra" style={{ flexWrap: "wrap", gap: 10 }}>
         <span className="dev-trancas-total">{lista.length} tranca(s)/torniquete(s) registrado(s)</span>
         {residenciales.length > 0 && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            background: filtroResidencial ? "#eef4ff" : "var(--fondo)",
-            border: `1px solid ${filtroResidencial ? "#a9c4f5" : "var(--borde)"}`,
-            borderRadius: 8, padding: "6px 10px",
-          }}>
-            <Building2 size={15} color={filtroResidencial ? "#2c5cc5" : "#8a94a3"} />
-            <span className="small" style={{ fontWeight: 600, color: filtroResidencial ? "#2c5cc5" : "#5a6472", whiteSpace: "nowrap" }}>
-              Filtrar por residencial:
-            </span>
-            <select value={filtroResidencial} onChange={(e) => setFiltroResidencial(e.target.value)}
-              className="dev-tranca-tipo-sel" style={{ maxWidth: 220, border: "none", background: "transparent" }}>
-              <option value="">Todas</option>
-              {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-            </select>
-            {filtroResidencial && (
-              <button className="ghost mini" onClick={() => setFiltroResidencial("")} title="Quitar filtro">✕</button>
-            )}
-          </div>
+          <BuscadorResidencial residenciales={residenciales} valor={filtroResidencial} onChange={setFiltroResidencial} />
         )}
       </div>
 
