@@ -984,6 +984,16 @@ function ConfigPis() {
       )) as string[]
     : [];
 
+  // Día 49, Etapa 3: contexto para el desarrollador — qué modo tiene
+  // configurado el punto elegido, así sabe de antemano qué hardware llevar
+  // a la instalación (lector Wiegand vs. Cidron + relay Modbus). Se toma
+  // del primer acceso que matchee — deberían estar todos sincronizados,
+  // gracias a la corrección de la Etapa 2 (el modo se elige por punto, no
+  // por tranca individual).
+  const modoDelPuntoElegido = nuevoPunto
+    ? accesosTodos.find((a) => a.residencial?.id === nuevaResidencial && a.punto_acceso === nuevoPunto)?.modo_control
+    : undefined;
+
   async function asignarResidencial(d: DispositivoDTO, residencialId: string) {
     // Reasignar la residencial de una Pi ya en uso es una acción sensible
     // (esa Pi deja de descargar información de su cliente anterior) —
@@ -1102,6 +1112,15 @@ function ConfigPis() {
                   Esta residencial todavía no tiene puntos de acceso creados (los crea su admin
                   desde Mi Perfil).
                 </span>
+              )}
+              {modoDelPuntoElegido && (
+                <div className="dev-tranca-modo-indicador" style={{ marginTop: 6, marginBottom: 0 }}>
+                  {modoDelPuntoElegido === "gpio" ? <Cpu size={13} /> : <Radio size={13} />}
+                  <span>
+                    Este punto es {modoDelPuntoElegido === "gpio" ? "Económico" : "Premium"} —
+                    llevá {modoDelPuntoElegido === "gpio" ? "el lector Wiegand" : "el Cidron y el relay Modbus"} a la instalación
+                  </span>
+                </div>
               )}
             </label>
             <button className="dev-tranca-btn" style={{ maxWidth: 160 }} disabled={creando} onClick={crear}>
