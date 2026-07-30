@@ -266,6 +266,23 @@ def create_app(config_class=Config):
             # facturas compartido entre residenciales).
             "ALTER TABLE config_recibo ADD COLUMN IF NOT EXISTS residencial_id BIGINT REFERENCES residenciales(id)",
             "UPDATE config_recibo SET residencial_id = (SELECT MIN(id) FROM residenciales) WHERE residencial_id IS NULL",
+            # Día 49 — dos formas de controlar una tranca (económico: lector
+            # Wiegand + relay directo a GPIO; premium: lector Cidron por
+            # OSDP/RS-485 + relay externo por Modbus). El tipo ENUM se crea
+            # con un bloque DO/EXCEPTION (Postgres no tiene "CREATE TYPE IF
+            # NOT EXISTS" nativo) — a diferencia de "ALTER TYPE ... ADD
+            # VALUE" (que sí necesita su propia lista con AUTOCOMMIT, ver
+            # 'enums' más arriba), CREATE TYPE corre bien dentro de una
+            # transacción normal, así que va en esta misma lista.
+            "DO $$ BEGIN "
+            "CREATE TYPE modo_control_acceso AS ENUM ('gpio', 'modbus'); "
+            "EXCEPTION WHEN duplicate_object THEN null; END $$",
+            "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS modo_control "
+            "modo_control_acceso NOT NULL DEFAULT 'gpio'",
+            "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS wiegand_d0_pin INTEGER",
+            "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS wiegand_d1_pin INTEGER",
+            "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS relay_canal INTEGER",
+            "ALTER TABLE accesos_fisicos ADD COLUMN IF NOT EXISTS lector_direccion_osdp INTEGER",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de

@@ -32,11 +32,38 @@ class AccesoFisico(db.Model):
         db.Enum("vehicular", "peatonal", name="tipo_acceso", create_type=False),
         nullable=False)
     activo = db.Column(db.Boolean, nullable=False, default=True)
+    # Día 49 — dos formas de controlar una tranca, elegidas por costo:
+    # 'gpio'   = económico: lector Wiegand + relay, ambos cableados directo
+    #            a pines GPIO de la Raspberry Pi (sin hardware externo).
+    # 'modbus' = premium: lector Cidron por bus OSDP/RS-485 + relay externo
+    #            por Modbus RTU/RS-485 (la arquitectura del Día 48).
+    # Se elige UNA VEZ por punto de acceso — no tiene sentido mezclar un
+    # lector barato con uno caro en el mismo portón. Se guarda por fila
+    # (por tranca) en vez de en una entidad "punto" aparte, siguiendo el
+    # mismo patrón que ya usa residencial_id en este modelo.
+    modo_control = db.Column(
+        db.Enum("gpio", "modbus", name="modo_control_acceso", create_type=False),
+        nullable=False, default="gpio")
     # Hardware: relay/GPIO que acciona la tranca de este acceso y duración del pulso.
     # relay_pin = número de pin GPIO de la Raspberry Pi que cierra el contacto seco.
+    #             Solo aplica si modo_control='gpio'.
     # pulso_ms  = milisegundos que dura el pulso (configurable; a confirmar con el ingeniero).
+    #             Aplica a los dos modos por igual — el concepto de "pulso" es el mismo,
+    #             cambia solo el mecanismo que lo entrega (GPIO directo o comando Modbus).
     relay_pin = db.Column(db.Integer)
     pulso_ms = db.Column(db.Integer, nullable=False, default=800)
+    # Modo 'gpio' — lector Wiegand: dos pines de datos (D0/D1), directo a la Pi.
+    # A diferencia de OSDP, Wiegand no es un bus compartido — cada lector
+    # ocupa sus propios dos pines, sin dirección ni bus de por medio.
+    wiegand_d0_pin = db.Column(db.Integer)
+    wiegand_d1_pin = db.Column(db.Integer)
+    # Modo 'modbus' — arquitectura Día 48: el relay vive en una placa externa
+    # (Waveshare 4 canales), no en la Pi — relay_canal es cuál de los 4
+    # canales corresponde a ESTA tranca (1 a 4). lector_direccion_osdp es la
+    # dirección fija del lector Cidron asignado a esta tranca en el bus
+    # compartido (1, 2 o 3 — ver el diagrama de conexión del Día 48).
+    relay_canal = db.Column(db.Integer)
+    lector_direccion_osdp = db.Column(db.Integer)
     # Punto de acceso (identifica la Raspberry Pi que controla este dispositivo).
     # Los accesos del mismo punto los maneja la misma Pi. Ej: "Acceso Principal".
     punto_acceso = db.Column(db.String(80))
@@ -65,8 +92,13 @@ class AccesoFisico(db.Model):
             "nombre": self.nombre,
             "tipo": self.tipo,
             "activo": self.activo,
+            "modo_control": self.modo_control,
             "relay_pin": self.relay_pin,
             "pulso_ms": self.pulso_ms,
+            "wiegand_d0_pin": self.wiegand_d0_pin,
+            "wiegand_d1_pin": self.wiegand_d1_pin,
+            "relay_canal": self.relay_canal,
+            "lector_direccion_osdp": self.lector_direccion_osdp,
             "punto_acceso": self.punto_acceso,
             "direccion": self.direccion,
             "residencial": residencial,

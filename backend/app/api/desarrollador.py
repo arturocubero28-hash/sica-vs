@@ -442,6 +442,17 @@ def configurar_acceso_fisico(usuario_actual, acceso_id):
                                           "message": "La residencial indicada no existe"}}), 404
             acceso.residencial_id = r.id
 
+    # Día 49 — modo_control: 'gpio' (económico, Wiegand+relay directo a la
+    # Pi) o 'modbus' (premium, Cidron por OSDP + relay externo). Se valida
+    # ANTES que los campos de cada modo, para poder dar un mensaje de error
+    # más útil si alguien manda campos de un modo con otro modo activo.
+    if "modo_control" in body:
+        modo = (body["modo_control"] or "").strip().lower()
+        if modo not in ("gpio", "modbus"):
+            return jsonify({"error": {"code": "modo_control_invalido",
+                                      "message": "El modo debe ser 'gpio' o 'modbus'"}}), 400
+        acceso.modo_control = modo
+
     # relay_pin: entero en rango de GPIO de Raspberry Pi (0–40), o null para desconfigurar.
     if "relay_pin" in body:
         pin = body["relay_pin"]
@@ -457,6 +468,61 @@ def configurar_acceso_fisico(usuario_actual, acceso_id):
                 return jsonify({"error": {"code": "pin_fuera_rango",
                                           "message": "El pin GPIO debe estar entre 0 y 40"}}), 400
             acceso.relay_pin = pin
+
+    # Modo 'gpio' — pines de datos del lector Wiegand (D0/D1). Mismo rango
+    # y mismo criterio de validación que relay_pin, ya que es el mismo tipo
+    # de recurso físico (un pin GPIO de la Pi).
+    for campo in ("wiegand_d0_pin", "wiegand_d1_pin"):
+        if campo in body:
+            valor = body[campo]
+            if valor is None or valor == "":
+                setattr(acceso, campo, None)
+            else:
+                try:
+                    valor = int(valor)
+                except (TypeError, ValueError):
+                    return jsonify({"error": {"code": "pin_invalido",
+                                              "message": f"{campo} debe ser un número entero"}}), 400
+                if valor < 0 or valor > 40:
+                    return jsonify({"error": {"code": "pin_fuera_rango",
+                                              "message": f"{campo} debe estar entre 0 y 40"}}), 400
+                setattr(acceso, campo, valor)
+
+    # Modo 'modbus' — canal del relay externo (1 a 4, la placa Waveshare del
+    # Día 48 trae exactamente 4 canales).
+    if "relay_canal" in body:
+        canal = body["relay_canal"]
+        if canal is None or canal == "":
+            acceso.relay_canal = None
+        else:
+            try:
+                canal = int(canal)
+            except (TypeError, ValueError):
+                return jsonify({"error": {"code": "canal_invalido",
+                                          "message": "El canal debe ser un número entero"}}), 400
+            if canal < 1 or canal > 4:
+                return jsonify({"error": {"code": "canal_fuera_rango",
+                                          "message": "El canal del relay debe estar entre 1 y 4"}}), 400
+            acceso.relay_canal = canal
+
+    # Modo 'modbus' — dirección OSDP del lector Cidron asignado a esta
+    # tranca. El protocolo OSDP permite direcciones de 0 a 126; no se acota
+    # a 1-3 (lo típico en un punto de 3 trancas) porque un punto futuro
+    # podría tener más lectores en su bus.
+    if "lector_direccion_osdp" in body:
+        direccion_osdp = body["lector_direccion_osdp"]
+        if direccion_osdp is None or direccion_osdp == "":
+            acceso.lector_direccion_osdp = None
+        else:
+            try:
+                direccion_osdp = int(direccion_osdp)
+            except (TypeError, ValueError):
+                return jsonify({"error": {"code": "direccion_osdp_invalida",
+                                          "message": "La dirección OSDP debe ser un número entero"}}), 400
+            if direccion_osdp < 0 or direccion_osdp > 126:
+                return jsonify({"error": {"code": "direccion_osdp_fuera_rango",
+                                          "message": "La dirección OSDP debe estar entre 0 y 126"}}), 400
+            acceso.lector_direccion_osdp = direccion_osdp
 
     # pulso_ms: entero positivo en rango sensato (100–5000 ms).
     if "pulso_ms" in body:
