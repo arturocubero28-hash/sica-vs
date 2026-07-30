@@ -1011,6 +1011,11 @@ function ConfigPis() {
   const [accesosTodos, setAccesosTodos] = useState<AccesoFisicoDTO[]>([]);
   // Bases multi-residencial (Día 37): a qué cliente asignar cada Pi
   const [residenciales, setResidenciales] = useState<ResidencialDTO[]>([]);
+  // Día 49, a pedido del usuario: filtrar y agrupar la LISTA de
+  // controladores por residencial — antes esta pantalla no tenía ningún
+  // filtro, mezclando todo. Estado propio, distinto de "nuevaResidencial"
+  // (que es del formulario de alta, no de este filtro).
+  const [filtroResidencialLista, setFiltroResidencialLista] = useState("");
 
   const cargar = useCallback(() => {
     setCargando(true);
@@ -1221,47 +1226,88 @@ function ConfigPis() {
       {(!pis || pis.length === 0) ? (
         <p className="muted" style={{ padding: 20 }}>No hay controladores registrados. Agregá el primero con el botón de arriba.</p>
       ) : (
-        <div className="dev-trancas-grid">
-          {pis.map((d) => (
-            <div key={d.id} className={`dev-tranca-card ${!d.activo ? "inactiva" : ""}`}>
-              <div className="dev-tranca-head">
-                <span className="dev-tranca-nombre">{d.nombre}</span>
-                <span className={`dev-tranca-badge ${d.activo ? "ok" : "sin"}`}>{d.activo ? "Activa" : "Revocada"}</span>
-              </div>
-              <div className="muted small" style={{ marginBottom: 6 }}>
-                {d.tipo === "lector_ct9" ? "Lector inteligente (CT9)" : "Raspberry Pi"}
-              </div>
-              {d.tipo === "lector_ct9" && (
-                <div className="dev-tranca-msg" style={{ background: "#fef2d5", color: "#92651c", marginBottom: 8 }}>
-                  Integración pendiente — este CT9 aún no sincroniza (falta el adaptador del SDK).
+        (() => {
+          // Día 49: filtrar por el buscador y agrupar por residencial —
+          // mismo patrón que ya usa ConfigTrancas para agrupar por punto.
+          // "Sin asignar" queda como su propio grupo, al final.
+          const listaFiltrada = filtroResidencialLista
+            ? pis.filter((d) => d.residencial?.id === filtroResidencialLista)
+            : pis;
+          const gruposDispositivos: { residencial: { id: string; nombre: string } | null; items: DispositivoDTO[] }[] = [];
+          listaFiltrada.forEach((d) => {
+            const clave = d.residencial?.id || null;
+            let g = gruposDispositivos.find((x) => (x.residencial?.id || null) === clave);
+            if (!g) { g = { residencial: d.residencial, items: [] }; gruposDispositivos.push(g); }
+            g.items.push(d);
+          });
+          // Sin asignar al final, no al principio — lo más relevante primero.
+          gruposDispositivos.sort((a, b) => (a.residencial ? -1 : 1) - (b.residencial ? -1 : 1));
+
+          return (
+            <>
+              {residenciales.length > 0 && (
+                <div className="dev-trancas-barra" style={{ marginBottom: 16 }}>
+                  <span className="dev-trancas-total">{listaFiltrada.length} controlador(es)</span>
+                  <BuscadorResidencial residenciales={residenciales} valor={filtroResidencialLista} onChange={setFiltroResidencialLista} />
                 </div>
               )}
-              <div className="dev-pi-info">
-                <div><span>Punto:</span> {d.punto_acceso || <em className="muted">sin asignar</em>}</div>
-                <div><span>Última sincronización:</span> {d.ultima_sync ? new Date(d.ultima_sync).toLocaleString() : "nunca"}</div>
-              </div>
-              <div style={{ margin: "8px 0" }}>
-                <label className="muted small" style={{ display: "block", marginBottom: 4 }}>
-                  Residencial <span title="Bases multi-residencial: qué cliente descarga información con este controlador">ⓘ</span>
-                </label>
-                <select value={d.residencial?.id || ""} onChange={(e) => asignarResidencial(d, e.target.value)}
-                  className="dev-tranca-tipo-sel" style={{ width: "100%" }}>
-                  <option value="">— Sin asignar —</option>
-                  {residenciales.map((r) => (
-                    <option key={r.id} value={r.id}>{r.nombre}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="dev-pi-acciones">
-                <button className="dev-tranca-toggle on" onClick={() => regenerar(d)} title="Generar un token nuevo"><Key size={16} /> Token</button>
-                <button className={`dev-tranca-toggle ${d.activo ? "off" : "on"}`} onClick={() => alternarActivo(d)}>
-                  {d.activo ? "Revocar" : "Reactivar"}
-                </button>
-                <button className="dev-tranca-del" onClick={() => eliminar(d)} title="Eliminar"><Trash2 size={16} /></button>
-              </div>
-            </div>
-          ))}
-        </div>
+              {listaFiltrada.length === 0 ? (
+                <p className="muted" style={{ padding: 20 }}>Ningún controlador coincide con ese filtro.</p>
+              ) : (
+                gruposDispositivos.map((g) => (
+                  <div key={g.residencial?.id || "sin-asignar"} className="dev-punto-grupo">
+                    <div className="dev-punto-titulo">
+                      <span className="dev-punto-ic"><Building2 size={16} /></span>
+                      <span>{g.residencial?.nombre || "Sin asignar"}</span>
+                      <span className="dev-punto-sub">{g.items.length} controlador(es)</span>
+                    </div>
+                    <div className="dev-trancas-grid">
+                      {g.items.map((d) => (
+                        <div key={d.id} className={`dev-tranca-card ${!d.activo ? "inactiva" : ""}`}>
+                          <div className="dev-tranca-head">
+                            <span className="dev-tranca-nombre">{d.nombre}</span>
+                            <span className={`dev-tranca-badge ${d.activo ? "ok" : "sin"}`}>{d.activo ? "Activa" : "Revocada"}</span>
+                          </div>
+                          <div className="muted small" style={{ marginBottom: 6 }}>
+                            {d.tipo === "lector_ct9" ? "Lector inteligente (CT9)" : "Raspberry Pi"}
+                          </div>
+                          {d.tipo === "lector_ct9" && (
+                            <div className="dev-tranca-msg" style={{ background: "#fef2d5", color: "#92651c", marginBottom: 8 }}>
+                              Integración pendiente — este CT9 aún no sincroniza (falta el adaptador del SDK).
+                            </div>
+                          )}
+                          <div className="dev-pi-info">
+                            <div><span>Punto:</span> {d.punto_acceso || <em className="muted">sin asignar</em>}</div>
+                            <div><span>Última sincronización:</span> {d.ultima_sync ? new Date(d.ultima_sync).toLocaleString() : "nunca"}</div>
+                          </div>
+                          <div style={{ margin: "8px 0" }}>
+                            <label className="muted small" style={{ display: "block", marginBottom: 4 }}>
+                              Residencial <span title="Bases multi-residencial: qué cliente descarga información con este controlador">ⓘ</span>
+                            </label>
+                            <select value={d.residencial?.id || ""} onChange={(e) => asignarResidencial(d, e.target.value)}
+                              className="dev-tranca-tipo-sel" style={{ width: "100%" }}>
+                              <option value="">— Sin asignar —</option>
+                              {residenciales.map((r) => (
+                                <option key={r.id} value={r.id}>{r.nombre}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="dev-pi-acciones">
+                            <button className="dev-tranca-toggle on" onClick={() => regenerar(d)} title="Generar un token nuevo"><Key size={16} /> Token</button>
+                            <button className={`dev-tranca-toggle ${d.activo ? "off" : "on"}`} onClick={() => alternarActivo(d)}>
+                              {d.activo ? "Revocar" : "Reactivar"}
+                            </button>
+                            <button className="dev-tranca-del" onClick={() => eliminar(d)} title="Eliminar"><Trash2 size={16} /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </>
+          );
+        })()
       )}
     </div>
   );
