@@ -2795,8 +2795,8 @@ table.data tbody tr:hover td { background: #f1f6fd; }
 .dev-tranca-badge.ok { background: #dcfce7; color: #166534; }
 .dev-tranca-badge.sin { background: #fef3c7; color: #92400e; }
 .dev-tranca-tipo { font-size: 12px; color: #6b7280; text-transform: capitalize; margin-bottom: 14px; }
-.dev-tranca-campos { display: flex; gap: 12px; margin-bottom: 12px; }
-.dev-tranca-campos label { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.dev-tranca-campos { display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.dev-tranca-campos label { flex: 1; min-width: 110px; display: flex; flex-direction: column; gap: 5px; }
 .dev-tranca-campos label span { font-size: 11px; font-weight: 600; color: #4b5563; text-transform: uppercase; letter-spacing: 0.04em; }
 .dev-tranca-campos input {
   width: 100%; padding: 9px 10px; border: 1px solid var(--borde, #e3e9f2); border-radius: 9px;
@@ -2908,6 +2908,29 @@ table.data tbody tr:hover td { background: #f1f6fd; }
 .dev-dir-btn:hover { border-color: #cbd5e1; }
 .dev-dir-btn.sel-ent { background: #dcfce7; border-color: #1d8a4a; color: #166534; }
 .dev-dir-btn.sel-sal { background: #fff7ed; border-color: var(--marca-naranja); color: #9a3412; }
+
+/* Día 49 — selector de tecnología (GPIO económico / Modbus premium).
+   Mismo lenguaje visual que .dev-dir-btn (dos botones, borde que cambia
+   de color al elegir), pero con ícono + título + descripción — la
+   decisión tiene más peso que un simple entrada/salida, así que se le
+   da más espacio para que se entienda de un vistazo, sin tener que leer
+   el texto chico de abajo. */
+.dev-modo-selector { display: flex; gap: 8px; margin-bottom: 12px; }
+.dev-modo-btn {
+  flex: 1; display: flex; align-items: center; gap: 9px;
+  padding: 10px 12px; border-radius: 10px; border: 1.5px solid var(--borde, #e3e9f2);
+  background: #fff; color: #6b7280; cursor: pointer; transition: all .2s; text-align: left;
+}
+.dev-modo-btn:hover { border-color: #cbd5e1; }
+.dev-modo-btn-texto { display: flex; flex-direction: column; gap: 1px; line-height: 1.25; }
+.dev-modo-btn-texto strong { font-size: 12.5px; font-weight: 700; }
+.dev-modo-btn-texto span { font-size: 10.5px; opacity: .8; }
+.dev-modo-btn.sel {
+  background: #eef4fb; border-color: var(--marca-azul, #022e45); color: var(--marca-azul, #022e45);
+}
+.dev-modo-btn:nth-child(2).sel {
+  background: #fff7ed; border-color: var(--marca-naranja); color: #9a3412;
+}
 
 /* ── Gráficos de reportería ── */
 .graficos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 18px 0; }

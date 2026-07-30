@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, devCrearResidencial, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO } from "../../api/client";
-import { AlertTriangle, BarChart3, Building2, Construction, Key, Lock, Monitor, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
+import { AlertTriangle, BarChart3, Building2, Construction, Cpu, Key, Lock, Monitor, Radio, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
   const [m, setM] = useState<DevMetricasDTO | null>(null);
@@ -517,7 +517,14 @@ function PanelSeguridad() {
 function ConfigTrancas() {
   const [accesos, setAccesos] = useState<AccesoFisicoDTO[] | null>(null);
   const [cargando, setCargando] = useState(true);
-  const [edits, setEdits] = useState<Record<number, { nombre: string; tipo: string; relay_pin: string; pulso_ms: string; punto_acceso: string; direccion: string }>>({});
+  const [edits, setEdits] = useState<Record<number, {
+    nombre: string; tipo: string; relay_pin: string; pulso_ms: string;
+    punto_acceso: string; direccion: string;
+    // Día 49
+    modo_control: "gpio" | "modbus";
+    wiegand_d0_pin: string; wiegand_d1_pin: string;
+    relay_canal: string; lector_direccion_osdp: string;
+  }>>({});
   const [guardando, setGuardando] = useState<number | null>(null);
   const [msg, setMsg] = useState<{ id: number; texto: string; ok: boolean } | null>(null);
   // Día 47: se quitaron los estados del formulario de alta (mostrarAlta,
@@ -536,8 +543,20 @@ function ConfigTrancas() {
     devAccesosFisicos()
       .then((data) => {
         setAccesos(data);
-        const e: Record<number, { nombre: string; tipo: string; relay_pin: string; pulso_ms: string; punto_acceso: string; direccion: string }> = {};
-        data.forEach((a) => { e[a.id] = { nombre: a.nombre, tipo: a.tipo, relay_pin: a.relay_pin == null ? "" : String(a.relay_pin), pulso_ms: String(a.pulso_ms), punto_acceso: a.punto_acceso || "", direccion: a.direccion || "entrada" }; });
+        const e: typeof edits = {};
+        data.forEach((a) => {
+          e[a.id] = {
+            nombre: a.nombre, tipo: a.tipo,
+            relay_pin: a.relay_pin == null ? "" : String(a.relay_pin),
+            pulso_ms: String(a.pulso_ms),
+            punto_acceso: a.punto_acceso || "", direccion: a.direccion || "entrada",
+            modo_control: a.modo_control || "gpio",
+            wiegand_d0_pin: a.wiegand_d0_pin == null ? "" : String(a.wiegand_d0_pin),
+            wiegand_d1_pin: a.wiegand_d1_pin == null ? "" : String(a.wiegand_d1_pin),
+            relay_canal: a.relay_canal == null ? "" : String(a.relay_canal),
+            lector_direccion_osdp: a.lector_direccion_osdp == null ? "" : String(a.lector_direccion_osdp),
+          };
+        });
         setEdits(e);
       })
       .catch(() => setAccesos([]))
@@ -562,30 +581,59 @@ function ConfigTrancas() {
     } catch { /* noop */ }
   }
 
-  function setCampo(id: number, campo: "nombre" | "tipo" | "relay_pin" | "pulso_ms" | "punto_acceso" | "direccion", valor: string) {
+  function setCampo(id: number, campo: keyof (typeof edits)[number], valor: string) {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
   }
 
   async function guardar(a: AccesoFisicoDTO) {
     const ed = edits[a.id];
     const nombre = ed.nombre.trim();
-    const pin = ed.relay_pin.trim();
     const pulso = parseInt(ed.pulso_ms, 10);
     if (!nombre) { setMsg({ id: a.id, texto: "El nombre no puede estar vacío", ok: false }); return; }
-    if (pin !== "") {
-      const p = parseInt(pin, 10);
-      if (isNaN(p) || p < 0 || p > 40) { setMsg({ id: a.id, texto: "El pin debe ser un número entre 0 y 40", ok: false }); return; }
-    }
     if (isNaN(pulso) || pulso < 100 || pulso > 5000) { setMsg({ id: a.id, texto: "El pulso debe estar entre 100 y 5000 ms", ok: false }); return; }
+
+    // Día 49: validación según el modo elegido — cada uno valida solo sus
+    // propios campos, no los del otro modo (quedan como estaban, sin tocar).
+    const num = (v: string) => v.trim() === "" ? null : parseInt(v, 10);
+    const cuerpo: Parameters<typeof devConfigurarAcceso>[1] = {
+      nombre, tipo: ed.tipo,
+      punto_acceso: ed.punto_acceso.trim(), direccion: ed.direccion,
+      pulso_ms: pulso, modo_control: ed.modo_control,
+    };
+
+    if (ed.modo_control === "gpio") {
+      const pin = ed.relay_pin.trim();
+      if (pin !== "") {
+        const p = parseInt(pin, 10);
+        if (isNaN(p) || p < 0 || p > 40) { setMsg({ id: a.id, texto: "El pin del relay debe ser un número entre 0 y 40", ok: false }); return; }
+      }
+      for (const [campo, valor] of [["Wiegand D0", ed.wiegand_d0_pin], ["Wiegand D1", ed.wiegand_d1_pin]] as const) {
+        if (valor.trim() === "") continue;
+        const p = parseInt(valor, 10);
+        if (isNaN(p) || p < 0 || p > 40) { setMsg({ id: a.id, texto: `El pin ${campo} debe ser un número entre 0 y 40`, ok: false }); return; }
+      }
+      cuerpo.relay_pin = num(ed.relay_pin);
+      cuerpo.wiegand_d0_pin = num(ed.wiegand_d0_pin);
+      cuerpo.wiegand_d1_pin = num(ed.wiegand_d1_pin);
+    } else {
+      const canal = ed.relay_canal.trim();
+      if (canal !== "") {
+        const c = parseInt(canal, 10);
+        if (isNaN(c) || c < 1 || c > 4) { setMsg({ id: a.id, texto: "El canal del relay debe ser un número entre 1 y 4", ok: false }); return; }
+      }
+      const dir = ed.lector_direccion_osdp.trim();
+      if (dir !== "") {
+        const d = parseInt(dir, 10);
+        if (isNaN(d) || d < 0 || d > 126) { setMsg({ id: a.id, texto: "La dirección OSDP debe ser un número entre 0 y 126", ok: false }); return; }
+      }
+      cuerpo.relay_canal = num(ed.relay_canal);
+      cuerpo.lector_direccion_osdp = num(ed.lector_direccion_osdp);
+    }
+
     setGuardando(a.id);
     setMsg(null);
     try {
-      const actualizado = await devConfigurarAcceso(a.id, {
-        nombre, tipo: ed.tipo,
-        punto_acceso: ed.punto_acceso.trim(), direccion: ed.direccion,
-        relay_pin: pin === "" ? null : parseInt(pin, 10),
-        pulso_ms: pulso,
-      });
+      const actualizado = await devConfigurarAcceso(a.id, cuerpo);
       setAccesos((prev) => prev ? prev.map((x) => x.id === a.id ? actualizado : x) : prev);
       setMsg({ id: a.id, texto: "Guardado correctamente", ok: true });
     } catch (err: any) {
@@ -647,8 +695,11 @@ function ConfigTrancas() {
     <div className="dev-trancas">
       <div className="dev-trancas-aviso">
         <strong><AlertTriangle size={16} /> Configuración sensible.</strong> Estos valores controlan el hardware físico de las trancas.
-        El <code>pin GPIO</code> es el pin de la Raspberry Pi que acciona el relay, y el <code>pulso</code> es
-        cuántos milisegundos se mantiene el contacto seco. Un valor incorrecto puede impedir que una tranca abra.
+        Elegí primero la <code>tecnología</code> de cada punto: en <strong>Económico</strong> el pin
+        del relay y del lector Wiegand van directo a la Raspberry Pi; en <strong>Premium</strong> el
+        relay y el lector viven en hardware externo, y solo hace falta indicar el canal y la dirección
+        de cada uno. El <code>pulso</code> (milisegundos que se mantiene el contacto seco) aplica igual
+        en los dos casos. Un valor incorrecto puede impedir que una tranca abra.
       </div>
 
       <div className="dev-trancas-barra" style={{ flexWrap: "wrap", gap: 10 }}>
@@ -699,8 +750,18 @@ function ConfigTrancas() {
             </div>
             <div className="dev-trancas-grid">
               {g.items.map((a) => {
-                const ed = edits[a.id] || { nombre: "", tipo: "vehicular", relay_pin: "", pulso_ms: "", punto_acceso: "" };
-                const sinConfig = a.relay_pin == null;
+                const ed = edits[a.id] || {
+                  nombre: "", tipo: "vehicular", relay_pin: "", pulso_ms: "", punto_acceso: "", direccion: "entrada",
+                  modo_control: "gpio" as const,
+                  wiegand_d0_pin: "", wiegand_d1_pin: "", relay_canal: "", lector_direccion_osdp: "",
+                };
+                // Día 49: "sin configurar" depende del modo — en GPIO
+                // alcanza con el pin del relay; en Modbus hace falta el
+                // canal Y la dirección del lector (ambos, para que el
+                // punto quede realmente operativo).
+                const sinConfig = a.modo_control === "modbus"
+                  ? (a.relay_canal == null || a.lector_direccion_osdp == null)
+                  : a.relay_pin == null;
                 return (
                   <div key={a.id} className={`dev-tranca-card ${!a.activo ? "inactiva" : ""}`}>
                     <div className="dev-tranca-head">
@@ -738,18 +799,76 @@ function ConfigTrancas() {
                         {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
                       </select>
                     </label>
-                    <div className="dev-tranca-campos">
-                      <label>
-                        <span>Pin GPIO</span>
-                        <input type="number" min={0} max={40} placeholder="—"
-                          value={ed.relay_pin} onChange={(e) => setCampo(a.id, "relay_pin", e.target.value)} />
-                      </label>
-                      <label>
-                        <span>Pulso (ms)</span>
-                        <input type="number" min={100} max={5000} step={50}
-                          value={ed.pulso_ms} onChange={(e) => setCampo(a.id, "pulso_ms", e.target.value)} />
-                      </label>
-                    </div>
+                    {/* Día 49: selector de tecnología — se elige UNA VEZ
+                        por punto de acceso, nunca mezclado dentro del
+                        mismo punto. Determina qué campos de hardware
+                        aparecen debajo. */}
+                    <label className="dev-tranca-punto">
+                      <span>Tecnología de este punto</span>
+                      <div className="dev-modo-selector">
+                        <button type="button"
+                          className={`dev-modo-btn ${ed.modo_control === "gpio" ? "sel" : ""}`}
+                          onClick={() => setCampo(a.id, "modo_control", "gpio")}>
+                          <Cpu size={17} />
+                          <span className="dev-modo-btn-texto">
+                            <strong>Económico</strong>
+                            <span>Wiegand + GPIO directo</span>
+                          </span>
+                        </button>
+                        <button type="button"
+                          className={`dev-modo-btn ${ed.modo_control === "modbus" ? "sel" : ""}`}
+                          onClick={() => setCampo(a.id, "modo_control", "modbus")}>
+                          <Radio size={17} />
+                          <span className="dev-modo-btn-texto">
+                            <strong>Premium</strong>
+                            <span>Cidron + OSDP/Modbus</span>
+                          </span>
+                        </button>
+                      </div>
+                    </label>
+
+                    {ed.modo_control === "gpio" ? (
+                      <div className="dev-tranca-campos">
+                        <label>
+                          <span>Pin GPIO (relay)</span>
+                          <input type="number" min={0} max={40} placeholder="—"
+                            value={ed.relay_pin} onChange={(e) => setCampo(a.id, "relay_pin", e.target.value)} />
+                        </label>
+                        <label>
+                          <span>Wiegand D0</span>
+                          <input type="number" min={0} max={40} placeholder="—"
+                            value={ed.wiegand_d0_pin} onChange={(e) => setCampo(a.id, "wiegand_d0_pin", e.target.value)} />
+                        </label>
+                        <label>
+                          <span>Wiegand D1</span>
+                          <input type="number" min={0} max={40} placeholder="—"
+                            value={ed.wiegand_d1_pin} onChange={(e) => setCampo(a.id, "wiegand_d1_pin", e.target.value)} />
+                        </label>
+                        <label>
+                          <span>Pulso (ms)</span>
+                          <input type="number" min={100} max={5000} step={50}
+                            value={ed.pulso_ms} onChange={(e) => setCampo(a.id, "pulso_ms", e.target.value)} />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="dev-tranca-campos">
+                        <label>
+                          <span>Canal del relay (1-4)</span>
+                          <input type="number" min={1} max={4} placeholder="—"
+                            value={ed.relay_canal} onChange={(e) => setCampo(a.id, "relay_canal", e.target.value)} />
+                        </label>
+                        <label>
+                          <span>Dirección OSDP del lector</span>
+                          <input type="number" min={0} max={126} placeholder="—"
+                            value={ed.lector_direccion_osdp} onChange={(e) => setCampo(a.id, "lector_direccion_osdp", e.target.value)} />
+                        </label>
+                        <label>
+                          <span>Pulso (ms)</span>
+                          <input type="number" min={100} max={5000} step={50}
+                            value={ed.pulso_ms} onChange={(e) => setCampo(a.id, "pulso_ms", e.target.value)} />
+                        </label>
+                      </div>
+                    )}
                     {msg && msg.id === a.id && (
                       <div className={`dev-tranca-msg ${msg.ok ? "ok" : "err"}`}>{msg.texto}</div>
                     )}

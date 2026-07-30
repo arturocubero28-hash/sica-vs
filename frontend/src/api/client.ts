@@ -782,15 +782,33 @@ export interface AccesoFisicoDTO {
   nombre: string;
   tipo: string;
   activo: boolean;
+  // Día 49: 'gpio' (económico, Wiegand + relay directo a la Pi) o
+  // 'modbus' (premium, Cidron por OSDP + relay externo). Se elige una
+  // sola vez por punto de acceso.
+  modo_control: "gpio" | "modbus";
   relay_pin: number | null;
   pulso_ms: number;
+  // Modo 'gpio': pines de datos del lector Wiegand (no es un bus
+  // compartido como OSDP, cada lector ocupa sus propios 2 pines).
+  wiegand_d0_pin: number | null;
+  wiegand_d1_pin: number | null;
+  // Modo 'modbus': canal del relay externo (1-4) y dirección OSDP fija
+  // del lector Cidron asignado a esta tranca en el bus compartido.
+  relay_canal: number | null;
+  lector_direccion_osdp: number | null;
   punto_acceso: string | null;
   direccion: string;
   // Bases multi-residencial (Día 37): a qué cliente pertenece esta tranca
   residencial: { id: string; nombre: string } | null;
 }
 export const devAccesosFisicos = () => request<AccesoFisicoDTO[]>("/dev/accesos-fisicos");
-export const devConfigurarAcceso = (id: number, body: { relay_pin?: number | null; pulso_ms?: number; nombre?: string; tipo?: string; activo?: boolean; punto_acceso?: string; direccion?: string; residencial_id?: string | null }) =>
+export const devConfigurarAcceso = (id: number, body: {
+  relay_pin?: number | null; pulso_ms?: number; nombre?: string; tipo?: string;
+  activo?: boolean; punto_acceso?: string; direccion?: string; residencial_id?: string | null;
+  modo_control?: "gpio" | "modbus";
+  wiegand_d0_pin?: number | null; wiegand_d1_pin?: number | null;
+  relay_canal?: number | null; lector_direccion_osdp?: number | null;
+}) =>
   request<AccesoFisicoDTO>(`/dev/accesos-fisicos/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const devCrearAcceso = (body: { nombre: string; tipo: string; punto_acceso?: string; residencial_id?: string }) =>
   request<AccesoFisicoDTO>("/dev/accesos-fisicos", { method: "POST", body: JSON.stringify(body) });
