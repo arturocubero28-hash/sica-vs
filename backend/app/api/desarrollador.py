@@ -744,9 +744,15 @@ def listar_residenciales(usuario_actual):
 def editar_suscripcion_residencial(usuario_actual, res_uuid):
     """
     Día 50, Etapa 5 — el desarrollador asigna o cambia el plan de una
-    residencial, y su fecha de próximo pago / días de gracia. Separado
-    de cualquier otro endpoint de edición de residencial porque esto es
-    exclusivamente del desarrollador (el admin nunca toca su propio plan).
+    residencial, y sus días de gracia. Separado de cualquier otro
+    endpoint de edición de residencial porque esto es exclusivamente
+    del desarrollador (el admin nunca toca su propio plan).
+
+    fecha_proximo_pago NO se edita acá a propósito (corrección del
+    usuario, Día 50): nunca se digita a mano — se calcula sola al crear
+    la residencial (fecha de alta + 30 días) y se recalcula sola cuando
+    se registra un pago (ver registrar_pago_residencial(), hoy + 30
+    días desde el día real del pago).
     """
     residencial = Residencial.query.filter_by(uuid_publico=res_uuid).first()
     if not residencial:
@@ -770,17 +776,6 @@ def editar_suscripcion_residencial(usuario_actual, res_uuid):
             # estaba pidiendo.
             residencial.upgrade_solicitado = False
 
-    if "fecha_proximo_pago" in body:
-        valor = body["fecha_proximo_pago"]
-        if not valor:
-            residencial.fecha_proximo_pago = None
-        else:
-            try:
-                residencial.fecha_proximo_pago = dt.date.fromisoformat(valor)
-            except ValueError:
-                return jsonify({"error": {"code": "fecha_invalida",
-                                          "message": "La fecha debe tener formato AAAA-MM-DD"}}), 400
-
     if "dias_gracia" in body:
         try:
             dias = int(body["dias_gracia"])
@@ -791,6 +786,26 @@ def editar_suscripcion_residencial(usuario_actual, res_uuid):
                                       "message": "Los días de gracia deben ser un número entero mayor o igual a 0"}}), 400
         residencial.dias_gracia = dias
 
+    db.session.commit()
+    return jsonify({"data": residencial.to_dict(incluir_stats=True)})
+
+
+@dev_bp.post("/residenciales/<uuid:res_uuid>/registrar-pago")
+@roles_required("desarrollador")
+def registrar_pago_residencial(usuario_actual, res_uuid):
+    """
+    Día 50 — el desarrollador aprieta esto el día que el cliente le paga.
+    Cada pago = 30 días de servicio, contados desde HOY (el día real del
+    pago), no desde la fecha_proximo_pago vieja — así, si una residencial
+    estuvo suspendida por atraso y recién ahora paga, el servicio se
+    reactiva contando 30 días completos desde este momento, no desde una
+    fecha vencida hace tiempo.
+    """
+    residencial = Residencial.query.filter_by(uuid_publico=res_uuid).first()
+    if not residencial:
+        return jsonify({"error": {"code": "no_encontrada",
+                                  "message": "Residencial no encontrada"}}), 404
+    residencial.fecha_proximo_pago = dt.date.today() + dt.timedelta(days=30)
     db.session.commit()
     return jsonify({"data": residencial.to_dict(incluir_stats=True)})
 
@@ -851,6 +866,12 @@ def crear_residencial(usuario_actual):
     email_admin = (body.get("email_admin") or "").strip().lower()
     telefono_admin = (body.get("telefono_admin") or "").strip()
 
+    # Día 50 — sistema de suscripciones: de acá en adelante, toda
+    # residencial nueva nace CON plan (Villas del Sol, creada antes de
+    # que este sistema existiera, queda como la única excepción
+    # histórica sin plan asignado).
+    plan_id_pedido = (body.get("plan_id") or "").strip()
+
     faltantes = []
     if not nombre_res: faltantes.append("nombre de la residencial")
     if not direccion: faltantes.append("dirección")
@@ -858,9 +879,23 @@ def crear_residencial(usuario_actual):
     if not nombre_admin: faltantes.append("nombre del admin")
     if not apellido_admin: faltantes.append("apellido del admin")
     if not email_admin: faltantes.append("correo del admin")
+    if not plan_id_pedido: faltantes.append("plan")
     if faltantes:
         return jsonify({"error": {"code": "datos_incompletos",
                                   "message": "Faltan campos obligatorios: " + ", ".join(faltantes)}}), 400
+
+    plan = Plan.query.filter_by(uuid_publico=plan_id_pedido).first()
+    if not plan:
+        return jsonify({"error": {"code": "plan_no_encontrado",
+                                  "message": "No se encontró ese plan"}}), 404
+
+    try:
+        dias_gracia = int(body.get("dias_gracia", 5))
+        if dias_gracia < 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"error": {"code": "dias_gracia_invalido",
+                                  "message": "Los días de gracia deben ser un número entero mayor o igual a 0"}}), 400
 
     if Usuario.query.filter_by(email=email_admin).first():
         return jsonify({"error": {"code": "email_duplicado",
@@ -881,9 +916,14 @@ def crear_residencial(usuario_actual):
     db.session.flush()  # necesito admin.id antes de crear la Residencial
 
     # 2. Crear la Residencial, dueña = el admin recién creado
+    # Día 50: fecha_proximo_pago se CALCULA (hoy + 30 días, "un mes de
+    # servicio"), nunca se digita a mano — ni acá ni cuando se registre
+    # un pago más adelante (ver registrar_pago_residencial()).
     residencial = Residencial(
         admin_id=admin.id, nombre=nombre_res,
         direccion=direccion, telefono=telefono_res,
+        plan_id=plan.id, dias_gracia=dias_gracia,
+        fecha_proximo_pago=dt.date.today() + dt.timedelta(days=30),
     )
     db.session.add(residencial)
     db.session.flush()  # necesito residencial.id

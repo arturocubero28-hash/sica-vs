@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devEditarSuscripcionResidencial, devUsuariosDeResidencial, devCrearResidencial, devPlanes, devCrearPlan, devEditarPlan, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO, type PlanDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devEditarSuscripcionResidencial, devRegistrarPagoResidencial, devUsuariosDeResidencial, devCrearResidencial, devPlanes, devCrearPlan, devEditarPlan, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO, type PlanDTO } from "../../api/client";
 import { AlertTriangle, BarChart3, Building2, Construction, Cpu, Key, Layers, Lock, Monitor, Radio, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
@@ -1349,6 +1349,11 @@ function PanelResidenciales() {
   const [apellidoAdmin, setApellidoAdmin] = useState("");
   const [emailAdmin, setEmailAdmin] = useState("");
   const [telefonoAdmin, setTelefonoAdmin] = useState("");
+  // Día 50: el plan y los días de gracia se eligen AL DAR DE ALTA — la
+  // fecha de próximo pago la calcula sola el backend (alta + 30 días),
+  // nunca se digita.
+  const [planAlta, setPlanAlta] = useState("");
+  const [diasGraciaAlta, setDiasGraciaAlta] = useState("5");
   const [creando, setCreando] = useState(false);
   const [errorAlta, setErrorAlta] = useState("");
   // Credenciales del admin recién creado, para mostrar una sola vez
@@ -1357,7 +1362,7 @@ function PanelResidenciales() {
   // Día 50, Etapa 5 — asignación de plan/suscripción por residencial.
   const [planesActivos, setPlanesActivos] = useState<PlanDTO[]>([]);
   const [editsSuscripcion, setEditsSuscripcion] = useState<Record<string, {
-    plan_id: string; fecha_proximo_pago: string; dias_gracia: string;
+    plan_id: string; dias_gracia: string;
   }>>({});
   const [guardandoSuscripcion, setGuardandoSuscripcion] = useState<string | null>(null);
   const [msgSuscripcion, setMsgSuscripcion] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
@@ -1368,7 +1373,6 @@ function PanelResidenciales() {
     data.forEach((r) => {
       e[r.id] = {
         plan_id: r.plan?.id || "",
-        fecha_proximo_pago: r.fecha_proximo_pago || "",
         dias_gracia: String(r.dias_gracia),
       };
     });
@@ -1393,6 +1397,7 @@ function PanelResidenciales() {
   function limpiarForm() {
     setNombreRes(""); setDireccionRes(""); setTelefonoRes("");
     setNombreAdmin(""); setApellidoAdmin(""); setEmailAdmin(""); setTelefonoAdmin("");
+    setPlanAlta(""); setDiasGraciaAlta("5");
   }
 
   async function crearResidencial() {
@@ -1404,7 +1409,10 @@ function PanelResidenciales() {
     if (!apellidoAdmin.trim()) faltan.push("apellido del admin");
     if (!emailAdmin.trim()) faltan.push("correo del admin");
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAdmin.trim())) faltan.push("correo del admin (formato inválido)");
+    if (!planAlta) faltan.push("plan");
     if (faltan.length > 0) { setErrorAlta("Faltan: " + faltan.join(", ")); return; }
+    const dias = parseInt(diasGraciaAlta, 10);
+    if (isNaN(dias) || dias < 0) { setErrorAlta("Los días de gracia deben ser un número mayor o igual a 0"); return; }
 
     setCreando(true); setErrorAlta("");
     try {
@@ -1412,6 +1420,7 @@ function PanelResidenciales() {
         nombre_residencial: nombreRes.trim(), direccion: direccionRes.trim(), telefono_residencial: telefonoRes.trim(),
         nombre_admin: nombreAdmin.trim(), apellido_admin: apellidoAdmin.trim(),
         email_admin: emailAdmin.trim(), telefono_admin: telefonoAdmin.trim() || undefined,
+        plan_id: planAlta, dias_gracia: dias,
       });
       setCredencialNueva({ email: res.admin.email, nombre: res.admin.nombre, pass: res.admin.password_generica });
       limpiarForm();
@@ -1441,13 +1450,29 @@ function PanelResidenciales() {
     try {
       const actualizada = await devEditarSuscripcionResidencial(r.id, {
         plan_id: ed.plan_id || null,
-        fecha_proximo_pago: ed.fecha_proximo_pago || null,
         dias_gracia: dias,
       });
       setLista((prev) => prev ? prev.map((x) => x.id === r.id ? actualizada : x) : prev);
       setMsgSuscripcion({ id: r.id, texto: "Suscripción actualizada", ok: true });
     } catch (err: any) {
       setMsgSuscripcion({ id: r.id, texto: err?.message || "No se pudo guardar", ok: false });
+    } finally {
+      setGuardandoSuscripcion(null);
+    }
+  }
+
+  // Día 50 — se aprieta el día que el cliente paga: recalcula
+  // fecha_proximo_pago = hoy + 30 días, sin importar cuál fecha tenía
+  // antes (aunque estuviera vencida hace rato por una suspensión).
+  async function registrarPago(r: ResidencialDTO) {
+    setGuardandoSuscripcion(r.id);
+    setMsgSuscripcion(null);
+    try {
+      const actualizada = await devRegistrarPagoResidencial(r.id);
+      setLista((prev) => prev ? prev.map((x) => x.id === r.id ? actualizada : x) : prev);
+      setMsgSuscripcion({ id: r.id, texto: `Pago registrado — servicio activo hasta ${actualizada.fecha_proximo_pago ? new Date(actualizada.fecha_proximo_pago).toLocaleDateString() : "—"}`, ok: true });
+    } catch (err: any) {
+      setMsgSuscripcion({ id: r.id, texto: err?.message || "No se pudo registrar el pago", ok: false });
     } finally {
       setGuardandoSuscripcion(null);
     }
@@ -1513,6 +1538,26 @@ function PanelResidenciales() {
               <span>Teléfono (opcional)</span>
               <input type="text" placeholder="Ej: 9999-0000" maxLength={30}
                 value={telefonoAdmin} onChange={(e) => setTelefonoAdmin(e.target.value)} />
+            </label>
+          </div>
+
+          <div className="sub" style={{ margin: "14px 0 6px" }}>Suscripción</div>
+          <p className="muted small" style={{ marginBottom: 8 }}>
+            La fecha de próximo pago se calcula sola (hoy + 30 días) — no se digita.
+          </p>
+          <div className="dev-tranca-alta-campos">
+            <label>
+              <span>Plan</span>
+              <select className="dev-tranca-tipo-sel" value={planAlta} onChange={(e) => setPlanAlta(e.target.value)}>
+                <option value="">— Elegí un plan —</option>
+                {planesActivos.filter((p) => p.activo).map((p) => (
+                  <option key={p.id} value={p.id}>{p.nombre} (${p.precio_mensual}/mes)</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Días de gracia</span>
+              <input type="number" min={0} value={diasGraciaAlta} onChange={(e) => setDiasGraciaAlta(e.target.value)} />
             </label>
             <button className="dev-tranca-btn" style={{ maxWidth: 200 }} disabled={creando} onClick={crearResidencial}>
               {creando ? "Creando…" : "Crear residencial"}
@@ -1607,6 +1652,12 @@ function PanelResidenciales() {
                   </div>
                 )}
                 <div>
+                  <span>Próximo pago:</span>{" "}
+                  {r.fecha_proximo_pago
+                    ? `${new Date(r.fecha_proximo_pago).toLocaleDateString()} (${r.dias_gracia} días de gracia)`
+                    : <em className="muted">sin fecha — asignale un plan primero</em>}
+                </div>
+                <div>
                   <span>Registro más antiguo:</span>{" "}
                   {r.stats?.fecha_registro_mas_antiguo
                     ? new Date(r.stats.fecha_registro_mas_antiguo).toLocaleDateString()
@@ -1614,7 +1665,10 @@ function PanelResidenciales() {
                 </div>
               </div>
 
-              {/* Día 50, Etapa 5 — asignar/editar la suscripción */}
+              {/* Día 50, Etapa 5 (corregido) — plan y días de gracia se
+                  pueden editar; la fecha de próximo pago NUNCA se edita
+                  a mano, solo avanza con el botón "Registrar pago" de
+                  abajo (hoy + 30 días, desde el día real del pago). */}
               <div className="dev-tranca-campos" onClick={(e) => e.stopPropagation()}>
                 <label>
                   <span>Plan</span>
@@ -1626,12 +1680,6 @@ function PanelResidenciales() {
                       <option key={p.id} value={p.id}>{p.nombre}{!p.activo ? " (inactivo)" : ""}</option>
                     ))}
                   </select>
-                </label>
-                <label>
-                  <span>Próximo pago</span>
-                  <input type="date"
-                    value={editsSuscripcion[r.id]?.fecha_proximo_pago || ""}
-                    onChange={(e) => setEditsSuscripcion((prev) => ({ ...prev, [r.id]: { ...prev[r.id], fecha_proximo_pago: e.target.value } }))} />
                 </label>
                 <label>
                   <span>Días de gracia</span>
@@ -1646,7 +1694,11 @@ function PanelResidenciales() {
               <div className="dev-pi-acciones">
                 <button className="dev-tranca-toggle on" disabled={guardandoSuscripcion === r.id}
                   onClick={(e) => { e.stopPropagation(); guardarSuscripcion(r); }}>
-                  {guardandoSuscripcion === r.id ? "Guardando…" : "Guardar suscripción"}
+                  {guardandoSuscripcion === r.id ? "Guardando…" : "Guardar plan"}
+                </button>
+                <button className="dev-tranca-toggle on" style={{ background: "#166534" }} disabled={guardandoSuscripcion === r.id}
+                  onClick={(e) => { e.stopPropagation(); registrarPago(r); }}>
+                  💰 Registrar pago
                 </button>
                 <button className="dev-tranca-toggle on" onClick={(e) => { e.stopPropagation(); verDetalle(r); }}>
                   Ver usuarios →

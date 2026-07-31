@@ -849,14 +849,17 @@ export interface UsuarioResidencialDTO {
 }
 export const devResidenciales = () => request<ResidencialDTO[]>("/dev/residenciales");
 export const devEditarSuscripcionResidencial = (id: string, body: Partial<{
-  plan_id: string | null; fecha_proximo_pago: string | null; dias_gracia: number;
+  plan_id: string | null; dias_gracia: number;
 }>) => request<ResidencialDTO>(`/dev/residenciales/${id}/suscripcion`, { method: "PUT", body: JSON.stringify(body) });
+export const devRegistrarPagoResidencial = (id: string) =>
+  request<ResidencialDTO>(`/dev/residenciales/${id}/registrar-pago`, { method: "POST" });
 export const devUsuariosDeResidencial = (uuid: string) =>
   request<{ residencial: ResidencialDTO; staff: UsuarioResidencialDTO[]; residentes_count: number }>(
     `/dev/residenciales/${uuid}/usuarios`);
 export const devCrearResidencial = (body: {
   nombre_residencial: string; direccion: string; telefono_residencial: string;
   nombre_admin: string; apellido_admin: string; email_admin: string; telefono_admin?: string;
+  plan_id: string; dias_gracia?: number;
 }) => request<{ residencial: ResidencialDTO; admin: { email: string; nombre: string; password_generica: string } }>(
     "/dev/residenciales", { method: "POST", body: JSON.stringify(body) });
 
