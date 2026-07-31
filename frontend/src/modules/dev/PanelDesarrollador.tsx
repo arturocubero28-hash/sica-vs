@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, devCrearResidencial, devPlanes, devCrearPlan, devEditarPlan, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO, type PlanDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devEditarSuscripcionResidencial, devUsuariosDeResidencial, devCrearResidencial, devPlanes, devCrearPlan, devEditarPlan, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO, type PlanDTO } from "../../api/client";
 import { AlertTriangle, BarChart3, Building2, Construction, Cpu, Key, Layers, Lock, Monitor, Radio, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
@@ -1320,6 +1320,21 @@ const ROL_LABEL_DEV: Record<string, string> = {
   admin: "Administrador", supervisor: "Supervisor", guardia: "Guardia", cajero: "Cajero",
 };
 
+// Día 50, Etapa 5: bytes -> texto legible (KB/MB/GB), para mostrar uso
+// de almacenamiento sin que el desarrollador tenga que hacer la cuenta.
+function formatearBytes(bytes: number | null | undefined): string {
+  if (bytes == null) return "—";
+  if (bytes === 0) return "0 MB";
+  const unidades = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  let valor = bytes;
+  while (valor >= 1024 && i < unidades.length - 1) {
+    valor /= 1024;
+    i++;
+  }
+  return `${valor.toFixed(i > 0 ? 1 : 0)} ${unidades[i]}`;
+}
+
 function PanelResidenciales() {
   const [lista, setLista] = useState<ResidencialDTO[] | null>(null);
   const [seleccionada, setSeleccionada] = useState<ResidencialDTO | null>(null);
@@ -1339,8 +1354,27 @@ function PanelResidenciales() {
   // Credenciales del admin recién creado, para mostrar una sola vez
   const [credencialNueva, setCredencialNueva] = useState<{ email: string; nombre: string; pass: string } | null>(null);
 
-  const cargar = () => devResidenciales().then(setLista).catch(() => setLista([]));
-  useEffect(() => { cargar(); }, []);
+  // Día 50, Etapa 5 — asignación de plan/suscripción por residencial.
+  const [planesActivos, setPlanesActivos] = useState<PlanDTO[]>([]);
+  const [editsSuscripcion, setEditsSuscripcion] = useState<Record<string, {
+    plan_id: string; fecha_proximo_pago: string; dias_gracia: string;
+  }>>({});
+  const [guardandoSuscripcion, setGuardandoSuscripcion] = useState<string | null>(null);
+  const [msgSuscripcion, setMsgSuscripcion] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
+
+  const cargar = () => devResidenciales().then((data) => {
+    setLista(data);
+    const e: typeof editsSuscripcion = {};
+    data.forEach((r) => {
+      e[r.id] = {
+        plan_id: r.plan?.id || "",
+        fecha_proximo_pago: r.fecha_proximo_pago || "",
+        dias_gracia: String(r.dias_gracia),
+      };
+    });
+    setEditsSuscripcion(e);
+  }).catch(() => setLista([]));
+  useEffect(() => { cargar(); devPlanes().then(setPlanesActivos).catch(() => setPlanesActivos([])); }, []);
 
   async function verDetalle(r: ResidencialDTO) {
     setSeleccionada(r);
@@ -1391,6 +1425,33 @@ function PanelResidenciales() {
   }
 
   if (lista === null) return <p className="muted" style={{ padding: 20 }}>Cargando residenciales…</p>;
+
+  async function guardarSuscripcion(r: ResidencialDTO) {
+    const ed = editsSuscripcion[r.id];
+    let dias: number;
+    try {
+      dias = parseInt(ed.dias_gracia, 10);
+      if (isNaN(dias) || dias < 0) throw new Error();
+    } catch {
+      setMsgSuscripcion({ id: r.id, texto: "Los días de gracia deben ser un número mayor o igual a 0", ok: false });
+      return;
+    }
+    setGuardandoSuscripcion(r.id);
+    setMsgSuscripcion(null);
+    try {
+      const actualizada = await devEditarSuscripcionResidencial(r.id, {
+        plan_id: ed.plan_id || null,
+        fecha_proximo_pago: ed.fecha_proximo_pago || null,
+        dias_gracia: dias,
+      });
+      setLista((prev) => prev ? prev.map((x) => x.id === r.id ? actualizada : x) : prev);
+      setMsgSuscripcion({ id: r.id, texto: "Suscripción actualizada", ok: true });
+    } catch (err: any) {
+      setMsgSuscripcion({ id: r.id, texto: err?.message || "No se pudo guardar", ok: false });
+    } finally {
+      setGuardandoSuscripcion(null);
+    }
+  }
 
   return (
     <div className="dev-trancas">
@@ -1518,7 +1579,75 @@ function PanelResidenciales() {
                   </>
                 )}
               </div>
+
+              {/* Día 50, Etapa 5 — estado de suscripción */}
+              {(r.suspendida || r.upgrade_solicitado) && (
+                <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                  {r.suspendida && (
+                    <span className="dev-tranca-badge sin">⛔ Suspendida por falta de pago</span>
+                  )}
+                  {r.upgrade_solicitado && (
+                    <span className="dev-tranca-badge" style={{ background: "#fef2d5", color: "#92651c" }}>
+                      ⬆ Pidió upgrade
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="dev-pi-info">
+                <div><span>Plan:</span> {r.plan ? r.plan.nombre : <em className="muted">sin asignar</em>}</div>
+                {r.plan && r.stats && (
+                  <div>
+                    <span>Almacenamiento:</span> {formatearBytes(r.almacenamiento_usado_bytes)} usados de {r.plan.almacenamiento_gb} GB
+                    {" · "}quedan {formatearBytes(r.stats.almacenamiento_restante_bytes)}
+                  </div>
+                )}
+                {r.plan && r.stats && (
+                  <div>
+                    <span>Casas:</span> {r.stats.casas}/{r.plan.max_casas} · <span>Usuarios:</span> {r.stats.usuarios_total}/{r.plan.max_usuarios}
+                  </div>
+                )}
+                <div>
+                  <span>Registro más antiguo:</span>{" "}
+                  {r.stats?.fecha_registro_mas_antiguo
+                    ? new Date(r.stats.fecha_registro_mas_antiguo).toLocaleDateString()
+                    : <em className="muted">sin registros todavía</em>}
+                </div>
+              </div>
+
+              {/* Día 50, Etapa 5 — asignar/editar la suscripción */}
+              <div className="dev-tranca-campos" onClick={(e) => e.stopPropagation()}>
+                <label>
+                  <span>Plan</span>
+                  <select className="dev-tranca-tipo-sel"
+                    value={editsSuscripcion[r.id]?.plan_id || ""}
+                    onChange={(e) => setEditsSuscripcion((prev) => ({ ...prev, [r.id]: { ...prev[r.id], plan_id: e.target.value } }))}>
+                    <option value="">— Sin plan —</option>
+                    {planesActivos.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nombre}{!p.activo ? " (inactivo)" : ""}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Próximo pago</span>
+                  <input type="date"
+                    value={editsSuscripcion[r.id]?.fecha_proximo_pago || ""}
+                    onChange={(e) => setEditsSuscripcion((prev) => ({ ...prev, [r.id]: { ...prev[r.id], fecha_proximo_pago: e.target.value } }))} />
+                </label>
+                <label>
+                  <span>Días de gracia</span>
+                  <input type="number" min={0}
+                    value={editsSuscripcion[r.id]?.dias_gracia || ""}
+                    onChange={(e) => setEditsSuscripcion((prev) => ({ ...prev, [r.id]: { ...prev[r.id], dias_gracia: e.target.value } }))} />
+                </label>
+              </div>
+              {msgSuscripcion && msgSuscripcion.id === r.id && (
+                <div className={`dev-tranca-msg ${msgSuscripcion.ok ? "ok" : "err"}`}>{msgSuscripcion.texto}</div>
+              )}
               <div className="dev-pi-acciones">
+                <button className="dev-tranca-toggle on" disabled={guardandoSuscripcion === r.id}
+                  onClick={(e) => { e.stopPropagation(); guardarSuscripcion(r); }}>
+                  {guardandoSuscripcion === r.id ? "Guardando…" : "Guardar suscripción"}
+                </button>
                 <button className="dev-tranca-toggle on" onClick={(e) => { e.stopPropagation(); verDetalle(r); }}>
                   Ver usuarios →
                 </button>

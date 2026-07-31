@@ -848,6 +848,9 @@ export interface UsuarioResidencialDTO {
   nombre: string; apellido: string; email: string; rol: string; activo: boolean;
 }
 export const devResidenciales = () => request<ResidencialDTO[]>("/dev/residenciales");
+export const devEditarSuscripcionResidencial = (id: string, body: Partial<{
+  plan_id: string | null; fecha_proximo_pago: string | null; dias_gracia: number;
+}>) => request<ResidencialDTO>(`/dev/residenciales/${id}/suscripcion`, { method: "PUT", body: JSON.stringify(body) });
 export const devUsuariosDeResidencial = (uuid: string) =>
   request<{ residencial: ResidencialDTO; staff: UsuarioResidencialDTO[]; residentes_count: number }>(
     `/dev/residenciales/${uuid}/usuarios`);

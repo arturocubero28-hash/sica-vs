@@ -739,6 +739,62 @@ def listar_residenciales(usuario_actual):
     return jsonify({"data": [r.to_dict(incluir_stats=True) for r in residenciales]})
 
 
+@dev_bp.put("/residenciales/<uuid:res_uuid>/suscripcion")
+@roles_required("desarrollador")
+def editar_suscripcion_residencial(usuario_actual, res_uuid):
+    """
+    Día 50, Etapa 5 — el desarrollador asigna o cambia el plan de una
+    residencial, y su fecha de próximo pago / días de gracia. Separado
+    de cualquier otro endpoint de edición de residencial porque esto es
+    exclusivamente del desarrollador (el admin nunca toca su propio plan).
+    """
+    residencial = Residencial.query.filter_by(uuid_publico=res_uuid).first()
+    if not residencial:
+        return jsonify({"error": {"code": "no_encontrada",
+                                  "message": "Residencial no encontrada"}}), 404
+
+    body = request.get_json(silent=True) or {}
+
+    if "plan_id" in body:
+        plan_id_pedido = body["plan_id"]
+        if plan_id_pedido in (None, ""):
+            residencial.plan_id = None
+        else:
+            plan = Plan.query.filter_by(uuid_publico=plan_id_pedido).first()
+            if not plan:
+                return jsonify({"error": {"code": "plan_no_encontrado",
+                                          "message": "No se encontró ese plan"}}), 404
+            residencial.plan_id = plan.id
+            # Al asignar un plan nuevo se da por atendida cualquier
+            # solicitud de upgrade pendiente — es justo lo que el admin
+            # estaba pidiendo.
+            residencial.upgrade_solicitado = False
+
+    if "fecha_proximo_pago" in body:
+        valor = body["fecha_proximo_pago"]
+        if not valor:
+            residencial.fecha_proximo_pago = None
+        else:
+            try:
+                residencial.fecha_proximo_pago = dt.date.fromisoformat(valor)
+            except ValueError:
+                return jsonify({"error": {"code": "fecha_invalida",
+                                          "message": "La fecha debe tener formato AAAA-MM-DD"}}), 400
+
+    if "dias_gracia" in body:
+        try:
+            dias = int(body["dias_gracia"])
+            if dias < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return jsonify({"error": {"code": "dias_gracia_invalido",
+                                      "message": "Los días de gracia deben ser un número entero mayor o igual a 0"}}), 400
+        residencial.dias_gracia = dias
+
+    db.session.commit()
+    return jsonify({"data": residencial.to_dict(incluir_stats=True)})
+
+
 @dev_bp.get("/residenciales/<uuid:res_uuid>/usuarios")
 @roles_required("desarrollador")
 def usuarios_de_residencial(usuario_actual, res_uuid):
