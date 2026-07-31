@@ -996,60 +996,75 @@ function MiCuentaPanel() {
         </div>
       )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>{estado.plan.nombre}</h3>
-        <p className="muted small" style={{ marginBottom: 14 }}>${estado.plan.precio_mensual}/mes</p>
-
-        <div className="perfil-cuenta-grid">
-          <div className="perfil-info-item"><span className="muted small">Fecha de alta</span><b>{estado.fecha_alta ? new Date(estado.fecha_alta).toLocaleDateString() : "—"}</b></div>
-          <div className="perfil-info-item"><span className="muted small">Próximo pago</span><b>{estado.fecha_proximo_pago ? new Date(estado.fecha_proximo_pago).toLocaleDateString() : "—"}</b></div>
-          <div className="perfil-info-item"><span className="muted small">Días de gracia</span><b>{estado.dias_gracia}</b></div>
-          <div className="perfil-info-item"><span className="muted small">Se suspende el</span><b>{fechaSuspension ? fechaSuspension.toLocaleDateString() : "—"}</b></div>
-          <div className="perfil-info-item"><span className="muted small">Casas</span><b>{estado.stats?.casas ?? 0} / {estado.plan.max_casas}</b></div>
-          <div className="perfil-info-item"><span className="muted small">Usuarios</span><b>{estado.stats?.usuarios_total ?? 0} / {estado.plan.max_usuarios}</b></div>
-          <div className="perfil-info-item">
-            <span className="muted small">Almacenamiento</span>
-            <b>{formatearBytes(estado.almacenamiento_usado_bytes)} de {estado.plan.almacenamiento_gb} GB</b>
+      {/* Día 50 (rediseño, a pedido del usuario): una sola tarjeta
+          integrada en vez de dos separadas con mucho aire — resumen +
+          chips compactos + fechas en una franja chica + historial con
+          scroll propio, para que la pantalla completa no se vuelva un
+          scroll interminable. */}
+      <div className="card cuenta-card">
+        <div className="cuenta-hero">
+          <div>
+            <h3 style={{ margin: 0 }}>{estado.plan.nombre}</h3>
+            <span className="muted small">${estado.plan.precio_mensual}/mes</span>
           </div>
-          <div className="perfil-info-item">
-            <span className="muted small">Registros desde</span>
-            <b>{estado.stats?.fecha_registro_mas_antiguo ? new Date(estado.stats.fecha_registro_mas_antiguo).toLocaleDateString() : "sin registros"}</b>
+          <span className={`pill ${estado.suspendida ? "red" : "green"}`}>
+            {estado.suspendida ? "Suspendida" : "Activa"}
+          </span>
+        </div>
+
+        <div className="cuenta-chips">
+          <div className="cuenta-chip">
+            <span>🏠</span>
+            <div><b>{estado.stats?.casas ?? 0}/{estado.plan.max_casas}</b><small>casas</small></div>
+          </div>
+          <div className="cuenta-chip">
+            <span>👥</span>
+            <div><b>{estado.stats?.usuarios_total ?? 0}/{estado.plan.max_usuarios}</b><small>usuarios</small></div>
+          </div>
+          <div className="cuenta-chip">
+            <span>💾</span>
+            <div><b>{formatearBytes(estado.almacenamiento_usado_bytes)}</b><small>de {estado.plan.almacenamiento_gb} GB</small></div>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 16 }}>
+        <div className="cuenta-fechas">
+          <span><b>Alta:</b> {estado.fecha_alta ? new Date(estado.fecha_alta).toLocaleDateString() : "—"}</span>
+          <span><b>Próximo pago:</b> {estado.fecha_proximo_pago ? new Date(estado.fecha_proximo_pago).toLocaleDateString() : "—"}</span>
+          <span><b>Gracia:</b> {estado.dias_gracia} día(s)</span>
+          <span><b>Se suspende:</b> {fechaSuspension ? fechaSuspension.toLocaleDateString() : "—"}</span>
+          <span><b>Registros desde:</b> {estado.stats?.fecha_registro_mas_antiguo ? new Date(estado.stats.fecha_registro_mas_antiguo).toLocaleDateString() : "sin registros"}</span>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 18 }}>
           <button onClick={abrirPagar}>💳 Pagar</button>
           {planes.some((p) => p.precio_mensual > (estado.plan?.precio_mensual || 0)) && (
             <button className="ghost" onClick={() => setMostrarUpgrade(true)}>⬆ Subir de plan</button>
           )}
         </div>
         {msgOk && <p className="ok small" style={{ marginTop: 10 }}>{msgOk}</p>}
-      </div>
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Historial de pagos</h3>
+        <div className="cuenta-divisor" />
+
+        <h4 className="cuenta-historial-titulo">Historial de pagos {pagos.length > 0 && <span className="muted small">({pagos.length})</span>}</h4>
         {pagos.length === 0 ? (
-          <p className="muted small" style={{}}>Todavía no registraste ningún pago.</p>
+          <p className="muted small">Todavía no registraste ningún pago.</p>
         ) : (
-          <table className="data" style={{ width: "100%" }}>
-            <thead>
-              <tr><th>Fecha</th><th>Plan</th><th>Monto</th><th>Estado</th></tr>
-            </thead>
-            <tbody>
-              {pagos.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.created_at ? new Date(p.created_at).toLocaleDateString() : "—"}</td>
-                  <td>{p.plan?.nombre || "—"}{p.es_upgrade ? " (upgrade)" : ""}</td>
-                  <td>${p.monto.toFixed(2)}</td>
-                  <td>
-                    <span className={`pill ${p.estado === "aprobado" ? "green" : p.estado === "rechazado" ? "red" : "amber"}`}>
-                      {p.estado === "aprobado" ? "Aprobado" : p.estado === "rechazado" ? "Rechazado" : "En revisión"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="cuenta-historial">
+            {pagos.map((p) => (
+              <div key={p.id} className="cuenta-historial-fila">
+                <div>
+                  <div>{p.plan?.nombre || "—"}{p.es_upgrade && <span className="pill amber" style={{ marginLeft: 6 }}>upgrade</span>}</div>
+                  <span className="muted small">{p.created_at ? new Date(p.created_at).toLocaleDateString() : "—"}</span>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div><b>${p.monto.toFixed(2)}</b></div>
+                  <span className={`pill ${p.estado === "aprobado" ? "green" : p.estado === "rechazado" ? "red" : "amber"}`}>
+                    {p.estado === "aprobado" ? "Aprobado" : p.estado === "rechazado" ? "Rechazado" : "En revisión"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

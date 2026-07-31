@@ -1980,18 +1980,47 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .perfil-info-item { display: flex; flex-direction: column; gap: 2px; }
 .perfil-info-item b { color: var(--marca-azul); font-size: 15px; }
 
-/* Día 50, Etapa 7 — "Mi cuenta" (suscripción), a diferencia de
-   perfil-info-grid (una columna, pensada para pocos datos) esta es una
-   grilla real de 2 columnas, para los 8 datos de suscripción sin que la
-   tarjeta quede demasiado alta. */
-.perfil-cuenta { max-width: 640px; margin: 0 auto; text-align: center; }
-.perfil-cuenta-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; text-align: center;
+/* Día 50 — "Mi cuenta" (suscripción), rediseñado a pedido del usuario:
+   una sola tarjeta integrada, con chips compactos y franja de fechas en
+   vez de una grilla alta de 8 ítems + una segunda tarjeta de historial
+   aparte — eso generaba demasiado scroll. El bloque completo se centra
+   en la página (max-width + margin auto), pero el contenido de adentro
+   queda alineado a la izquierda, más prolijo para este tipo de tarjeta
+   tipo "panel" que forzar centrado línea por línea. */
+.perfil-cuenta { max-width: 640px; margin: 0 auto; }
+.cuenta-card { text-align: left; }
+
+.cuenta-hero { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+
+.cuenta-chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.cuenta-chip {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--gris-cl); border-radius: 10px; padding: 8px 14px;
 }
-.perfil-cuenta-grid .perfil-info-item { align-items: center; }
-@media (max-width: 560px) {
-  .perfil-cuenta-grid { grid-template-columns: 1fr; }
+.cuenta-chip > span { font-size: 18px; }
+.cuenta-chip b { display: block; font-size: 13.5px; color: var(--marca-azul, var(--azul)); }
+.cuenta-chip small { color: var(--gris); font-size: 11px; }
+
+.cuenta-fechas {
+  display: flex; flex-wrap: wrap; gap: 6px 20px;
+  font-size: 12.5px; color: var(--gris);
+  padding: 12px 0; border-top: 1px solid var(--borde); border-bottom: 1px solid var(--borde);
 }
+.cuenta-fechas b { color: var(--marca-azul, var(--azul)); font-weight: 600; }
+
+.cuenta-divisor { height: 1px; background: var(--borde); margin: 20px 0 14px; }
+.cuenta-historial-titulo { margin: 0 0 10px; font-size: 15px; }
+
+/* El historial scrollea DENTRO de su propio espacio, en vez de estirar
+   toda la pantalla — con 5-6 pagos ya se nota la diferencia. */
+.cuenta-historial { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; }
+.cuenta-historial-fila {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 8px; border-bottom: 1px solid var(--gris-cl); font-size: 13.5px;
+  border-radius: 8px; transition: background 0.15s;
+}
+.cuenta-historial-fila:hover { background: var(--gris-cl); }
+.cuenta-historial-fila:last-child { border-bottom: none; }
 
 /* ============================================================
    LECTOR DE TARJETA RFID
