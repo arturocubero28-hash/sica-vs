@@ -4,7 +4,7 @@ import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesion
   getConfigResidencial, setConfigResidencial,
   getMiResidencial, setMiResidencial, subirLogoResidencial, urlLogoResidencial,
   listarPuntosAcceso, crearPuntoAcceso, editarPuntoAcceso, historialCountPunto,
-  getMiSuscripcion, getPlanesDisponibles, getMisPagosSuscripcion, pagarSuscripcion,
+  getMiSuscripcion, getPlanesDisponibles, getMisPagosSuscripcion, pagarSuscripcion, subirPlan,
   type Usuario, type SesionDTO, type CredencialWebAuthnDTO, type ConfigResidencial,
   type ResidencialDTO, type PuntoAccesoDTO, type SuscripcionEstadoDTO, type PlanDTO,
   type SuscripcionPagoDTO } from "../../api/client";
@@ -905,7 +905,11 @@ function MiCuentaPanel() {
   const [cargando, setCargando] = useState(true);
   const [mostrarPagar, setMostrarPagar] = useState(false);
   const [mostrarUpgrade, setMostrarUpgrade] = useState(false);
-  const [planElegido, setPlanElegido] = useState("");
+  // Día 50 (corrección): upgrade inmediato, sin comprobante — este es el
+  // paso de confirmación dentro del mismo modal (no un plan a "pagar").
+  const [planParaConfirmar, setPlanParaConfirmar] = useState<PlanDTO | null>(null);
+  const [confirmandoUpgrade, setConfirmandoUpgrade] = useState(false);
+  const [errorUpgrade, setErrorUpgrade] = useState("");
   const [archivo, setArchivo] = useState<File | null>(null);
   const [subiendo, setSubiendo] = useState(false);
   const [errorPago, setErrorPago] = useState("");
@@ -928,21 +932,34 @@ function MiCuentaPanel() {
 
   // "Pagar" simple = renovación del plan actual, sin elegir nada.
   function abrirPagar() {
-    setPlanElegido(estado?.plan?.id || "");
     setArchivo(null);
     setErrorPago("");
     setMostrarPagar(true);
   }
 
-  // "Upgrade" = explica los beneficios de los planes más altos; al elegir
-  // uno, pasa directo al mismo flujo de pago pero con ese plan ya fijado
-  // (a pedido del usuario: separado del botón "Pagar" común).
-  function elegirPlanUpgrade(planId: string) {
-    setPlanElegido(planId);
-    setArchivo(null);
-    setErrorPago("");
-    setMostrarUpgrade(false);
-    setMostrarPagar(true);
+  // "Subir de plan" ya NO pasa por el flujo de pago — el cambio es
+  // inmediato, sin comprobante (decisión de negocio confirmada con el
+  // usuario). Acá solo se abre el paso de confirmación.
+  function pedirConfirmacionUpgrade(plan: PlanDTO) {
+    setPlanParaConfirmar(plan);
+    setErrorUpgrade("");
+  }
+
+  async function confirmarUpgrade() {
+    if (!planParaConfirmar) return;
+    setConfirmandoUpgrade(true);
+    setErrorUpgrade("");
+    try {
+      await subirPlan(planParaConfirmar.id);
+      setPlanParaConfirmar(null);
+      setMostrarUpgrade(false);
+      setMsgOk(`¡Listo! Ya estás en el plan ${planParaConfirmar.nombre}.`);
+      cargar();
+    } catch (err: any) {
+      setErrorUpgrade(err?.message || "No se pudo cambiar el plan");
+    } finally {
+      setConfirmandoUpgrade(false);
+    }
   }
 
   async function confirmarPago() {
@@ -950,8 +967,9 @@ function MiCuentaPanel() {
     setSubiendo(true);
     setErrorPago("");
     try {
-      const planParaEnviar = planElegido && planElegido !== estado?.plan?.id ? planElegido : undefined;
-      await pagarSuscripcion(archivo, planParaEnviar);
+      // "Pagar" ya solo renueva el plan actual — el upgrade se resuelve
+      // aparte, de inmediato, sin comprobante (ver confirmarUpgrade()).
+      await pagarSuscripcion(archivo);
       setMostrarPagar(false);
       setMsgOk("Comprobante enviado — tu desarrollador lo va a revisar en breve.");
       cargar();
@@ -1087,9 +1105,7 @@ function MiCuentaPanel() {
             </div>
 
             <div className="msg-banner msg-banner-ok" style={{ marginBottom: 12 }}>
-              Vas a pagar el plan <strong>{planes.find((p) => p.id === planElegido)?.nombre || estado.plan?.nombre}</strong>
-              {" "}(${(planes.find((p) => p.id === planElegido)?.precio_mensual ?? estado.plan?.precio_mensual)?.toFixed(2)}/mes)
-              {planElegido !== estado.plan?.id && " — cambio de plan"}
+              Vas a pagar la renovación del plan <strong>{estado.plan?.nombre}</strong> (${estado.plan?.precio_mensual}/mes).
             </div>
 
             <label style={{ display: "block", marginBottom: 12 }}>
@@ -1112,41 +1128,68 @@ function MiCuentaPanel() {
           contra el plan actual, en vez de mezclarlo como una opción más
           dentro del formulario de pago. */}
       {mostrarUpgrade && (
-        <div className="modal" onClick={() => setMostrarUpgrade(false)}>
+        <div className="modal" onClick={() => { setMostrarUpgrade(false); setPlanParaConfirmar(null); }}>
           <div className="modal-body" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
-            <h3>Subí de plan</h3>
-            <p className="muted small" style={{ marginBottom: 16 }}>
-              Tu plan actual, <strong>{estado.plan?.nombre}</strong>, te da {estado.plan?.max_casas} casas,{" "}
-              {estado.plan?.max_usuarios} usuarios y {estado.plan?.almacenamiento_gb} GB de almacenamiento.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {planes
-                .filter((p) => p.precio_mensual > (estado.plan?.precio_mensual || 0))
-                .map((p) => {
-                  const masCasas = p.max_casas - (estado.plan?.max_casas || 0);
-                  const masUsuarios = p.max_usuarios - (estado.plan?.max_usuarios || 0);
-                  const masGB = p.almacenamiento_gb - (estado.plan?.almacenamiento_gb || 0);
-                  return (
-                    <div key={p.id} className="card" style={{ margin: 0, padding: 16, textAlign: "left" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                        <strong style={{ fontSize: 16 }}>{p.nombre}</strong>
-                        <span className="muted small">${p.precio_mensual}/mes</span>
-                      </div>
-                      <ul style={{ margin: "8px 0 12px", paddingLeft: 18, fontSize: 13.5 }}>
-                        {masCasas > 0 && <li>+{masCasas} casas más (hasta {p.max_casas})</li>}
-                        {masUsuarios > 0 && <li>+{masUsuarios} usuarios más (hasta {p.max_usuarios})</li>}
-                        {masGB > 0 && <li>+{masGB} GB más de almacenamiento (hasta {p.almacenamiento_gb} GB)</li>}
-                      </ul>
-                      <button onClick={() => elegirPlanUpgrade(p.id)} style={{ width: "100%" }}>
-                        Solicitar este plan
-                      </button>
-                    </div>
-                  );
-                })}
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-              <button onClick={() => setMostrarUpgrade(false)} className="ghost">Cerrar</button>
-            </div>
+            {!planParaConfirmar ? (
+              <>
+                <h3>Subí de plan</h3>
+                <p className="muted small" style={{ marginBottom: 16 }}>
+                  Tu plan actual, <strong>{estado.plan?.nombre}</strong>, te da {estado.plan?.max_casas} casas,{" "}
+                  {estado.plan?.max_usuarios} usuarios y {estado.plan?.almacenamiento_gb} GB de almacenamiento.
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {planes
+                    .filter((p) => p.precio_mensual > (estado.plan?.precio_mensual || 0))
+                    .map((p) => {
+                      const masCasas = p.max_casas - (estado.plan?.max_casas || 0);
+                      const masUsuarios = p.max_usuarios - (estado.plan?.max_usuarios || 0);
+                      const masGB = p.almacenamiento_gb - (estado.plan?.almacenamiento_gb || 0);
+                      return (
+                        <div key={p.id} className="card" style={{ margin: 0, padding: 16, textAlign: "left" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                            <strong style={{ fontSize: 16 }}>{p.nombre}</strong>
+                            <span className="muted small">${p.precio_mensual}/mes</span>
+                          </div>
+                          <ul style={{ margin: "8px 0 12px", paddingLeft: 18, fontSize: 13.5 }}>
+                            {masCasas > 0 && <li>+{masCasas} casas más (hasta {p.max_casas})</li>}
+                            {masUsuarios > 0 && <li>+{masUsuarios} usuarios más (hasta {p.max_usuarios})</li>}
+                            {masGB > 0 && <li>+{masGB} GB más de almacenamiento (hasta {p.almacenamiento_gb} GB)</li>}
+                          </ul>
+                          {/* Texto promocional, a pedido del usuario: sin ser
+                              agresivo, pero dejando claro el beneficio de
+                              activarlo ya y pagar recién en el proximo ciclo. */}
+                          <p className="muted small" style={{ marginBottom: 10 }}>
+                            <TrendingUp size={13} style={{ verticalAlign: "middle", marginRight: 4 }} />
+                            Subilo hoy y empezá a disfrutarlo ya mismo — pagás el nuevo precio recién en tu próxima fecha de pago.
+                          </p>
+                          <button onClick={() => pedirConfirmacionUpgrade(p)} style={{ width: "100%" }}>
+                            Subir a {p.nombre}
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+                  <button onClick={() => setMostrarUpgrade(false)} className="ghost">Cerrar</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3>Confirmá tu upgrade</h3>
+                <div className="msg-banner msg-banner-ok" style={{ marginBottom: 16 }}>
+                  Vas a pasar al plan <strong>{planParaConfirmar.nombre}</strong> ahora mismo, con acceso inmediato
+                  a sus beneficios. El nuevo precio (${planParaConfirmar.precio_mensual}/mes) se cobra recién en tu
+                  próxima fecha de pago{estado.fecha_proximo_pago ? `, el ${new Date(estado.fecha_proximo_pago).toLocaleDateString()}` : ""} — no se te cobra nada hoy.
+                </div>
+                {errorUpgrade && <p className="err small" style={{ marginBottom: 10 }}>{errorUpgrade}</p>}
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <button onClick={() => setPlanParaConfirmar(null)} className="ghost" disabled={confirmandoUpgrade}>Volver</button>
+                  <button onClick={confirmarUpgrade} disabled={confirmandoUpgrade}>
+                    {confirmandoUpgrade ? "Confirmando…" : "Sí, subir de plan"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

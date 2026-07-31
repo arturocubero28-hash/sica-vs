@@ -59,6 +59,51 @@ def planes_disponibles(usuario_actual):
     return jsonify({"data": [p.to_dict() for p in planes]})
 
 
+@suscripcion_bp.post("/subir-plan")
+@roles_required("admin", "super_admin")
+def subir_plan(usuario_actual):
+    """
+    Día 50 (corrección del usuario) — upgrade INMEDIATO, sin comprobante.
+
+    Decisión de negocio confirmada con el usuario: cuando el admin pide
+    subir de plan, el cambio se aplica ya mismo (empieza a disfrutar los
+    beneficios de inmediato) — pero el PAGO del precio nuevo recién se
+    cobra en su próxima fecha de pago normal, sin tocarla ni adelantarla.
+    El desarrollador "pierde" ese período sin cobrar el precio más alto,
+    pero gana con la tarifa nueva de ahí en adelante.
+
+    Por eso este endpoint NO pide comprobante — es solo cambiar el plan,
+    no un pago. Solo permite subir a un plan MÁS CARO (un downgrade es
+    una conversación distinta, que pasa por el desarrollador directo).
+    """
+    residencial = _mi_residencial(usuario_actual)
+    if not residencial:
+        return jsonify({"error": {"code": "sin_residencial",
+                                  "message": "Tu usuario no tiene una residencial asignada"}}), 400
+    if not residencial.plan_id:
+        return jsonify({"error": {"code": "sin_plan",
+                                  "message": "Tu residencial todavía no tiene un plan asignado — "
+                                             "contactá a tu desarrollador"}}), 400
+
+    body = request.get_json(silent=True) or {}
+    plan_id_pedido = (body.get("plan_id") or "").strip()
+    if not plan_id_pedido:
+        return jsonify({"error": {"code": "plan_requerido", "message": "Elegí un plan"}}), 400
+    plan_nuevo = Plan.query.filter_by(uuid_publico=plan_id_pedido).first()
+    if not plan_nuevo:
+        return jsonify({"error": {"code": "plan_no_encontrado", "message": "No se encontró ese plan"}}), 404
+    if plan_nuevo.precio_mensual <= residencial.plan.precio_mensual:
+        return jsonify({"error": {"code": "no_es_upgrade",
+                                  "message": "Ese plan no es más caro que el actual — "
+                                             "para bajar de plan, contactá a tu desarrollador"}}), 400
+
+    residencial.plan_id = plan_nuevo.id
+    # fecha_proximo_pago NO se toca a propósito — el precio nuevo se cobra
+    # recién en el ciclo que ya tenía, no antes.
+    db.session.commit()
+    return jsonify({"data": residencial.to_dict(incluir_stats=True)})
+
+
 @suscripcion_bp.get("/mi-estado")
 @roles_required("admin", "super_admin")
 def mi_estado(usuario_actual):

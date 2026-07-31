@@ -883,6 +883,8 @@ export interface SuscripcionPagoDTO {
 }
 export const getMiSuscripcion = () => request<SuscripcionEstadoDTO>("/suscripcion/mi-estado");
 export const getPlanesDisponibles = () => request<PlanDTO[]>("/suscripcion/planes-disponibles");
+export const subirPlan = (planId: string) =>
+  request<SuscripcionEstadoDTO>("/suscripcion/subir-plan", { method: "POST", body: JSON.stringify({ plan_id: planId }) });
 export const getMisPagosSuscripcion = () => request<SuscripcionPagoDTO[]>("/suscripcion/mis-pagos");
 export async function pagarSuscripcion(archivo: File, planId?: string): Promise<SuscripcionPagoDTO> {
   const token = getToken();

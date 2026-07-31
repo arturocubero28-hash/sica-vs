@@ -1130,30 +1130,7 @@ def editar_mi_residencial(usuario_actual):
     return jsonify({"data": r.to_dict()})
 
 
-@cuentas_bp.post("/mi-residencial/solicitar-upgrade")
-@roles_required("admin", "super_admin")
-def solicitar_upgrade(usuario_actual):
-    """
-    Día 50 — sistema de suscripciones. El admin llegó al límite de su
-    plan (casas o usuarios) y pide que se lo suban. Esto NO cambia el
-    plan solo, ni pasa automáticamente al chocar contra el límite —
-    es una acción explícita del admin. Solo deja una señal
-    (upgrade_solicitado) para que el desarrollador la vea y lo llame.
-    """
-    from app.models.residencial import Residencial
-    if not usuario_actual.residencial_id:
-        return jsonify({"error": {"code": "sin_residencial",
-                                  "message": "Tu usuario no tiene una residencial asignada"}}), 400
-    r = Residencial.query.get(usuario_actual.residencial_id)
-    if not r:
-        return jsonify({"error": {"code": "no_encontrada",
-                                  "message": "Residencial no encontrada"}}), 404
-    r.upgrade_solicitado = True
-    db.session.commit()
-    return jsonify({"data": r.to_dict()})
-
-
-
+@cuentas_bp.post("/mi-residencial/logo")
 @roles_required("admin", "super_admin")
 def subir_logo_residencial(usuario_actual):
     """Sube/reemplaza el logo de la residencial del admin. Mismo patrón de
