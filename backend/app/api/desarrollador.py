@@ -1081,10 +1081,17 @@ def crear_plan(usuario_actual):
     return jsonify({"data": plan.to_dict()}), 201
 
 
-@dev_bp.put("/planes/<int:plan_id>")
+@dev_bp.put("/planes/<uuid:plan_id>")
 @roles_required("desarrollador")
 def editar_plan(usuario_actual, plan_id):
-    plan = Plan.query.get(plan_id)
+    # Bug real encontrado por el usuario: esta ruta esperaba el ID
+    # numérico interno (<int:plan_id>, Plan.query.get()), pero
+    # Plan.to_dict() siempre devolvió el uuid_publico como "id" — el
+    # mismo que usa el frontend para armar la URL. Flask rechazaba la
+    # petición de entrada (la URL ni matcheaba la ruta), por eso
+    # cualquier edición de un plan ya creado fallaba con "no encontrado",
+    # sin importar qué campo se intentara cambiar.
+    plan = Plan.query.filter_by(uuid_publico=plan_id).first()
     if not plan:
         return jsonify({"error": {"code": "no_encontrado", "message": "Plan no encontrado"}}), 404
 
