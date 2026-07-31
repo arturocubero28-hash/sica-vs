@@ -1141,6 +1141,27 @@ export const setConfigResidencial = (body: Partial<ConfigResidencial>) =>
 // mil residenciales del futuro SaaS, porque siempre resuelve por el usuario
 // que consulta.
 
+export interface PlanDTO {
+  id: string;
+  nombre: string;
+  max_casas: number;
+  max_usuarios: number;
+  almacenamiento_gb: number;
+  precio_mensual: number;
+  activo: boolean;
+  orden: number;
+  stats?: { residenciales: number };
+}
+export const devPlanes = () => request<PlanDTO[]>("/dev/planes");
+export const devCrearPlan = (body: {
+  nombre: string; max_casas: number; max_usuarios: number;
+  almacenamiento_gb: number; precio_mensual: number; orden?: number;
+}) => request<PlanDTO>("/dev/planes", { method: "POST", body: JSON.stringify(body) });
+export const devEditarPlan = (id: string, body: Partial<{
+  nombre: string; max_casas: number; max_usuarios: number;
+  almacenamiento_gb: number; precio_mensual: number; activo: boolean; orden: number;
+}>) => request<PlanDTO>(`/dev/planes/${id}`, { method: "PUT", body: JSON.stringify(body) });
+
 export interface ResidencialDTO {
   id: string;
   nombre: string;
@@ -1152,11 +1173,21 @@ export interface ResidencialDTO {
   color_primario: string;
   color_secundario: string;
   activa: boolean;
+  // Día 50 — sistema de suscripciones.
+  plan: PlanDTO | null;
+  fecha_proximo_pago: string | null;
+  dias_gracia: number;
+  suspendida: boolean;
+  almacenamiento_usado_bytes: number;
+  upgrade_solicitado: boolean;
   admin: { nombre: string; email: string } | null;
   created_at: string | null;
   stats?: {
     guardias: number; cajeros: number; supervisores: number;
     residentes: number; dispositivos: number;
+    casas: number; usuarios_total: number;
+    almacenamiento_restante_bytes: number | null;
+    fecha_registro_mas_antiguo: string | null;
   };
 }
 

@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, devCrearResidencial, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO } from "../../api/client";
-import { AlertTriangle, BarChart3, Building2, Construction, Cpu, Key, Lock, Monitor, Radio, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devUsuariosDeResidencial, devCrearResidencial, devPlanes, devCrearPlan, devEditarPlan, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO, type PlanDTO } from "../../api/client";
+import { AlertTriangle, BarChart3, Building2, Construction, Cpu, Key, Layers, Lock, Monitor, Radio, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
   const [m, setM] = useState<DevMetricasDTO | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad" | "trancas" | "pis" | "residenciales">("salud");
+  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad" | "trancas" | "pis" | "residenciales" | "planes">("salud");
   // Filtros de logs
   const [email, setEmail] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -80,6 +80,7 @@ export function PanelDesarrollador() {
         <button className={`hist-tab ${tab === "trancas" ? "on" : ""}`} onClick={() => setTab("trancas")}><Construction size={16} /> Trancas</button>
         <button className={`hist-tab ${tab === "pis" ? "on" : ""}`} onClick={() => setTab("pis")}><Router size={16} /> Controladores de acceso</button>
         <button className={`hist-tab ${tab === "residenciales" ? "on" : ""}`} onClick={() => setTab("residenciales")}><Building2 size={16} /> Residenciales</button>
+        <button className={`hist-tab ${tab === "planes" ? "on" : ""}`} onClick={() => setTab("planes")}><Layers size={16} /> Planes</button>
       </div>
 
       {tab === "salud" && (
@@ -254,6 +255,7 @@ export function PanelDesarrollador() {
       {tab === "trancas" && <ConfigTrancas />}
       {tab === "pis" && <ConfigPis />}
       {tab === "residenciales" && <PanelResidenciales />}
+      {tab === "planes" && <ConfigPlanes />}
     </div>
   );
 }
@@ -1564,6 +1566,211 @@ function PanelResidenciales() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Planes de suscripción (Día 50, Etapa 4) ─────────────────────────────────
+function ConfigPlanes() {
+  const [planes, setPlanes] = useState<PlanDTO[] | null>(null);
+  const [mostrarAlta, setMostrarAlta] = useState(false);
+  const [nuevoNombre, setNuevoNombre] = useState("");
+  const [nuevoMaxCasas, setNuevoMaxCasas] = useState("");
+  const [nuevoMaxUsuarios, setNuevoMaxUsuarios] = useState("");
+  const [nuevoAlmacenamiento, setNuevoAlmacenamiento] = useState("");
+  const [nuevoPrecio, setNuevoPrecio] = useState("");
+  const [creando, setCreando] = useState(false);
+  const [errorAlta, setErrorAlta] = useState("");
+  const [edits, setEdits] = useState<Record<string, {
+    nombre: string; max_casas: string; max_usuarios: string;
+    almacenamiento_gb: string; precio_mensual: string;
+  }>>({});
+  const [guardandoId, setGuardandoId] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
+
+  const cargar = useCallback(() => {
+    devPlanes().then((data) => {
+      setPlanes(data);
+      const e: typeof edits = {};
+      data.forEach((p) => {
+        e[p.id] = {
+          nombre: p.nombre, max_casas: String(p.max_casas), max_usuarios: String(p.max_usuarios),
+          almacenamiento_gb: String(p.almacenamiento_gb), precio_mensual: String(p.precio_mensual),
+        };
+      });
+      setEdits(e);
+    }).catch(() => setPlanes([]));
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  function setCampo(id: string, campo: keyof (typeof edits)[number], valor: string) {
+    setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
+  }
+
+  async function crearPlan() {
+    setErrorAlta("");
+    const nombre = nuevoNombre.trim();
+    const casas = parseInt(nuevoMaxCasas, 10);
+    const usuarios = parseInt(nuevoMaxUsuarios, 10);
+    const gb = parseInt(nuevoAlmacenamiento, 10);
+    const precio = parseFloat(nuevoPrecio);
+    if (!nombre) { setErrorAlta("El nombre es obligatorio"); return; }
+    if (isNaN(casas) || casas < 1) { setErrorAlta("Casas debe ser un número mayor a 0"); return; }
+    if (isNaN(usuarios) || usuarios < 1) { setErrorAlta("Usuarios debe ser un número mayor a 0"); return; }
+    if (isNaN(gb) || gb < 1) { setErrorAlta("El almacenamiento debe ser un número mayor a 0"); return; }
+    if (isNaN(precio) || precio < 0) { setErrorAlta("El precio debe ser un número válido"); return; }
+
+    setCreando(true);
+    try {
+      await devCrearPlan({
+        nombre, max_casas: casas, max_usuarios: usuarios,
+        almacenamiento_gb: gb, precio_mensual: precio, orden: (planes?.length || 0),
+      });
+      setNuevoNombre(""); setNuevoMaxCasas(""); setNuevoMaxUsuarios("");
+      setNuevoAlmacenamiento(""); setNuevoPrecio(""); setMostrarAlta(false);
+      cargar();
+    } catch (err: any) {
+      setErrorAlta(err?.message || "No se pudo crear el plan");
+    } finally {
+      setCreando(false);
+    }
+  }
+
+  async function guardar(p: PlanDTO) {
+    const ed = edits[p.id];
+    const nombre = ed.nombre.trim();
+    const casas = parseInt(ed.max_casas, 10);
+    const usuarios = parseInt(ed.max_usuarios, 10);
+    const gb = parseInt(ed.almacenamiento_gb, 10);
+    const precio = parseFloat(ed.precio_mensual);
+    if (!nombre) { setMsg({ id: p.id, texto: "El nombre no puede estar vacío", ok: false }); return; }
+    if (isNaN(casas) || casas < 1) { setMsg({ id: p.id, texto: "Casas debe ser mayor a 0", ok: false }); return; }
+    if (isNaN(usuarios) || usuarios < 1) { setMsg({ id: p.id, texto: "Usuarios debe ser mayor a 0", ok: false }); return; }
+    if (isNaN(gb) || gb < 1) { setMsg({ id: p.id, texto: "El almacenamiento debe ser mayor a 0", ok: false }); return; }
+    if (isNaN(precio) || precio < 0) { setMsg({ id: p.id, texto: "El precio debe ser válido", ok: false }); return; }
+
+    setGuardandoId(p.id);
+    setMsg(null);
+    try {
+      const actualizado = await devEditarPlan(p.id, {
+        nombre, max_casas: casas, max_usuarios: usuarios,
+        almacenamiento_gb: gb, precio_mensual: precio,
+      });
+      setPlanes((prev) => prev ? prev.map((x) => x.id === p.id ? actualizado : x) : prev);
+      setMsg({ id: p.id, texto: "Guardado correctamente", ok: true });
+    } catch (err: any) {
+      setMsg({ id: p.id, texto: err?.message || "No se pudo guardar", ok: false });
+    } finally {
+      setGuardandoId(null);
+    }
+  }
+
+  async function alternarActivo(p: PlanDTO) {
+    setGuardandoId(p.id);
+    try {
+      const actualizado = await devEditarPlan(p.id, { activo: !p.activo });
+      setPlanes((prev) => prev ? prev.map((x) => x.id === p.id ? actualizado : x) : prev);
+    } catch (err: any) {
+      setMsg({ id: p.id, texto: err?.message || "No se pudo cambiar el estado", ok: false });
+    } finally {
+      setGuardandoId(null);
+    }
+  }
+
+  if (planes === null) return <p className="muted" style={{ padding: 20 }}>Cargando planes…</p>;
+
+  return (
+    <div>
+      <div className="dev-trancas-aviso">
+        <strong><Layers size={16} /> Planes de suscripción.</strong> Cada plan define cuántas casas,
+        usuarios y GB de almacenamiento incluye — se lo asignás a cada residencial desde la pestaña
+        Residenciales. Un plan retirado (<code>Inactivo</code>) no se borra ni afecta a quien ya lo
+        tenga — solo deja de ofrecerse para asignar de nuevo.
+      </div>
+
+      <div className="dev-trancas-barra">
+        <span className="dev-trancas-total">{planes.length} plan(es)</span>
+        <button className="dev-tranca-add" onClick={() => setMostrarAlta((v) => !v)}>
+          {mostrarAlta ? "Cancelar" : "+ Nuevo plan"}
+        </button>
+      </div>
+
+      {mostrarAlta && (
+        <div className="dev-tranca-card" style={{ marginBottom: 20 }}>
+          <div className="dev-tranca-campos">
+            <label><span>Nombre</span>
+              <input type="text" placeholder="ej. Básico" value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} />
+            </label>
+            <label><span>Máx. casas</span>
+              <input type="number" min={1} placeholder="20" value={nuevoMaxCasas} onChange={(e) => setNuevoMaxCasas(e.target.value)} />
+            </label>
+            <label><span>Máx. usuarios</span>
+              <input type="number" min={1} placeholder="100" value={nuevoMaxUsuarios} onChange={(e) => setNuevoMaxUsuarios(e.target.value)} />
+            </label>
+            <label><span>Almacenamiento (GB)</span>
+              <input type="number" min={1} placeholder="250" value={nuevoAlmacenamiento} onChange={(e) => setNuevoAlmacenamiento(e.target.value)} />
+            </label>
+            <label><span>Precio mensual (USD)</span>
+              <input type="number" min={0} step={0.01} placeholder="49.99" value={nuevoPrecio} onChange={(e) => setNuevoPrecio(e.target.value)} />
+            </label>
+          </div>
+          {errorAlta && <div className="dev-tranca-msg err">{errorAlta}</div>}
+          <button className="dev-tranca-add" disabled={creando} onClick={crearPlan}>
+            {creando ? "Creando…" : "Crear plan"}
+          </button>
+        </div>
+      )}
+
+      <div className="dev-trancas-grid">
+        {planes.map((p) => {
+          const ed = edits[p.id] || {
+            nombre: p.nombre, max_casas: String(p.max_casas), max_usuarios: String(p.max_usuarios),
+            almacenamiento_gb: String(p.almacenamiento_gb), precio_mensual: String(p.precio_mensual),
+          };
+          return (
+            <div key={p.id} className={`dev-tranca-card ${!p.activo ? "inactiva" : ""}`}>
+              <div className="dev-tranca-head">
+                <span className="dev-tranca-nombre">{p.nombre}</span>
+                <span className={`dev-tranca-badge ${p.activo ? "ok" : "sin"}`}>{p.activo ? "Activo" : "Inactivo"}</span>
+              </div>
+              {p.stats && (
+                <div className="muted small" style={{ marginBottom: 8 }}>
+                  {p.stats.residenciales} residencial(es) en este plan
+                </div>
+              )}
+              <div className="dev-tranca-campos">
+                <label><span>Nombre</span>
+                  <input type="text" value={ed.nombre} onChange={(e) => setCampo(p.id, "nombre", e.target.value)} />
+                </label>
+                <label><span>Máx. casas</span>
+                  <input type="number" min={1} value={ed.max_casas} onChange={(e) => setCampo(p.id, "max_casas", e.target.value)} />
+                </label>
+                <label><span>Máx. usuarios</span>
+                  <input type="number" min={1} value={ed.max_usuarios} onChange={(e) => setCampo(p.id, "max_usuarios", e.target.value)} />
+                </label>
+                <label><span>Almacenamiento (GB)</span>
+                  <input type="number" min={1} value={ed.almacenamiento_gb} onChange={(e) => setCampo(p.id, "almacenamiento_gb", e.target.value)} />
+                </label>
+                <label><span>Precio mensual (USD)</span>
+                  <input type="number" min={0} step={0.01} value={ed.precio_mensual} onChange={(e) => setCampo(p.id, "precio_mensual", e.target.value)} />
+                </label>
+              </div>
+              {msg && msg.id === p.id && (
+                <div className={`dev-tranca-msg ${msg.ok ? "ok" : "err"}`}>{msg.texto}</div>
+              )}
+              <div className="dev-pi-acciones">
+                <button className="dev-tranca-toggle on" disabled={guardandoId === p.id} onClick={() => guardar(p)}>
+                  {guardandoId === p.id ? "Guardando…" : "Guardar cambios"}
+                </button>
+                <button className={`dev-tranca-toggle ${p.activo ? "off" : "on"}`} disabled={guardandoId === p.id} onClick={() => alternarActivo(p)}>
+                  {p.activo ? "Desactivar" : "Reactivar"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

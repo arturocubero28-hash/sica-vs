@@ -135,11 +135,39 @@ class Residencial(db.Model):
         if incluir_stats:
             from app.models.usuario import Usuario
             from app.models.dispositivo import Dispositivo
+            from app.models.cuenta import Cuenta, Unidad
+            from app.models.archivo_residencial import ArchivoResidencial
+            from app.extensions import db as _db
+
+            casas = (
+                Cuenta.query.join(Unidad, Cuenta.unidad_id == Unidad.id)
+                .filter(Unidad.residencial_id == self.id).count()
+            )
+            usuarios_total = Usuario.query.filter_by(residencial_id=self.id).count()
+
+            # Día 50: espacio restante y fecha del registro más antiguo —
+            # se calculan acá (no se guardan) para que Residenciales
+            # (Etapa 5) y el perfil del admin (Etapa 6) lean del mismo
+            # lugar, sin duplicar la cuenta cada uno por su lado.
+            espacio_restante = None
+            if self.plan_id and self.plan:
+                limite_bytes = self.plan.almacenamiento_gb * 1024 ** 3
+                espacio_restante = max(0, limite_bytes - (self.almacenamiento_usado_bytes or 0))
+
+            mas_antiguo = (
+                _db.session.query(_db.func.min(ArchivoResidencial.created_at))
+                .filter(ArchivoResidencial.residencial_id == self.id).scalar()
+            )
+
             d["stats"] = {
                 "guardias": Usuario.query.filter_by(residencial_id=self.id, rol="guardia").count(),
                 "cajeros": Usuario.query.filter_by(residencial_id=self.id, rol="cajero").count(),
                 "supervisores": Usuario.query.filter_by(residencial_id=self.id, rol="supervisor").count(),
                 "residentes": Usuario.query.filter_by(residencial_id=self.id, rol="residente").count(),
                 "dispositivos": Dispositivo.query.filter_by(residencial_id=self.id).count(),
+                "casas": casas,
+                "usuarios_total": usuarios_total,
+                "almacenamiento_restante_bytes": espacio_restante,
+                "fecha_registro_mas_antiguo": mas_antiguo.isoformat() if mas_antiguo else None,
             }
         return d
