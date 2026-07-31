@@ -10,7 +10,7 @@ import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesion
   type SuscripcionPagoDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
 import { aplicarColoresResidencial } from "../../utils/colores";
-import { Fingerprint } from "lucide-react";
+import { Fingerprint, Home, Users, HardDrive, CreditCard, TrendingUp, AlertOctagon, AlertTriangle, Lock } from "lucide-react";
 
 // Día 47 — colores de fábrica, deben coincidir con backend/app/models/
 // residencial.py (DEFAULT_COLOR_PRIMARIO/SECUNDARIO). Solo se usan acá
@@ -50,7 +50,7 @@ export function MiPerfil() {
             onClick={() => setTab("accesos")}>🚧 Puntos de acceso</button>
           {esDueno && (
             <button className={`tab-btn ${tab === "cuenta" ? "active" : ""}`}
-              onClick={() => setTab("cuenta")}>💳 Mi cuenta</button>
+              onClick={() => setTab("cuenta")}><CreditCard size={16} /> Mi cuenta</button>
           )}
         </div>
       )}
@@ -987,85 +987,88 @@ function MiCuentaPanel() {
     <div className="perfil-cuenta">
       {estado.suspendida && (
         <div className="msg-banner msg-banner-err" style={{ marginBottom: 16 }}>
-          ⛔ Tu servicio está suspendido por falta de pago. Subí tu comprobante para reactivarlo.
+          <AlertOctagon size={16} /> Tu servicio está suspendido por falta de pago. Subí tu comprobante para reactivarlo.
         </div>
       )}
       {!estado.suspendida && diasParaSuspension !== null && diasParaSuspension <= 5 && (
         <div className="msg-banner msg-banner-warn" style={{ marginBottom: 16 }}>
-          ⚠ Tu servicio se suspende en {diasParaSuspension} día(s) si no registrás el pago.
+          <AlertTriangle size={16} /> Tu servicio se suspende en {diasParaSuspension} día(s) si no registrás el pago.
         </div>
       )}
 
-      {/* Día 50 (rediseño, a pedido del usuario): una sola tarjeta
-          integrada en vez de dos separadas con mucho aire — resumen +
-          chips compactos + fechas en una franja chica + historial con
-          scroll propio, para que la pantalla completa no se vuelva un
-          scroll interminable. */}
-      <div className="card cuenta-card">
-        <div className="cuenta-hero">
-          <div>
-            <h3 style={{ margin: 0 }}>{estado.plan.nombre}</h3>
-            <span className="muted small">${estado.plan.precio_mensual}/mes</span>
+      {/* Día 50 (rediseño, a pedido del usuario): dos columnas en
+          pantallas anchas — info + acciones a la izquierda, historial a
+          la derecha — para aprovechar el ancho en vez de dejar aire
+          muerto a los costados de una sola columna centrada. Se
+          reemplazaron los emojis por íconos de Lucide, el mismo set
+          usado en el resto del proyecto. */}
+      <div className="cuenta-layout">
+        <div className="card cuenta-card">
+          <div className="cuenta-hero">
+            <div>
+              <h3 style={{ margin: 0 }}>{estado.plan.nombre}</h3>
+              <span className="muted small">${estado.plan.precio_mensual}/mes</span>
+            </div>
+            <span className={`pill ${estado.suspendida ? "red" : "green"}`}>
+              {estado.suspendida ? "Suspendida" : "Activa"}
+            </span>
           </div>
-          <span className={`pill ${estado.suspendida ? "red" : "green"}`}>
-            {estado.suspendida ? "Suspendida" : "Activa"}
-          </span>
+
+          <div className="cuenta-chips">
+            <div className="cuenta-chip">
+              <Home size={18} />
+              <div><b>{estado.stats?.casas ?? 0}/{estado.plan.max_casas}</b><small>casas</small></div>
+            </div>
+            <div className="cuenta-chip">
+              <Users size={18} />
+              <div><b>{estado.stats?.usuarios_total ?? 0}/{estado.plan.max_usuarios}</b><small>usuarios</small></div>
+            </div>
+            <div className="cuenta-chip">
+              <HardDrive size={18} />
+              <div><b>{formatearBytes(estado.almacenamiento_usado_bytes)}</b><small>de {estado.plan.almacenamiento_gb} GB</small></div>
+            </div>
+          </div>
+
+          <div className="cuenta-fechas">
+            <span><b>Alta:</b> {estado.fecha_alta ? new Date(estado.fecha_alta).toLocaleDateString() : "—"}</span>
+            <span><b>Próximo pago:</b> {estado.fecha_proximo_pago ? new Date(estado.fecha_proximo_pago).toLocaleDateString() : "—"}</span>
+            <span><b>Gracia:</b> {estado.dias_gracia} día(s)</span>
+            <span><b>Se suspende:</b> {fechaSuspension ? fechaSuspension.toLocaleDateString() : "—"}</span>
+            <span><b>Registros desde:</b> {estado.stats?.fecha_registro_mas_antiguo ? new Date(estado.stats.fecha_registro_mas_antiguo).toLocaleDateString() : "sin registros"}</span>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+            <button onClick={abrirPagar}><CreditCard size={16} /> Pagar</button>
+            {planes.some((p) => p.precio_mensual > (estado.plan?.precio_mensual || 0)) && (
+              <button className="ghost" onClick={() => setMostrarUpgrade(true)}><TrendingUp size={16} /> Subir de plan</button>
+            )}
+          </div>
+          {msgOk && <p className="ok small" style={{ marginTop: 10 }}>{msgOk}</p>}
         </div>
 
-        <div className="cuenta-chips">
-          <div className="cuenta-chip">
-            <span>🏠</span>
-            <div><b>{estado.stats?.casas ?? 0}/{estado.plan.max_casas}</b><small>casas</small></div>
-          </div>
-          <div className="cuenta-chip">
-            <span>👥</span>
-            <div><b>{estado.stats?.usuarios_total ?? 0}/{estado.plan.max_usuarios}</b><small>usuarios</small></div>
-          </div>
-          <div className="cuenta-chip">
-            <span>💾</span>
-            <div><b>{formatearBytes(estado.almacenamiento_usado_bytes)}</b><small>de {estado.plan.almacenamiento_gb} GB</small></div>
-          </div>
-        </div>
-
-        <div className="cuenta-fechas">
-          <span><b>Alta:</b> {estado.fecha_alta ? new Date(estado.fecha_alta).toLocaleDateString() : "—"}</span>
-          <span><b>Próximo pago:</b> {estado.fecha_proximo_pago ? new Date(estado.fecha_proximo_pago).toLocaleDateString() : "—"}</span>
-          <span><b>Gracia:</b> {estado.dias_gracia} día(s)</span>
-          <span><b>Se suspende:</b> {fechaSuspension ? fechaSuspension.toLocaleDateString() : "—"}</span>
-          <span><b>Registros desde:</b> {estado.stats?.fecha_registro_mas_antiguo ? new Date(estado.stats.fecha_registro_mas_antiguo).toLocaleDateString() : "sin registros"}</span>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 18 }}>
-          <button onClick={abrirPagar}>💳 Pagar</button>
-          {planes.some((p) => p.precio_mensual > (estado.plan?.precio_mensual || 0)) && (
-            <button className="ghost" onClick={() => setMostrarUpgrade(true)}>⬆ Subir de plan</button>
+        <div className="card cuenta-card cuenta-historial-card">
+          <h4 className="cuenta-historial-titulo">Historial de pagos {pagos.length > 0 && <span className="muted small">({pagos.length})</span>}</h4>
+          {pagos.length === 0 ? (
+            <p className="muted small">Todavía no registraste ningún pago.</p>
+          ) : (
+            <div className="cuenta-historial">
+              {pagos.map((p) => (
+                <div key={p.id} className="cuenta-historial-fila">
+                  <div>
+                    <div>{p.plan?.nombre || "—"}{p.es_upgrade && <span className="pill amber" style={{ marginLeft: 6 }}>upgrade</span>}</div>
+                    <span className="muted small">{p.created_at ? new Date(p.created_at).toLocaleDateString() : "—"}</span>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div><b>${p.monto.toFixed(2)}</b></div>
+                    <span className={`pill ${p.estado === "aprobado" ? "green" : p.estado === "rechazado" ? "red" : "amber"}`}>
+                      {p.estado === "aprobado" ? "Aprobado" : p.estado === "rechazado" ? "Rechazado" : "En revisión"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
-        {msgOk && <p className="ok small" style={{ marginTop: 10 }}>{msgOk}</p>}
-
-        <div className="cuenta-divisor" />
-
-        <h4 className="cuenta-historial-titulo">Historial de pagos {pagos.length > 0 && <span className="muted small">({pagos.length})</span>}</h4>
-        {pagos.length === 0 ? (
-          <p className="muted small">Todavía no registraste ningún pago.</p>
-        ) : (
-          <div className="cuenta-historial">
-            {pagos.map((p) => (
-              <div key={p.id} className="cuenta-historial-fila">
-                <div>
-                  <div>{p.plan?.nombre || "—"}{p.es_upgrade && <span className="pill amber" style={{ marginLeft: 6 }}>upgrade</span>}</div>
-                  <span className="muted small">{p.created_at ? new Date(p.created_at).toLocaleDateString() : "—"}</span>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div><b>${p.monto.toFixed(2)}</b></div>
-                  <span className={`pill ${p.estado === "aprobado" ? "green" : p.estado === "rechazado" ? "red" : "amber"}`}>
-                    {p.estado === "aprobado" ? "Aprobado" : p.estado === "rechazado" ? "Rechazado" : "En revisión"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {mostrarPagar && (
@@ -1076,7 +1079,7 @@ function MiCuentaPanel() {
             <div style={{ marginBottom: 14 }}>
               <label className="small muted" style={{ display: "block", marginBottom: 4 }}>Método de pago</label>
               <button disabled style={{ width: "100%", opacity: 0.5 }} title="Próximamente">
-                🔒 Pasarela de pago (próximamente)
+                <Lock size={16} /> Pasarela de pago (próximamente)
               </button>
               <p className="muted small" style={{ marginTop: 6 }}>
                 Por ahora, subí el comprobante de tu depósito o transferencia — tu desarrollador lo revisa y activa tu servicio.
