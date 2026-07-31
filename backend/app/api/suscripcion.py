@@ -104,6 +104,27 @@ def subir_plan(usuario_actual):
     return jsonify({"data": residencial.to_dict(incluir_stats=True)})
 
 
+@suscripcion_bp.get("/comprobantes/<nombre_archivo>")
+@roles_required("desarrollador")
+def ver_comprobante_suscripcion(usuario_actual, nombre_archivo):
+    """
+    Día 50, Etapa 8 — el desarrollador ve el comprobante antes de
+    aprobar/rechazar. Exclusivo desarrollador (es él quien revisa estos
+    pagos, no hay staff de residencial de por medio acá).
+
+    Mismo criterio de seguridad que ver_comprobante en cuotas.py: solo
+    se sirve si el nombre corresponde a un SuscripcionPago realmente
+    registrado — nunca un archivo arbitrario de la carpeta aunque
+    alguien adivine o construya un nombre.
+    """
+    from app.utils.archivos import servir_archivo_seguro
+    pago = SuscripcionPago.query.filter_by(comprobante_archivo=nombre_archivo).first()
+    if not pago:
+        return jsonify({"error": {"code": "no_encontrado",
+                                  "message": "Comprobante no encontrado"}}), 404
+    return servir_archivo_seguro(_carpeta_pagos_suscripcion(), nombre_archivo)
+
+
 @suscripcion_bp.get("/mi-estado")
 @roles_required("admin", "super_admin")
 def mi_estado(usuario_actual):

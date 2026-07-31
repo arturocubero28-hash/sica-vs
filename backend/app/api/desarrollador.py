@@ -14,6 +14,7 @@ from app.models.visita import AccesoFisico, EventoAcceso
 from app.models.dispositivo import Dispositivo, generar_token, hash_token
 from app.models.residencial import Residencial
 from app.models.plan import Plan
+from app.models.suscripcion_pago import SuscripcionPago
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
 from app.utils.passwords import generar_password_temporal
@@ -811,24 +812,85 @@ def editar_residencial(usuario_actual, res_uuid):
     return jsonify({"data": residencial.to_dict(incluir_stats=True)})
 
 
+def _extender_servicio_30_dias(residencial):
+    """
+    Día 50 — un pago (por cualquier vía: botón directo del desarrollador,
+    o aprobar un comprobante) siempre extiende el servicio 30 días desde
+    HOY, no desde la fecha_proximo_pago vieja — así, si una residencial
+    estuvo suspendida por atraso, el servicio se reactiva contando 30
+    días completos desde este momento, no desde una fecha vencida hace
+    tiempo. Un solo lugar para esta regla, para que no se desincronice
+    entre los distintos puntos donde se aplica.
+    """
+    residencial.fecha_proximo_pago = dt.date.today() + dt.timedelta(days=30)
+
+
 @dev_bp.post("/residenciales/<uuid:res_uuid>/registrar-pago")
 @roles_required("desarrollador")
 def registrar_pago_residencial(usuario_actual, res_uuid):
-    """
-    Día 50 — el desarrollador aprieta esto el día que el cliente le paga.
-    Cada pago = 30 días de servicio, contados desde HOY (el día real del
-    pago), no desde la fecha_proximo_pago vieja — así, si una residencial
-    estuvo suspendida por atraso y recién ahora paga, el servicio se
-    reactiva contando 30 días completos desde este momento, no desde una
-    fecha vencida hace tiempo.
-    """
+    """Botón directo del desarrollador (pago recibido por fuera del
+    sistema — efectivo, etc.) — ver _extender_servicio_30_dias()."""
     residencial = Residencial.query.filter_by(uuid_publico=res_uuid).first()
     if not residencial:
         return jsonify({"error": {"code": "no_encontrada",
                                   "message": "Residencial no encontrada"}}), 404
-    residencial.fecha_proximo_pago = dt.date.today() + dt.timedelta(days=30)
+    _extender_servicio_30_dias(residencial)
     db.session.commit()
     return jsonify({"data": residencial.to_dict(incluir_stats=True)})
+
+
+# ── Revisión de pagos de suscripción (Etapa 8) ──────────────────────────────
+@dev_bp.get("/suscripcion-pagos")
+@roles_required("desarrollador")
+def listar_pagos_suscripcion(usuario_actual):
+    """
+    Todos los pagos de suscripción de todas las residenciales — filtrable
+    por estado (?estado=en_revision). Sin filtro, trae todos (para poder
+    ver el historial completo, no solo lo pendiente).
+    """
+    q = SuscripcionPago.query
+    estado_filtro = request.args.get("estado")
+    if estado_filtro:
+        q = q.filter_by(estado=estado_filtro)
+    pagos = q.order_by(SuscripcionPago.created_at.desc()).all()
+    return jsonify({"data": [p.to_dict() for p in pagos]})
+
+
+@dev_bp.post("/suscripcion-pagos/<uuid:pago_uuid>/revisar")
+@roles_required("desarrollador")
+def revisar_pago_suscripcion(usuario_actual, pago_uuid):
+    """
+    Aprobar o rechazar un comprobante de pago de suscripción. Al
+    aprobar, extiende el servicio 30 días (misma regla que el botón
+    directo) — al rechazar, NO se toca la fecha, solo queda registrado
+    el motivo para que el admin lo vea en su historial.
+    """
+    pago = SuscripcionPago.query.filter_by(uuid_publico=pago_uuid).first()
+    if not pago:
+        return jsonify({"error": {"code": "no_encontrado", "message": "Pago no encontrado"}}), 404
+    if pago.estado != "en_revision":
+        return jsonify({"error": {"code": "ya_revisado",
+                                  "message": f"Este pago ya fue {pago.estado}"}}), 400
+
+    body = request.get_json(silent=True) or {}
+    decision = body.get("decision")
+    if decision not in ("aprobar", "rechazar"):
+        return jsonify({"error": {"code": "decision_invalida",
+                                  "message": "decision debe ser 'aprobar' o 'rechazar'"}}), 400
+
+    if decision == "aprobar":
+        pago.estado = "aprobado"
+        if pago.residencial:
+            _extender_servicio_30_dias(pago.residencial)
+    else:
+        pago.estado = "rechazado"
+        notas = (body.get("notas_rechazo") or "").strip()
+        pago.notas_rechazo = notas or None
+
+    pago.revisado_por = usuario_actual.id
+    pago.revisado_en = dt.datetime.utcnow()
+    db.session.commit()
+    return jsonify({"data": pago.to_dict()})
 
 
 @dev_bp.get("/residenciales/<uuid:res_uuid>/usuarios")

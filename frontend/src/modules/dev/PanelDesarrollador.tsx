@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devEditarResidencial, devRegistrarPagoResidencial, devUsuariosDeResidencial, devCrearResidencial, devPlanes, devCrearPlan, devEditarPlan, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO, type PlanDTO } from "../../api/client";
-import { AlertTriangle, BarChart3, Building2, Construction, Cpu, Key, Layers, Lock, Monitor, Radio, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devEditarResidencial, devRegistrarPagoResidencial, devUsuariosDeResidencial, devCrearResidencial, devPlanes, devCrearPlan, devEditarPlan, devPagosSuscripcion, devRevisarPagoSuscripcion, urlComprobanteSuscripcion, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO, type PlanDTO, type SuscripcionPagoDTO } from "../../api/client";
+import { AlertTriangle, BarChart3, Building2, Construction, Cpu, Key, Layers, Lock, Monitor, Radio, Receipt, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
   const [m, setM] = useState<DevMetricasDTO | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad" | "trancas" | "pis" | "residenciales" | "planes">("salud");
+  const [tab, setTab] = useState<"salud" | "logs" | "codigo" | "seguridad" | "trancas" | "pis" | "residenciales" | "planes" | "pagos">("salud");
   // Filtros de logs
   const [email, setEmail] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -81,6 +81,7 @@ export function PanelDesarrollador() {
         <button className={`hist-tab ${tab === "pis" ? "on" : ""}`} onClick={() => setTab("pis")}><Router size={16} /> Controladores de acceso</button>
         <button className={`hist-tab ${tab === "residenciales" ? "on" : ""}`} onClick={() => setTab("residenciales")}><Building2 size={16} /> Residenciales</button>
         <button className={`hist-tab ${tab === "planes" ? "on" : ""}`} onClick={() => setTab("planes")}><Layers size={16} /> Planes</button>
+        <button className={`hist-tab ${tab === "pagos" ? "on" : ""}`} onClick={() => setTab("pagos")}><Receipt size={16} /> Pagos de suscripción</button>
       </div>
 
       {tab === "salud" && (
@@ -256,6 +257,7 @@ export function PanelDesarrollador() {
       {tab === "pis" && <ConfigPis />}
       {tab === "residenciales" && <PanelResidenciales />}
       {tab === "planes" && <ConfigPlanes />}
+      {tab === "pagos" && <ConfigPagosSuscripcion />}
     </div>
   );
 }
@@ -2000,6 +2002,149 @@ function ConfigPlanes() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ── Revisión de pagos de suscripción (Día 50, Etapa 8) ──────────────────────
+function ConfigPagosSuscripcion() {
+  const [pagos, setPagos] = useState<SuscripcionPagoDTO[] | null>(null);
+  const [filtro, setFiltro] = useState<"en_revision" | "todos">("en_revision");
+  const [procesando, setProcesando] = useState<string | null>(null);
+  const [rechazando, setRechazando] = useState<string | null>(null);
+  const [notaRechazo, setNotaRechazo] = useState("");
+  const [msg, setMsg] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
+
+  const cargar = useCallback(() => {
+    devPagosSuscripcion(filtro === "en_revision" ? "en_revision" : undefined)
+      .then(setPagos).catch(() => setPagos([]));
+  }, [filtro]);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  async function aprobar(p: SuscripcionPagoDTO) {
+    setProcesando(p.id);
+    setMsg(null);
+    try {
+      await devRevisarPagoSuscripcion(p.id, "aprobar");
+      setMsg({ id: p.id, texto: `Pago aprobado — servicio extendido 30 días.`, ok: true });
+      cargar();
+    } catch (err: any) {
+      setMsg({ id: p.id, texto: err?.message || "No se pudo aprobar", ok: false });
+    } finally {
+      setProcesando(null);
+    }
+  }
+
+  async function confirmarRechazo(p: SuscripcionPagoDTO) {
+    setProcesando(p.id);
+    setMsg(null);
+    try {
+      await devRevisarPagoSuscripcion(p.id, "rechazar", notaRechazo.trim() || undefined);
+      setRechazando(null);
+      setNotaRechazo("");
+      setMsg({ id: p.id, texto: "Pago rechazado.", ok: true });
+      cargar();
+    } catch (err: any) {
+      setMsg({ id: p.id, texto: err?.message || "No se pudo rechazar", ok: false });
+    } finally {
+      setProcesando(null);
+    }
+  }
+
+  if (pagos === null) return <p className="muted" style={{ padding: 20 }}>Cargando pagos…</p>;
+
+  return (
+    <div>
+      <div className="dev-trancas-aviso">
+        <strong><Receipt size={16} /> Pagos de suscripción.</strong> Acá revisás los comprobantes que suben los
+        admins al pagar su plan. Al <strong>aprobar</strong>, el servicio se extiende 30 días desde hoy
+        automáticamente — no hace falta tocar nada más. Los cambios de plan (upgrade) ya se aplican solos al
+        momento de pedirlos, no pasan por acá.
+      </div>
+
+      <div className="dev-trancas-barra">
+        <span className="dev-trancas-total">{pagos.length} pago(s)</span>
+        <div className="dev-modo-selector" style={{ maxWidth: 320 }}>
+          <button type="button" className={`dev-modo-btn ${filtro === "en_revision" ? "sel" : ""}`}
+            onClick={() => setFiltro("en_revision")}>
+            <span className="dev-modo-btn-texto"><strong>Pendientes</strong></span>
+          </button>
+          <button type="button" className={`dev-modo-btn ${filtro === "todos" ? "sel" : ""}`}
+            onClick={() => setFiltro("todos")}>
+            <span className="dev-modo-btn-texto"><strong>Todos</strong></span>
+          </button>
+        </div>
+      </div>
+
+      {pagos.length === 0 ? (
+        <p className="muted" style={{ padding: 20 }}>
+          {filtro === "en_revision" ? "No hay pagos pendientes de revisión." : "Todavía no hay pagos registrados."}
+        </p>
+      ) : (
+        <div className="dev-trancas-grid">
+          {pagos.map((p) => (
+            <div key={p.id} className="dev-tranca-card">
+              <div className="dev-tranca-head">
+                <span className="dev-tranca-nombre">{p.residencial?.nombre || "—"}</span>
+                <span className={`dev-tranca-badge ${p.estado === "aprobado" ? "ok" : p.estado === "rechazado" ? "sin" : ""}`}
+                  style={p.estado === "en_revision" ? { background: "#fef2d5", color: "#92651c" } : undefined}>
+                  {p.estado === "aprobado" ? "Aprobado" : p.estado === "rechazado" ? "Rechazado" : "En revisión"}
+                </span>
+              </div>
+              <div className="dev-pi-info">
+                <div><span>Plan:</span> {p.plan?.nombre || "—"}{p.es_upgrade && <span className="pill amber" style={{ marginLeft: 6 }}>upgrade</span>}</div>
+                <div><span>Monto:</span> ${p.monto.toFixed(2)}</div>
+                <div><span>Subido por:</span> {p.subido_por || "—"}</div>
+                <div><span>Fecha:</span> {p.created_at ? new Date(p.created_at).toLocaleString() : "—"}</div>
+                {p.revisado_por && (
+                  <div><span>Revisado por:</span> {p.revisado_por} — {p.revisado_en ? new Date(p.revisado_en).toLocaleDateString() : ""}</div>
+                )}
+                {p.notas_rechazo && <div><span>Motivo de rechazo:</span> {p.notas_rechazo}</div>}
+              </div>
+
+              {p.comprobante_archivo && (
+                <a href={urlComprobanteSuscripcion(p.comprobante_archivo)} target="_blank" rel="noreferrer"
+                  className="dev-tranca-toggle on" style={{ display: "block", textAlign: "center", marginBottom: 8, textDecoration: "none" }}>
+                  Ver comprobante ↗
+                </a>
+              )}
+
+              {msg && msg.id === p.id && (
+                <div className={`dev-tranca-msg ${msg.ok ? "ok" : "err"}`}>{msg.texto}</div>
+              )}
+
+              {p.estado === "en_revision" && (
+                rechazando === p.id ? (
+                  <div className="dev-tranca-campos" style={{ flexDirection: "column" }}>
+                    <label style={{ width: "100%" }}>
+                      <span>Motivo del rechazo (opcional)</span>
+                      <input type="text" value={notaRechazo} onChange={(e) => setNotaRechazo(e.target.value)}
+                        placeholder="Ej: comprobante ilegible" />
+                    </label>
+                    <div className="dev-pi-acciones" style={{ width: "100%" }}>
+                      <button className="dev-tranca-toggle off" disabled={procesando === p.id} onClick={() => confirmarRechazo(p)}>
+                        {procesando === p.id ? "Rechazando…" : "Confirmar rechazo"}
+                      </button>
+                      <button className="dev-tranca-toggle on" onClick={() => { setRechazando(null); setNotaRechazo(""); }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="dev-pi-acciones">
+                    <button className="dev-tranca-toggle on" disabled={procesando === p.id} onClick={() => aprobar(p)}>
+                      {procesando === p.id ? "Aprobando…" : "✓ Aprobar"}
+                    </button>
+                    <button className="dev-tranca-toggle off" disabled={procesando === p.id} onClick={() => setRechazando(p.id)}>
+                      Rechazar
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

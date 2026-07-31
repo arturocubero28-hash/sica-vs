@@ -886,6 +886,20 @@ export const getPlanesDisponibles = () => request<PlanDTO[]>("/suscripcion/plane
 export const subirPlan = (planId: string) =>
   request<SuscripcionEstadoDTO>("/suscripcion/subir-plan", { method: "POST", body: JSON.stringify({ plan_id: planId }) });
 export const getMisPagosSuscripcion = () => request<SuscripcionPagoDTO[]>("/suscripcion/mis-pagos");
+
+// Día 50, Etapa 8 — el desarrollador revisando pagos de suscripción
+// (distinto de mis-pagos, que es lo que ve el ADMIN de sus propios pagos).
+export const devPagosSuscripcion = (estado?: string) =>
+  request<SuscripcionPagoDTO[]>(`/dev/suscripcion-pagos${estado ? `?estado=${estado}` : ""}`);
+export const devRevisarPagoSuscripcion = (id: string, decision: "aprobar" | "rechazar", notasRechazo?: string) =>
+  request<SuscripcionPagoDTO>(`/dev/suscripcion-pagos/${id}/revisar`, {
+    method: "POST", body: JSON.stringify({ decision, notas_rechazo: notasRechazo }),
+  });
+export function urlComprobanteSuscripcion(nombreArchivo: string): string {
+  const token = getToken();
+  return `${API_URL}/suscripcion/comprobantes/${nombreArchivo}?_auth=${token}`;
+}
+
 export async function pagarSuscripcion(archivo: File, planId?: string): Promise<SuscripcionPagoDTO> {
   const token = getToken();
   const form = new FormData();
