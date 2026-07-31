@@ -61,6 +61,7 @@ def create_app(config_class=Config):
     from app.models.residencial import Residencial  # noqa: F401  bases multi-residencial (Día 37)
     from app.models.plan import Plan  # noqa: F401  planes de suscripción (Día 50)
     from app.models.archivo_residencial import ArchivoResidencial  # noqa: F401  cuota de almacenamiento (Día 50)
+    from app.models.suscripcion_pago import SuscripcionPago  # noqa: F401  pagos de suscripción (Día 50)
     from app.models.dispositivo_movil import DispositivoMovil  # noqa: F401  tokens FCM push
     from app.models.cuenta import ConfigResidencial  # noqa: F401  config global residencial
 
@@ -104,6 +105,9 @@ def create_app(config_class=Config):
 
     from app.api.recibos import recibos_bp
     app.register_blueprint(recibos_bp, url_prefix="/api/v1/recibos")
+
+    from app.api.suscripcion import suscripcion_bp
+    app.register_blueprint(suscripcion_bp, url_prefix="/api/v1/suscripcion")
 
     from app.api.acceso import acceso_bp
     app.register_blueprint(acceso_bp, url_prefix="/api/v1/acceso")
