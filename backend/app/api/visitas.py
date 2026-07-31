@@ -20,8 +20,7 @@ from app.extensions import db
 from app.models.visita import Visita, CodigoQR, EventoAcceso, AccesoFisico
 from app.models.cuenta import Cuenta, Residente
 from app.auth.security import token_required, roles_required
-from app.services.cuota_almacenamiento import guardar_foto_con_cuota
-from app.services.storage import eliminar_archivo
+from app.services.cuota_almacenamiento import guardar_con_cuota, deshacer_registro
 
 visitas_bp = Blueprint("visitas", __name__)
 
@@ -76,8 +75,8 @@ def _guardar_foto_multipart(archivo, prefijo, residencial_id=None):
         if ext not in EXTENSIONES_IMAGEN_VALIDAS:
             ext = "jpg"
         contenido_tipo = archivo.mimetype or "image/jpeg"
-        clave = guardar_foto_con_cuota(
-            archivo.stream, residencial_id, subcarpeta="",
+        clave = guardar_con_cuota(
+            archivo.stream, residencial_id, tipo="acceso", subcarpeta="",
             content_type=contenido_tipo, extension=ext,
         )
         if not clave:
@@ -104,8 +103,8 @@ def _guardar_foto_base64(b64_data, prefijo, residencial_id=None):
         if not img_bytes:
             raise ErrorGuardadoFoto(f"La foto de {prefijo} llegó vacía")
         import io
-        clave = guardar_foto_con_cuota(
-            io.BytesIO(img_bytes), residencial_id, subcarpeta="",
+        clave = guardar_con_cuota(
+            io.BytesIO(img_bytes), residencial_id, tipo="acceso", subcarpeta="",
             content_type="image/jpeg", extension="jpg",
         )
         if not clave:
@@ -118,17 +117,6 @@ def _guardar_foto_base64(b64_data, prefijo, residencial_id=None):
         raise ErrorGuardadoFoto(f"No se pudo guardar la foto de {prefijo}") from e
 
 
-def _borrar_ruta(clave):
-    """PHOTO-15: borra una foto ya guardada por su clave, sin fallar si no existe.
-    Día 50: usa la abstracción de storage (eliminar_archivo), no os.remove()
-    directo — funciona igual en modo local o en modo Spaces."""
-    if not clave:
-        return
-    try:
-        eliminar_archivo(clave)
-    except Exception as e:
-        current_app.logger.warning("PHOTO-15: no se pudo limpiar %s: %s", clave, e)
-
 
 def _borrar_fotos(*claves):
     """
@@ -136,26 +124,17 @@ def _borrar_fotos(*claves):
     revierte. Sin esto, un fallo a mitad de camino deja huérfanos que
     nadie referencia y nadie borra nunca.
 
-    Día 50: usa eliminar_archivo() (funciona en local o en Spaces, no
-    solo /app/uploads), y además deshace el registro de cuota — si no
-    se revirtiera también el FotoAcceso y el contador de la residencial,
-    un rollback dejaría "fantasmas" contando espacio que en realidad se
-    liberó.
+    Día 50: usa deshacer_registro() (services/cuota_almacenamiento.py) —
+    centraliza en un solo lugar borrar el archivo (local o Spaces),
+    quitar su registro de ArchivoResidencial, y descontar del contador
+    de la residencial. Sin esto, un rollback dejaría "fantasmas"
+    contando espacio que en realidad se liberó.
     """
     for clave in claves:
         if not clave:
             continue
         try:
-            eliminar_archivo(clave)
-            from app.models.foto_acceso import FotoAcceso
-            registro = FotoAcceso.query.filter_by(clave=clave).first()
-            if registro:
-                residencial = registro.residencial
-                if residencial:
-                    residencial.almacenamiento_usado_bytes = max(
-                        0, (residencial.almacenamiento_usado_bytes or 0) - registro.tamano_bytes)
-                db.session.delete(registro)
-                db.session.commit()
+            deshacer_registro(clave)
         except Exception as e:
             current_app.logger.warning("PHOTO-15: no se pudo limpiar %s: %s", clave, e)
 

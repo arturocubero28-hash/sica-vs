@@ -60,7 +60,7 @@ def create_app(config_class=Config):
     from app.models.dispositivo import Dispositivo  # noqa: F401  Raspberry Pi de accesos
     from app.models.residencial import Residencial  # noqa: F401  bases multi-residencial (Día 37)
     from app.models.plan import Plan  # noqa: F401  planes de suscripción (Día 50)
-    from app.models.foto_acceso import FotoAcceso  # noqa: F401  cuota de almacenamiento (Día 50)
+    from app.models.archivo_residencial import ArchivoResidencial  # noqa: F401  cuota de almacenamiento (Día 50)
     from app.models.dispositivo_movil import DispositivoMovil  # noqa: F401  tokens FCM push
     from app.models.cuenta import ConfigResidencial  # noqa: F401  config global residencial
 
@@ -296,6 +296,18 @@ def create_app(config_class=Config):
             "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS dias_gracia INTEGER NOT NULL DEFAULT 5",
             "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS almacenamiento_usado_bytes BIGINT NOT NULL DEFAULT 0",
             "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS upgrade_solicitado BOOLEAN NOT NULL DEFAULT false",
+            # Día 50 (mismo día, generalización): FotoAcceso -> ArchivoResidencial
+            # -- el usuario decidió que los comprobantes de pago comparten el
+            # mismo pozo de cuota que las fotos de acceso. Si la tabla vieja
+            # ya existe (se creó con el nombre anterior en un restart previo),
+            # se renombra preservando cualquier fila que ya tuviera; si nunca
+            # existió (instalación nueva), este RENAME falla silenciosamente
+            # (capturado por el try/except de este mismo loop) y
+            # db.create_all() más arriba ya crea la tabla completa con el
+            # nombre nuevo, columnas incluidas.
+            "ALTER TABLE IF EXISTS fotos_acceso RENAME TO archivos_residencial",
+            "ALTER TABLE archivos_residencial ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) NOT NULL DEFAULT 'acceso'",
+            "ALTER TABLE archivos_residencial ADD COLUMN IF NOT EXISTS pago_id BIGINT REFERENCES pagos(id)",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de

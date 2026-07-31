@@ -22,6 +22,7 @@ from app.models.cuenta import Cuota, Pago, Residente, Cuenta, ComprobantePago
 from app.auth.security import token_required, roles_required
 from app.utils.archivos import guardar_imagen_segura, servir_archivo_seguro, EXT_DOCUMENTO
 from app.utils import dinero
+from app.services.cuota_almacenamiento import registrar_archivo_existente, vincular_pago
 
 cuotas_bp = Blueprint("cuotas", __name__)
 
@@ -215,11 +216,19 @@ def subir_comprobante(usuario_actual, uuid_cuota):
     # Si alguno falla, no se guarda nada a medias — se informa cuál fue.
     nombres_archivos = []
     for i, archivo in enumerate(archivos_subidos):
+        # Día 50 — sistema de suscripciones: tamaño ANTES de guardar (el
+        # stream puede quedar agotado después, según el backend de
+        # storage) para poder registrarlo contra la cuota de la residencial.
+        archivo.stream.seek(0, os.SEEK_END)
+        tam = archivo.stream.tell()
+        archivo.stream.seek(0)
+
         nombre_archivo, error = guardar_imagen_segura(archivo, _carpeta_comprobantes(), EXT_DOCUMENTO)
         if error:
             return jsonify({"error": {"code": "FORMATO_INVALIDO",
                                       "message": f"Comprobante {i + 1}: {error}"}}), 400
         nombres_archivos.append(nombre_archivo)
+        registrar_archivo_existente(usuario_actual.residencial_id, nombre_archivo, tam, tipo="comprobante")
 
     pago = Pago(
         cuota_id=cuota.id,
@@ -235,6 +244,7 @@ def subir_comprobante(usuario_actual, uuid_cuota):
 
     for nombre_archivo in nombres_archivos:
         db.session.add(ComprobantePago(pago_id=pago.id, archivo=nombre_archivo))
+        vincular_pago(nombre_archivo, pago.id)
 
     cuota.estado = "en_revision"
     db.session.commit()
@@ -272,10 +282,15 @@ def subir_comprobante_abono(usuario_actual, uuid_abono):
         return jsonify({"error": {"code": "MONTO_INVALIDO", "message": "Indicá un monto válido"}}), 400
 
     referencia = request.form.get("referencia", "")[:120]
+    archivo_comprobante = request.files["comprobante"]
+    archivo_comprobante.stream.seek(0, os.SEEK_END)
+    tam = archivo_comprobante.stream.tell()
+    archivo_comprobante.stream.seek(0)
     nombre_archivo, error = guardar_imagen_segura(
-        request.files["comprobante"], _carpeta_comprobantes(), EXT_DOCUMENTO)
+        archivo_comprobante, _carpeta_comprobantes(), EXT_DOCUMENTO)
     if error:
         return jsonify({"error": {"code": "FORMATO_INVALIDO", "message": error}}), 400
+    registrar_archivo_existente(usuario_actual.residencial_id, nombre_archivo, tam, tipo="comprobante")
 
     pago = Pago(
         cuota_id=None,
@@ -289,6 +304,7 @@ def subir_comprobante_abono(usuario_actual, uuid_abono):
     )
     db.session.add(pago)
     db.session.commit()
+    vincular_pago(nombre_archivo, pago.id)
     return jsonify({"data": pago.to_dict()}), 201
 @cuotas_bp.get("/comprobantes/<nombre_archivo>")
 @token_required
