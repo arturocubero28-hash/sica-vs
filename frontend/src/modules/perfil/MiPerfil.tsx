@@ -898,30 +898,6 @@ function MiResidencialPanel() {
   );
 }
 
-// Día 50, Etapa 7 — bytes -> texto legible. Duplicado a propósito de la
-// versión que ya existe en el panel dev (PanelDesarrollador.tsx) — este
-// módulo es de cara al cliente, aquel es interno; mejor no atarlos con
-// un import cruzado entre las dos partes de la app por una función tan
-// chica.
-function formatearBytes(bytes: number | null | undefined): string {
-  if (bytes == null) return "—";
-  if (bytes === 0) return "0 MB";
-  const unidades = ["B", "KB", "MB", "GB", "TB"];
-  let i = 0;
-  let valor = bytes;
-  while (valor >= 1024 && i < unidades.length - 1) {
-    valor /= 1024;
-    i++;
-  }
-  return `${valor.toFixed(i > 0 ? 1 : 0)} ${unidades[i]}`;
-}
-
-const ESTADO_LABEL: Record<string, { texto: string; clase: string }> = {
-  en_revision: { texto: "En revisión", clase: "pill-amber" },
-  aprobado: { texto: "Aprobado", clase: "pill-verde" },
-  rechazado: { texto: "Rechazado", clase: "pill-rojo" },
-};
-
 function MiCuentaPanel() {
   const [estado, setEstado] = useState<SuscripcionEstadoDTO | null>(null);
   const [pagos, setPagos] = useState<SuscripcionPagoDTO[]>([]);
