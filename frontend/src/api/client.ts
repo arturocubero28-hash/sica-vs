@@ -858,6 +858,47 @@ export const devEditarResidencial = (id: string, body: Partial<{
 }>) => request<ResidencialDTO>(`/dev/residenciales/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const devRegistrarPagoResidencial = (id: string) =>
   request<ResidencialDTO>(`/dev/residenciales/${id}/registrar-pago`, { method: "POST" });
+
+// Día 50, Etapa 7 — lo que el ADMIN ve/hace de su propia suscripción
+// (distinto de todo lo anterior, que es exclusivo del desarrollador).
+export interface SuscripcionEstadoDTO extends ResidencialDTO {
+  fecha_suspension: string | null;
+  fecha_alta: string | null;
+}
+export interface SuscripcionPagoDTO {
+  id: string;
+  residencial: { id: string; nombre: string } | null;
+  plan: PlanDTO | null;
+  monto: number;
+  es_upgrade: boolean;
+  metodo: "comprobante" | "pasarela";
+  comprobante_archivo: string | null;
+  referencia_pasarela: string | null;
+  estado: "en_revision" | "aprobado" | "rechazado";
+  notas_rechazo: string | null;
+  subido_por: string | null;
+  revisado_por: string | null;
+  revisado_en: string | null;
+  created_at: string | null;
+}
+export const getMiSuscripcion = () => request<SuscripcionEstadoDTO>("/suscripcion/mi-estado");
+export const getPlanesDisponibles = () => request<PlanDTO[]>("/suscripcion/planes-disponibles");
+export const getMisPagosSuscripcion = () => request<SuscripcionPagoDTO[]>("/suscripcion/mis-pagos");
+export async function pagarSuscripcion(archivo: File, planId?: string): Promise<SuscripcionPagoDTO> {
+  const token = getToken();
+  const form = new FormData();
+  form.append("comprobante", archivo);
+  if (planId) form.append("plan_id", planId);
+  const res = await fetch(`${API_URL}/suscripcion/pagar`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error?.message || "Error al subir el comprobante");
+  return json.data;
+}
+
 export const devUsuariosDeResidencial = (uuid: string) =>
   request<{ residencial: ResidencialDTO; staff: UsuarioResidencialDTO[]; residentes_count: number }>(
     `/dev/residenciales/${uuid}/usuarios`);

@@ -1979,6 +1979,18 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .perfil-info-item { display: flex; flex-direction: column; gap: 2px; }
 .perfil-info-item b { color: var(--marca-azul); font-size: 15px; }
 
+/* Día 50, Etapa 7 — "Mi cuenta" (suscripción), a diferencia de
+   perfil-info-grid (una columna, pensada para pocos datos) esta es una
+   grilla real de 2 columnas, para los 8 datos de suscripción sin que la
+   tarjeta quede demasiado alta. */
+.perfil-cuenta { max-width: 640px; }
+.perfil-cuenta-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px;
+}
+@media (max-width: 560px) {
+  .perfil-cuenta-grid { grid-template-columns: 1fr; }
+}
+
 /* ============================================================
    LECTOR DE TARJETA RFID
    ============================================================ */
@@ -3299,6 +3311,7 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 }
 .msg-banner-ok  { background: #eafaf1; color: #166534; border: 1px solid #86efac; }
 .msg-banner-err { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
+.msg-banner-warn { background: #fff2dd; color: #9a6700; border: 1px solid #fcd48a; }
 .msg-banner-close {
   background: none; border: none; color: inherit; cursor: pointer;
   font-size: 15px; padding: 0; opacity: .65; flex-shrink: 0;

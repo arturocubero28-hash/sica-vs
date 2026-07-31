@@ -4,8 +4,10 @@ import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesion
   getConfigResidencial, setConfigResidencial,
   getMiResidencial, setMiResidencial, subirLogoResidencial, urlLogoResidencial,
   listarPuntosAcceso, crearPuntoAcceso, editarPuntoAcceso, historialCountPunto,
+  getMiSuscripcion, getPlanesDisponibles, getMisPagosSuscripcion, pagarSuscripcion,
   type Usuario, type SesionDTO, type CredencialWebAuthnDTO, type ConfigResidencial,
-  type ResidencialDTO, type PuntoAccesoDTO } from "../../api/client";
+  type ResidencialDTO, type PuntoAccesoDTO, type SuscripcionEstadoDTO, type PlanDTO,
+  type SuscripcionPagoDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
 import { aplicarColoresResidencial } from "../../utils/colores";
 import { Fingerprint } from "lucide-react";
@@ -19,12 +21,16 @@ const COLOR_SECUNDARIO_FABRICA = "#F48723";
 
 export function MiPerfil() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [tab, setTab] = useState<"perfil" | "config" | "accesos">("perfil");
+  const [tab, setTab] = useState<"perfil" | "config" | "accesos" | "cuenta">("perfil");
   useEffect(() => { getMe().then(setUsuario).catch(() => {}); }, []);
 
   if (!usuario) return <p className="muted">Cargando…</p>;
 
   const esAdmin = ["admin", "super_admin", "supervisor"].includes(usuario.rol);
+  // Día 50, Etapa 7: la suscripción es del DUEÑO de la residencial, no de
+  // un supervisor operativo — mismo criterio que ya usa el backend
+  // (roles_required admin/super_admin en /suscripcion, sin supervisor).
+  const esDueno = ["admin", "super_admin"].includes(usuario.rol);
 
   const rolLabel: Record<string, string> = {
     admin: "Administrador", super_admin: "Super Admin", supervisor: "Supervisor", guardia: "Guardia", residente: "Residente",
@@ -42,6 +48,10 @@ export function MiPerfil() {
             onClick={() => setTab("config")}>⚙ Configuraciones</button>
           <button className={`tab-btn ${tab === "accesos" ? "active" : ""}`}
             onClick={() => setTab("accesos")}>🚧 Puntos de acceso</button>
+          {esDueno && (
+            <button className={`tab-btn ${tab === "cuenta" ? "active" : ""}`}
+              onClick={() => setTab("cuenta")}>💳 Mi cuenta</button>
+          )}
         </div>
       )}
 
@@ -66,6 +76,7 @@ export function MiPerfil() {
 
       {tab === "config" && esAdmin && <ConfigPanel />}
       {tab === "accesos" && esAdmin && <PuntosAccesoPanel />}
+      {tab === "cuenta" && esDueno && <MiCuentaPanel />}
     </div>
   );
 }
@@ -885,4 +896,229 @@ function MiResidencialPanel() {
       {error && <p className="err small" style={{ marginTop: 10 }}>{error}</p>}
     </div>
   );
+}
+
+// Día 50, Etapa 7 — bytes -> texto legible. Duplicado a propósito de la
+// versión que ya existe en el panel dev (PanelDesarrollador.tsx) — este
+// módulo es de cara al cliente, aquel es interno; mejor no atarlos con
+// un import cruzado entre las dos partes de la app por una función tan
+// chica.
+function formatearBytes(bytes: number | null | undefined): string {
+  if (bytes == null) return "—";
+  if (bytes === 0) return "0 MB";
+  const unidades = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  let valor = bytes;
+  while (valor >= 1024 && i < unidades.length - 1) {
+    valor /= 1024;
+    i++;
+  }
+  return `${valor.toFixed(i > 0 ? 1 : 0)} ${unidades[i]}`;
+}
+
+const ESTADO_LABEL: Record<string, { texto: string; clase: string }> = {
+  en_revision: { texto: "En revisión", clase: "pill-amber" },
+  aprobado: { texto: "Aprobado", clase: "pill-verde" },
+  rechazado: { texto: "Rechazado", clase: "pill-rojo" },
+};
+
+function MiCuentaPanel() {
+  const [estado, setEstado] = useState<SuscripcionEstadoDTO | null>(null);
+  const [pagos, setPagos] = useState<SuscripcionPagoDTO[]>([]);
+  const [planes, setPlanes] = useState<PlanDTO[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [mostrarPagar, setMostrarPagar] = useState(false);
+  const [planElegido, setPlanElegido] = useState("");
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [subiendo, setSubiendo] = useState(false);
+  const [errorPago, setErrorPago] = useState("");
+  const [msgOk, setMsgOk] = useState("");
+
+  function cargar() {
+    setCargando(true);
+    Promise.all([
+      getMiSuscripcion().catch(() => null),
+      getMisPagosSuscripcion().catch(() => []),
+      getPlanesDisponibles().catch(() => []),
+    ]).then(([e, p, pl]) => {
+      setEstado(e);
+      setPagos(p);
+      setPlanes(pl);
+      setCargando(false);
+    });
+  }
+  useEffect(() => { cargar(); }, []);
+
+  function abrirPagar() {
+    setPlanElegido(estado?.plan?.id || "");
+    setArchivo(null);
+    setErrorPago("");
+    setMostrarPagar(true);
+  }
+
+  async function confirmarPago() {
+    if (!archivo) { setErrorPago("Adjuntá el comprobante del pago"); return; }
+    setSubiendo(true);
+    setErrorPago("");
+    try {
+      const planParaEnviar = planElegido && planElegido !== estado?.plan?.id ? planElegido : undefined;
+      await pagarSuscripcion(archivo, planParaEnviar);
+      setMostrarPagar(false);
+      setMsgOk("Comprobante enviado — tu desarrollador lo va a revisar en breve.");
+      cargar();
+    } catch (err: any) {
+      setErrorPago(err?.message || "No se pudo subir el comprobante");
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  if (cargando) return <p className="muted">Cargando…</p>;
+
+  // A pedido del usuario: si no hay afiliación a un plan, no se muestra
+  // nada de esta sección (ni el resumen, ni el botón de pagar).
+  if (!estado || !estado.plan) {
+    return (
+      <div className="perfil-cuenta">
+        <p className="muted">
+          Tu residencial todavía no tiene un plan de suscripción asignado. Contactá a tu
+          desarrollador si tenés dudas sobre tu servicio.
+        </p>
+      </div>
+    );
+  }
+
+  const hoy = new Date();
+  const fechaSuspension = estado.fecha_suspension ? new Date(estado.fecha_suspension) : null;
+  const diasParaSuspension = fechaSuspension
+    ? Math.ceil((fechaSuspension.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  const inputStyle = { width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)" };
+
+  return (
+    <div className="perfil-cuenta">
+      {estado.suspendida && (
+        <div className="msg-banner msg-banner-err" style={{ marginBottom: 16 }}>
+          ⛔ Tu servicio está suspendido por falta de pago. Subí tu comprobante para reactivarlo.
+        </div>
+      )}
+      {!estado.suspendida && diasParaSuspension !== null && diasParaSuspension <= 5 && (
+        <div className="msg-banner msg-banner-warn" style={{ marginBottom: 16 }}>
+          ⚠ Tu servicio se suspende en {diasParaSuspension} día(s) si no registrás el pago.
+        </div>
+      )}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0 }}>{estado.plan.nombre}</h3>
+        <p className="muted small" style={{ marginBottom: 14, textAlign: "left" }}>${estado.plan.precio_mensual}/mes</p>
+
+        <div className="perfil-cuenta-grid">
+          <div className="perfil-info-item"><span className="muted small">Fecha de alta</span><b>{estado.fecha_alta ? new Date(estado.fecha_alta).toLocaleDateString() : "—"}</b></div>
+          <div className="perfil-info-item"><span className="muted small">Próximo pago</span><b>{estado.fecha_proximo_pago ? new Date(estado.fecha_proximo_pago).toLocaleDateString() : "—"}</b></div>
+          <div className="perfil-info-item"><span className="muted small">Días de gracia</span><b>{estado.dias_gracia}</b></div>
+          <div className="perfil-info-item"><span className="muted small">Se suspende el</span><b>{fechaSuspension ? fechaSuspension.toLocaleDateString() : "—"}</b></div>
+          <div className="perfil-info-item"><span className="muted small">Casas</span><b>{estado.stats?.casas ?? 0} / {estado.plan.max_casas}</b></div>
+          <div className="perfil-info-item"><span className="muted small">Usuarios</span><b>{estado.stats?.usuarios_total ?? 0} / {estado.plan.max_usuarios}</b></div>
+          <div className="perfil-info-item">
+            <span className="muted small">Almacenamiento</span>
+            <b>{formatearBytes(estado.almacenamiento_usado_bytes)} de {estado.plan.almacenamiento_gb} GB</b>
+          </div>
+          <div className="perfil-info-item">
+            <span className="muted small">Registros desde</span>
+            <b>{estado.stats?.fecha_registro_mas_antiguo ? new Date(estado.stats.fecha_registro_mas_antiguo).toLocaleDateString() : "sin registros"}</b>
+          </div>
+        </div>
+
+        <button style={{ marginTop: 16 }} onClick={abrirPagar}>💳 Pagar</button>
+        {msgOk && <p className="ok small" style={{ marginTop: 10, textAlign: "left" }}>{msgOk}</p>}
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>Historial de pagos</h3>
+        {pagos.length === 0 ? (
+          <p className="muted small" style={{ textAlign: "left" }}>Todavía no registraste ningún pago.</p>
+        ) : (
+          <table className="data" style={{ width: "100%" }}>
+            <thead>
+              <tr><th>Fecha</th><th>Plan</th><th>Monto</th><th>Estado</th></tr>
+            </thead>
+            <tbody>
+              {pagos.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.created_at ? new Date(p.created_at).toLocaleDateString() : "—"}</td>
+                  <td>{p.plan?.nombre || "—"}{p.es_upgrade ? " (upgrade)" : ""}</td>
+                  <td>${p.monto.toFixed(2)}</td>
+                  <td>
+                    <span className={`pill ${p.estado === "aprobado" ? "green" : p.estado === "rechazado" ? "red" : "amber"}`}>
+                      {p.estado === "aprobado" ? "Aprobado" : p.estado === "rechazado" ? "Rechazado" : "En revisión"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {mostrarPagar && (
+        <div className="modal" onClick={() => setMostrarPagar(false)}>
+          <div className="modal-body" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <h3>Pagar suscripción</h3>
+
+            <div style={{ marginBottom: 14 }}>
+              <label className="small muted" style={{ display: "block", marginBottom: 4 }}>Método de pago</label>
+              <button disabled style={{ width: "100%", opacity: 0.5 }} title="Próximamente">
+                🔒 Pasarela de pago (próximamente)
+              </button>
+              <p className="muted small" style={{ marginTop: 6, textAlign: "left" }}>
+                Por ahora, subí el comprobante de tu depósito o transferencia — tu desarrollador lo revisa y activa tu servicio.
+              </p>
+            </div>
+
+            <label style={{ display: "block", marginBottom: 12 }}>
+              <span className="small muted" style={{ display: "block", marginBottom: 4 }}>¿Vas a seguir en el mismo plan, o pedís un cambio?</span>
+              <select style={inputStyle} value={planElegido} onChange={(e) => setPlanElegido(e.target.value)}>
+                {planes.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} (${p.precio_mensual}/mes){p.id === estado.plan?.id ? " — plan actual" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label style={{ display: "block", marginBottom: 12 }}>
+              <span className="small muted" style={{ display: "block", marginBottom: 4 }}>Comprobante (foto o PDF)</span>
+              <input type="file" accept="image/*,.pdf" onChange={(e) => setArchivo(e.target.files?.[0] || null)} />
+            </label>
+
+            {errorPago && <p className="err small" style={{ marginBottom: 10, textAlign: "left" }}>{errorPago}</p>}
+
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setMostrarPagar(false)} className="ghost" disabled={subiendo}>Cancelar</button>
+              <button onClick={confirmarPago} disabled={subiendo}>{subiendo ? "Enviando…" : "Enviar comprobante"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Día 50, Etapa 7 — bytes -> texto legible. Duplicado a propósito de la
+// versión que ya existe en el panel dev (PanelDesarrollador.tsx) — este
+// módulo es de cara al cliente, aquel es interno; mejor no atarlos con
+// un import cruzado entre las dos partes de la app por una función tan
+// chica.
+function formatearBytes(bytes: number | null | undefined): string {
+  if (bytes == null) return "—";
+  if (bytes === 0) return "0 MB";
+  const unidades = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  let valor = bytes;
+  while (valor >= 1024 && i < unidades.length - 1) {
+    valor /= 1024;
+    i++;
+  }
+  return `${valor.toFixed(i > 0 ? 1 : 0)} ${unidades[i]}`;
 }

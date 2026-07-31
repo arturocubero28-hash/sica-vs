@@ -45,6 +45,20 @@ def _mi_residencial(usuario_actual):
     return Residencial.query.get(usuario_actual.residencial_id)
 
 
+@suscripcion_bp.get("/planes-disponibles")
+@roles_required("admin", "super_admin")
+def planes_disponibles(usuario_actual):
+    """
+    Día 50, Etapa 7 — para que el admin pueda elegir a qué plan pedir
+    upgrade al pagar. Distinto de GET /dev/planes (exclusivo
+    desarrollador, que además trae cuántas residenciales tiene cada
+    plan) — acá solo se listan los planes ACTIVOS con lo que el admin
+    necesita para decidir: nombre, límites, precio.
+    """
+    planes = Plan.query.filter_by(activo=True).order_by(Plan.orden.asc(), Plan.id.asc()).all()
+    return jsonify({"data": [p.to_dict() for p in planes]})
+
+
 @suscripcion_bp.get("/mi-estado")
 @roles_required("admin", "super_admin")
 def mi_estado(usuario_actual):
