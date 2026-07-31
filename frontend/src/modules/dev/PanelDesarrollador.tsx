@@ -1464,6 +1464,12 @@ function PanelResidenciales() {
   // Día 50 — se aprieta el día que el cliente paga: recalcula
   // fecha_proximo_pago = hoy + 30 días, sin importar cuál fecha tenía
   // antes (aunque estuviera vencida hace rato por una suspensión).
+  // Día 50 — el botón directo se quitó (el usuario aclaró que esto no va
+  // a ser la forma real de cobrar, solo un adelanto). La función queda
+  // preparada para reutilizarse desde la pantalla de revisión de pagos
+  // de suscripción (etapa siguiente): cuando el desarrollador aprueba un
+  // comprobante o confirma un pago por pasarela, esta es la lógica que
+  // efectivamente extiende el servicio 30 días desde el día del pago.
   async function registrarPago(r: ResidencialDTO) {
     setGuardandoSuscripcion(r.id);
     setMsgSuscripcion(null);
@@ -1488,13 +1494,15 @@ function PanelResidenciales() {
 
       <div className="dev-trancas-barra">
         <span className="dev-trancas-total">{lista.length} residencial(es)</span>
-        <button className="dev-tranca-add" onClick={() => { setMostrarAlta((v) => !v); setErrorAlta(""); }}>
-          {mostrarAlta ? "Cancelar" : "+ Nueva residencial"}
+        <button className="dev-tranca-add" onClick={() => { setMostrarAlta(true); setErrorAlta(""); }}>
+          + Nueva residencial
         </button>
       </div>
 
       {mostrarAlta && (
-        <div className="dev-tranca-alta">
+        <div className="dev-modal-overlay" onClick={() => { setMostrarAlta(false); setErrorAlta(""); }}>
+          <div className="dev-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+            <h3>Nueva residencial</h3>
           <p className="muted small" style={{ marginBottom: 10 }}>
             Crea un cliente nuevo: un admin dueño con todo lo que él cree colgando de esta residencial.
           </p>
@@ -1569,6 +1577,11 @@ function PanelResidenciales() {
             activación más adelante.)
           </p>
           {errorAlta && <div className="dev-tranca-msg err" style={{ marginTop: 10 }}>{errorAlta}</div>}
+          <div className="dev-modal-acciones">
+            <button className="dev-tranca-del-confirm" style={{ background: "#022E45" }}
+              onClick={() => { setMostrarAlta(false); setErrorAlta(""); }}>Cerrar</button>
+          </div>
+          </div>
         </div>
       )}
 
@@ -1695,10 +1708,6 @@ function PanelResidenciales() {
                 <button className="dev-tranca-toggle on" disabled={guardandoSuscripcion === r.id}
                   onClick={(e) => { e.stopPropagation(); guardarSuscripcion(r); }}>
                   {guardandoSuscripcion === r.id ? "Guardando…" : "Guardar plan"}
-                </button>
-                <button className="dev-tranca-toggle on" style={{ background: "#166534" }} disabled={guardandoSuscripcion === r.id}
-                  onClick={(e) => { e.stopPropagation(); registrarPago(r); }}>
-                  💰 Registrar pago
                 </button>
                 <button className="dev-tranca-toggle on" onClick={(e) => { e.stopPropagation(); verDetalle(r); }}>
                   Ver usuarios →
