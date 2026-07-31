@@ -12,6 +12,7 @@
   --azul: var(--marca-azul);
   --azul2: var(--marca-azul-2);
   --gris: #6b7280;
+  --gris-cl: #f1f3f6;
   --bg: #f4f7fb;
 }
 * { box-sizing: border-box; }
@@ -1983,10 +1984,11 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
    perfil-info-grid (una columna, pensada para pocos datos) esta es una
    grilla real de 2 columnas, para los 8 datos de suscripción sin que la
    tarjeta quede demasiado alta. */
-.perfil-cuenta { max-width: 640px; }
+.perfil-cuenta { max-width: 640px; margin: 0 auto; text-align: center; }
 .perfil-cuenta-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; text-align: center;
 }
+.perfil-cuenta-grid .perfil-info-item { align-items: center; }
 @media (max-width: 560px) {
   .perfil-cuenta-grid { grid-template-columns: 1fr; }
 }
@@ -3181,7 +3183,7 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 .tab-btn:first-child { border-radius: 10px 0 0 10px; }
 .tab-btn:last-child  { border-radius: 0 10px 10px 0; border-left: 0; }
 .tab-btn.active { background: var(--azul); color: #fff; border-color: var(--azul); }
-.tab-btn:hover:not(.active) { background: var(--gris-cl); }
+.tab-btn:hover:not(.active) { background: var(--gris-cl); color: var(--marca-azul, #022e45); }
 .ok { color: var(--verde); } .err { color: var(--rojo); }
 
 /* Tarjetas de radio para elegir "administrador vs administrador que vive" */

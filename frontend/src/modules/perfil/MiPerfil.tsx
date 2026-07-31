@@ -904,6 +904,7 @@ function MiCuentaPanel() {
   const [planes, setPlanes] = useState<PlanDTO[]>([]);
   const [cargando, setCargando] = useState(true);
   const [mostrarPagar, setMostrarPagar] = useState(false);
+  const [mostrarUpgrade, setMostrarUpgrade] = useState(false);
   const [planElegido, setPlanElegido] = useState("");
   const [archivo, setArchivo] = useState<File | null>(null);
   const [subiendo, setSubiendo] = useState(false);
@@ -925,10 +926,22 @@ function MiCuentaPanel() {
   }
   useEffect(() => { cargar(); }, []);
 
+  // "Pagar" simple = renovación del plan actual, sin elegir nada.
   function abrirPagar() {
     setPlanElegido(estado?.plan?.id || "");
     setArchivo(null);
     setErrorPago("");
+    setMostrarPagar(true);
+  }
+
+  // "Upgrade" = explica los beneficios de los planes más altos; al elegir
+  // uno, pasa directo al mismo flujo de pago pero con ese plan ya fijado
+  // (a pedido del usuario: separado del botón "Pagar" común).
+  function elegirPlanUpgrade(planId: string) {
+    setPlanElegido(planId);
+    setArchivo(null);
+    setErrorPago("");
+    setMostrarUpgrade(false);
     setMostrarPagar(true);
   }
 
@@ -970,8 +983,6 @@ function MiCuentaPanel() {
     ? Math.ceil((fechaSuspension.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24))
     : null;
 
-  const inputStyle = { width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)" };
-
   return (
     <div className="perfil-cuenta">
       {estado.suspendida && (
@@ -987,7 +998,7 @@ function MiCuentaPanel() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>{estado.plan.nombre}</h3>
-        <p className="muted small" style={{ marginBottom: 14, textAlign: "left" }}>${estado.plan.precio_mensual}/mes</p>
+        <p className="muted small" style={{ marginBottom: 14 }}>${estado.plan.precio_mensual}/mes</p>
 
         <div className="perfil-cuenta-grid">
           <div className="perfil-info-item"><span className="muted small">Fecha de alta</span><b>{estado.fecha_alta ? new Date(estado.fecha_alta).toLocaleDateString() : "—"}</b></div>
@@ -1006,14 +1017,19 @@ function MiCuentaPanel() {
           </div>
         </div>
 
-        <button style={{ marginTop: 16 }} onClick={abrirPagar}>💳 Pagar</button>
-        {msgOk && <p className="ok small" style={{ marginTop: 10, textAlign: "left" }}>{msgOk}</p>}
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 16 }}>
+          <button onClick={abrirPagar}>💳 Pagar</button>
+          {planes.some((p) => p.precio_mensual > (estado.plan?.precio_mensual || 0)) && (
+            <button className="ghost" onClick={() => setMostrarUpgrade(true)}>⬆ Subir de plan</button>
+          )}
+        </div>
+        {msgOk && <p className="ok small" style={{ marginTop: 10 }}>{msgOk}</p>}
       </div>
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Historial de pagos</h3>
         {pagos.length === 0 ? (
-          <p className="muted small" style={{ textAlign: "left" }}>Todavía no registraste ningún pago.</p>
+          <p className="muted small" style={{}}>Todavía no registraste ningún pago.</p>
         ) : (
           <table className="data" style={{ width: "100%" }}>
             <thead>
@@ -1047,32 +1063,71 @@ function MiCuentaPanel() {
               <button disabled style={{ width: "100%", opacity: 0.5 }} title="Próximamente">
                 🔒 Pasarela de pago (próximamente)
               </button>
-              <p className="muted small" style={{ marginTop: 6, textAlign: "left" }}>
+              <p className="muted small" style={{ marginTop: 6 }}>
                 Por ahora, subí el comprobante de tu depósito o transferencia — tu desarrollador lo revisa y activa tu servicio.
               </p>
             </div>
 
-            <label style={{ display: "block", marginBottom: 12 }}>
-              <span className="small muted" style={{ display: "block", marginBottom: 4 }}>¿Vas a seguir en el mismo plan, o pedís un cambio?</span>
-              <select style={inputStyle} value={planElegido} onChange={(e) => setPlanElegido(e.target.value)}>
-                {planes.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre} (${p.precio_mensual}/mes){p.id === estado.plan?.id ? " — plan actual" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="msg-banner msg-banner-ok" style={{ marginBottom: 12 }}>
+              Vas a pagar el plan <strong>{planes.find((p) => p.id === planElegido)?.nombre || estado.plan?.nombre}</strong>
+              {" "}(${(planes.find((p) => p.id === planElegido)?.precio_mensual ?? estado.plan?.precio_mensual)?.toFixed(2)}/mes)
+              {planElegido !== estado.plan?.id && " — cambio de plan"}
+            </div>
 
             <label style={{ display: "block", marginBottom: 12 }}>
               <span className="small muted" style={{ display: "block", marginBottom: 4 }}>Comprobante (foto o PDF)</span>
               <input type="file" accept="image/*,.pdf" onChange={(e) => setArchivo(e.target.files?.[0] || null)} />
             </label>
 
-            {errorPago && <p className="err small" style={{ marginBottom: 10, textAlign: "left" }}>{errorPago}</p>}
+            {errorPago && <p className="err small" style={{ marginBottom: 10 }}>{errorPago}</p>}
 
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button onClick={() => setMostrarPagar(false)} className="ghost" disabled={subiendo}>Cancelar</button>
               <button onClick={confirmarPago} disabled={subiendo}>{subiendo ? "Enviando…" : "Enviar comprobante"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Día 50 (corrección del usuario): separado del botón "Pagar" —
+          este modal explica los BENEFICIOS de subir de plan, comparando
+          contra el plan actual, en vez de mezclarlo como una opción más
+          dentro del formulario de pago. */}
+      {mostrarUpgrade && (
+        <div className="modal" onClick={() => setMostrarUpgrade(false)}>
+          <div className="modal-body" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <h3>Subí de plan</h3>
+            <p className="muted small" style={{ marginBottom: 16 }}>
+              Tu plan actual, <strong>{estado.plan?.nombre}</strong>, te da {estado.plan?.max_casas} casas,{" "}
+              {estado.plan?.max_usuarios} usuarios y {estado.plan?.almacenamiento_gb} GB de almacenamiento.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {planes
+                .filter((p) => p.precio_mensual > (estado.plan?.precio_mensual || 0))
+                .map((p) => {
+                  const masCasas = p.max_casas - (estado.plan?.max_casas || 0);
+                  const masUsuarios = p.max_usuarios - (estado.plan?.max_usuarios || 0);
+                  const masGB = p.almacenamiento_gb - (estado.plan?.almacenamiento_gb || 0);
+                  return (
+                    <div key={p.id} className="card" style={{ margin: 0, padding: 16, textAlign: "left" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                        <strong style={{ fontSize: 16 }}>{p.nombre}</strong>
+                        <span className="muted small">${p.precio_mensual}/mes</span>
+                      </div>
+                      <ul style={{ margin: "8px 0 12px", paddingLeft: 18, fontSize: 13.5 }}>
+                        {masCasas > 0 && <li>+{masCasas} casas más (hasta {p.max_casas})</li>}
+                        {masUsuarios > 0 && <li>+{masUsuarios} usuarios más (hasta {p.max_usuarios})</li>}
+                        {masGB > 0 && <li>+{masGB} GB más de almacenamiento (hasta {p.almacenamiento_gb} GB)</li>}
+                      </ul>
+                      <button onClick={() => elegirPlanUpgrade(p.id)} style={{ width: "100%" }}>
+                        Solicitar este plan
+                      </button>
+                    </div>
+                  );
+                })}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+              <button onClick={() => setMostrarUpgrade(false)} className="ghost">Cerrar</button>
             </div>
           </div>
         </div>
