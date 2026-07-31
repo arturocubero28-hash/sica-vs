@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devEditarSuscripcionResidencial, devRegistrarPagoResidencial, devUsuariosDeResidencial, devCrearResidencial, devPlanes, devCrearPlan, devEditarPlan, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO, type PlanDTO } from "../../api/client";
+import { devMetricas, devLogs, devMetricasCodigo, devSeguridad, devAccesosFisicos, devConfigurarAcceso, devHistorialCount, devEliminarAcceso, devDispositivos, devCrearDispositivo, devActualizarDispositivo, devRegenerarToken, devEliminarDispositivo, devResidenciales, devEditarResidencial, devRegistrarPagoResidencial, devUsuariosDeResidencial, devCrearResidencial, devPlanes, devCrearPlan, devEditarPlan, urlLogoResidencial, type DevMetricasDTO, type MetricasCodigoDTO, type SeguridadDTO, type AccesoFisicoDTO, type DispositivoDTO, type ResidencialDTO, type UsuarioResidencialDTO, type PlanDTO } from "../../api/client";
 import { AlertTriangle, BarChart3, Building2, Construction, Cpu, Key, Layers, Lock, Monitor, Radio, Router, Search, Shield, ThumbsUp, TrafficCone, Trash2 } from "lucide-react";
 
 export function PanelDesarrollador() {
@@ -1359,26 +1359,30 @@ function PanelResidenciales() {
   // Credenciales del admin recién creado, para mostrar una sola vez
   const [credencialNueva, setCredencialNueva] = useState<{ email: string; nombre: string; pass: string } | null>(null);
 
-  // Día 50, Etapa 5 — asignación de plan/suscripción por residencial.
+  // Día 50 — asignación de plan/suscripción, y ahora también edición de
+  // nombre/dirección/teléfono, todo consolidado en un modal "Editar
+  // residencial" (corrección del usuario: antes plan/días de gracia
+  // quedaban siempre editables sueltos en cada tarjeta).
   const [planesActivos, setPlanesActivos] = useState<PlanDTO[]>([]);
-  const [editsSuscripcion, setEditsSuscripcion] = useState<Record<string, {
-    plan_id: string; dias_gracia: string;
-  }>>({});
+  const [editando, setEditando] = useState<ResidencialDTO | null>(null);
+  const [formEdicion, setFormEdicion] = useState({
+    nombre: "", direccion: "", telefono: "", plan_id: "", dias_gracia: "5",
+  });
   const [guardandoSuscripcion, setGuardandoSuscripcion] = useState<string | null>(null);
   const [msgSuscripcion, setMsgSuscripcion] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
+  const [errorEdicion, setErrorEdicion] = useState("");
 
-  const cargar = () => devResidenciales().then((data) => {
-    setLista(data);
-    const e: typeof editsSuscripcion = {};
-    data.forEach((r) => {
-      e[r.id] = {
-        plan_id: r.plan?.id || "",
-        dias_gracia: String(r.dias_gracia),
-      };
-    });
-    setEditsSuscripcion(e);
-  }).catch(() => setLista([]));
+  const cargar = () => devResidenciales().then(setLista).catch(() => setLista([]));
   useEffect(() => { cargar(); devPlanes().then(setPlanesActivos).catch(() => setPlanesActivos([])); }, []);
+
+  function abrirEditar(r: ResidencialDTO) {
+    setEditando(r);
+    setErrorEdicion("");
+    setFormEdicion({
+      nombre: r.nombre, direccion: r.direccion || "", telefono: r.telefono || "",
+      plan_id: r.plan?.id || "", dias_gracia: String(r.dias_gracia),
+    });
+  }
 
   async function verDetalle(r: ResidencialDTO) {
     setSeleccionada(r);
@@ -1435,27 +1439,30 @@ function PanelResidenciales() {
 
   if (lista === null) return <p className="muted" style={{ padding: 20 }}>Cargando residenciales…</p>;
 
-  async function guardarSuscripcion(r: ResidencialDTO) {
-    const ed = editsSuscripcion[r.id];
+  async function guardarEdicion() {
+    if (!editando) return;
+    const nombre = formEdicion.nombre.trim();
+    if (!nombre) { setErrorEdicion("El nombre no puede quedar vacío"); return; }
     let dias: number;
     try {
-      dias = parseInt(ed.dias_gracia, 10);
+      dias = parseInt(formEdicion.dias_gracia, 10);
       if (isNaN(dias) || dias < 0) throw new Error();
     } catch {
-      setMsgSuscripcion({ id: r.id, texto: "Los días de gracia deben ser un número mayor o igual a 0", ok: false });
+      setErrorEdicion("Los días de gracia deben ser un número mayor o igual a 0");
       return;
     }
-    setGuardandoSuscripcion(r.id);
-    setMsgSuscripcion(null);
+    setGuardandoSuscripcion(editando.id);
+    setErrorEdicion("");
     try {
-      const actualizada = await devEditarSuscripcionResidencial(r.id, {
-        plan_id: ed.plan_id || null,
-        dias_gracia: dias,
+      const actualizada = await devEditarResidencial(editando.id, {
+        nombre, direccion: formEdicion.direccion.trim(), telefono: formEdicion.telefono.trim(),
+        plan_id: formEdicion.plan_id || null, dias_gracia: dias,
       });
-      setLista((prev) => prev ? prev.map((x) => x.id === r.id ? actualizada : x) : prev);
-      setMsgSuscripcion({ id: r.id, texto: "Suscripción actualizada", ok: true });
+      setLista((prev) => prev ? prev.map((x) => x.id === editando.id ? actualizada : x) : prev);
+      setEditando(null);
+      setMsgSuscripcion({ id: editando.id, texto: "Residencial actualizada", ok: true });
     } catch (err: any) {
-      setMsgSuscripcion({ id: r.id, texto: err?.message || "No se pudo guardar", ok: false });
+      setErrorEdicion(err?.message || "No se pudo guardar");
     } finally {
       setGuardandoSuscripcion(null);
     }
@@ -1605,6 +1612,62 @@ function PanelResidenciales() {
         </div>
       )}
 
+      {/* Día 50 (corrección) — modal único para editar todo lo que el
+          desarrollador configura de una residencial: nombre, dirección,
+          teléfono, plan y días de gracia. */}
+      {editando && (
+        <div className="dev-modal-overlay" onClick={() => setEditando(null)}>
+          <div className="dev-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <h3>Editar {editando.nombre}</h3>
+            <div className="dev-tranca-campos">
+              <label>
+                <span>Nombre</span>
+                <input type="text" maxLength={160} value={formEdicion.nombre}
+                  onChange={(e) => setFormEdicion((f) => ({ ...f, nombre: e.target.value }))} />
+              </label>
+              <label>
+                <span>Dirección</span>
+                <input type="text" value={formEdicion.direccion}
+                  onChange={(e) => setFormEdicion((f) => ({ ...f, direccion: e.target.value }))} />
+              </label>
+              <label>
+                <span>Teléfono</span>
+                <input type="text" maxLength={30} value={formEdicion.telefono}
+                  onChange={(e) => setFormEdicion((f) => ({ ...f, telefono: e.target.value }))} />
+              </label>
+            </div>
+            <div className="sub" style={{ margin: "14px 0 6px" }}>Suscripción</div>
+            <p className="muted small" style={{ marginBottom: 8 }}>
+              La fecha de próximo pago no se edita acá — se calcula sola con cada pago registrado.
+            </p>
+            <div className="dev-tranca-campos">
+              <label>
+                <span>Plan</span>
+                <select className="dev-tranca-tipo-sel" value={formEdicion.plan_id}
+                  onChange={(e) => setFormEdicion((f) => ({ ...f, plan_id: e.target.value }))}>
+                  <option value="">— Sin plan —</option>
+                  {planesActivos.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre}{!p.activo ? " (inactivo)" : ""}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Días de gracia</span>
+                <input type="number" min={0} value={formEdicion.dias_gracia}
+                  onChange={(e) => setFormEdicion((f) => ({ ...f, dias_gracia: e.target.value }))} />
+              </label>
+            </div>
+            {errorEdicion && <div className="dev-tranca-msg err">{errorEdicion}</div>}
+            <div className="dev-modal-acciones">
+              <button className="dev-tranca-toggle on" disabled={guardandoSuscripcion === editando.id} onClick={guardarEdicion}>
+                {guardandoSuscripcion === editando.id ? "Guardando…" : "Guardar cambios"}
+              </button>
+              <button className="dev-tranca-del-confirm" style={{ background: "#6b7280" }} onClick={() => setEditando(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {lista.length === 0 ? (
         <p className="muted" style={{ padding: 20 }}>
           No hay ninguna residencial creada todavía — se crea automáticamente al correr la migración
@@ -1678,36 +1741,12 @@ function PanelResidenciales() {
                 </div>
               </div>
 
-              {/* Día 50, Etapa 5 (corregido) — plan y días de gracia se
-                  pueden editar; la fecha de próximo pago NUNCA se edita
-                  a mano, solo avanza con el botón "Registrar pago" de
-                  abajo (hoy + 30 días, desde el día real del pago). */}
-              <div className="dev-tranca-campos" onClick={(e) => e.stopPropagation()}>
-                <label>
-                  <span>Plan</span>
-                  <select className="dev-tranca-tipo-sel"
-                    value={editsSuscripcion[r.id]?.plan_id || ""}
-                    onChange={(e) => setEditsSuscripcion((prev) => ({ ...prev, [r.id]: { ...prev[r.id], plan_id: e.target.value } }))}>
-                    <option value="">— Sin plan —</option>
-                    {planesActivos.map((p) => (
-                      <option key={p.id} value={p.id}>{p.nombre}{!p.activo ? " (inactivo)" : ""}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Días de gracia</span>
-                  <input type="number" min={0}
-                    value={editsSuscripcion[r.id]?.dias_gracia || ""}
-                    onChange={(e) => setEditsSuscripcion((prev) => ({ ...prev, [r.id]: { ...prev[r.id], dias_gracia: e.target.value } }))} />
-                </label>
-              </div>
               {msgSuscripcion && msgSuscripcion.id === r.id && (
                 <div className={`dev-tranca-msg ${msgSuscripcion.ok ? "ok" : "err"}`}>{msgSuscripcion.texto}</div>
               )}
               <div className="dev-pi-acciones">
-                <button className="dev-tranca-toggle on" disabled={guardandoSuscripcion === r.id}
-                  onClick={(e) => { e.stopPropagation(); guardarSuscripcion(r); }}>
-                  {guardandoSuscripcion === r.id ? "Guardando…" : "Guardar plan"}
+                <button className="dev-tranca-toggle on" onClick={(e) => { e.stopPropagation(); abrirEditar(r); }}>
+                  ✏️ Editar residencial
                 </button>
                 <button className="dev-tranca-toggle on" onClick={(e) => { e.stopPropagation(); verDetalle(r); }}>
                   Ver usuarios →

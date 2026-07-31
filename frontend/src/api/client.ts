@@ -848,9 +848,14 @@ export interface UsuarioResidencialDTO {
   nombre: string; apellido: string; email: string; rol: string; activo: boolean;
 }
 export const devResidenciales = () => request<ResidencialDTO[]>("/dev/residenciales");
-export const devEditarSuscripcionResidencial = (id: string, body: Partial<{
+// Día 50 (corrección): consolidado en un solo endpoint todo lo que el
+// desarrollador configura de una residencial — antes plan/días de
+// gracia vivían en /suscripcion, separados de nombre/dirección/teléfono
+// (que ni siquiera se podían editar desde acá todavía).
+export const devEditarResidencial = (id: string, body: Partial<{
+  nombre: string; direccion: string; telefono: string;
   plan_id: string | null; dias_gracia: number;
-}>) => request<ResidencialDTO>(`/dev/residenciales/${id}/suscripcion`, { method: "PUT", body: JSON.stringify(body) });
+}>) => request<ResidencialDTO>(`/dev/residenciales/${id}`, { method: "PUT", body: JSON.stringify(body) });
 export const devRegistrarPagoResidencial = (id: string) =>
   request<ResidencialDTO>(`/dev/residenciales/${id}/registrar-pago`, { method: "POST" });
 export const devUsuariosDeResidencial = (uuid: string) =>

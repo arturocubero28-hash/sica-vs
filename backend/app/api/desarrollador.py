@@ -739,20 +739,23 @@ def listar_residenciales(usuario_actual):
     return jsonify({"data": [r.to_dict(incluir_stats=True) for r in residenciales]})
 
 
-@dev_bp.put("/residenciales/<uuid:res_uuid>/suscripcion")
+@dev_bp.put("/residenciales/<uuid:res_uuid>")
 @roles_required("desarrollador")
-def editar_suscripcion_residencial(usuario_actual, res_uuid):
+def editar_residencial(usuario_actual, res_uuid):
     """
-    Día 50, Etapa 5 — el desarrollador asigna o cambia el plan de una
-    residencial, y sus días de gracia. Separado de cualquier otro
-    endpoint de edición de residencial porque esto es exclusivamente
-    del desarrollador (el admin nunca toca su propio plan).
+    Día 50 (corrección del usuario): edición consolidada de TODOS los
+    campos que el desarrollador configura al dar de alta una residencial
+    — nombre, dirección, teléfono, plan y días de gracia — desde un
+    único botón "Editar residencial" en el panel, en vez de tener el
+    plan/días de gracia siempre editables sueltos en la tarjeta (como
+    quedó en la Etapa 5, antes de esta corrección).
 
-    fecha_proximo_pago NO se edita acá a propósito (corrección del
-    usuario, Día 50): nunca se digita a mano — se calcula sola al crear
-    la residencial (fecha de alta + 30 días) y se recalcula sola cuando
-    se registra un pago (ver registrar_pago_residencial(), hoy + 30
-    días desde el día real del pago).
+    Ruta renombrada de /suscripcion a esta, más genérica, ya que ahora
+    cubre más que solo la suscripción.
+
+    fecha_proximo_pago NO se edita acá a propósito: nunca se digita a
+    mano — se calcula sola al crear la residencial (fecha de alta + 30
+    días) y se recalcula sola cuando se registra un pago.
     """
     residencial = Residencial.query.filter_by(uuid_publico=res_uuid).first()
     if not residencial:
@@ -760,6 +763,24 @@ def editar_suscripcion_residencial(usuario_actual, res_uuid):
                                   "message": "Residencial no encontrada"}}), 404
 
     body = request.get_json(silent=True) or {}
+
+    if "nombre" in body:
+        nombre = (body["nombre"] or "").strip()
+        if not nombre:
+            return jsonify({"error": {"code": "nombre_requerido",
+                                      "message": "El nombre no puede quedar vacío"}}), 400
+        otra = Residencial.query.filter(Residencial.nombre == nombre,
+                                        Residencial.id != residencial.id).first()
+        if otra:
+            return jsonify({"error": {"code": "nombre_duplicado",
+                                      "message": "Ya existe otra residencial con ese nombre"}}), 400
+        residencial.nombre = nombre
+
+    if "direccion" in body:
+        residencial.direccion = (body["direccion"] or "").strip() or None
+
+    if "telefono" in body:
+        residencial.telefono = (body["telefono"] or "").strip() or None
 
     if "plan_id" in body:
         plan_id_pedido = body["plan_id"]
