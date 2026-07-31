@@ -75,6 +75,10 @@ def subir_plan(usuario_actual):
     Por eso este endpoint NO pide comprobante — es solo cambiar el plan,
     no un pago. Solo permite subir a un plan MÁS CARO (un downgrade es
     una conversación distinta, que pasa por el desarrollador directo).
+
+    A pedido del usuario: pide la contraseña del admin para confirmar
+    (es un compromiso de pago real, aunque diferido — merece la misma
+    verificación que cualquier acción sensible de la cuenta).
     """
     residencial = _mi_residencial(usuario_actual)
     if not residencial:
@@ -86,6 +90,12 @@ def subir_plan(usuario_actual):
                                              "contactá a tu desarrollador"}}), 400
 
     body = request.get_json(silent=True) or {}
+
+    password = body.get("password") or ""
+    if not password or not usuario_actual.check_password(password):
+        return jsonify({"error": {"code": "password_incorrecta",
+                                  "message": "Contraseña incorrecta"}}), 401
+
     plan_id_pedido = (body.get("plan_id") or "").strip()
     if not plan_id_pedido:
         return jsonify({"error": {"code": "plan_requerido", "message": "Elegí un plan"}}), 400

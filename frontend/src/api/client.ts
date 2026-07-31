@@ -883,8 +883,8 @@ export interface SuscripcionPagoDTO {
 }
 export const getMiSuscripcion = () => request<SuscripcionEstadoDTO>("/suscripcion/mi-estado");
 export const getPlanesDisponibles = () => request<PlanDTO[]>("/suscripcion/planes-disponibles");
-export const subirPlan = (planId: string) =>
-  request<SuscripcionEstadoDTO>("/suscripcion/subir-plan", { method: "POST", body: JSON.stringify({ plan_id: planId }) });
+export const subirPlan = (planId: string, password: string) =>
+  request<SuscripcionEstadoDTO>("/suscripcion/subir-plan", { method: "POST", body: JSON.stringify({ plan_id: planId, password }) });
 export const getMisPagosSuscripcion = () => request<SuscripcionPagoDTO[]>("/suscripcion/mis-pagos");
 
 // Día 50, Etapa 8 — el desarrollador revisando pagos de suscripción

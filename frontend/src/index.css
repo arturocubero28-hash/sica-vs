@@ -2027,6 +2027,50 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .cuenta-historial-fila:hover { background: var(--gris-cl); }
 .cuenta-historial-fila:last-child { border-bottom: none; }
 
+/* Día 50 — modal de "Mejorá tu plan" rediseñado, a pedido del usuario
+   (el primero se sentía "muy sencillo" y la confirmación quedaba
+   amontonada). Tres pasos: lista de beneficios, confirmación con
+   contraseña, pantalla de éxito. */
+.upgrade-modal-header { display: flex; gap: 12px; align-items: flex-start; }
+.upgrade-modal-header svg { color: var(--marca-naranja, var(--naranja)); flex-shrink: 0; margin-top: 2px; }
+
+.upgrade-plan-card {
+  border: 1.5px solid var(--borde); border-radius: 12px; padding: 14px 16px;
+  text-align: left; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.upgrade-plan-card:hover { border-color: var(--marca-naranja, var(--naranja)); box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+.upgrade-plan-card-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.upgrade-plan-card-top strong { font-size: 16px; }
+.upgrade-plan-precio { font-size: 15px; font-weight: 700; color: var(--marca-azul, var(--azul)); }
+.upgrade-plan-precio small { font-size: 11px; font-weight: 500; color: var(--gris); }
+
+.upgrade-benefit-list { display: flex; flex-direction: column; gap: 5px; }
+.upgrade-benefit-list div { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--gris); }
+.upgrade-benefit-list svg { color: var(--verde, #1d8a4a); flex-shrink: 0; }
+
+.upgrade-nota-pago { text-align: center; margin: 14px 0 0; }
+
+.upgrade-compare { display: flex; align-items: center; justify-content: center; gap: 16px; }
+.upgrade-compare-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 14px; border-radius: 12px; background: var(--gris-cl); text-align: center;
+}
+.upgrade-compare-item strong { font-size: 16px; color: var(--marca-azul, var(--azul)); }
+.upgrade-compare-item.destacado {
+  background: #fff7ed; border: 1.5px solid var(--marca-naranja, var(--naranja));
+}
+.upgrade-compare svg { color: var(--gris); flex-shrink: 0; }
+
+.upgrade-exito { text-align: center; padding: 8px 0; }
+.upgrade-exito svg { color: var(--verde, #1d8a4a); margin-bottom: 10px; }
+.upgrade-exito h3 { margin: 0 0 6px; }
+.upgrade-exito-detalles {
+  display: flex; justify-content: center; gap: 18px; margin: 16px 0;
+  font-size: 13.5px; color: var(--gris);
+}
+.upgrade-exito-detalles div { display: flex; align-items: center; gap: 6px; }
+.upgrade-exito-detalles svg { color: var(--marca-naranja, var(--naranja)); margin-bottom: 0; }
+
 /* ============================================================
    LECTOR DE TARJETA RFID
    ============================================================ */
