@@ -21,6 +21,19 @@
 
 services:
   backend:
+    # Sin --max-requests para esta prueba -- se copió el valor de
+    # gangautos tal cual (1000), pero gangautos tiene muy poco tráfico,
+    # nunca lo alcanza en la práctica. Con 500 usuarios simulados y
+    # 30-47 peticiones/segundo, ese umbral se disparaba cada 30-60
+    # segundos, reciclando workers en plena prueba -- confirmado en los
+    # logs (Día 50): varios "Booting worker" seguidos, hasta 3 workers
+    # reiniciándose en el mismo segundo. Cada reciclado deja ese espacio
+    # fuera de servicio mientras el proceso nuevo arranca, reduciendo la
+    # capacidad real disponible durante toda la prueba sin que sea un
+    # problema de hardware. Quitarlo acá da una medición limpia de la
+    # capacidad real; para producción, un valor calibrado al tráfico
+    # real esperado de SICA-VS (mucho más alto que el de gangautos) se
+    # define aparte, no se copia de otro proyecto sin pensarlo.
     command: gunicorn --workers 7 --threads 2 --bind 0.0.0.0:5000 --timeout 90
-             --keep-alive 5 --max-requests 1000 --max-requests-jitter 100
+             --keep-alive 5
              wsgi:app
