@@ -52,8 +52,13 @@ class Config:
     ENV = os.environ.get("SICAVS_ENV", "development")
 
     # Límite de intentos de login. Estricto en producción (frena fuerza bruta);
-    # relajado en desarrollo para no estorbar durante las pruebas.
-    LOGIN_RATE_LIMIT = "5 per 15 minutes" if ENV == "production" else "100 per minute"
+    # relajado en desarrollo para no estorbar durante las pruebas. Día 50:
+    # LOGIN_RATE_LIMIT_OVERRIDE permite subirlo más todavía SOLO para
+    # pruebas de estrés (donde cientos de "usuarios" simulados se loguean
+    # casi juntos, desde una sola IP real) sin tocar el valor real de
+    # producción ni el de desarrollo normal.
+    LOGIN_RATE_LIMIT = (os.environ.get("LOGIN_RATE_LIMIT_OVERRIDE") or
+                        ("5 per 15 minutes" if ENV == "production" else "100 per minute"))
 
     # OBSOLETO (DEVICE-06, Auditoría Día 35): este token global compartido
     # ya no se usa en ningún endpoint. Cada Raspberry Pi tiene su propio

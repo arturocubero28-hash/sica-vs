@@ -67,6 +67,7 @@ services:
       # problema real de capacidad. Sin tocar esta variable, se comporta
       # exactamente igual que en producción (600 por hora).
       RATE_LIMIT_DEFAULT: ${RATE_LIMIT_DEFAULT:-600 per hour}
+      LOGIN_RATE_LIMIT_OVERRIDE: ${LOGIN_RATE_LIMIT_OVERRIDE:-}
     depends_on:
       db:
         condition: service_healthy
