@@ -117,16 +117,28 @@ def guardar_imagen_segura(archivo, carpeta_destino, extensiones=EXT_IMAGEN):
     # para imágenes reales, un PDF de comprobante se deja tal cual. Si la
     # compresión falla por cualquier motivo, se sigue con el archivo
     # original sin tocar — nunca bloquea la subida.
+    #
+    # Corrección (Día 50, señalada por el usuario): la app móvil YA
+    # comprime del lado del cliente antes de subir (WebP, 40-70KB
+    # típico) -- ese trabajo se hizo ahí a propósito, para no
+    # sobrecargar el servidor. El primer intento de esta función
+    # recomprimía TODO sin distinción, repitiendo ese trabajo de la app
+    # de nuevo del lado del servidor. Ahora, si lo que llega ya es chico
+    # (≤ UMBRAL_YA_COMPRIMIDO), se deja tal cual -- el servidor solo
+    # entra a comprimir cuando hace falta de verdad (subidas grandes sin
+    # comprimir, típicamente del panel web).
+    UMBRAL_YA_COMPRIMIDO = 200 * 1024  # 200 KB
     stream_final = archivo.stream
     ext_final = ext
     if ext in EXT_IMAGEN:  # no incluye "pdf"
         datos_originales = archivo.stream.read()
         archivo.stream.seek(0)
-        comprimido = comprimir_imagen_webp(datos_originales)
-        if comprimido is not None:
-            import io
-            stream_final = io.BytesIO(comprimido)
-            ext_final = "webp"
+        if len(datos_originales) > UMBRAL_YA_COMPRIMIDO:
+            comprimido = comprimir_imagen_webp(datos_originales)
+            if comprimido is not None:
+                import io
+                stream_final = io.BytesIO(comprimido)
+                ext_final = "webp"
 
     stream_final.seek(0, os.SEEK_END)
     tam = stream_final.tell()
