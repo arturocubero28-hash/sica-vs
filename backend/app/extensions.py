@@ -43,9 +43,16 @@ def _key_func():
 
 
 # Límite global suave + límites estrictos por endpoint (definidos con decoradores)
+#
+# Día 50: se agregó RATE_LIMIT_DEFAULT como variable de entorno opcional,
+# para poder aflojar este límite SOLO en pruebas de estrés locales (donde
+# Locust manda el tráfico de cientos de "usuarios" simulados desde una
+# sola IP real, la de la máquina de pruebas) sin tocar el valor real de
+# producción. Sin la variable, se comporta exactamente igual que antes.
+import os
 limiter = Limiter(
     key_func=_key_func,
-    default_limits=["600 per hour"],   # tope global generoso por IP
+    default_limits=[os.environ.get("RATE_LIMIT_DEFAULT", "600 per hour")],
     storage_uri=None,                  # se setea en create_app con REDIS_URL
     strategy="fixed-window",
 )

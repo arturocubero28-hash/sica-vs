@@ -61,6 +61,12 @@ services:
       GOOGLE_SERVICE_ACCOUNT_EMAIL: "sicavs-wallet@sica-vs-villasdelsol.iam.gserviceaccount.com"
       GOOGLE_SERVICE_ACCOUNT_KEY: ""
       LOGO_URL: "https://diabetes-earflap-faction.ngrok-free.dev/static/logo-vs.png"
+      # Día 50: para pruebas de estrés con Locust, donde cientos de
+      # "usuarios" simulados salen de una sola IP real (la máquina de
+      # pruebas) y agotan el cupo por IP en segundos sin que sea un
+      # problema real de capacidad. Sin tocar esta variable, se comporta
+      # exactamente igual que en producción (600 por hora).
+      RATE_LIMIT_DEFAULT: ${RATE_LIMIT_DEFAULT:-600 per hour}
     depends_on:
       db:
         condition: service_healthy
