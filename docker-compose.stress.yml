@@ -1,0 +1,26 @@
+# SICA-VS — override SOLO para pruebas de estrés (Día 50)
+#
+# docker-compose.yml normal corre el backend con "flask run --debug" --
+# el servidor de desarrollo de Flask, pensado para programar (recarga
+# automática al guardar un archivo), no para aguantar carga real. Bajo
+# 500 usuarios simulados de Locust, eso generó timeouts de hasta 31
+# segundos con la CPU apenas al 58% -- el cuello de botella no era el
+# hardware, era que el servidor de desarrollo procesa casi una petición
+# a la vez.
+#
+# Este archivo reemplaza SOLO el comando del backend por Gunicorn, con
+# la misma configuración real que ya usa gangautos en el droplet (7
+# workers, 2 threads) -- para que la prueba de estrés compare contra lo
+# mismo que correría en producción de verdad.
+#
+# USO (no reemplaza al archivo normal, se combina con él):
+#   docker compose -f docker-compose.yml -f docker-compose.stress.yml up -d --build
+#
+# Para volver al modo normal de desarrollo (con recarga automática):
+#   docker compose up -d --build
+
+services:
+  backend:
+    command: gunicorn --workers 7 --threads 2 --bind 0.0.0.0:5000 --timeout 90
+             --keep-alive 5 --max-requests 1000 --max-requests-jitter 100
+             wsgi:app
