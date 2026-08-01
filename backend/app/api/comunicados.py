@@ -54,7 +54,7 @@ def crear(usuario_actual):
 
     nombre_imagen = None
     if "imagen" in request.files and request.files["imagen"].filename:
-        nombre_imagen, error = guardar_imagen_segura(
+        nombre_imagen, error, _tam = guardar_imagen_segura(
             request.files["imagen"], _carpeta(), EXT_IMAGEN
         )
         if error:

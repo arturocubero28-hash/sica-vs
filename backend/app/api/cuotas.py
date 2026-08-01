@@ -216,14 +216,9 @@ def subir_comprobante(usuario_actual, uuid_cuota):
     # Si alguno falla, no se guarda nada a medias — se informa cuál fue.
     nombres_archivos = []
     for i, archivo in enumerate(archivos_subidos):
-        # Día 50 — sistema de suscripciones: tamaño ANTES de guardar (el
-        # stream puede quedar agotado después, según el backend de
-        # storage) para poder registrarlo contra la cuota de la residencial.
-        archivo.stream.seek(0, os.SEEK_END)
-        tam = archivo.stream.tell()
-        archivo.stream.seek(0)
-
-        nombre_archivo, error = guardar_imagen_segura(archivo, _carpeta_comprobantes(), EXT_DOCUMENTO)
+        # tam ya NO se calcula acá a mano: guardar_imagen_segura() comprime
+        # del lado del servidor y devuelve el tamaño REAL ya comprimido.
+        nombre_archivo, error, tam = guardar_imagen_segura(archivo, _carpeta_comprobantes(), EXT_DOCUMENTO)
         if error:
             return jsonify({"error": {"code": "FORMATO_INVALIDO",
                                       "message": f"Comprobante {i + 1}: {error}"}}), 400
@@ -287,10 +282,7 @@ def subir_comprobante_abono(usuario_actual, uuid_abono):
 
     referencia = request.form.get("referencia", "")[:120]
     archivo_comprobante = request.files["comprobante"]
-    archivo_comprobante.stream.seek(0, os.SEEK_END)
-    tam = archivo_comprobante.stream.tell()
-    archivo_comprobante.stream.seek(0)
-    nombre_archivo, error = guardar_imagen_segura(
+    nombre_archivo, error, tam = guardar_imagen_segura(
         archivo_comprobante, _carpeta_comprobantes(), EXT_DOCUMENTO)
     if error:
         return jsonify({"error": {"code": "FORMATO_INVALIDO", "message": error}}), 400

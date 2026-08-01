@@ -1150,7 +1150,7 @@ def subir_logo_residencial(usuario_actual):
         return jsonify({"error": {"code": "sin_archivo",
                                   "message": "Adjuntá una imagen para el logo"}}), 400
 
-    nombre_archivo, error = guardar_imagen_segura(
+    nombre_archivo, error, _tam = guardar_imagen_segura(
         request.files["logo"], _carpeta_logos(), EXT_IMAGEN
     )
     if error:

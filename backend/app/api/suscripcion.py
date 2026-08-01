@@ -212,10 +212,11 @@ def pagar(usuario_actual):
         return jsonify({"error": {"code": "comprobante_requerido",
                                   "message": "Adjuntá el comprobante del pago"}}), 400
     archivo = request.files["comprobante"]
-    archivo.stream.seek(0, os.SEEK_END)
-    tam = archivo.stream.tell()
-    archivo.stream.seek(0)
-    nombre_archivo, error = guardar_imagen_segura(
+    # tam ya NO se calcula acá a mano: guardar_imagen_segura() comprime la
+    # imagen del lado del servidor y devuelve el tamaño REAL después de
+    # comprimir — contar el tamaño de antes de comprimir hubiera inflado
+    # la cuota de almacenamiento sin necesidad.
+    nombre_archivo, error, tam = guardar_imagen_segura(
         archivo, _carpeta_pagos_suscripcion(), EXT_DOCUMENTO)
     if error:
         return jsonify({"error": {"code": "FORMATO_INVALIDO", "message": error}}), 400
