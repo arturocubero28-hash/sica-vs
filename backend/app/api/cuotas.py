@@ -228,7 +228,11 @@ def subir_comprobante(usuario_actual, uuid_cuota):
             return jsonify({"error": {"code": "FORMATO_INVALIDO",
                                       "message": f"Comprobante {i + 1}: {error}"}}), 400
         nombres_archivos.append(nombre_archivo)
-        registrar_archivo_existente(usuario_actual.residencial_id, nombre_archivo, tam, tipo="comprobante")
+        try:
+            registrar_archivo_existente(usuario_actual.residencial_id, nombre_archivo, tam, tipo="comprobante")
+        except Exception as e:
+            current_app.logger.error(
+                "No se pudo registrar la cuota de almacenamiento para %s: %s", nombre_archivo, e)
 
     pago = Pago(
         cuota_id=cuota.id,
@@ -290,7 +294,11 @@ def subir_comprobante_abono(usuario_actual, uuid_abono):
         archivo_comprobante, _carpeta_comprobantes(), EXT_DOCUMENTO)
     if error:
         return jsonify({"error": {"code": "FORMATO_INVALIDO", "message": error}}), 400
-    registrar_archivo_existente(usuario_actual.residencial_id, nombre_archivo, tam, tipo="comprobante")
+    try:
+        registrar_archivo_existente(usuario_actual.residencial_id, nombre_archivo, tam, tipo="comprobante")
+    except Exception as e:
+        current_app.logger.error(
+            "No se pudo registrar la cuota de almacenamiento para %s: %s", nombre_archivo, e)
 
     pago = Pago(
         cuota_id=None,

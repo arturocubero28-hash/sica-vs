@@ -219,7 +219,16 @@ def pagar(usuario_actual):
         archivo, _carpeta_pagos_suscripcion(), EXT_DOCUMENTO)
     if error:
         return jsonify({"error": {"code": "FORMATO_INVALIDO", "message": error}}), 400
-    registrar_archivo_existente(residencial.id, nombre_archivo, tam, tipo="comprobante")
+    # Si esto falla, NO debe tumbar el pago (el comprobante ya se guardó
+    # bien en disco/Spaces) — pero antes fallaba en silencio, sin dejar
+    # rastro. Ahora, si algo sale mal acá, va a quedar registrado en los
+    # logs del backend para poder diagnosticarlo.
+    try:
+        registrar_archivo_existente(residencial.id, nombre_archivo, tam, tipo="comprobante")
+    except Exception as e:
+        current_app.logger.error(
+            "No se pudo registrar la cuota de almacenamiento para %s (residencial_id=%s): %s",
+            nombre_archivo, residencial.id, e)
 
     pago = SuscripcionPago(
         residencial_id=residencial.id,
