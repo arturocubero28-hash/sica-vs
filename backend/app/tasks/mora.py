@@ -58,8 +58,13 @@ def _avisar_cuotas_logica(Cuota, _notif):
                       f"Realizá tu pago para mantener tu cuenta al día.")
 
         try:
-            _notif.notificar_cuenta(
-                cuenta, titulo, cuerpo,
+            # Encolado (async) en vez de enviar directo -- así cada aviso se
+            # reparte como una tarea separada entre los 12 procesos del
+            # worker, en paralelo, en vez de mandarse uno por uno en fila
+            # dentro de esta misma tarea (que es lo que causaba el atraso
+            # real que notó el usuario en las pruebas de hoy).
+            _notif.notificar_cuenta_async(
+                cuenta.id, titulo, cuerpo,
                 {"tipo": "cuota_por_vencer", "dias": str(dias)},
             )
             avisadas += 1
@@ -215,8 +220,8 @@ def revisar_mora():
         try:
             from app.services import notificaciones as _notif
             for cuenta in cuentas_bloqueadas:
-                _notif.notificar_cuenta(
-                    cuenta,
+                _notif.notificar_cuenta_async(
+                    cuenta.id,
                     "Cuenta bloqueada por mora",
                     "Tu cuenta fue bloqueada por cuotas vencidas. "
                     "Regularizá tu pago para recuperar el acceso.",
@@ -229,20 +234,30 @@ def revisar_mora():
         # Corre cada noche, así que el residente recibe un recordatorio diario
         # que va escalando mientras no pague.
         avisados = 0
-        try:
-            from app.services import notificaciones as _notif
-            for info in avisos_mora.values():
-                cuenta = info["cuenta"]
-                dias = info["dias"]
-                monto_txt = f"L {info['monto']:,.2f}"
-                titulo, cuerpo = _mensaje_mora(dias, monto_txt)
-                _notif.notificar_cuenta(
-                    cuenta, titulo, cuerpo,
+        from app.services import notificaciones as _notif
+        for info in avisos_mora.values():
+            cuenta = info["cuenta"]
+            dias = info["dias"]
+            monto_txt = f"L {info['monto']:,.2f}"
+            titulo, cuerpo = _mensaje_mora(dias, monto_txt)
+            try:
+                # Encolado (async): cada aviso se reparte como tarea propia
+                # entre los procesos del worker, en paralelo -- antes se
+                # mandaba uno por uno en fila dentro de este mismo ciclo,
+                # lo que causaba que las últimas cuentas de la lista
+                # recibieran su aviso varios minutos después que las
+                # primeras (encontrado el Día 50, en pruebas reales).
+                _notif.notificar_cuenta_async(
+                    cuenta.id, titulo, cuerpo,
                     {"tipo": "mora_diaria", "dias": str(dias)},
                 )
                 avisados += 1
-        except Exception:
-            pass
+            except Exception:
+                # Un fallo en UNA cuenta ya no corta el resto del ciclo --
+                # antes el try/except envolvía todo el for, así que una
+                # sola falla dejaba sin avisar a todas las cuentas
+                # restantes de la lista, en silencio.
+                pass
 
         return {"procesadas": procesadas, "cuentas_bloqueadas": bloqueadas,
                 "avisos_mora": avisados}
