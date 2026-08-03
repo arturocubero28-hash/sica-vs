@@ -283,10 +283,29 @@ def resolver_residencial_caja(usuario_actual, request):
         rid, err = resolver_residencial_caja(usuario_actual, request)
         if err:
             return err
+
+    Día 51 — niveles de plan: este resolver ahora también valida
+    permite_cuotas sobre la residencial REALMENTE resuelta (la del
+    usuario, o la elegida explícitamente por un rol de plataforma) — no
+    alcanza con el decorador @requiere_funcion_plan en cada endpoint,
+    porque ese decorador solo mira usuario_actual.residencial_id, que
+    para desarrollador/super_admin siempre es None (nunca bloquea,
+    sin importar qué residencial estén mirando en realidad). Bug real
+    encontrado por el usuario probando con su propia cuenta de
+    desarrollador contra una residencial en plan Básico.
     """
+    def _validar_plan(rid):
+        from app.utils.residencial import plan_permite
+        if not plan_permite(rid, "cuotas"):
+            from flask import jsonify
+            return None, (jsonify({"error": {"code": "funcion_no_incluida",
+                          "message": "Tu plan actual no incluye esta función — "
+                                     "hablá con tu proveedor para subir de plan."}}), 402)
+        return rid, None
+
     rid = residencial_id_de_usuario(usuario_actual)
     if rid is not None:
-        return rid, None
+        return _validar_plan(rid)
 
     # Rol de plataforma sin residencial propia: exigir que la indique.
     uuid_pedido = request.args.get("residencial_id")
@@ -308,7 +327,7 @@ def resolver_residencial_caja(usuario_actual, request):
         from flask import jsonify
         return None, (jsonify({"error": {"code": "residencial_no_encontrada",
                                          "message": "No se encontró esa residencial"}}), 404)
-    return r.id, None
+    return _validar_plan(r.id)
 
 
 def limite_casas_alcanzado(residencial_id):

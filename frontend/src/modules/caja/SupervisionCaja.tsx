@@ -7,6 +7,7 @@ import {
   type ResidencialDTO, type Usuario,
 } from "../../api/client";
 import { L } from "../../utils/formato";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { FileText } from "lucide-react";
 
 export function SupervisionCaja({ usuario }: { usuario: Usuario }) {
@@ -27,6 +28,7 @@ export function SupervisionCaja({ usuario }: { usuario: Usuario }) {
   const [detalle, setDetalle] = useState<SesionCajaDTO | null>(null);
   const [editarSaldo, setEditarSaldo] = useState(false);
   const [ajusteConteo, setAjusteConteo] = useState(false);
+  const [errorPlan, setErrorPlan] = useState("");
 
   // Cargar la lista de residenciales una sola vez, solo si hace falta elegir.
   useEffect(() => {
@@ -39,11 +41,12 @@ export function SupervisionCaja({ usuario }: { usuario: Usuario }) {
     if (esPlataforma && !residencialId) { setCargando(false); return; }
     const rid = esPlataforma ? residencialId : undefined;
     setCargando(true);
+    setErrorPlan("");
     Promise.all([
       listarSesionesCaja(rid), resumenCaja(rid), listarDescuadres(undefined, rid), listarSalidas(undefined, rid),
     ])
       .then(([s, r, d, sl]) => { setSesiones(s); setResumen(r); setDescuadres(d); setSalidas(sl); })
-      .catch(() => {}).finally(() => setCargando(false));
+      .catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
   }
   useEffect(() => { recargar(); }, [residencialId]);
 
@@ -78,6 +81,7 @@ export function SupervisionCaja({ usuario }: { usuario: Usuario }) {
   }
 
   if (cargando) return <p className="muted">Cargando…</p>;
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   const abiertas = sesiones.filter(s => s.estado === "abierta");
   const totalRecaudadoHoy = sesiones

@@ -630,6 +630,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas }:
             </label>
           </div>
           )}
+          {permiteCuotas && (
           <div className="row" style={{ alignItems: "center", marginTop: 10 }}>
             <span className="muted small" style={{ marginRight: 10 }}>
               Acceso virtual (QR/Bluetooth) de esta cuenta:
@@ -647,6 +648,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas }:
               </button>
             </div>
           </div>
+          )}
           </div>
           )}
 

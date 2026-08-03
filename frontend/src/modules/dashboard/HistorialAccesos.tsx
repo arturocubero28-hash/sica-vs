@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { historialAccesos, historialPagos, historialTarjetas, urlFotoGuardia, urlReciboPDF, urlComprobante, type HistorialDTO, type HistorialPagosDTO, type HistorialTarjetasDTO, type EventoHistorialDTO } from "../../api/client";
 import { L } from "../../utils/formato";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { Camera, Car, DollarSign, Footprints, IdCard, Paperclip, QrCode, Receipt, ScrollText } from "lucide-react";
 
 export function HistorialAccesos() {
@@ -249,13 +250,16 @@ function TabPagos() {
   const [metodo, setMetodo] = useState("");
   const [buscar, setBuscar] = useState("");
   const [pagina, setPagina] = useState(1);
+  const [errorPlan, setErrorPlan] = useState("");
 
   function cargar() {
     setCargando(true);
     historialPagos({ desde, hasta, metodo, buscar, pagina })
-      .then(setData).catch(() => {}).finally(() => setCargando(false));
+      .then(setData).catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
   }
   useEffect(() => { cargar(); }, [pagina]);
+
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   function aplicarFiltros() { setPagina(1); cargar(); }
   function limpiar() {
