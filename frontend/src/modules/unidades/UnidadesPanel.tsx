@@ -609,6 +609,14 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas }:
               <b>Cuota mensual</b>
               <InfoTip texto="La tarifa define cuánto paga esta casa cada mes. El día de pago es la fecha límite mensual; se autollena con hoy pero podés cambiarlo (máximo 28 para evitar problemas en febrero)." />
             </div>
+          {!permiteCuotas ? (
+            <div className="muted small" style={{
+              padding: "10px 12px", background: "var(--gris-cl, #f1f3f6)",
+              borderRadius: 8, marginTop: 4,
+            }}>
+              No aplica — tu plan actual no incluye cuotas de residentes.
+            </div>
+          ) : (
           <div className="row">
             <select value={tarifaId} onChange={(e) => setTarifaId(Number(e.target.value))}>
               <option value={0}>— Selecciona tarifa —</option>
@@ -621,6 +629,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas }:
                 onChange={(e) => setDiaPago(Number(e.target.value))} />
             </label>
           </div>
+          )}
           <div className="row" style={{ alignItems: "center", marginTop: 10 }}>
             <span className="muted small" style={{ marginRight: 10 }}>
               Acceso virtual (QR/Bluetooth) de esta cuenta:
