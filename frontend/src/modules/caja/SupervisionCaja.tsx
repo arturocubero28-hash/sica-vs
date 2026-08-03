@@ -81,7 +81,6 @@ export function SupervisionCaja({ usuario }: { usuario: Usuario }) {
   }
 
   if (cargando) return <p className="muted">Cargando…</p>;
-  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   const abiertas = sesiones.filter(s => s.estado === "abierta");
   const totalRecaudadoHoy = sesiones
@@ -104,6 +103,13 @@ export function SupervisionCaja({ usuario }: { usuario: Usuario }) {
         </div>
       </div>
 
+      {/* Día 51 — niveles de plan: el header con el selector ("Cambiar") queda
+          SIEMPRE visible arriba, incluso si el plan de la residencial elegida
+          no incluye caja -- antes el mensaje reemplazaba TODA la pantalla,
+          dejando a un desarrollador sin forma de volver a elegir otra
+          residencial sin recargar la página entera. */}
+      {errorPlan ? <FuncionNoIncluida mensaje={errorPlan} /> : (
+      <>
       {/* Saldo del sistema */}
       {resumen && (
         <div className="saldo-caja-card">
@@ -345,6 +351,8 @@ export function SupervisionCaja({ usuario }: { usuario: Usuario }) {
         <ModalAjusteConteo saldoSistema={resumen.saldo_actual} residencialId={esPlataforma ? residencialId : undefined}
           onCerrar={() => setAjusteConteo(false)}
           onGuardado={() => { setAjusteConteo(false); recargar(); }} />
+      )}
+      </>
       )}
     </div>
   );
