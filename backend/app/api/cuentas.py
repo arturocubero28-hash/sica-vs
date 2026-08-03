@@ -27,7 +27,7 @@ from flask import Blueprint, request, jsonify, current_app
 from app.extensions import db
 from app.models.usuario import Usuario
 from app.models.cuenta import Unidad, Cuenta, Residente, Tarjeta, Tarifa, CodigoEnrolamiento, Cuota, SolicitudBaja, Pago
-from app.auth.security import roles_required, token_required
+from app.auth.security import roles_required, token_required, requiere_funcion_plan
 from app.utils.residencial import residencial_id_heredado
 from app.utils.archivos import guardar_imagen_segura, servir_archivo_seguro, EXT_IMAGEN
 
@@ -793,6 +793,7 @@ def asignar_tarjeta(usuario_actual, cuenta_uuid):
 # =====================================================================
 @cuentas_bp.get("/tarifas")
 @token_required
+@requiere_funcion_plan("cuotas")
 def listar_tarifas(usuario_actual):
     from app.utils.residencial import scope_directo
     tarifas = scope_directo(Tarifa.query, Tarifa, usuario_actual).filter_by(activa=True).all()
@@ -801,6 +802,7 @@ def listar_tarifas(usuario_actual):
 
 @cuentas_bp.post("/tarifas")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def crear_tarifa(usuario_actual):
     data = request.get_json(silent=True) or {}
     nombre = (data.get("nombre") or "").strip()
@@ -823,6 +825,7 @@ def crear_tarifa(usuario_actual):
 
 @cuentas_bp.put("/tarifas/<int:tarifa_id>")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def editar_tarifa(usuario_actual, tarifa_id):
     tarifa = Tarifa.query.get(tarifa_id)
     if not tarifa:
@@ -846,6 +849,7 @@ def editar_tarifa(usuario_actual, tarifa_id):
 
 @cuentas_bp.delete("/tarifas/<int:tarifa_id>")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def desactivar_tarifa(usuario_actual, tarifa_id):
     tarifa = Tarifa.query.get(tarifa_id)
     if not tarifa:
@@ -1011,6 +1015,7 @@ def validar_codigo_enrolamiento(usuario_actual, codigo):
 
 @cuentas_bp.get("/config-residencial")
 @roles_required("admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def leer_config_residencial(usuario_actual):
     from app.models.cuenta import ConfigResidencial
     cfg = ConfigResidencial.get()
@@ -1019,6 +1024,7 @@ def leer_config_residencial(usuario_actual):
 
 @cuentas_bp.put("/config-residencial")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def editar_config_residencial(usuario_actual):
     """Edita día de pago y/o días de gracia. Al cambiar el día de pago,
     se aplica a TODAS las cuentas activas automáticamente."""

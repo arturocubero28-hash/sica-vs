@@ -45,6 +45,20 @@ def _avisar_cuotas_logica(Cuota, _notif):
         cuenta = cuota.cuenta
         if not cuenta:
             continue
+        # Día 51 — niveles de plan: si la residencial de esta cuenta tiene
+        # un plan que no incluye cuotas, no se manda el aviso. En rigor no
+        # debería ni haber cuotas generadas para residenciales así, pero
+        # este chequeo cubre el caso de una residencial que tenía cuotas
+        # y bajó de plan después.
+        #
+        # Cuenta.unidad_id es solo una columna FK, sin relación ORM
+        # definida en el modelo -- se consulta Unidad directo en vez de
+        # asumir un cuenta.unidad que no existe.
+        from app.utils.residencial import plan_permite
+        from app.models.cuenta import Unidad
+        unidad = Unidad.query.get(cuenta.unidad_id)
+        if unidad and not plan_permite(unidad.residencial_id, "cuotas"):
+            continue
         dias = (cuota.fecha_vencimiento - hoy).days
         monto_txt = f"L {float(cuota.monto):,.2f}"
 
@@ -190,6 +204,19 @@ def revisar_mora():
         for cuota in cuotas:
             dias = (hoy - cuota.fecha_vencimiento).days
             cuenta = cuota.cuenta
+            if not cuenta:
+                continue
+
+            # Día 51 — niveles de plan: si la residencial de esta cuenta
+            # tiene un plan que no incluye cuotas, no se bloquea la cuenta
+            # ni se manda ningún aviso de mora. Es el corazón del pedido
+            # del usuario: un plan Básico no debe tener el control
+            # automático de accesos por pago corriendo en absoluto.
+            from app.utils.residencial import plan_permite
+            from app.models.cuenta import Unidad
+            unidad = Unidad.query.get(cuenta.unidad_id)
+            if unidad and not plan_permite(unidad.residencial_id, "cuotas"):
+                continue
 
             if dias >= dias_gracia:
                 cuota.estado = "vencida"

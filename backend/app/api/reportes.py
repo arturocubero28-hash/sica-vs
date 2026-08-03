@@ -9,7 +9,7 @@ from collections import defaultdict
 from flask import Blueprint, jsonify, request
 
 from app.models.cuenta import Cuota, Pago, Cuenta
-from app.auth.security import roles_required
+from app.auth.security import roles_required, requiere_funcion_plan
 from app.utils import dinero
 from app.utils.residencial import (scope_cuotas, scope_pagos, scope_cuentas,
                                    scope_eventos)
@@ -19,6 +19,7 @@ reportes_bp = Blueprint("reportes", __name__)
 
 @reportes_bp.get("/financiero")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def reporte_financiero(usuario_actual):
     """
     Reporte financiero del mes en curso (o el indicado por ?anio=&mes=).
@@ -218,6 +219,7 @@ def reporte_financiero(usuario_actual):
 
 @reportes_bp.get("/mora-por-casa")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def mora_por_casa(usuario_actual):
     """
     Reporte de mora detallado por casa: lista cada cuenta con cuotas pendientes
@@ -316,6 +318,7 @@ def mora_por_casa(usuario_actual):
 
 @reportes_bp.get("/caja")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def reporte_caja(usuario_actual):
     """
     Reporte de sesiones de caja en un período (control de arqueo).
@@ -515,6 +518,7 @@ def reporte_accesos(usuario_actual):
 
 @reportes_bp.get("/inventario")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def reporte_inventario(usuario_actual):
     """
     Reporte de inventario de tarjetas en un período.
@@ -593,6 +597,7 @@ def reporte_inventario(usuario_actual):
 
 @reportes_bp.get("/ejecutivo")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def reporte_ejecutivo(usuario_actual):
     """
     Resumen ejecutivo del mes: los KPIs clave en un solo lugar, pensado para

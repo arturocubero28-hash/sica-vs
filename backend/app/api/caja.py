@@ -12,7 +12,7 @@ from app.extensions import db
 from app.models.caja import SesionCaja, ConfigCaja, AjusteCaja, SalidaCaja
 from app.models.cuenta import Cuenta, Cuota, Pago, Tarjeta, Residente, TipoTarjeta, MovimientoStock, VentaTarjeta
 from app.models.usuario import Usuario
-from app.auth.security import roles_required
+from app.auth.security import roles_required, requiere_funcion_plan
 from app.utils import dinero
 
 caja_bp = Blueprint("caja", __name__)
@@ -27,6 +27,7 @@ def _sesion_abierta_de(usuario):
 # ── Estado de la caja del cajero actual ───────────────────────────────────────
 @caja_bp.get("/estado")
 @roles_required("cajero", "admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def estado_caja(usuario_actual):
     sesion = _sesion_abierta_de(usuario_actual)
     if not sesion:
@@ -41,6 +42,7 @@ def estado_caja(usuario_actual):
 # ── Saldo de apertura sugerido (no editable) ──────────────────────────────────
 @caja_bp.get("/saldo-apertura")
 @roles_required("cajero", "admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def saldo_apertura(usuario_actual):
     """Devuelve el fondo con que debe abrir la próxima caja (del cierre anterior),
     de LA RESIDENCIAL de usuario_actual — cada una opera su caja aparte."""
@@ -65,6 +67,7 @@ def saldo_apertura(usuario_actual):
 # ── Abrir caja ────────────────────────────────────────────────────────────────
 @caja_bp.post("/abrir")
 @roles_required("cajero", "admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def abrir_caja(usuario_actual):
     if _sesion_abierta_de(usuario_actual):
         return jsonify({"error": {"code": "ya_abierta",
@@ -111,6 +114,7 @@ def abrir_caja(usuario_actual):
 # ── Registrar pago en ventanilla ──────────────────────────────────────────────
 @caja_bp.post("/pago")
 @roles_required("cajero", "admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def registrar_pago(usuario_actual):
     sesion = _sesion_abierta_de(usuario_actual)
     if not sesion:
@@ -183,6 +187,7 @@ def registrar_pago(usuario_actual):
 # ── Vender tarjeta en caja (cobra + asigna a la casa + baja stock) ─────────────
 @caja_bp.post("/vender-tarjeta")
 @roles_required("cajero", "admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def vender_tarjeta(usuario_actual):
     sesion = _sesion_abierta_de(usuario_actual)
     if not sesion:
@@ -287,6 +292,7 @@ def vender_tarjeta(usuario_actual):
 
 @caja_bp.post("/cerrar")
 @roles_required("cajero", "admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def cerrar_caja(usuario_actual):
     sesion = _sesion_abierta_de(usuario_actual)
     if not sesion:
@@ -336,6 +342,7 @@ def cerrar_caja(usuario_actual):
 # ── Cuotas pendientes de una cuenta (para buscar en ventanilla) ───────────────
 @caja_bp.get("/buscar-cuenta")
 @roles_required("cajero", "admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def buscar_cuenta(usuario_actual):
     q = (request.args.get("q") or "").strip()
     if not q:
@@ -434,6 +441,7 @@ def buscar_cuenta(usuario_actual):
 # =====================================================================
 @caja_bp.get("/sesiones")
 @roles_required("admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def listar_sesiones(usuario_actual):
     """Día 47: usa el MISMO resolver que resumen_caja, para que la lista de
     sesiones siempre corresponda a la residencial que se está mirando —
@@ -453,6 +461,7 @@ def listar_sesiones(usuario_actual):
 
 @caja_bp.get("/resumen")
 @roles_required("admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def resumen_caja(usuario_actual):
     """
     Saldo de caja DE UNA RESIDENCIAL. La fórmula vive en UN solo lugar:
@@ -503,6 +512,7 @@ def resumen_caja(usuario_actual):
 
 @caja_bp.get("/sesiones/<uuid_sesion>")
 @roles_required("admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def detalle_sesion(usuario_actual, uuid_sesion):
     s = SesionCaja.query.filter_by(uuid_publico=uuid_sesion).first()
     if not s:
@@ -513,6 +523,7 @@ def detalle_sesion(usuario_actual, uuid_sesion):
 # ── Constancia PDF del turno del cajero ──────────────────────────────────────
 @caja_bp.get("/sesiones/<uuid_sesion>/pdf")
 @roles_required("cajero", "admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def constancia_pdf(usuario_actual, uuid_sesion):
     """Genera la constancia PDF del turno del cajero con arqueo."""
     s = SesionCaja.query.filter_by(uuid_publico=uuid_sesion).first()
@@ -739,6 +750,7 @@ def _validar_clave_dev(clave):
 # =====================================================================
 @caja_bp.post("/saldo-inicial")
 @roles_required("admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def modificar_saldo_inicial(usuario_actual):
     """
     CONFIGURACIÓN INICIAL de UNA residencial (se usa una sola vez al
@@ -782,6 +794,7 @@ def modificar_saldo_inicial(usuario_actual):
 
 @caja_bp.post("/ajuste-conteo")
 @roles_required("admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def ajuste_conteo(usuario_actual):
     """
     AJUSTE POR CONTEO FÍSICO (operación normal).
@@ -838,6 +851,7 @@ def ajuste_conteo(usuario_actual):
 # =====================================================================
 @caja_bp.post("/descuadre")
 @roles_required("cajero", "admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def reportar_descuadre(usuario_actual):
     """El cajero reporta un sobrante o faltante. Queda pendiente de aprobación."""
     data = request.get_json(silent=True) or {}
@@ -868,6 +882,7 @@ def reportar_descuadre(usuario_actual):
 
 @caja_bp.get("/descuadres")
 @roles_required("admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def listar_descuadres(usuario_actual):
     """Día 47: mismo resolver que el resto de la sección de caja, por
     consistencia (ver listar_sesiones)."""
@@ -887,6 +902,7 @@ def listar_descuadres(usuario_actual):
 
 @caja_bp.post("/descuadres/<uuid_ajuste>/resolver")
 @roles_required("admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def resolver_descuadre(usuario_actual, uuid_ajuste):
     """Admin/dev aprueba o rechaza un descuadre. Aprobar requiere clave de dev."""
     data = request.get_json(silent=True) or {}
@@ -922,6 +938,7 @@ def resolver_descuadre(usuario_actual, uuid_ajuste):
 # =====================================================================
 @caja_bp.post("/salida")
 @roles_required("cajero", "admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def solicitar_salida(usuario_actual):
     """El cajero solicita una salida de efectivo (ej. depósito al banco)."""
     sesion = _sesion_abierta_de(usuario_actual)
@@ -951,6 +968,7 @@ def solicitar_salida(usuario_actual):
 
 @caja_bp.get("/salidas")
 @roles_required("admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def listar_salidas(usuario_actual):
     """Lista todas las salidas de UNA residencial. Día 47: mismo resolver
     que el resto de la sección de caja, por consistencia."""
@@ -972,6 +990,7 @@ def listar_salidas(usuario_actual):
 
 @caja_bp.post("/salidas/<uuid_salida>/autorizar")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def autorizar_salida(usuario_actual, uuid_salida):
     """Admin autoriza o rechaza una salida. Autorizar requiere su contraseña."""
     data = request.get_json(silent=True) or {}
@@ -1003,6 +1022,7 @@ def autorizar_salida(usuario_actual, uuid_salida):
 
 @caja_bp.get("/salidas/pendientes")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def salidas_pendientes(usuario_actual):
     """Salidas que están esperando autorización."""
     salidas = SalidaCaja.query.filter_by(estado="pendiente")\
@@ -1015,6 +1035,7 @@ def salidas_pendientes(usuario_actual):
 # =====================================================================
 @caja_bp.post("/ingreso")
 @roles_required("cajero", "admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def solicitar_ingreso(usuario_actual):
     """El cajero registra un ingreso extraordinario (ej. traer efectivo del banco)."""
     sesion = _sesion_abierta_de(usuario_actual)
