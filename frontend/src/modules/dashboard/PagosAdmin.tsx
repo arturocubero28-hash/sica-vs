@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { cuotasPendientesAdmin, revisarPago, generarCuotasManual, urlComprobante, type PagoAdminDTO } from "../../api/client";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 
 export function PagosAdmin() {
   const [pagos, setPagos] = useState<PagoAdminDTO[]>([]);
@@ -37,7 +38,7 @@ export function PagosAdmin() {
   }
 
   if (cargando) return <p className="muted">Cargando pagos pendientes…</p>;
-  if (errorPlan) return <p className="muted" style={{ padding: 20 }}>{errorPlan}</p>;
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   return (
     <div className="pagos-admin">

@@ -3232,6 +3232,21 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 
 /* "i" azul de info con burbuja */
 .infotip { position: relative; display: inline-flex; align-items: center; color: #2563eb; cursor: help; }
+
+/* Día 51 — "esta función no está en tu plan" (FuncionNoIncluida.tsx),
+   en vez del texto plano que mostraba antes. */
+.funcion-no-incluida {
+  max-width: 380px; margin: 40px auto; text-align: center;
+  padding: 32px 28px; background: var(--gris-cl, #f1f3f6); border-radius: 16px;
+}
+.funcion-no-incluida-icono {
+  width: 52px; height: 52px; margin: 0 auto 14px; border-radius: 50%;
+  background: #fff7ed; color: var(--marca-naranja, var(--naranja));
+  display: flex; align-items: center; justify-content: center;
+}
+.funcion-no-incluida h3 { margin: 0 0 8px; color: var(--marca-azul, var(--azul)); }
+.funcion-no-incluida p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+
 .infotip-bubble {
   position: absolute; left: 22px; top: -4px; z-index: 30; width: 240px;
   background: var(--marca-azul); color: #fff; font-size: 12.5px; font-weight: 400; line-height: 1.4;

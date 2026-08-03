@@ -215,7 +215,7 @@ def requiere_funcion_plan(funcion):
             if not plan_permite(usuario_actual.residencial_id, funcion):
                 return jsonify({"error": {"code": "funcion_no_incluida",
                                           "message": "Tu plan actual no incluye esta función — "
-                                                     "hablá con tu desarrollador para subir de plan."}}), 402
+                                                     "hablá con tu proveedor para subir de plan."}}), 402
             return f(usuario_actual, *args, **kwargs)
         return wrapper
     return decorator

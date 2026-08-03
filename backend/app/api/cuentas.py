@@ -81,7 +81,7 @@ def _crear_usuario_pendiente(nombre, apellido, email, telefono=None, extra=None,
     if usuario_actual is not None:
         from app.utils.residencial import limite_usuarios_alcanzado
         if limite_usuarios_alcanzado(usuario_actual.residencial_id):
-            return None, "Tu plan actual no permite más usuarios. Pedile a tu desarrollador que te suba de plan."
+            return None, "Tu plan actual no permite más usuarios. Pedile a tu proveedor que te suba de plan."
 
     extra = extra or {}
     u = Usuario(
@@ -230,7 +230,7 @@ def crear_cuenta(usuario_actual):
     from app.utils.residencial import limite_casas_alcanzado
     if limite_casas_alcanzado(usuario_actual.residencial_id):
         return _err("limite_casas", "Tu plan actual no permite más casas. "
-                    "Pedile a tu desarrollador que te suba de plan.", 402)
+                    "Pedile a tu proveedor que te suba de plan.", 402)
 
     # La unidad puede venir ya existente (unidad_id) o crearse sobre la marcha
     # (unidad_nueva: {tipo, identificador}), para no requerir un paso previo.

@@ -87,7 +87,7 @@ def subir_plan(usuario_actual):
     if not residencial.plan_id:
         return jsonify({"error": {"code": "sin_plan",
                                   "message": "Tu residencial todavía no tiene un plan asignado — "
-                                             "contactá a tu desarrollador"}}), 400
+                                             "contactá a tu proveedor"}}), 400
 
     body = request.get_json(silent=True) or {}
 
@@ -105,7 +105,7 @@ def subir_plan(usuario_actual):
     if plan_nuevo.precio_mensual <= residencial.plan.precio_mensual:
         return jsonify({"error": {"code": "no_es_upgrade",
                                   "message": "Ese plan no es más caro que el actual — "
-                                             "para bajar de plan, contactá a tu desarrollador"}}), 400
+                                             "para bajar de plan, contactá a tu proveedor"}}), 400
 
     residencial.plan_id = plan_nuevo.id
     # fecha_proximo_pago NO se toca a propósito — el precio nuevo se cobra
@@ -197,7 +197,7 @@ def pagar(usuario_actual):
     if not residencial.plan_id:
         return jsonify({"error": {"code": "sin_plan",
                                   "message": "Tu residencial todavía no tiene un plan asignado — "
-                                             "contactá a tu desarrollador"}}), 400
+                                             "contactá a tu proveedor"}}), 400
 
     plan_pedido_id = request.form.get("plan_id", "").strip()
     if plan_pedido_id:

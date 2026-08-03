@@ -92,7 +92,7 @@ def _crear_usuario_rol(req, rol, usuario_actual):
     if limite_usuarios_alcanzado(usuario_actual.residencial_id):
         return jsonify({"error": {"code": "limite_usuarios",
                                   "message": "Tu plan actual no permite más usuarios. "
-                                             "Pedile a tu desarrollador que te suba de plan."}}), 402
+                                             "Pedile a tu proveedor que te suba de plan."}}), 402
 
     # SEC-01: contraseña aleatoria por usuario, no una fija compartida.
     # Se muestra una sola vez en la respuesta para que el admin la anote

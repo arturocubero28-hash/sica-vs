@@ -3,6 +3,7 @@ import { misCuotas, subirComprobante, subirComprobanteAbono, urlReciboPDF,
   type CuotaDTO, type AbonoArregloDTO, type PagoHistorialDTO } from "../../api/client";
 import { AlertTriangle, Paperclip, Handshake, Receipt } from "lucide-react";
 import { comprimirImagenWebp } from "../../utils/comprimirImagen";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 
 const estadoLabel: Record<string, string> = {
   pendiente: "Pendiente", en_revision: "En revisión", pagada: "Pagada", vencida: "Vencida",
@@ -46,7 +47,7 @@ export function CuotasResidente() {
   }
 
   if (cargando) return <p className="muted">Cargando cuotas…</p>;
-  if (errorPlan) return <p className="muted" style={{ padding: 20 }}>{errorPlan}</p>;
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   const pendientes = cuotas.filter(c => c.estado !== "pagada" && c.estado !== "en_arreglo");
   const abonosPend = arreglo ? arreglo.abonos.filter(a => a.estado !== "pagado") : [];
