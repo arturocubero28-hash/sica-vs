@@ -34,6 +34,17 @@ class Plan(db.Model):
     # Orden de presentación en el panel — no el id, así se pueden reordenar
     # los planes en la lista sin que dependa de cuándo se creó cada uno.
     orden = db.Column(db.Integer, nullable=False, default=0)
+
+    # Día 51 — niveles de plan (Básico/Premium), por flags de función en vez
+    # de un campo único de "nivel": así un plan futuro puede combinar
+    # funciones libremente (ej. cuotas sí, notificaciones no) sin depender
+    # de agregar un nuevo nombre de nivel cada vez. Todos en True por
+    # defecto — los planes creados ANTES de este sistema (Día 49) deben
+    # seguir funcionando exactamente igual que hasta ahora, sin que se les
+    # bloquee nada de golpe.
+    permite_cuotas = db.Column(db.Boolean, nullable=False, default=True)
+    permite_notificaciones = db.Column(db.Boolean, nullable=False, default=True)
+
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow,
                            onupdate=dt.datetime.utcnow)
@@ -48,6 +59,8 @@ class Plan(db.Model):
             "precio_mensual": float(self.precio_mensual),
             "activo": self.activo,
             "orden": self.orden,
+            "permite_cuotas": self.permite_cuotas,
+            "permite_notificaciones": self.permite_notificaciones,
         }
         if incluir_stats:
             from app.models.residencial import Residencial

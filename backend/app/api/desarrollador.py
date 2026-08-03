@@ -1075,6 +1075,8 @@ def crear_plan(usuario_actual):
         nombre=nombre, max_casas=max_casas, max_usuarios=max_usuarios,
         almacenamiento_gb=almacenamiento_gb, precio_mensual=precio,
         orden=int(body.get("orden", 0)),
+        permite_cuotas=bool(body.get("permite_cuotas", True)),
+        permite_notificaciones=bool(body.get("permite_notificaciones", True)),
     )
     db.session.add(plan)
     db.session.commit()
@@ -1130,6 +1132,10 @@ def editar_plan(usuario_actual, plan_id):
             plan.orden = int(body["orden"])
         except (TypeError, ValueError):
             pass  # el orden es solo cosmético, no vale la pena bloquear el guardado por esto
+    if "permite_cuotas" in body:
+        plan.permite_cuotas = bool(body["permite_cuotas"])
+    if "permite_notificaciones" in body:
+        plan.permite_notificaciones = bool(body["permite_notificaciones"])
 
     db.session.commit()
     return jsonify({"data": plan.to_dict()})

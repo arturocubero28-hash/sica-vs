@@ -312,6 +312,12 @@ def create_app(config_class=Config):
             "ALTER TABLE IF EXISTS fotos_acceso RENAME TO archivos_residencial",
             "ALTER TABLE archivos_residencial ADD COLUMN IF NOT EXISTS tipo VARCHAR(20) NOT NULL DEFAULT 'acceso'",
             "ALTER TABLE archivos_residencial ADD COLUMN IF NOT EXISTS pago_id BIGINT REFERENCES pagos(id)",
+            # Día 51 — niveles de plan por flags de función. Default true:
+            # los planes ya creados (Día 49-50) deben seguir con acceso
+            # completo, tal como funcionaban antes de que este sistema
+            # existiera.
+            "ALTER TABLE planes ADD COLUMN IF NOT EXISTS permite_cuotas BOOLEAN NOT NULL DEFAULT true",
+            "ALTER TABLE planes ADD COLUMN IF NOT EXISTS permite_notificaciones BOOLEAN NOT NULL DEFAULT true",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de
