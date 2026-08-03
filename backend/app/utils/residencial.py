@@ -348,3 +348,25 @@ def limite_usuarios_alcanzado(residencial_id):
         return False
     actuales = Usuario.query.filter_by(residencial_id=residencial_id).count()
     return actuales >= residencial.plan.max_usuarios
+
+
+def plan_permite(residencial_id, funcion):
+    """
+    Día 51 — niveles de plan (Básico/Premium) por flags de función.
+    Devuelve True si la residencial puede usar esa función según su plan.
+
+    Mismo criterio que el resto del sistema de suscripciones: sin
+    residencial_id o sin plan asignado, SIEMPRE permite — no hay
+    restricción de nivel contra la cual medir (Villas del Sol, sin plan
+    todavía, sigue con acceso completo a todo).
+
+    funcion: 'cuotas' o 'notificaciones' — el nombre del flag en el
+    modelo Plan, sin el prefijo 'permite_'.
+    """
+    if not residencial_id:
+        return True
+    from app.models.residencial import Residencial
+    residencial = Residencial.query.get(residencial_id)
+    if not residencial or not residencial.plan_id or not residencial.plan:
+        return True
+    return getattr(residencial.plan, f"permite_{funcion}", True)

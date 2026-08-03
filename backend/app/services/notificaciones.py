@@ -96,6 +96,17 @@ def notificar_usuario(usuario_id, titulo, cuerpo, datos=None):
     """Envía una notificación a todos los dispositivos activos de un usuario."""
     if not _habilitado:
         return 0
+    # Día 51 — niveles de plan (Básico/Premium): si la residencial del
+    # usuario tiene un plan que no incluye notificaciones, no se manda
+    # nada. Se chequea acá, el único lugar donde de verdad se dispara el
+    # envío — notificar_cuenta() y las dos versiones _async llaman a
+    # esta misma función por dentro, así que quedan cubiertas sin
+    # repetir el chequeo en cada una.
+    from app.utils.residencial import plan_permite
+    from app.models.usuario import Usuario
+    usuario = Usuario.query.get(usuario_id)
+    if not usuario or not plan_permite(usuario.residencial_id, "notificaciones"):
+        return 0
     from app.models.dispositivo_movil import DispositivoMovil
     dispositivos = DispositivoMovil.query.filter_by(
         usuario_id=usuario_id, activo=True

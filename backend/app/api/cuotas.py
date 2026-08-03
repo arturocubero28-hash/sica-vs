@@ -19,7 +19,7 @@ from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db
 from app.models.cuenta import Cuota, Pago, Residente, Cuenta, ComprobantePago
-from app.auth.security import token_required, roles_required
+from app.auth.security import token_required, roles_required, requiere_funcion_plan
 from app.utils.archivos import guardar_imagen_segura, servir_archivo_seguro, EXT_DOCUMENTO
 from app.utils import dinero
 from app.services.cuota_almacenamiento import registrar_archivo_existente, vincular_pago
@@ -36,6 +36,7 @@ def _carpeta_comprobantes():
 # ── RESIDENTE: ver sus cuotas ─────────────────────────────────────────────────
 @cuotas_bp.get("/mias")
 @token_required
+@requiere_funcion_plan("cuotas")
 def mis_cuotas(usuario_actual):
     residente = Residente.query.filter_by(
         usuario_id=usuario_actual.id, activo=True
@@ -136,6 +137,7 @@ def mis_cuotas(usuario_actual):
 # ── RESIDENTE: detalle de una cuota ──────────────────────────────────────────
 @cuotas_bp.get("/mias/<uuid_cuota>")
 @token_required
+@requiere_funcion_plan("cuotas")
 def detalle_cuota(usuario_actual, uuid_cuota):
     residente = Residente.query.filter_by(
         usuario_id=usuario_actual.id, activo=True
@@ -153,6 +155,7 @@ def detalle_cuota(usuario_actual, uuid_cuota):
 # ── RESIDENTE: subir comprobante ──────────────────────────────────────────────
 @cuotas_bp.post("/mias/<uuid_cuota>/pagar")
 @token_required
+@requiere_funcion_plan("cuotas")
 def subir_comprobante(usuario_actual, uuid_cuota):
     residente = Residente.query.filter_by(
         usuario_id=usuario_actual.id, activo=True
@@ -254,6 +257,7 @@ def subir_comprobante(usuario_actual, uuid_cuota):
 # ── RESIDENTE: subir comprobante de un ABONO de arreglo ───────────────────────
 @cuotas_bp.post("/abonos/<uuid_abono>/pagar")
 @token_required
+@requiere_funcion_plan("cuotas")
 def subir_comprobante_abono(usuario_actual, uuid_abono):
     """El residente sube el comprobante de un abono de su arreglo de pago.
     Crea un Pago en revisión vinculado al abono; el admin lo aprueba luego."""
@@ -356,6 +360,7 @@ def ver_comprobante(usuario_actual, nombre_archivo):
 # ── ADMIN: contar pagos pendientes (para notificaciones) ──────────────────────
 @cuotas_bp.get("/pendientes/count")
 @roles_required("admin")
+@requiere_funcion_plan("cuotas")
 def contar_pendientes(usuario_actual):
     from app.utils.residencial import scope_pagos
     n = scope_pagos(Pago.query, usuario_actual).filter(Pago.estado == "en_revision").count()
@@ -365,6 +370,7 @@ def contar_pendientes(usuario_actual):
 # ── ADMIN: lista de pagos en revisión (comprobantes subidos) ──────────────────
 @cuotas_bp.get("/pendientes")
 @roles_required("admin")
+@requiere_funcion_plan("cuotas")
 def pagos_pendientes(usuario_actual):
     # Día 48 — hallazgo de auditoría: sin filtrar, un admin veía los
     # comprobantes de pago EN REVISIÓN de todas las residenciales —
@@ -389,6 +395,7 @@ def pagos_pendientes(usuario_actual):
 # ── ADMIN: todas las cuotas ───────────────────────────────────────────────────
 @cuotas_bp.get("/todas")
 @roles_required("admin")
+@requiere_funcion_plan("cuotas")
 def todas_las_cuotas(usuario_actual):
     # Día 48 — hallazgo de auditoría: sin filtrar, mostraba las cuotas de
     # TODAS las residenciales (monto, estado, unidad) — un admin podía ver
@@ -411,6 +418,7 @@ def todas_las_cuotas(usuario_actual):
 # ── ADMIN: aprobar o rechazar pago ────────────────────────────────────────────
 @cuotas_bp.post("/pagos/<uuid_pago>/revisar")
 @roles_required("admin")
+@requiere_funcion_plan("cuotas")
 def revisar_pago(usuario_actual, uuid_pago):
     # O3.1 (Auditoría Día 42): candado sobre el pago + verificación de que
     # siga pendiente de revisión. Sin esto, dos aprobaciones simultáneas del
@@ -599,6 +607,7 @@ def revisar_mora_manual(usuario_actual):
 
 @cuotas_bp.get("/historial-pagos")
 @roles_required("admin", "super_admin", "desarrollador")
+@requiere_funcion_plan("cuotas")
 def historial_pagos(usuario_actual):
     """
     Historial de pagos para auditoría (admin): cuándo se pagó, cuánto,

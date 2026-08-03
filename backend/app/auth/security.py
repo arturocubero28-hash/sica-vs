@@ -185,3 +185,37 @@ def roles_required(*roles_permitidos):
             return f(usuario, *args, **kwargs)
         return wrapper
     return decorator
+
+
+def requiere_funcion_plan(funcion):
+    """
+    Día 51 — niveles de plan (Básico/Premium) por flags de función. Bloquea
+    un endpoint completo si el plan de la residencial del usuario no
+    incluye esa función (hoy: 'cuotas' o 'notificaciones').
+
+    Se apila DEBAJO de @token_required o @roles_required — esos ya
+    resolvieron usuario_actual antes de llegar acá, por eso este
+    decorador lo recibe como primer argumento en vez de volver a validar
+    el token desde cero. Uso:
+
+        @cuotas_bp.get("/mias")
+        @token_required
+        @requiere_funcion_plan("cuotas")
+        def ver_mis_cuotas(usuario_actual):
+            ...
+
+    Sin plan asignado, plan_permite() ya devuelve True (mismo criterio
+    de "sin plan = sin restricción" que el resto del sistema de
+    suscripciones) — este decorador no necesita repetir esa lógica.
+    """
+    def decorator(f):
+        @wraps(f)
+        def wrapper(usuario_actual, *args, **kwargs):
+            from app.utils.residencial import plan_permite
+            if not plan_permite(usuario_actual.residencial_id, funcion):
+                return jsonify({"error": {"code": "funcion_no_incluida",
+                                          "message": "Tu plan actual no incluye esta función — "
+                                                     "hablá con tu desarrollador para subir de plan."}}), 402
+            return f(usuario_actual, *args, **kwargs)
+        return wrapper
+    return decorator
