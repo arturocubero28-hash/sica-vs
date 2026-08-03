@@ -5,6 +5,7 @@ import {
   type ArregloDTO, type Cuenta, type CuotaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { AlertTriangle, Landmark, Info } from "lucide-react";
 
 const ESTADO_PILL: Record<string, string> = {
@@ -20,12 +21,16 @@ export function ArreglosPanel() {
   const [arreglos, setArreglos] = useState<ArregloDTO[]>([]);
   const [cargando, setCargando] = useState(true);
   const [detalle, setDetalle] = useState<ArregloDTO | null>(null);
+  const [errorPlan, setErrorPlan] = useState("");
 
   function cargar() {
     setCargando(true);
-    listarArreglos(filtro || undefined).then(setArreglos).catch(() => {}).finally(() => setCargando(false));
+    listarArreglos(filtro || undefined).then(setArreglos)
+      .catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
   }
   useEffect(() => { cargar(); }, [filtro]);
+
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   return (
     <div className="reporteria">

@@ -15,7 +15,7 @@ from flask import Blueprint, jsonify, request, send_file
 
 from app.extensions import db
 from app.models.cuenta import Pago, ConfigRecibo
-from app.auth.security import roles_required, token_required
+from app.auth.security import roles_required, token_required, requiere_funcion_plan
 
 recibos_bp = Blueprint("recibos", __name__)
 
@@ -49,6 +49,7 @@ def _err(code, msg, status):
 # ─────────────────────────────────────────────────────────────────────────────
 @recibos_bp.get("/config")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def ver_config(usuario_actual):
     # Día 48: mismo resolver que ya usa Caja (genérico pese al nombre —
     # admin/supervisor -> su propia residencial; super_admin/desarrollador
@@ -62,6 +63,7 @@ def ver_config(usuario_actual):
 
 @recibos_bp.put("/config")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def editar_config(usuario_actual):
     from app.utils.residencial import resolver_residencial_caja
     rid, err = resolver_residencial_caja(usuario_actual, request)
@@ -82,6 +84,7 @@ def editar_config(usuario_actual):
 # ─────────────────────────────────────────────────────────────────────────────
 @recibos_bp.get("/<pago_uuid>/pdf")
 @token_required
+@requiere_funcion_plan("cuotas")
 def recibo_pdf(usuario_actual, pago_uuid):
     pago = Pago.query.filter_by(uuid_publico=pago_uuid).first()
     if not pago:

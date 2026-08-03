@@ -143,14 +143,20 @@ def crear_unidad(usuario_actual):
         return _err("tipo_invalido", "El tipo debe ser 'casa' o 'edificio'", 400)
     if not identificador:
         return _err("datos_incompletos", "El identificador es obligatorio", 400)
-    if Unidad.query.filter_by(identificador=identificador).first():
+    # Bug real encontrado (Día 51, probando planes): esta consulta buscaba
+    # el identificador en TODA la base, sin filtrar por residencial -- una
+    # residencial no podía usar "casa 2" si CUALQUIER OTRA residencial ya
+    # tenía una unidad con ese mismo nombre. El identificador debe ser
+    # único DENTRO de cada residencial, no global en todo el sistema.
+    residencial_id = residencial_id_heredado(usuario_actual)
+    if Unidad.query.filter_by(identificador=identificador, residencial_id=residencial_id).first():
         return _err("duplicado", f"Ya existe la unidad '{identificador}'", 409)
 
     u = Unidad(tipo=tipo, identificador=identificador,
                direccion_ref=data.get("direccion_ref"),
                # Bases multi-residencial (Día 37): hereda la residencial de
                # quien la crea. Hoy siempre el mismo valor en Villas del Sol.
-               residencial_id=residencial_id_heredado(usuario_actual))
+               residencial_id=residencial_id)
     db.session.add(u)
     db.session.commit()
     return jsonify({"data": u.to_dict()}), 201

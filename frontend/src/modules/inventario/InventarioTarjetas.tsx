@@ -4,6 +4,7 @@ import {
   type TipoTarjetaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { Car, Footprints } from "lucide-react";
 
 export function InventarioTarjetas() {
@@ -11,12 +12,16 @@ export function InventarioTarjetas() {
   const [cargando, setCargando] = useState(true);
   const [creando, setCreando] = useState(false);
   const [stockDe, setStockDe] = useState<TipoTarjetaDTO | null>(null);
+  const [errorPlan, setErrorPlan] = useState("");
 
   function recargar() {
     setCargando(true);
-    listarTiposTarjeta().then(setTipos).catch(() => {}).finally(() => setCargando(false));
+    listarTiposTarjeta().then(setTipos)
+      .catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
   }
   useEffect(() => { recargar(); }, []);
+
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   const totalStock = tipos.reduce((a, t) => a + t.stock, 0);
   const bajoStock = tipos.filter(t => t.activo && t.stock <= 5).length;

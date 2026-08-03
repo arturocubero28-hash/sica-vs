@@ -16,7 +16,7 @@ from flask import Blueprint, jsonify, request
 
 from app.extensions import db
 from app.models.cuenta import Cuenta, Cuota, Pago, ArregloPago, AbonoArreglo
-from app.auth.security import roles_required
+from app.auth.security import roles_required, requiere_funcion_plan
 
 arreglos_bp = Blueprint("arreglos", __name__)
 
@@ -57,6 +57,7 @@ def _money(x):
 # ─────────────────────────────────────────────────────────────────────────────
 @arreglos_bp.get("")
 @roles_required("admin", "super_admin", "cajero")
+@requiere_funcion_plan("cuotas")
 def listar_arreglos(usuario_actual):
     from app.utils.residencial import scope_por_cuenta
     estado = request.args.get("estado")
@@ -73,6 +74,7 @@ def listar_arreglos(usuario_actual):
 # ─────────────────────────────────────────────────────────────────────────────
 @arreglos_bp.get("/<uuid>")
 @roles_required("admin", "super_admin", "cajero")
+@requiere_funcion_plan("cuotas")
 def detalle_arreglo(usuario_actual, uuid):
     arreglo = ArregloPago.query.filter_by(uuid_publico=uuid).first()
     # Día 48 — hallazgo de auditoría: sin este chequeo, un admin/cajero de
@@ -88,6 +90,7 @@ def detalle_arreglo(usuario_actual, uuid):
 # ─────────────────────────────────────────────────────────────────────────────
 @arreglos_bp.get("/cuenta/<cuenta_uuid>/cuotas-pendientes")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def cuotas_pendientes_cuenta(usuario_actual, cuenta_uuid):
     cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
     if not cuenta:
@@ -107,6 +110,7 @@ def cuotas_pendientes_cuenta(usuario_actual, cuenta_uuid):
 # ─────────────────────────────────────────────────────────────────────────────
 @arreglos_bp.post("")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def crear_arreglo(usuario_actual):
     """
     Body:
@@ -250,6 +254,7 @@ def crear_arreglo(usuario_actual):
 # ─────────────────────────────────────────────────────────────────────────────
 @arreglos_bp.post("/<uuid>/abonos/<abono_uuid>/cobrar")
 @roles_required("cajero", "super_admin")
+@requiere_funcion_plan("cuotas")
 def cobrar_abono(usuario_actual, uuid, abono_uuid):
     """Registra el pago de un abono EN VENTANILLA (solo cajero).
 
@@ -333,6 +338,7 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
 # ─────────────────────────────────────────────────────────────────────────────
 @arreglos_bp.post("/<uuid>/cancelar")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
 def cancelar_arreglo(usuario_actual, uuid):
     arreglo = ArregloPago.query.filter_by(uuid_publico=uuid).first()
     if not arreglo or not _arreglo_es_mio(arreglo, usuario_actual):
