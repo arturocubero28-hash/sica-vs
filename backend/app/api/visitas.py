@@ -177,6 +177,14 @@ def crear_visita(usuario_actual):
     if cuenta.bloqueada:
         return jsonify({"error": {"code": "cuenta_bloqueada",
                                   "message": "Tu cuenta está bloqueada por mora. No puedes generar QR."}}), 403
+    # Día 51 — Cuenta.activa: el interruptor MANUAL del admin, distinto de
+    # bloqueada (que es automático, por mora). Existía en el modelo desde
+    # hace tiempo pero nunca se conectó a nada -- es la herramienta que le
+    # queda a un admin de plan Básico para cortarle el acceso a una casa
+    # a mano, sin depender del sistema de cuotas.
+    if not cuenta.activa:
+        return jsonify({"error": {"code": "cuenta_inactiva",
+                                  "message": "Tu cuenta está dada de baja. Contactá a tu administrador."}}), 403
 
     data = request.get_json(silent=True) or {}
     tipo = data.get("tipo")
@@ -392,6 +400,7 @@ def validar_qr(usuario_actual):
             "adentro": True,
             "direccion_sugerida": "salida",
             "cuenta_bloqueada": bool(cuenta_in and cuenta_in.bloqueada),
+            "cuenta_inactiva": bool(cuenta_in and not cuenta_in.activa),
             "mensaje": "Esta visita está adentro. Puede registrar su SALIDA.",
         }})
 
@@ -421,9 +430,12 @@ def validar_qr(usuario_actual):
 
     # Estado de la cuenta del residente: si está bloqueada por mora, NO se
     # rechaza la entrada (la mora es del residente, no del visitante), pero se
-    # avisa al guardia para que tome la decisión informado.
+    # avisa al guardia para que tome la decisión informado. Mismo criterio
+    # para activa (Día 51) -- si el admin dio de baja la cuenta a mano, el
+    # guardia se entera igual, sin que se le trabe la entrada al visitante.
     cuenta = Cuenta.query.get(visita.cuenta_id)
     cuenta_bloqueada = bool(cuenta and cuenta.bloqueada)
+    cuenta_inactiva = bool(cuenta and not cuenta.activa)
 
     # Si llegamos aquí, la visita NO está adentro (eso se manejó al inicio).
     # Es una entrada válida nueva.
@@ -433,6 +445,7 @@ def validar_qr(usuario_actual):
         "adentro": False,
         "direccion_sugerida": "entrada",
         "cuenta_bloqueada": cuenta_bloqueada,
+        "cuenta_inactiva": cuenta_inactiva,
         "mensaje": ("QR válido, pero la cuenta del residente tiene mora."
                     if cuenta_bloqueada else
                     "QR válido. Puede proceder con la validación."),

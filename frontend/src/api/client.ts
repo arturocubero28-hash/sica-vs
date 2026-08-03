@@ -1338,6 +1338,13 @@ export const toggleQrRecurrente = (cuentaUuid: string, habilitado: boolean) =>
     `/unidades/cuentas/${cuentaUuid}`,
     { method: "PUT", body: JSON.stringify({ qr_recurrente_habilitado: habilitado }) });
 
+// Día 51 — Cuenta.activa: el interruptor manual del admin para cortarle
+// el acceso a una casa a mano, sin depender del sistema de cuotas.
+export const toggleCuentaActiva = (cuentaUuid: string, activa: boolean) =>
+  request<object>(
+    `/unidades/cuentas/${cuentaUuid}`,
+    { method: "PUT", body: JSON.stringify({ activa }) });
+
 // ── Tipo de acceso virtual (QR/BLE) por cuenta (admin) ──────────────────────
 // Define qué trancas puede abrir el QR permanente y el BLE de los residentes
 // de esta cuenta. Mismo concepto que el tipo_acceso de las tarjetas físicas,

@@ -453,7 +453,16 @@ def detalle_cuenta(usuario_actual, cuenta_uuid):
 @cuentas_bp.put("/cuentas/<cuenta_uuid>")
 @roles_required("admin", "super_admin")
 def editar_cuenta(usuario_actual, cuenta_uuid):
-    """Edita campos configurables de una cuenta (ej. habilitar QR recurrente)."""
+    """Edita campos configurables de una cuenta (ej. habilitar QR recurrente).
+
+    Día 51: gana "activa" -- el interruptor MANUAL para que el admin le
+    corte el acceso a una casa a mano (deja de poder generar visitas),
+    sin depender del sistema de cuotas/mora. Existía en el modelo desde
+    hace tiempo pero nunca se conectó a ningún endpoint ni pantalla.
+    A propósito NO se gatea con requiere_funcion_plan("cuotas") -- es
+    justamente la herramienta que le queda a un admin de plan Básico,
+    que no tiene el bloqueo automático.
+    """
     cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
     if not cuenta:
         return _err("no_encontrada", "Cuenta no encontrada", 404)
@@ -468,6 +477,8 @@ def editar_cuenta(usuario_actual, cuenta_uuid):
         dp = int(body["dia_pago"])
         if 1 <= dp <= 28:
             cuenta.dia_pago = dp
+    if "activa" in body:
+        cuenta.activa = bool(body["activa"])
     db.session.commit()
     return jsonify({"data": cuenta.to_dict()})
 

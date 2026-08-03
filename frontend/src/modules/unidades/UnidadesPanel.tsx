@@ -4,7 +4,7 @@ import {
   detalleCuenta, agregarMiembro, quitarMiembro, regenerarEnlace,
   asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
   crearTarifa, editarTarifa, desactivarTarifa,
-  validarCodigoEnrolamiento, toggleQrRecurrente, editarTipoAccesoVirtual, editarUnidad,
+  validarCodigoEnrolamiento, toggleQrRecurrente, toggleCuentaActiva, editarTipoAccesoVirtual, editarUnidad,
   listarSolicitudesBaja, resolverSolicitudBaja, nivelarSaldo,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO, type SolicitudBajaDTO,
 } from "../../api/client";
@@ -757,6 +757,11 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
   const [etiqueta, setEtiqueta] = useState("");
   const [qrRecurrente, setQrRecurrente] = useState(cuenta.qr_recurrente_habilitado ?? false);
   const [guardandoQr, setGuardandoQr] = useState(false);
+  // Día 51 — Cuenta.activa: interruptor manual, distinto de "bloqueada"
+  // (que es automático, por mora) -- la herramienta que le queda a un
+  // admin de plan Básico para cortarle el acceso a una casa a mano.
+  const [cuentaActiva, setCuentaActiva] = useState(cuenta.activa ?? true);
+  const [guardandoActiva, setGuardandoActiva] = useState(false);
   const [tipoAccesoVirtual, setTipoAccesoVirtual] = useState<"peatonal" | "vehicular">(
     cuenta.tipo_acceso_virtual ?? "peatonal");
   const [guardandoTipoVirtual, setGuardandoTipoVirtual] = useState(false);
@@ -798,6 +803,18 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
       setTimeout(() => setMsgConfig(""), 2500);
     } catch (e) { setMsgConfig((e as Error).message); }
     finally { setGuardandoQr(false); }
+  }
+
+  async function guardarActiva(valor: boolean) {
+    setGuardandoActiva(true); setMsgConfig("");
+    try {
+      await toggleCuentaActiva(cuenta.id, valor);
+      setCuentaActiva(valor);
+      setMsgConfig("✓ Guardado");
+      onCambio();
+      setTimeout(() => setMsgConfig(""), 2500);
+    } catch (e) { setMsgConfig((e as Error).message); }
+    finally { setGuardandoActiva(false); }
   }
 
   async function guardarTipoAccesoVirtual(valor: "peatonal" | "vehicular") {
@@ -985,10 +1002,25 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio }:
         {/* ══════ PESTAÑA: ACCESOS ══════ */}
         {tabDetalle === "accesos" && (<>
 
-        {/* Configuraciones: QR recurrente + límite de apartamentos (solo edificios) */}
+        {/* Configuraciones: cuenta activa + QR recurrente + límite de apartamentos (solo edificios) */}
         <div className="sub">Configuración</div>
         <div className="detalle-config-box">
           <div className="detalle-config-fila">
+            <div>
+              <b>Cuenta activa</b>
+              <p className="muted small" style={{ margin: "2px 0 0" }}>
+                Si la desactivás, esta casa deja de poder generar visitas — es la forma manual
+                de cortarle el acceso a alguien, sin depender de cuotas ni mora.
+              </p>
+            </div>
+            <label className="switch">
+              <input type="checkbox" checked={cuentaActiva} disabled={guardandoActiva}
+                onChange={(e) => guardarActiva(e.target.checked)} />
+              <span className="switch-slider" />
+            </label>
+          </div>
+
+          <div className="detalle-config-fila" style={{ marginTop: 10 }}>
             <div>
               <b>QR recurrente</b>
               <p className="muted small" style={{ margin: "2px 0 0" }}>
