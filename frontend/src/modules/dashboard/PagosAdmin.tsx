@@ -7,9 +7,15 @@ export function PagosAdmin() {
   const [procesando, setProcesando] = useState<string | null>(null);
   const [nota, setNota] = useState("");
   const [pagoDetalle, setPagoDetalle] = useState<PagoAdminDTO | null>(null);
+  // Día 51 — niveles de plan: mismo criterio que CuotasResidente, mostrar
+  // el mensaje real del backend (ej. "tu plan no incluye esta función")
+  // en vez de dejar la pantalla vacía como si no hubiera nada pendiente.
+  const [errorPlan, setErrorPlan] = useState("");
 
   useEffect(() => {
-    cuotasPendientesAdmin().then(setPagos).catch(() => {}).finally(() => setCargando(false));
+    cuotasPendientesAdmin().then(setPagos)
+      .catch((e) => setErrorPlan(e?.message || "No se pudo cargar los pagos pendientes"))
+      .finally(() => setCargando(false));
   }, []);
 
   async function revisar(pago: PagoAdminDTO, accion: "aprobar" | "rechazar") {
@@ -31,6 +37,7 @@ export function PagosAdmin() {
   }
 
   if (cargando) return <p className="muted">Cargando pagos pendientes…</p>;
+  if (errorPlan) return <p className="muted" style={{ padding: 20 }}>{errorPlan}</p>;
 
   return (
     <div className="pagos-admin">

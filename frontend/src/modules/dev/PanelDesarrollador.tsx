@@ -1810,11 +1810,14 @@ function ConfigPlanes() {
   const [nuevoMaxUsuarios, setNuevoMaxUsuarios] = useState("");
   const [nuevoAlmacenamiento, setNuevoAlmacenamiento] = useState("");
   const [nuevoPrecio, setNuevoPrecio] = useState("");
+  const [nuevoPermiteCuotas, setNuevoPermiteCuotas] = useState(true);
+  const [nuevoPermiteNotif, setNuevoPermiteNotif] = useState(true);
   const [creando, setCreando] = useState(false);
   const [errorAlta, setErrorAlta] = useState("");
   const [edits, setEdits] = useState<Record<string, {
     nombre: string; max_casas: string; max_usuarios: string;
     almacenamiento_gb: string; precio_mensual: string;
+    permite_cuotas: boolean; permite_notificaciones: boolean;
   }>>({});
   const [guardandoId, setGuardandoId] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
@@ -1827,6 +1830,7 @@ function ConfigPlanes() {
         e[p.id] = {
           nombre: p.nombre, max_casas: String(p.max_casas), max_usuarios: String(p.max_usuarios),
           almacenamiento_gb: String(p.almacenamiento_gb), precio_mensual: String(p.precio_mensual),
+          permite_cuotas: p.permite_cuotas, permite_notificaciones: p.permite_notificaciones,
         };
       });
       setEdits(e);
@@ -1836,6 +1840,10 @@ function ConfigPlanes() {
   useEffect(() => { cargar(); }, [cargar]);
 
   function setCampo(id: string, campo: keyof (typeof edits)[number], valor: string) {
+    setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
+  }
+
+  function setCampoBool(id: string, campo: "permite_cuotas" | "permite_notificaciones", valor: boolean) {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
   }
 
@@ -1857,9 +1865,11 @@ function ConfigPlanes() {
       await devCrearPlan({
         nombre, max_casas: casas, max_usuarios: usuarios,
         almacenamiento_gb: gb, precio_mensual: precio, orden: (planes?.length || 0),
+        permite_cuotas: nuevoPermiteCuotas, permite_notificaciones: nuevoPermiteNotif,
       });
       setNuevoNombre(""); setNuevoMaxCasas(""); setNuevoMaxUsuarios("");
       setNuevoAlmacenamiento(""); setNuevoPrecio(""); setMostrarAlta(false);
+      setNuevoPermiteCuotas(true); setNuevoPermiteNotif(true);
       cargar();
     } catch (err: any) {
       setErrorAlta(err?.message || "No se pudo crear el plan");
@@ -1887,6 +1897,7 @@ function ConfigPlanes() {
       const actualizado = await devEditarPlan(p.id, {
         nombre, max_casas: casas, max_usuarios: usuarios,
         almacenamiento_gb: gb, precio_mensual: precio,
+        permite_cuotas: ed.permite_cuotas, permite_notificaciones: ed.permite_notificaciones,
       });
       setPlanes((prev) => prev ? prev.map((x) => x.id === p.id ? actualizado : x) : prev);
       setMsg({ id: p.id, texto: "Guardado correctamente", ok: true });
@@ -1946,6 +1957,16 @@ function ConfigPlanes() {
               <input type="number" min={0} step={0.01} placeholder="49.99" value={nuevoPrecio} onChange={(e) => setNuevoPrecio(e.target.value)} />
             </label>
           </div>
+          <div style={{ display: "flex", gap: 18, margin: "8px 0 4px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={nuevoPermiteCuotas} onChange={(e) => setNuevoPermiteCuotas(e.target.checked)} />
+              <span>Incluye cuotas de residentes</span>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={nuevoPermiteNotif} onChange={(e) => setNuevoPermiteNotif(e.target.checked)} />
+              <span>Incluye notificaciones</span>
+            </label>
+          </div>
           {errorAlta && <div className="dev-tranca-msg err">{errorAlta}</div>}
           <button className="dev-tranca-add" disabled={creando} onClick={crearPlan}>
             {creando ? "Creando…" : "Crear plan"}
@@ -1985,6 +2006,16 @@ function ConfigPlanes() {
                 </label>
                 <label><span>Precio mensual (USD)</span>
                   <input type="number" min={0} step={0.01} value={ed.precio_mensual} onChange={(e) => setCampo(p.id, "precio_mensual", e.target.value)} />
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: 18, margin: "8px 0 4px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input type="checkbox" checked={ed.permite_cuotas} onChange={(e) => setCampoBool(p.id, "permite_cuotas", e.target.checked)} />
+                  <span>Incluye cuotas de residentes</span>
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input type="checkbox" checked={ed.permite_notificaciones} onChange={(e) => setCampoBool(p.id, "permite_notificaciones", e.target.checked)} />
+                  <span>Incluye notificaciones</span>
                 </label>
               </div>
               {msg && msg.id === p.id && (

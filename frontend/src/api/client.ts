@@ -1218,16 +1218,21 @@ export interface PlanDTO {
   precio_mensual: number;
   activo: boolean;
   orden: number;
+  // Día 51 — niveles de plan (Básico/Premium) por flags de función.
+  permite_cuotas: boolean;
+  permite_notificaciones: boolean;
   stats?: { residenciales: number };
 }
 export const devPlanes = () => request<PlanDTO[]>("/dev/planes");
 export const devCrearPlan = (body: {
   nombre: string; max_casas: number; max_usuarios: number;
   almacenamiento_gb: number; precio_mensual: number; orden?: number;
+  permite_cuotas?: boolean; permite_notificaciones?: boolean;
 }) => request<PlanDTO>("/dev/planes", { method: "POST", body: JSON.stringify(body) });
 export const devEditarPlan = (id: string, body: Partial<{
   nombre: string; max_casas: number; max_usuarios: number;
   almacenamiento_gb: number; precio_mensual: number; activo: boolean; orden: number;
+  permite_cuotas: boolean; permite_notificaciones: boolean;
 }>) => request<PlanDTO>(`/dev/planes/${id}`, { method: "PUT", body: JSON.stringify(body) });
 
 export interface ResidencialDTO {

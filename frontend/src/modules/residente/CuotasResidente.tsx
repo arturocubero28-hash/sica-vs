@@ -19,6 +19,13 @@ export function CuotasResidente() {
   const [tab, setTab] = useState<"pendientes" | "historial">("pendientes");
   const [cuotaPago, setCuotaPago] = useState<CuotaDTO | null>(null);
   const [abonoPago, setAbonoPago] = useState<AbonoArregloDTO | null>(null);
+  // Día 51 — niveles de plan: si la residencial no tiene esta función
+  // incluida, el backend responde con un mensaje claro (402) en vez de
+  // la lista de cuotas. Antes el .catch(() => {}) se lo comía en
+  // silencio, dejando la pantalla vacía como si no hubiera cuotas
+  // pendientes — engañoso, parece que está todo pagado cuando en
+  // realidad la función ni está disponible.
+  const [errorPlan, setErrorPlan] = useState("");
 
   function recargar() {
     misCuotas().then(d => {
@@ -28,7 +35,8 @@ export function CuotasResidente() {
   useEffect(() => {
     misCuotas().then(d => {
       setCuotas(d.cuotas); setArreglo(d.arreglo); setHistorial(d.historial || []);
-    }).catch(() => {}).finally(() => setCargando(false));
+    }).catch((e) => setErrorPlan(e?.message || "No se pudo cargar tus cuotas"))
+      .finally(() => setCargando(false));
   }, []);
 
   function onPagoSubido() {
@@ -38,6 +46,7 @@ export function CuotasResidente() {
   }
 
   if (cargando) return <p className="muted">Cargando cuotas…</p>;
+  if (errorPlan) return <p className="muted" style={{ padding: 20 }}>{errorPlan}</p>;
 
   const pendientes = cuotas.filter(c => c.estado !== "pagada" && c.estado !== "en_arreglo");
   const abonosPend = arreglo ? arreglo.abonos.filter(a => a.estado !== "pagado") : [];
