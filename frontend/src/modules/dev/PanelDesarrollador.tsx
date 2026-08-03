@@ -1974,11 +1974,24 @@ function ConfigPlanes() {
         </div>
       )}
 
-      <div className="dev-trancas-grid">
-        {planes.map((p) => {
+      {(() => {
+        // Día 51 — agrupar visualmente por nivel, a partir de los mismos
+        // flags de función (no un campo de nivel aparte): un plan con
+        // AMBOS flags en false cae en "Básico", con AMBOS en true cae en
+        // "Premium", y cualquier combinación mixta (posible gracias a
+        // haber elegido flags en vez de un nivel fijo) cae en su propia
+        // sección — así el día que se arme un plan con una combinación
+        // distinta, no se pierde ni se mete a la fuerza en un grupo que
+        // no le corresponde.
+        const basicos = planes.filter((p) => !p.permite_cuotas && !p.permite_notificaciones);
+        const premium = planes.filter((p) => p.permite_cuotas && p.permite_notificaciones);
+        const mixtos = planes.filter((p) => !basicos.includes(p) && !premium.includes(p));
+
+        function renderTarjeta(p: PlanDTO) {
           const ed = edits[p.id] || {
             nombre: p.nombre, max_casas: String(p.max_casas), max_usuarios: String(p.max_usuarios),
             almacenamiento_gb: String(p.almacenamiento_gb), precio_mensual: String(p.precio_mensual),
+            permite_cuotas: p.permite_cuotas, permite_notificaciones: p.permite_notificaciones,
           };
           return (
             <div key={p.id} className={`dev-tranca-card ${!p.activo ? "inactiva" : ""}`}>
@@ -2031,8 +2044,26 @@ function ConfigPlanes() {
               </div>
             </div>
           );
-        })}
-      </div>
+        }
+
+        function seccion(titulo: string, lista: PlanDTO[]) {
+          if (lista.length === 0) return null;
+          return (
+            <div style={{ marginBottom: 22 }}>
+              <h4 style={{ margin: "0 0 10px", color: "#022E45" }}>{titulo} <span className="muted small">({lista.length})</span></h4>
+              <div className="dev-trancas-grid">{lista.map(renderTarjeta)}</div>
+            </div>
+          );
+        }
+
+        return (
+          <>
+            {seccion("Básico", basicos)}
+            {seccion("Premium", premium)}
+            {seccion("Personalizado", mixtos)}
+          </>
+        );
+      })()}
     </div>
   );
 }
