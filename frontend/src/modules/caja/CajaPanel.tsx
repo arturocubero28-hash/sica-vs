@@ -9,20 +9,27 @@ import { L } from "../../utils/formato";
 import { InfoTip } from "../../components/InfoTip";
 import { LectorTarjeta } from "../unidades/LectorTarjeta";
 import { AlertTriangle, Banknote, CreditCard, FileText, LockOpen, Receipt, Ticket } from "lucide-react";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 
 export function CajaPanel() {
   const [sesion, setSesion] = useState<SesionCajaDTO | null>(null);
   const [cargando, setCargando] = useState(true);
   const [cerrando, setCerrando] = useState(false);
   const [vendiendo, setVendiendo] = useState(false);
+  // Día 51 — niveles de plan: sin esto, un plan sin cuotas veía la
+  // pantalla de "abrir caja por primera vez" en vez de enterarse de que
+  // la función ni está disponible.
+  const [errorPlan, setErrorPlan] = useState("");
 
   function recargar() {
-    estadoCaja().then(r => setSesion(r.abierta ? r.sesion! : null)).catch(() => {}).finally(() => setCargando(false));
+    estadoCaja().then(r => setSesion(r.abierta ? r.sesion! : null))
+      .catch((e) => setErrorPlan(e?.message || ""))
+      .finally(() => setCargando(false));
   }
   useEffect(() => { recargar(); }, []);
 
   if (cargando) return <p className="muted">Cargando caja…</p>;
-
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
   if (!sesion) return <AbrirCaja onAbierta={recargar} />;
   if (cerrando) return <CerrarCaja sesion={sesion} onCancelar={() => setCerrando(false)} onCerrada={() => { setCerrando(false); recargar(); }} />;
 

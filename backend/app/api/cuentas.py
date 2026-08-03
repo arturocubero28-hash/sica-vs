@@ -265,10 +265,21 @@ def crear_cuenta(usuario_actual):
 
     es_solo_contenedor = data.get("es_solo_contenedor", False)
 
+    # Día 51 — niveles de plan: una residencial en plan Básico no tiene
+    # cuotas en absoluto, así que exigirle una tarifa para dar de alta
+    # una casa no tiene sentido — y ahora que listar/crear tarifas está
+    # bloqueado para ese tipo de plan, exigirla la dejaría totalmente
+    # trabada para crear casas nuevas, rompiendo la función principal
+    # que Básico sí debe tener. Se trata igual que una cuenta contenedora
+    # (sin tarifa ni día de pago), sin importar si la marcaron como tal.
+    from app.utils.residencial import plan_permite
+    sin_cuotas = not plan_permite(usuario_actual.residencial_id, "cuotas")
+
     tarifa = None
     dia_pago = 1
-    if es_solo_contenedor:
-        # El edificio como contenedor no paga cuota — la tarifa es opcional
+    if es_solo_contenedor or sin_cuotas:
+        # El edificio como contenedor no paga cuota — la tarifa es opcional.
+        # Mismo criterio para cualquier cuenta de una residencial sin cuotas.
         pass
     else:
         tarifa = Tarifa.query.get(data.get("tarifa_id"))

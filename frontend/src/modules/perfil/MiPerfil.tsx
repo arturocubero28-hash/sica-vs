@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesiones,
   registrarHuella, listarCredencialesHuella, eliminarCredencialHuella, soportaHuella,
   getConfigResidencial, setConfigResidencial,
@@ -579,14 +580,20 @@ function ConfigPanel() {
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  // Día 51 — niveles de plan: separado de "error" (que es de guardado),
+  // para poder mostrar el mensaje real del backend con estilo propio en
+  // vez de un texto generico de "no se pudo cargar".
+  const [errorPlan, setErrorPlan] = useState("");
 
   useEffect(() => {
     getConfigResidencial().then((c) => {
       setCfg(c);
       setDiaPago(c.dia_pago);
       setDiasGracia(c.dias_gracia);
-    }).catch(() => setError("No se pudo cargar la configuración"));
+    }).catch((e) => setErrorPlan(e?.message || "No se pudo cargar la configuración"));
   }, []);
+
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   async function guardar() {
     setGuardando(true);

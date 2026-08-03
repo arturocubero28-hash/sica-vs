@@ -3,6 +3,7 @@ import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos, rep
   type ReporteFinancieroDTO, type MoraPorCasaDTO, type CasaMoraDTO,
   type ReporteCajaDTO, type ReporteAccesosDTO, type ReporteInventarioDTO, type ReporteEjecutivoDTO } from "../../api/client";
 import { L } from "../../utils/formato";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { useMiResidencial } from "../../hooks/useMiResidencial";
 import { GraficoBarras, GraficoDona, GraficoLinea, GraficoBarrasCant, GraficoBarrasHoriz } from "./Graficos";
 import {
@@ -71,20 +72,22 @@ function ReporteFinancieroVista({ nombreResidencial }: { nombreResidencial: stri
   const [hasta, setHasta] = useState("");
   const [data, setData] = useState<ReporteFinancieroDTO | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [errorPlan, setErrorPlan] = useState("");
 
   function cargar(a = anio, m = mes) {
     setCargando(true);
     if (modo === "rango" && desde && hasta) {
       reporteFinanciero(undefined, undefined, desde, hasta)
-        .then(setData).catch(() => {}).finally(() => setCargando(false));
+        .then(setData).catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
     } else {
-      reporteFinanciero(a, m).then(setData).catch(() => {}).finally(() => setCargando(false));
+      reporteFinanciero(a, m).then(setData).catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
     }
   }
 
   useEffect(() => { cargar(); }, []);
 
   if (cargando) return <p className="muted">Cargando reporte…</p>;
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
   if (!data) return <p className="muted">No se pudo cargar el reporte.</p>;
 
   const meses = [
@@ -441,9 +444,10 @@ function ReporteMoraPorCasa({ nombreResidencial }: { nombreResidencial: string }
   const [cargando, setCargando] = useState(true);
   const [expandida, setExpandida] = useState<string | null>(null);
   const [buscar, setBuscar] = useState("");
+  const [errorPlan, setErrorPlan] = useState("");
 
   useEffect(() => {
-    reporteMoraPorCasa().then(setData).catch(() => {}).finally(() => setCargando(false));
+    reporteMoraPorCasa().then(setData).catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
   }, []);
 
   async function exportarPDF() {
@@ -530,6 +534,7 @@ function ReporteMoraPorCasa({ nombreResidencial }: { nombreResidencial: string }
   }
 
   if (cargando) return <p className="muted">Cargando reporte de mora…</p>;
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
   if (!data) return <p className="muted">No se pudo cargar el reporte.</p>;
 
   const casasFiltradas = data.casas.filter((c: CasaMoraDTO) => {
@@ -649,13 +654,15 @@ function ReporteCajaVista({ nombreResidencial }: { nombreResidencial: string }) 
   const [hasta, setHasta] = useState(fin);
   const [data, setData] = useState<ReporteCajaDTO | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [errorPlan, setErrorPlan] = useState("");
 
   function cargar() {
     setCargando(true);
     reporteCaja(desde || undefined, hasta || undefined)
-      .then(setData).catch(() => {}).finally(() => setCargando(false));
+      .then(setData).catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
   }
   useEffect(() => { cargar(); }, []);
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   async function exportarPDF() {
     if (!data) return;
@@ -958,13 +965,15 @@ function ReporteInventarioVista({ nombreResidencial }: { nombreResidencial: stri
   const [hasta, setHasta] = useState(fin);
   const [data, setData] = useState<ReporteInventarioDTO | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [errorPlan, setErrorPlan] = useState("");
 
   function cargar() {
     setCargando(true);
     reporteInventario(desde || undefined, hasta || undefined)
-      .then(setData).catch(() => {}).finally(() => setCargando(false));
+      .then(setData).catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
   }
   useEffect(() => { cargar(); }, []);
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   async function exportarPDF() {
     if (!data) return;
@@ -1086,6 +1095,7 @@ function ReporteEjecutivoVista({ nombreResidencial }: { nombreResidencial: strin
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [data, setData] = useState<ReporteEjecutivoDTO | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [errorPlan, setErrorPlan] = useState("");
 
   const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -1093,9 +1103,10 @@ function ReporteEjecutivoVista({ nombreResidencial }: { nombreResidencial: strin
 
   function cargar() {
     setCargando(true);
-    reporteEjecutivo(anio, mes).then(setData).catch(() => {}).finally(() => setCargando(false));
+    reporteEjecutivo(anio, mes).then(setData).catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
   }
   useEffect(() => { cargar(); }, []);
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   async function exportarPDF() {
     if (!data) return;

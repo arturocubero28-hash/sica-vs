@@ -4,6 +4,7 @@ import {
   reporteMoraPorCasa,
   type MetricasDTO, type VisitaTablaDTO, type VisitaActivaDTO, type CasaMoraDTO,
 } from "../../api/client";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { L } from "../../utils/formato";
 import { useMiResidencial } from "../../hooks/useMiResidencial";
 import { Building2, Car, Circle, FileText, PartyPopper, Search, Users } from "lucide-react";
@@ -28,14 +29,19 @@ export function DashboardAdmin() {
   const [vistaActivas, setVistaActivas] = useState(false);
   const [modalMora, setModalMora] = useState<CasaMoraDTO[] | null>(null);
   const [cargandoMora, setCargandoMora] = useState(false);
+  // Día 51 — niveles de plan: si el plan no incluye cuotas, sin esto el
+  // modal mostraba "no hay cuentas en mora 🎉" — engañoso, da a entender
+  // que todo está al día cuando en realidad la función ni está disponible.
+  const [errorMora, setErrorMora] = useState("");
 
   async function abrirMora() {
     setCargandoMora(true);
     setModalMora([]);
+    setErrorMora("");
     try {
       const r = await reporteMoraPorCasa();
       setModalMora(r.casas);
-    } catch { setModalMora([]); }
+    } catch (e) { setModalMora([]); setErrorMora((e as Error)?.message || ""); }
     finally { setCargandoMora(false); }
   }
 
@@ -155,6 +161,8 @@ export function DashboardAdmin() {
             </div>
             {cargandoMora ? (
               <p className="muted">Cargando…</p>
+            ) : errorMora ? (
+              <FuncionNoIncluida mensaje={errorMora} />
             ) : modalMora.length === 0 ? (
               <div className="metric-modal-empty">No hay cuentas en mora. <PartyPopper size={16} /></div>
             ) : (

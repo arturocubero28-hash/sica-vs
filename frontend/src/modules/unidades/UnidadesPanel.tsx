@@ -5,7 +5,7 @@ import {
   asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
   crearTarifa, editarTarifa, desactivarTarifa,
   validarCodigoEnrolamiento, toggleQrRecurrente, toggleCuentaActiva, editarTipoAccesoVirtual, editarUnidad,
-  listarSolicitudesBaja, resolverSolicitudBaja, nivelarSaldo,
+  listarSolicitudesBaja, resolverSolicitudBaja, nivelarSaldo, getMiResidencial,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO, type SolicitudBajaDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
@@ -35,9 +35,17 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
   const [seleccionada, setSeleccionada] = useState<Cuenta | null>(null);
   const [modalNueva, setModalNueva] = useState(false);
   const [numSolicitudes, setNumSolicitudes] = useState(0);
+  // Día 51 — niveles de plan: si la residencial no tiene cuotas
+  // incluidas, la tarifa deja de ser obligatoria para dar de alta una
+  // casa (ver validación en guardar()). Default true -- sin dato
+  // todavía, no se bloquea de más mientras carga.
+  const [permiteCuotas, setPermiteCuotas] = useState(true);
 
   async function recargar() { setCuentas(await listarCuentas()); }
   useEffect(() => { recargar(); }, []);
+  useEffect(() => {
+    getMiResidencial().then((r) => setPermiteCuotas(r?.plan?.permite_cuotas ?? true)).catch(() => {});
+  }, []);
   useEffect(() => {
     listarSolicitudesBaja("pendiente").then(s => setNumSolicitudes(s.length)).catch(() => {});
   }, [tab, cuentas]);
@@ -70,6 +78,7 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
       {tab === "solicitudes" && <SolicitudesBajaPanel onCambio={recargar} />}
       {modalNueva && (
         <FormNuevaCuenta
+          permiteCuotas={permiteCuotas}
           onCerrar={() => setModalNueva(false)}
           onCreada={async () => { await recargar(); }} />
       )}
@@ -221,7 +230,8 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
   );
 }
 
-function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerrar: () => void }) {
+function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas }:
+  { onCreada: () => void; onCerrar: () => void; permiteCuotas: boolean }) {
   const [unidades, setUnidades] = useState<Unidad[]>([]);
   const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [unidadId, setUnidadId] = useState("");
@@ -277,7 +287,14 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
 
   async function recargarUnidades() {
     setUnidades(await listarUnidades());
-    setTarifas(await listarTarifas());
+    // Día 51 — niveles de plan: en una residencial sin cuotas (Básico),
+    // esta llamada devuelve 402 a propósito — se atrapa acá para que no
+    // rompa el resto de la pantalla (crear casas debe seguir andando).
+    try {
+      setTarifas(await listarTarifas());
+    } catch {
+      setTarifas([]);
+    }
   }
   useEffect(() => { recargarUnidades(); }, []);
 
@@ -333,7 +350,7 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
 
     const hayUnidad = unidadId || (modoUnidad === "nueva" && nuevaUnidadId.trim());
     const esDuenoSinVivienda = esEdificio && modoUnidad === "nueva" && !duenoVive;
-    const hayTarifa = esDuenoSinVivienda || !!tarifaId;
+    const hayTarifa = esDuenoSinVivienda || !permiteCuotas || !!tarifaId;
 
     // Validación campo a campo — muestra todos los errores de una vez
     const errs: Record<string, string> = {};
@@ -369,8 +386,8 @@ function FormNuevaCuenta({ onCreada, onCerrar }: { onCreada: () => void; onCerra
               max_apartamentos: nuevaUnidadTipo === "edificio" && maxApartamentos
                 ? Number(maxApartamentos) : undefined } : undefined,
         apartamento: (esEdificio && !esDuenoSinVivienda) ? apartamento : undefined,
-        tarifa_id: esDuenoSinVivienda ? undefined : tarifaId,
-        dia_pago: esDuenoSinVivienda ? 1 : diaPago,
+        tarifa_id: (esDuenoSinVivienda || !permiteCuotas) ? undefined : tarifaId,
+        dia_pago: (esDuenoSinVivienda || !permiteCuotas) ? 1 : diaPago,
         tipo_acceso_virtual: tipoAccesoVirtualAlta,
         codigo_enrolamiento: codigoEnrol.trim() || undefined,
         es_dueno_edificio: esEdificio && modoUnidad === "nueva" && !enrolInfo,
