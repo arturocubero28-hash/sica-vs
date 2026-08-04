@@ -593,8 +593,6 @@ function ConfigPanel() {
     }).catch((e) => setErrorPlan(e?.message || "No se pudo cargar la configuración"));
   }, []);
 
-  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
-
   async function guardar() {
     setGuardando(true);
     setMsg("");
@@ -613,12 +611,19 @@ function ConfigPanel() {
     }
   }
 
-  if (!cfg) return <p className="muted">Cargando configuración…</p>;
-
+  // Día 53 — Sprint 3: MiResidencialPanel (nombre, logo, colores) es
+  // configuración general, NADA que ver con cuotas -- antes el bloqueo de
+  // plan reemplazaba TODA la pestaña, tapando también esto. Ahora
+  // MiResidencialPanel se muestra siempre, y solo el bloque de "Cobro
+  // mensual" (que sí es 100% de cuotas) se reemplaza por el mensaje.
   return (
     <div>
       <MiResidencialPanel />
 
+      {errorPlan ? <FuncionNoIncluida mensaje={errorPlan} /> : !cfg ? (
+        <p className="muted">Cargando configuración…</p>
+      ) : (
+      <>
       <div className="dash-card">
         <h3>📅 Cobro mensual</h3>
         <p className="muted small" style={{ marginBottom: 12 }}>
@@ -688,6 +693,8 @@ function ConfigPanel() {
           de 30 días).</p>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

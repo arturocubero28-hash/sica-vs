@@ -10,6 +10,7 @@ import {
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
 import { InfoTip } from "../../components/InfoTip";
+import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle } from "lucide-react";
 
 /** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
@@ -1525,12 +1526,16 @@ function GestionTarifas() {
   const [editando, setEditando] = useState<number | null>(null);
   const [editMonto, setEditMonto] = useState("");
   const [creandoTarifa, setCreandoTarifa] = useState(false);
+  const [errorPlan, setErrorPlan] = useState("");
 
   function cargar() {
     setCargando(true);
-    listarTarifas().then(setTarifas).catch(() => {}).finally(() => setCargando(false));
+    listarTarifas().then(setTarifas)
+      .catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
   }
   useEffect(() => { cargar(); }, []);
+
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   async function crear() {
     if (creandoTarifa) return;

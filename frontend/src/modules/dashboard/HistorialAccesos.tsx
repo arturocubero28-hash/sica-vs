@@ -359,12 +359,15 @@ function TabTarjetas() {
   const [buscar, setBuscar] = useState("");
   const [pagina, setPagina] = useState(1);
   const [cargando, setCargando] = useState(true);
+  const [errorPlan, setErrorPlan] = useState("");
 
   useEffect(() => {
     setCargando(true);
     historialTarjetas({ desde, hasta, direccion, buscar, pagina })
-      .then(setData).catch(() => {}).finally(() => setCargando(false));
+      .then(setData).catch((e) => setErrorPlan(e?.message || "")).finally(() => setCargando(false));
   }, [desde, hasta, direccion, buscar, pagina]);
+
+  if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   return (
     <>

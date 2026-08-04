@@ -11,7 +11,7 @@ from flask import Blueprint, jsonify, current_app, request
 from app.extensions import db
 from app.models.visita import Visita, EventoAcceso, AccesoFisico
 from app.models.cuenta import Cuenta, Unidad, Residente
-from app.auth.security import roles_required, token_required
+from app.auth.security import roles_required, token_required, requiere_funcion_plan
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -409,6 +409,7 @@ def historial_accesos(usuario_actual):
 
 @dashboard_bp.get("/historial-tarjetas")
 @roles_required("admin", "super_admin", "guardia", "desarrollador")
+@requiere_funcion_plan("control_fisico")
 def historial_accesos_tarjeta(usuario_actual):
     """
     Historial de accesos de RESIDENTES por tarjeta RFID (origen='residente').
