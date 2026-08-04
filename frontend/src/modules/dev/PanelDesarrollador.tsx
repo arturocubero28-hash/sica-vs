@@ -1961,7 +1961,7 @@ function ConfigPlanes() {
               <input type="number" min={0} step={0.01} placeholder="49.99" value={nuevoPrecio} onChange={(e) => setNuevoPrecio(e.target.value)} />
             </label>
           </div>
-          <div style={{ display: "flex", gap: 18, margin: "8px 0 4px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "8px 0 4px" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
               <input type="checkbox" checked={nuevoPermiteCuotas} onChange={(e) => setNuevoPermiteCuotas(e.target.checked)} />
               <span>Incluye cuotas de residentes</span>
@@ -2029,7 +2029,7 @@ function ConfigPlanes() {
                   <input type="number" min={0} step={0.01} value={ed.precio_mensual} onChange={(e) => setCampo(p.id, "precio_mensual", e.target.value)} />
                 </label>
               </div>
-              <div style={{ display: "flex", gap: 18, margin: "8px 0 4px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "8px 0 4px" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
                   <input type="checkbox" checked={ed.permite_cuotas} onChange={(e) => setCampoBool(p.id, "permite_cuotas", e.target.checked)} />
                   <span>Incluye cuotas de residentes</span>
