@@ -40,11 +40,18 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
   // casa (ver validación en guardar()). Default true -- sin dato
   // todavía, no se bloquea de más mientras carga.
   const [permiteCuotas, setPermiteCuotas] = useState(true);
+  // Día 53 — Sprint 2: separado de permiteCuotas -- "Acceso virtual" es
+  // control físico (qué trancas puede abrir la tarjeta digital), no
+  // cuotas. Antes se ocultaba mirando el flag equivocado.
+  const [permiteControlFisico, setPermiteControlFisico] = useState(true);
 
   async function recargar() { setCuentas(await listarCuentas()); }
   useEffect(() => { recargar(); }, []);
   useEffect(() => {
-    getMiResidencial().then((r) => setPermiteCuotas(r?.plan?.permite_cuotas ?? true)).catch(() => {});
+    getMiResidencial().then((r) => {
+      setPermiteCuotas(r?.plan?.permite_cuotas ?? true);
+      setPermiteControlFisico(r?.plan?.permite_control_fisico ?? true);
+    }).catch(() => {});
   }, []);
   useEffect(() => {
     listarSolicitudesBaja("pendiente").then(s => setNumSolicitudes(s.length)).catch(() => {});
@@ -79,11 +86,13 @@ export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
       {modalNueva && (
         <FormNuevaCuenta
           permiteCuotas={permiteCuotas}
+          permiteControlFisico={permiteControlFisico}
           onCerrar={() => setModalNueva(false)}
           onCreada={async () => { await recargar(); }} />
       )}
       {seleccionada && (
         <DetalleCuenta cuenta={seleccionada} onCerrar={() => setSeleccionada(null)} permiteCuotas={permiteCuotas}
+          permiteControlFisico={permiteControlFisico}
           onCambio={async () => setSeleccionada(await detalleCuenta(seleccionada.id))} />
       )}
     </>
@@ -252,8 +261,8 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
   );
 }
 
-function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas }:
-  { onCreada: () => void; onCerrar: () => void; permiteCuotas: boolean }) {
+function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisico }:
+  { onCreada: () => void; onCerrar: () => void; permiteCuotas: boolean; permiteControlFisico: boolean }) {
   const [unidades, setUnidades] = useState<Unidad[]>([]);
   const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [unidadId, setUnidadId] = useState("");
@@ -652,7 +661,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas }:
             </label>
           </div>
           )}
-          {permiteCuotas && (
+          {permiteControlFisico && (
           <div className="row" style={{ alignItems: "center", marginTop: 10 }}>
             <span className="muted small" style={{ marginRight: 10 }}>
               Acceso virtual (QR/Bluetooth) de esta cuenta:
@@ -801,8 +810,8 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas }:
   );
 }
 
-function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas }:
-  { cuenta: Cuenta; onCerrar: () => void; onCambio: () => void; permiteCuotas: boolean }) {
+function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteControlFisico }:
+  { cuenta: Cuenta; onCerrar: () => void; onCambio: () => void; permiteCuotas: boolean; permiteControlFisico: boolean }) {
   const [cardUid, setCardUid] = useState("");
   const [etiqueta, setEtiqueta] = useState("");
   const [qrRecurrente, setQrRecurrente] = useState(cuenta.qr_recurrente_habilitado ?? false);
@@ -1052,7 +1061,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas }:
             </label>
           </div>
 
-          {permiteCuotas && (
+          {permiteControlFisico && (
           <div className="detalle-config-fila" style={{ marginTop: 10 }}>
             <div>
               <b>Acceso virtual (QR y Bluetooth)</b>

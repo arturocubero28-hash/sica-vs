@@ -1812,12 +1812,13 @@ function ConfigPlanes() {
   const [nuevoPrecio, setNuevoPrecio] = useState("");
   const [nuevoPermiteCuotas, setNuevoPermiteCuotas] = useState(true);
   const [nuevoPermiteNotif, setNuevoPermiteNotif] = useState(true);
+  const [nuevoPermiteFisico, setNuevoPermiteFisico] = useState(true);
   const [creando, setCreando] = useState(false);
   const [errorAlta, setErrorAlta] = useState("");
   const [edits, setEdits] = useState<Record<string, {
     nombre: string; max_casas: string; max_usuarios: string;
     almacenamiento_gb: string; precio_mensual: string;
-    permite_cuotas: boolean; permite_notificaciones: boolean;
+    permite_cuotas: boolean; permite_notificaciones: boolean; permite_control_fisico: boolean;
   }>>({});
   const [guardandoId, setGuardandoId] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ id: string; texto: string; ok: boolean } | null>(null);
@@ -1831,6 +1832,7 @@ function ConfigPlanes() {
           nombre: p.nombre, max_casas: String(p.max_casas), max_usuarios: String(p.max_usuarios),
           almacenamiento_gb: String(p.almacenamiento_gb), precio_mensual: String(p.precio_mensual),
           permite_cuotas: p.permite_cuotas, permite_notificaciones: p.permite_notificaciones,
+          permite_control_fisico: p.permite_control_fisico,
         };
       });
       setEdits(e);
@@ -1843,7 +1845,7 @@ function ConfigPlanes() {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
   }
 
-  function setCampoBool(id: string, campo: "permite_cuotas" | "permite_notificaciones", valor: boolean) {
+  function setCampoBool(id: string, campo: "permite_cuotas" | "permite_notificaciones" | "permite_control_fisico", valor: boolean) {
     setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }));
   }
 
@@ -1866,10 +1868,11 @@ function ConfigPlanes() {
         nombre, max_casas: casas, max_usuarios: usuarios,
         almacenamiento_gb: gb, precio_mensual: precio, orden: (planes?.length || 0),
         permite_cuotas: nuevoPermiteCuotas, permite_notificaciones: nuevoPermiteNotif,
+        permite_control_fisico: nuevoPermiteFisico,
       });
       setNuevoNombre(""); setNuevoMaxCasas(""); setNuevoMaxUsuarios("");
       setNuevoAlmacenamiento(""); setNuevoPrecio(""); setMostrarAlta(false);
-      setNuevoPermiteCuotas(true); setNuevoPermiteNotif(true);
+      setNuevoPermiteCuotas(true); setNuevoPermiteNotif(true); setNuevoPermiteFisico(true);
       cargar();
     } catch (err: any) {
       setErrorAlta(err?.message || "No se pudo crear el plan");
@@ -1898,6 +1901,7 @@ function ConfigPlanes() {
         nombre, max_casas: casas, max_usuarios: usuarios,
         almacenamiento_gb: gb, precio_mensual: precio,
         permite_cuotas: ed.permite_cuotas, permite_notificaciones: ed.permite_notificaciones,
+        permite_control_fisico: ed.permite_control_fisico,
       });
       setPlanes((prev) => prev ? prev.map((x) => x.id === p.id ? actualizado : x) : prev);
       setMsg({ id: p.id, texto: "Guardado correctamente", ok: true });
@@ -1966,6 +1970,10 @@ function ConfigPlanes() {
               <input type="checkbox" checked={nuevoPermiteNotif} onChange={(e) => setNuevoPermiteNotif(e.target.checked)} />
               <span>Incluye notificaciones</span>
             </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input type="checkbox" checked={nuevoPermiteFisico} onChange={(e) => setNuevoPermiteFisico(e.target.checked)} />
+              <span>Incluye control de accesos físico</span>
+            </label>
           </div>
           {errorAlta && <div className="dev-tranca-msg err">{errorAlta}</div>}
           <button className="dev-tranca-add" disabled={creando} onClick={crearPlan}>
@@ -1975,23 +1983,23 @@ function ConfigPlanes() {
       )}
 
       {(() => {
-        // Día 51 — agrupar visualmente por nivel, a partir de los mismos
-        // flags de función (no un campo de nivel aparte): un plan con
-        // AMBOS flags en false cae en "Básico", con AMBOS en true cae en
-        // "Premium", y cualquier combinación mixta (posible gracias a
-        // haber elegido flags en vez de un nivel fijo) cae en su propia
-        // sección — así el día que se arme un plan con una combinación
-        // distinta, no se pierde ni se mete a la fuerza en un grupo que
-        // no le corresponde.
-        const basicos = planes.filter((p) => !p.permite_cuotas && !p.permite_notificaciones);
-        const premium = planes.filter((p) => p.permite_cuotas && p.permite_notificaciones);
-        const mixtos = planes.filter((p) => !basicos.includes(p) && !premium.includes(p));
+        // Día 53 — Sprint 2: se agrega Intermedio (cuotas sí, control físico
+        // no) como cuarta categoría real, a partir del mismo criterio de
+        // agrupar por flags (no un campo de nivel aparte). El eje de nivel
+        // pasa a ser permite_cuotas + permite_control_fisico -- notificaciones
+        // queda como flag independiente, no determina el grupo.
+        const basicos = planes.filter((p) => !p.permite_cuotas && !p.permite_control_fisico);
+        const intermedios = planes.filter((p) => p.permite_cuotas && !p.permite_control_fisico);
+        const premium = planes.filter((p) => p.permite_cuotas && p.permite_control_fisico);
+        const mixtos = planes.filter((p) =>
+          !basicos.includes(p) && !intermedios.includes(p) && !premium.includes(p));
 
         function renderTarjeta(p: PlanDTO) {
           const ed = edits[p.id] || {
             nombre: p.nombre, max_casas: String(p.max_casas), max_usuarios: String(p.max_usuarios),
             almacenamiento_gb: String(p.almacenamiento_gb), precio_mensual: String(p.precio_mensual),
             permite_cuotas: p.permite_cuotas, permite_notificaciones: p.permite_notificaciones,
+            permite_control_fisico: p.permite_control_fisico,
           };
           return (
             <div key={p.id} className={`dev-tranca-card ${!p.activo ? "inactiva" : ""}`}>
@@ -2030,6 +2038,10 @@ function ConfigPlanes() {
                   <input type="checkbox" checked={ed.permite_notificaciones} onChange={(e) => setCampoBool(p.id, "permite_notificaciones", e.target.checked)} />
                   <span>Incluye notificaciones</span>
                 </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                  <input type="checkbox" checked={ed.permite_control_fisico} onChange={(e) => setCampoBool(p.id, "permite_control_fisico", e.target.checked)} />
+                  <span>Incluye control físico</span>
+                </label>
               </div>
               {msg && msg.id === p.id && (
                 <div className={`dev-tranca-msg ${msg.ok ? "ok" : "err"}`}>{msg.texto}</div>
@@ -2059,6 +2071,7 @@ function ConfigPlanes() {
         return (
           <>
             {seccion("Básico", basicos)}
+            {seccion("Intermedio", intermedios)}
             {seccion("Premium", premium)}
             {seccion("Personalizado", mixtos)}
           </>
