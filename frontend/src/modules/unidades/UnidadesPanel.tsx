@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   listarCuentas, listarUnidades, listarTarifas, crearUnidad, crearCuenta,
   detalleCuenta, agregarMiembro, quitarMiembro, regenerarEnlace,
-  asignarTarjeta, darBajaCuenta, reactivarCuenta, editarUsuario,
+  asignarTarjeta, darBajaCuenta, reactivarCuenta, pausarAcceso, reanudarAcceso, editarUsuario,
   crearTarifa, editarTarifa, desactivarTarifa,
   validarCodigoEnrolamiento, toggleQrRecurrente, editarTipoAccesoVirtual, editarUnidad,
   listarSolicitudesBaja, resolverSolicitudBaja, nivelarSaldo, getMiResidencial,
@@ -107,6 +107,17 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
     finally { setProcesando(null); }
   }
 
+  // Día 53 — Sprint 1: pausa liviana, distinta de dar de baja — sin saldo,
+  // sin tocar tarjetas ni usuarios, reversible con un solo clic.
+  async function alternarPausa(c: Cuenta) {
+    setProcesando(c.id);
+    try {
+      if (c.acceso_pausado) await reanudarAcceso(c.id);
+      else await pausarAcceso(c.id);
+      onRecargar();
+    } finally { setProcesando(null); }
+  }
+
   // Filtrado en memoria
   const q = busqueda.trim().toLowerCase();
   const filtradas = cuentas.filter((c) => {
@@ -163,13 +174,16 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
             <tbody>
               {filtradas.map((c) => {
                 const dadaBaja = c.activa === false;
+                // Día 53 — Sprint 1: pausa liviana, con su propio estado visual,
+                // distinto de "Baja" (dar de baja formal).
+                const pausada = !dadaBaja && c.acceso_pausado === true;
                 const pend = c.cuotas_pendientes || 0;
                 const esContenedor = c.tipo_cuenta === "edificio_contenedor";
                 const esAdminRes = c.tipo_cuenta === "edificio_admin";
                 const esApto = c.tipo_cuenta === "apartamento";
                 const administra = esContenedor || esAdminRes;
                 return (
-                  <tr key={c.id} className={dadaBaja ? "fila-baja" : (administra ? "fila-edificio" : (esApto ? "fila-apto" : ""))}>
+                  <tr key={c.id} className={dadaBaja ? "fila-baja" : pausada ? "fila-pausada" : (administra ? "fila-edificio" : (esApto ? "fila-apto" : ""))}>
                     <td>
                       <div className="id-cell">
                         {administra ? (
@@ -201,15 +215,23 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
                     <td>
                       {dadaBaja
                         ? <span className="pill" style={{ background: "#6b7280", color: "#fff" }}>Baja</span>
+                        : pausada
+                        ? <span className="pill" style={{ background: "#b45309", color: "#fff" }}>Pausada</span>
                         : esContenedor
                         ? <span className="pill" style={{ background: "#044a6e", color: "#fff" }}>Administración</span>
                         : <span className={c.bloqueada ? "pill red" : "pill green"}>{c.bloqueada ? "Bloqueada" : c.estado}</span>}
                     </td>
-                    <td style={{ display: "flex", gap: 6 }}>
+                    <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button className="btn-tabla btn-tabla-ver" onClick={() => onAbrir(c)}>Ver</button>
                       {dadaBaja
                         ? <button className="btn-tabla btn-tabla-ok" disabled={procesando === c.id} onClick={() => reactivar(c)}>Reactivar</button>
-                        : <button className="btn-tabla btn-tabla-baja" disabled={procesando === c.id} onClick={() => setCuentaBaja(c)}>Dar de baja</button>}
+                        : <>
+                          <button className={`btn-tabla ${pausada ? "btn-tabla-ok" : "btn-tabla-neutro"}`}
+                            disabled={procesando === c.id} onClick={() => alternarPausa(c)}>
+                            {pausada ? "Reanudar acceso" : "Pausar acceso"}
+                          </button>
+                          <button className="btn-tabla btn-tabla-baja" disabled={procesando === c.id} onClick={() => setCuentaBaja(c)}>Dar de baja</button>
+                        </>}
                     </td>
                   </tr>
                 );

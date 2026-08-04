@@ -185,6 +185,12 @@ def crear_visita(usuario_actual):
     if not cuenta.activa:
         return jsonify({"error": {"code": "cuenta_inactiva",
                                   "message": "Tu cuenta está dada de baja. Contactá a tu administrador."}}), 403
+    # Día 53 — Sprint 1: pausa liviana, distinta de "activa" (dar de baja
+    # formal). Mismo efecto de bloqueo, mensaje propio para no confundir
+    # a un residente pausado temporalmente con uno dado de baja.
+    if cuenta.acceso_pausado:
+        return jsonify({"error": {"code": "acceso_pausado",
+                                  "message": "Tu acceso está pausado temporalmente. Contactá a tu administrador."}}), 403
 
     data = request.get_json(silent=True) or {}
     tipo = data.get("tipo")
@@ -401,6 +407,7 @@ def validar_qr(usuario_actual):
             "direccion_sugerida": "salida",
             "cuenta_bloqueada": bool(cuenta_in and cuenta_in.bloqueada),
             "cuenta_inactiva": bool(cuenta_in and not cuenta_in.activa),
+            "acceso_pausado": bool(cuenta_in and cuenta_in.acceso_pausado),
             "mensaje": "Esta visita está adentro. Puede registrar su SALIDA.",
         }})
 
@@ -436,6 +443,7 @@ def validar_qr(usuario_actual):
     cuenta = Cuenta.query.get(visita.cuenta_id)
     cuenta_bloqueada = bool(cuenta and cuenta.bloqueada)
     cuenta_inactiva = bool(cuenta and not cuenta.activa)
+    acceso_pausado = bool(cuenta and cuenta.acceso_pausado)
 
     # Si llegamos aquí, la visita NO está adentro (eso se manejó al inicio).
     # Es una entrada válida nueva.
@@ -446,6 +454,7 @@ def validar_qr(usuario_actual):
         "direccion_sugerida": "entrada",
         "cuenta_bloqueada": cuenta_bloqueada,
         "cuenta_inactiva": cuenta_inactiva,
+        "acceso_pausado": acceso_pausado,
         "mensaje": ("QR válido, pero la cuenta del residente tiene mora."
                     if cuenta_bloqueada else
                     "QR válido. Puede proceder con la validación."),

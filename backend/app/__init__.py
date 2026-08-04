@@ -318,6 +318,9 @@ def create_app(config_class=Config):
             # existiera.
             "ALTER TABLE planes ADD COLUMN IF NOT EXISTS permite_cuotas BOOLEAN NOT NULL DEFAULT true",
             "ALTER TABLE planes ADD COLUMN IF NOT EXISTS permite_notificaciones BOOLEAN NOT NULL DEFAULT true",
+            # Día 53 — Sprint 1: pausa liviana de acceso, distinta de "activa"
+            # (dar de baja). Default false: ninguna cuenta empieza pausada.
+            "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS acceso_pausado BOOLEAN NOT NULL DEFAULT false",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de

@@ -89,6 +89,13 @@ class Cuenta(db.Model):
     estado = db.Column(db.String(20), nullable=False, default="al_dia")
     bloqueada = db.Column(db.Boolean, nullable=False, default=False)
     activa = db.Column(db.Boolean, nullable=False, default=True)   # baja: deja de generar cuotas y accesos
+    # Día 53 — Sprint 1: pausa liviana, DISTINTA de "activa" (dar de baja).
+    # dar_baja_cuenta exige saldo en 0 y desactiva tarjetas/usuarios uno por
+    # uno -- pensado para una mudanza real. acceso_pausado es reversible sin
+    # fricción, para cortar temporalmente el acceso sin ese peso -- pensado
+    # sobre todo para residenciales sin cuotas (Básico), donde "dar de baja"
+    # no tiene mucho sentido conceptual.
+    acceso_pausado = db.Column(db.Boolean, nullable=False, default=False)
     # Solo la administración puede habilitar la generación de QR recurrentes
     # para una cuenta. Por defecto está deshabilitado (Día 29).
     qr_recurrente_habilitado = db.Column(db.Boolean, nullable=False, default=False)
@@ -213,6 +220,7 @@ class Cuenta(db.Model):
             "estado": self.estado,
             "bloqueada": self.bloqueada,
             "activa": self.activa,
+            "acceso_pausado": self.acceso_pausado,
             "qr_recurrente_habilitado": self.qr_recurrente_habilitado,
             "tipo_acceso_virtual": self.tipo_acceso_virtual,
             "tarifa": self.tarifa.nombre if self.tarifa else None,

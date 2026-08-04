@@ -131,7 +131,7 @@ export interface Cuenta {
   es_apartamento?: boolean; es_contenedor?: boolean; administra_edificio?: boolean;
   tipo_cuenta?: "casa" | "edificio_contenedor" | "edificio_admin" | "apartamento";
   dia_pago: number; estado: string;
-  bloqueada: boolean; activa?: boolean; tarifa: string; monto: number;
+  bloqueada: boolean; activa?: boolean; acceso_pausado?: boolean; tarifa: string; monto: number;
   titular?: ResidenteDTO; total_residentes: number; total_tarjetas: number;
   cuotas_pendientes?: number; qr_recurrente_habilitado?: boolean; created_at?: string;
   tipo_acceso_virtual?: "peatonal" | "vehicular";
@@ -177,6 +177,11 @@ export const darBajaCuenta = (id: string) =>
   request<Cuenta>(`/unidades/cuentas/${id}/baja`, { method: "POST" });
 export const reactivarCuenta = (id: string) =>
   request<Cuenta>(`/unidades/cuentas/${id}/reactivar`, { method: "POST" });
+// Día 53 — Sprint 1: pausa liviana y reversible, distinta de dar de baja.
+export const pausarAcceso = (id: string) =>
+  request<Cuenta>(`/unidades/cuentas/${id}/pausar-acceso`, { method: "POST" });
+export const reanudarAcceso = (id: string) =>
+  request<Cuenta>(`/unidades/cuentas/${id}/reanudar-acceso`, { method: "POST" });
 
 export interface SolicitudBajaDTO {
   id: string; cuenta_id: string; apartamento: string; edificio: string;

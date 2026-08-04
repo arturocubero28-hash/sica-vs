@@ -1960,6 +1960,10 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .casas-contador { margin-bottom: 10px; }
 .fila-baja { opacity: 0.55; }
 .fila-baja td { background: #fafafa; }
+/* Día 53 — Sprint 1: pausa liviana, tono ámbar tenue, distinto de "baja"
+   (gris, apagada del todo) -- la casa sigue "viva", solo con el acceso
+   cortado temporalmente. */
+.fila-pausada td { background: #fffbeb; }
 
 /* Botones de baja / reactivar con buen contraste */
 .btn-baja {

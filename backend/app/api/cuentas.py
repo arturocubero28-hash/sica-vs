@@ -662,6 +662,34 @@ def reactivar_cuenta(usuario_actual, cuenta_uuid):
     return jsonify({"data": cuenta.to_dict()})
 
 
+@cuentas_bp.post("/cuentas/<cuenta_uuid>/pausar-acceso")
+@roles_required("admin", "super_admin")
+def pausar_acceso_cuenta(usuario_actual, cuenta_uuid):
+    """Día 53 — Sprint 1: pausa liviana y reversible del acceso de una casa,
+    SIN las exigencias de dar_baja_cuenta (saldo en 0, tarjetas, usuarios
+    uno por uno). Pensada sobre todo para residenciales sin cuotas
+    (Básico), donde 'dar de baja' formal no tiene mucho sentido —
+    ver crear_visita() en visitas.py para el bloqueo real."""
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+    cuenta.acceso_pausado = True
+    db.session.commit()
+    return jsonify({"data": cuenta.to_dict()})
+
+
+@cuentas_bp.post("/cuentas/<cuenta_uuid>/reanudar-acceso")
+@roles_required("admin", "super_admin")
+def reanudar_acceso_cuenta(usuario_actual, cuenta_uuid):
+    """Contraparte de pausar_acceso_cuenta — solo revierte el mismo flag."""
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+    cuenta.acceso_pausado = False
+    db.session.commit()
+    return jsonify({"data": cuenta.to_dict()})
+
+
 # =====================================================================
 # RESIDENTES (miembros adicionales)
 # =====================================================================
