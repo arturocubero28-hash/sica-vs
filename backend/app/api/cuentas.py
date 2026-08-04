@@ -487,6 +487,15 @@ def editar_cuenta(usuario_actual, cuenta_uuid):
     if "qr_recurrente_habilitado" in body:
         cuenta.qr_recurrente_habilitado = bool(body["qr_recurrente_habilitado"])
     if "tipo_acceso_virtual" in body:
+        # Día 53 — Sprint 2: este campo es sobre qué trancas puede abrir la
+        # tarjeta digital -- control físico puro, no cuotas. Chequeo
+        # selectivo (no se puede gatear todo el endpoint, "activa" debe
+        # seguir funcionando siempre, sin importar el plan).
+        from app.utils.residencial import plan_permite
+        if not plan_permite(usuario_actual.residencial_id, "control_fisico"):
+            return _err("funcion_no_incluida",
+                        "Tu plan actual no incluye control de accesos físico — "
+                        "hablá con tu proveedor para subir de plan.", 402)
         valor = body["tipo_acceso_virtual"]
         if valor in ("peatonal", "vehicular"):
             cuenta.tipo_acceso_virtual = valor
@@ -809,6 +818,7 @@ def regenerar_enlace(usuario_actual, cuenta_uuid, residente_uuid):
 # =====================================================================
 @cuentas_bp.post("/cuentas/<cuenta_uuid>/tarjetas")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("control_fisico")
 def asignar_tarjeta(usuario_actual, cuenta_uuid):
     cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
     if not cuenta:

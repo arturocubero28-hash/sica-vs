@@ -21,7 +21,7 @@ import base64
 from flask import Blueprint, jsonify, request, current_app
 
 from app.extensions import db
-from app.auth.security import token_required
+from app.auth.security import token_required, requiere_funcion_plan
 from app.models.cuenta import TarjetaVirtual, Residente, Cuenta
 
 tv_bp = Blueprint("tarjeta_virtual", __name__)
@@ -50,6 +50,7 @@ def _generar_codigo_unico():
 
 @tv_bp.get("/mi-tarjeta-virtual")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def mi_tarjeta_virtual(usuario_actual):
     """Estado actual de la tarjeta virtual del residente."""
     residente, cuenta = _mi_residente(usuario_actual)
@@ -68,6 +69,7 @@ def mi_tarjeta_virtual(usuario_actual):
 
 @tv_bp.post("/mi-tarjeta-virtual/activar")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def activar_tarjeta_virtual(usuario_actual):
     """Crea la tarjeta virtual del residente si no existe. Si ya existe la reactiva."""
     residente, cuenta = _mi_residente(usuario_actual)
@@ -103,6 +105,7 @@ def activar_tarjeta_virtual(usuario_actual):
 
 @tv_bp.post("/mi-tarjeta-virtual/suspender")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def suspender_tarjeta_virtual(usuario_actual):
     """Suspende la tarjeta (ej. perdió el teléfono). El código deja de funcionar
     en el próximo sync de la Pi (máx 5 min)."""
@@ -122,6 +125,7 @@ def suspender_tarjeta_virtual(usuario_actual):
 
 @tv_bp.post("/mi-tarjeta-virtual/reactivar")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def reactivar_tarjeta_virtual(usuario_actual):
     """Reactiva una tarjeta suspendida y genera un código nuevo (el anterior
     quedó potencialmente expuesto)."""
@@ -150,6 +154,7 @@ def reactivar_tarjeta_virtual(usuario_actual):
 
 @tv_bp.get("/mi-tarjeta-virtual/wallet-pass")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def wallet_pass(usuario_actual):
     """
     Devuelve el JWT firmado para Google Wallet Pass.

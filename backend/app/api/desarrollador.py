@@ -1077,6 +1077,7 @@ def crear_plan(usuario_actual):
         orden=int(body.get("orden", 0)),
         permite_cuotas=bool(body.get("permite_cuotas", True)),
         permite_notificaciones=bool(body.get("permite_notificaciones", True)),
+        permite_control_fisico=bool(body.get("permite_control_fisico", True)),
     )
     db.session.add(plan)
     db.session.commit()
@@ -1136,6 +1137,8 @@ def editar_plan(usuario_actual, plan_id):
         plan.permite_cuotas = bool(body["permite_cuotas"])
     if "permite_notificaciones" in body:
         plan.permite_notificaciones = bool(body["permite_notificaciones"])
+    if "permite_control_fisico" in body:
+        plan.permite_control_fisico = bool(body["permite_control_fisico"])
 
     db.session.commit()
     return jsonify({"data": plan.to_dict()})

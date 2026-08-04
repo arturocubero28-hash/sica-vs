@@ -28,7 +28,7 @@ import datetime as dt
 from flask import Blueprint, request, jsonify, current_app
 
 from app.extensions import db, limiter
-from app.auth.security import roles_required
+from app.auth.security import roles_required, requiere_funcion_plan
 from app.models.cuenta import Tarjeta, Cuenta, TarjetaVirtual, CredencialBLE
 from app.models.visita import EventoAcceso, AccesoFisico
 from app.models.dispositivo import Dispositivo
@@ -63,6 +63,22 @@ def _dispositivo_actual():
     from app.models.dispositivo import hash_token
     disp = Dispositivo.query.filter_by(token_hash=hash_token(token), activo=True).first()
     return disp
+
+
+def _bloqueado_por_plan_fisico(disp):
+    """
+    Día 53 — Sprint 2: estos endpoints los llama la propia Pi (autenticada
+    por token de dispositivo, no por usuario), así que el decorador
+    requiere_funcion_plan (pensado para usuario_actual) no aplica acá. Se
+    valida a mano, mismo criterio: sin residencial o sin plan, no hay
+    restricción. Devuelve una respuesta de error si corresponde bloquear,
+    o None si está OK.
+    """
+    from app.utils.residencial import plan_permite
+    if not plan_permite(disp.residencial_id, "control_fisico"):
+        return _err("funcion_no_incluida",
+                    "El plan de esta residencial no incluye control de accesos físico.", 402)
+    return None
 
 
 def _guardia_pi_acceso(disp):
@@ -103,6 +119,9 @@ def validar_tarjeta():
     if not disp:
         return _err("dispositivo_no_autorizado",
                     "Dispositivo no autorizado para validar accesos", 401)
+    err = _bloqueado_por_plan_fisico(disp)
+    if err:
+        return err
 
     # PI-ISO-14 (Auditoría Día 39): antes, este endpoint no comprobaba el
     # punto en absoluto — bastaba con que el token fuera válido y la tranca
@@ -213,6 +232,9 @@ def sincronizar():
     if not disp:
         return _err("dispositivo_no_autorizado",
                     "Dispositivo no autorizado o revocado", 401)
+    err = _bloqueado_por_plan_fisico(disp)
+    if err:
+        return err
 
     # PI-ISO-14 (Auditoría Día 39): antes, el filtro por punto era condicional
     # (`if disp.punto_acceso:`), así que una Pi sin punto se llevaba TODAS las
@@ -370,6 +392,9 @@ def reportar_eventos():
     if not disp:
         return _err("dispositivo_no_autorizado",
                     "Dispositivo no autorizado o revocado", 401)
+    err = _bloqueado_por_plan_fisico(disp)
+    if err:
+        return err
 
     # PI-ISO-14 (Auditoría Día 39): sin punto asignado no se reporta nada.
     # Coherente con /sincronizar y /validar-tarjeta: los tres endpoints del
@@ -484,6 +509,9 @@ def validar_ble():
     if not disp:
         return _err("dispositivo_no_autorizado",
                     "Dispositivo no autorizado o revocado", 401)
+    err = _bloqueado_por_plan_fisico(disp)
+    if err:
+        return err
 
     # PI-ISO-14: mismas garantías que el resto de endpoints del agente.
     bloqueo = _guardia_pi_acceso(disp)
@@ -614,6 +642,9 @@ def config_camaras_agente():
     if not disp:
         return _err("dispositivo_no_autorizado",
                     "Dispositivo no autorizado o revocado", 401)
+    err = _bloqueado_por_plan_fisico(disp)
+    if err:
+        return err
     if disp.tipo != "camara":
         return _err("tipo_incorrecto",
                     "Este dispositivo no es un agente de cámaras", 403)
@@ -638,6 +669,9 @@ def heartbeat_agente_camaras():
     if not disp:
         return _err("dispositivo_no_autorizado",
                     "Dispositivo no autorizado o revocado", 401)
+    err = _bloqueado_por_plan_fisico(disp)
+    if err:
+        return err
 
     disp.ultimo_heartbeat = dt.datetime.utcnow()
     db.session.commit()
@@ -701,6 +735,7 @@ def _punto_a_dict(nombre_punto, trancas):
 
 @acceso_bp.get("/puntos")
 @roles_required("admin", "super_admin", "guardia")
+@requiere_funcion_plan("control_fisico")
 def listar_puntos_acceso(usuario_actual):
     """
     Lista los puntos de acceso agrupados por punto_acceso. Un guardia
@@ -733,6 +768,7 @@ def listar_puntos_acceso(usuario_actual):
 
 @acceso_bp.post("/puntos")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("control_fisico")
 def crear_punto_acceso(usuario_actual):
     """
     Crea un punto de acceso nuevo con las trancas que el admin indique.
@@ -794,6 +830,7 @@ def crear_punto_acceso(usuario_actual):
 
 @acceso_bp.put("/puntos/<nombre_punto>")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("control_fisico")
 def editar_punto_acceso(usuario_actual, nombre_punto):
     """
     Edita lo operativo de un punto: nombre nuevo, o activar/desactivar
@@ -832,6 +869,7 @@ def editar_punto_acceso(usuario_actual, nombre_punto):
 
 @acceso_bp.get("/puntos/<nombre_punto>/historial-count")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("control_fisico")
 def historial_count_punto(usuario_actual, nombre_punto):
     """Cuántos eventos de acceso tiene un punto — informativo antes de desactivarlo."""
     trancas = _trancas_del_punto(nombre_punto)

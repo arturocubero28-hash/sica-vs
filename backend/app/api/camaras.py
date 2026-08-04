@@ -11,7 +11,7 @@ from flask import Blueprint, request, jsonify, Response, current_app
 
 from app.extensions import db
 from app.models.camara import Camara
-from app.auth.security import token_required, roles_required
+from app.auth.security import token_required, roles_required, requiere_funcion_plan
 
 camaras_bp = Blueprint("camaras", __name__)
 
@@ -19,6 +19,7 @@ camaras_bp = Blueprint("camaras", __name__)
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 @camaras_bp.get("")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("control_fisico")
 def listar_camaras(usuario_actual):
     from app.utils.residencial import scope_directo
     camaras = scope_directo(Camara.query, Camara, usuario_actual) \
@@ -28,6 +29,7 @@ def listar_camaras(usuario_actual):
 
 @camaras_bp.post("")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("control_fisico")
 def crear_camara(usuario_actual):
     body = request.get_json() or {}
     if not body.get("nombre") or not body.get("ip"):
@@ -55,6 +57,7 @@ def crear_camara(usuario_actual):
 
 @camaras_bp.put("/<uuid_camara>")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("control_fisico")
 def editar_camara(usuario_actual, uuid_camara):
     from app.utils.residencial import pertenece_a_mi_residencial
     cam = Camara.query.filter_by(uuid_publico=uuid_camara).first()
@@ -83,6 +86,7 @@ def editar_camara(usuario_actual, uuid_camara):
 
 @camaras_bp.delete("/<uuid_camara>")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("control_fisico")
 def eliminar_camara(usuario_actual, uuid_camara):
     from app.utils.residencial import pertenece_a_mi_residencial
     cam = Camara.query.filter_by(uuid_publico=uuid_camara).first()
@@ -96,6 +100,7 @@ def eliminar_camara(usuario_actual, uuid_camara):
 # ── Probar conexión a una cámara ───────────────────────────────────────────────
 @camaras_bp.post("/<uuid_camara>/probar")
 @roles_required("admin", "super_admin")
+@requiere_funcion_plan("control_fisico")
 def probar_camara(usuario_actual, uuid_camara):
     from app.utils.residencial import pertenece_a_mi_residencial
     cam = Camara.query.filter_by(uuid_publico=uuid_camara).first()
@@ -163,6 +168,7 @@ def _generar_mjpeg(url_rtsp):
 
 @camaras_bp.get("/<uuid_camara>/stream")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def stream_camara(usuario_actual, uuid_camara):
     # Día 48 — hallazgo de auditoría, el más grave de los cuatro: este
     # endpoint usa @token_required (CUALQUIER rol autenticado — residente,

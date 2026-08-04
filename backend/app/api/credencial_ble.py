@@ -23,7 +23,7 @@ import datetime as dt
 from flask import Blueprint, jsonify, request, current_app
 
 from app.extensions import db
-from app.auth.security import token_required
+from app.auth.security import token_required, requiere_funcion_plan
 from app.models.cuenta import CredencialBLE, Residente
 
 ble_bp = Blueprint("credencial_ble", __name__)
@@ -70,6 +70,7 @@ def _generar_token():
 
 @ble_bp.get("/mi-ble")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def mi_ble(usuario_actual):
     residente, cuenta = _mi_residente(usuario_actual)
     if not residente:
@@ -85,6 +86,7 @@ def mi_ble(usuario_actual):
 
 @ble_bp.post("/mi-ble/activar")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def activar_ble(usuario_actual):
     """Registra el dispositivo actual y genera la credencial BLE.
     Si el residente ya tenía una credencial en otro dispositivo, la revoca
@@ -132,6 +134,7 @@ def activar_ble(usuario_actual):
 
 @ble_bp.post("/mi-ble/suspender")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def suspender_ble(usuario_actual):
     residente, cuenta = _mi_residente(usuario_actual)
     if not residente:
@@ -150,6 +153,7 @@ def suspender_ble(usuario_actual):
 
 @ble_bp.post("/mi-ble/reactivar")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def reactivar_ble(usuario_actual):
     # BLE-BE-18: reactivar genera token y clave nuevos — mismo criterio
     # que activar.
@@ -185,6 +189,7 @@ def reactivar_ble(usuario_actual):
 
 @ble_bp.post("/mi-ble/registrar-uso")
 @token_required
+@requiere_funcion_plan("control_fisico")
 def registrar_uso_ble(usuario_actual):
     """El teléfono llama aquí después de un acceso exitoso para incrementar
     el rolling counter. Mantiene sincronizado el contador entre teléfono y servidor."""

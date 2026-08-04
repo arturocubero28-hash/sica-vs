@@ -44,6 +44,10 @@ class Plan(db.Model):
     # bloquee nada de golpe.
     permite_cuotas = db.Column(db.Boolean, nullable=False, default=True)
     permite_notificaciones = db.Column(db.Boolean, nullable=False, default=True)
+    # Día 53 — Sprint 2: tercer flag, para el plan Intermedio (cuotas sí,
+    # hardware no). Default true por el mismo motivo que los otros dos: los
+    # planes ya creados no deben perder funciones de golpe.
+    permite_control_fisico = db.Column(db.Boolean, nullable=False, default=True)
 
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow,
@@ -61,6 +65,7 @@ class Plan(db.Model):
             "orden": self.orden,
             "permite_cuotas": self.permite_cuotas,
             "permite_notificaciones": self.permite_notificaciones,
+            "permite_control_fisico": self.permite_control_fisico,
         }
         if incluir_stats:
             from app.models.residencial import Residencial

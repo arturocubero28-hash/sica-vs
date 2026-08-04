@@ -27,7 +27,7 @@ def _err(code, msg, status):
 # ── Listar tipos de tarjeta (catálogo + stock) ────────────────────────────────
 @inventario_bp.get("/tipos")
 @roles_required("admin", "super_admin", "cajero", "desarrollador")
-@requiere_funcion_plan("cuotas")
+@requiere_funcion_plan("control_fisico")
 def listar_tipos(usuario_actual):
     from app.utils.residencial import scope_directo
     tipos = scope_directo(TipoTarjeta.query, TipoTarjeta, usuario_actual).order_by(
@@ -38,7 +38,7 @@ def listar_tipos(usuario_actual):
 # ── Crear un tipo de tarjeta ──────────────────────────────────────────────────
 @inventario_bp.post("/tipos")
 @roles_required("admin", "super_admin")
-@requiere_funcion_plan("cuotas")
+@requiere_funcion_plan("control_fisico")
 def crear_tipo(usuario_actual):
     data = request.get_json(silent=True) or {}
     nombre = (data.get("nombre") or "").strip()
@@ -81,7 +81,7 @@ def crear_tipo(usuario_actual):
 # ── Editar un tipo (nombre, precio, activo) ───────────────────────────────────
 @inventario_bp.put("/tipos/<uuid>")
 @roles_required("admin", "super_admin")
-@requiere_funcion_plan("cuotas")
+@requiere_funcion_plan("control_fisico")
 def editar_tipo(usuario_actual, uuid):
     from app.utils.residencial import pertenece_a_mi_residencial
     tipo = TipoTarjeta.query.filter_by(uuid_publico=uuid).first()
@@ -111,7 +111,7 @@ def editar_tipo(usuario_actual, uuid):
 # ── Registrar entrada de stock (compra de un lote nuevo) ──────────────────────
 @inventario_bp.post("/tipos/<uuid>/stock")
 @roles_required("admin", "super_admin")
-@requiere_funcion_plan("cuotas")
+@requiere_funcion_plan("control_fisico")
 def agregar_stock(usuario_actual, uuid):
     # O3.1 / O6.1 (Auditoría Día 42): candado sobre el TipoTarjeta. Sin él,
     # dos ajustes simultáneos leen el mismo tipo.stock y el segundo pisa al
@@ -157,7 +157,7 @@ def agregar_stock(usuario_actual, uuid):
 # ── Historial de movimientos de stock ─────────────────────────────────────────
 @inventario_bp.get("/movimientos")
 @roles_required("admin", "super_admin", "desarrollador")
-@requiere_funcion_plan("cuotas")
+@requiere_funcion_plan("control_fisico")
 def listar_movimientos(usuario_actual):
     movs = (MovimientoStock.query
             .order_by(MovimientoStock.created_at.desc())
