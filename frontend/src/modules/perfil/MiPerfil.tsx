@@ -315,9 +315,16 @@ function PuntosAccesoPanel() {
   const [mostrarCrear, setMostrarCrear] = useState(false);
 
   function cargar() {
-    listarPuntosAcceso(false).then(setPuntos).catch(() => setError("No se pudieron cargar los puntos de acceso"));
+    listarPuntosAcceso(false).then(setPuntos)
+      .catch((e) => setError(e?.message || "No se pudieron cargar los puntos de acceso"));
   }
   useEffect(cargar, []);
+
+  // Día 53 — Sprint 3 parte 2: antes mostraba un texto fijo genérico en vez
+  // del mensaje real del backend ("esta función no está en tu plan"),
+  // aunque este ya estaba correctamente bloqueado del lado del servidor
+  // desde el Sprint 2.
+  if (error) return <FuncionNoIncluida mensaje={error} />;
 
   return (
     <div>
@@ -334,8 +341,7 @@ function PuntosAccesoPanel() {
           punto están trabajando; los accesos que registren quedan atribuidos a ese punto.
         </p>
 
-        {error && <p className="err small">{error}</p>}
-        {!puntos && !error && <p className="muted">Cargando…</p>}
+        {!puntos && <p className="muted">Cargando…</p>}
 
         {puntos && puntos.length === 0 && (
           <div className="muted small" style={{ padding: "16px 0" }}>

@@ -1270,7 +1270,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
         {/* ══════ FIN PESTAÑA MIEMBROS ══════ */}
 
         {/* ══════ PESTAÑA: ACCESOS (parte 2 — tarjetas) ══════ */}
-        {tabDetalle === "accesos" && (<>
+        {tabDetalle === "accesos" && permiteControlFisico && (<>
 
         <div className="sub">Tarjetas de proximidad ({(cuenta.tarjetas || []).length})</div>
         <div className="scroll-x"><table className="data">

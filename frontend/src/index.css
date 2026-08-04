@@ -2521,7 +2521,13 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   color: #6b7280; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px;
   display: inline-flex; align-items: center; gap: 7px; }
 .htab.activo { color: var(--marca-naranja); border-bottom-color: var(--marca-naranja); }
-.htab:hover { color: var(--marca-azul); }
+.htab:hover {
+  color: var(--marca-azul);
+  /* Mismo bug que .detalle-tabs (Día 53): sin esto, hereda el fondo azul
+     del button:hover global -- texto azul sobre fondo azul, ilegible. */
+  background: none !important;
+  transform: none !important;
+}
 
 /* Arreglos de pago */
 .cuotas-check-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto;
@@ -3218,7 +3224,14 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   border-bottom: 2px solid transparent; margin-bottom: -2px;
   transition: color .15s, border-color .15s;
 }
-.detalle-tabs button:hover { color: var(--marca-azul); }
+.detalle-tabs button:hover {
+  color: var(--marca-azul);
+  /* El botón global (button:hover) pone fondo azul + texto blanco por
+     defecto -- acá se anula el fondo para que solo cambie el color de
+     texto (bug real: quedaba texto azul sobre fondo azul, ilegible). */
+  background: none !important;
+  transform: none !important;
+}
 .detalle-tabs button.on {
   color: var(--marca-azul); border-bottom-color: var(--marca-naranja);
 }
