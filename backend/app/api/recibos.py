@@ -11,7 +11,7 @@ Estructura preparada para FASE 2 (SAR): CAI, rango autorizado, fecha límite.
 """
 import io
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, jsonify, request, send_file, current_app
 
 from app.extensions import db
 from app.models.cuenta import Pago, ConfigRecibo
@@ -135,15 +135,35 @@ def recibo_pdf(usuario_actual, pago_uuid):
 
 
 def _generar_pdf_recibo(pago, cfg):
-    """Genera el PDF del recibo con reportlab."""
+    """
+    Genera el PDF del recibo con reportlab.
+
+    Día 54 — corrección real encontrada por el usuario probando con una
+    segunda residencial (Bosques de Jucutuma): el recibo mostraba
+    "Residencial Villas del Sol" fijo (el nombre real solo salía si el
+    admin había configurado nombre_emisor a mano en ConfigRecibo — Bosques
+    nunca lo hizo), colores fijos sin importar la personalización de cada
+    residencial, sin logo, y el concepto no decía a qué mes correspondía
+    la cuota. Ahora usa el nombre/colores/logo REALES de la residencial
+    del pago (Residencial.nombre, color_primario/secundario, logo_archivo)
+    como el criterio por defecto -- nombre_emisor en ConfigRecibo sigue
+    pudiendo pisarlo si el admin quiere un nombre distinto en el recibo
+    (ej. la razón social legal) del que usa en el resto del sistema.
+    """
+    import os
     from reportlab.lib.pagesizes import A5
     from reportlab.lib.units import mm
     from reportlab.lib import colors
     from reportlab.pdfgen import canvas
 
-    AZUL = colors.HexColor("#022E45")
-    NARANJA = colors.HexColor("#F48723")
+    from app.models.residencial import Residencial, DEFAULT_COLOR_PRIMARIO, DEFAULT_COLOR_SECUNDARIO
+    residencial = Residencial.query.get(pago.residencial_id) if pago.residencial_id else None
+
+    AZUL = colors.HexColor((residencial.color_primario if residencial else None) or DEFAULT_COLOR_PRIMARIO)
+    NARANJA = colors.HexColor((residencial.color_secundario if residencial else None) or DEFAULT_COLOR_SECUNDARIO)
     GRIS = colors.HexColor("#6b7280")
+
+    nombre_emisor = cfg.nombre_emisor or (residencial.nombre if residencial else None) or "Residencial"
 
     buf = io.BytesIO()
     W, H = A5
@@ -151,12 +171,29 @@ def _generar_pdf_recibo(pago, cfg):
 
     numero = cfg.numero_formateado(pago.numero_recibo)
 
-    # Encabezado
+    # Encabezado — franja con las cuatro esquinas redondeadas (antes era un
+    # rectángulo cuadrado sin ninguna curva; pedido explícito del usuario).
+    ALTO_HEADER = 20 * mm
+    MARGEN_SUP = 2.5 * mm
     c.setFillColor(NARANJA)
-    c.rect(0, H - 18 * mm, W, 18 * mm, fill=1, stroke=0)
+    c.roundRect(0, H - ALTO_HEADER - MARGEN_SUP, W, ALTO_HEADER, 4 * mm, fill=1, stroke=0)
+
+    # Logo (si la residencial tiene uno) + nombre
+    x_texto = 12 * mm
+    if residencial and residencial.logo_archivo:
+        ruta_logo = os.path.join(
+            current_app.config.get("UPLOAD_FOLDER", "/app/uploads"), "residenciales", residencial.logo_archivo)
+        if os.path.exists(ruta_logo):
+            try:
+                tam_logo = 12 * mm
+                c.drawImage(ruta_logo, 10 * mm, H - 17 * mm, width=tam_logo, height=tam_logo,
+                           preserveAspectRatio=True, mask="auto")
+                x_texto = 10 * mm + tam_logo + 3 * mm
+            except Exception:
+                pass  # un logo corrupto no debe tumbar la generación del recibo
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 13)
-    c.drawString(12 * mm, H - 12 * mm, cfg.nombre_emisor or "Residencial Villas del Sol")
+    c.drawString(x_texto, H - 12 * mm, nombre_emisor)
 
     # Título RECIBO + número
     c.setFillColor(AZUL)
@@ -206,6 +243,15 @@ def _generar_pdf_recibo(pago, cfg):
         "transferencia": "Transferencia", "linea": "Pago en línea", "pasarela": "Pago en línea",
     }.get(pago.metodo, pago.metodo)
 
+    # Concepto: si el pago corresponde a una cuota con período conocido, se
+    # arma "Pago de cuota — Agosto 2026" en vez del genérico de antes.
+    concepto = pago.referencia or "Pago de cuota"
+    if not pago.referencia and pago.cuota and pago.cuota.periodo:
+        meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                 "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+        p = pago.cuota.periodo
+        concepto = f"Pago de cuota — {meses[p.month - 1].capitalize()} {p.year}"
+
     def fila(label, valor, bold_val=False):
         nonlocal y
         c.setFont("Helvetica", 9)
@@ -219,7 +265,7 @@ def _generar_pdf_recibo(pago, cfg):
     fila("Fecha:", fecha_str)
     fila("Casa / Unidad:", unidad)
     fila("Recibí de:", titular)
-    fila("Concepto:", (pago.referencia or "Pago de cuota")[:40])
+    fila("Concepto:", concepto[:40])
     fila("Forma de pago:", metodo_label)
 
     # Monto destacado

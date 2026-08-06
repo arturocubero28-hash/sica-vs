@@ -525,36 +525,64 @@ def detalle_sesion(usuario_actual, uuid_sesion):
 @roles_required("cajero", "admin", "super_admin", "desarrollador")
 @requiere_funcion_plan("cuotas")
 def constancia_pdf(usuario_actual, uuid_sesion):
-    """Genera la constancia PDF del turno del cajero con arqueo."""
+    """Genera la constancia PDF del turno del cajero con arqueo.
+
+    Día 54 — mismo criterio recién aplicado al recibo de pago (recibos.py):
+    antes mostraba "Residencial Villas del Sol" fijo y colores fijos, sin
+    importar de qué residencial fuera la sesión de caja. Ahora usa el
+    nombre/colores/logo reales, resueltos desde el cajero que abrió la
+    sesión (SesionCaja no tiene residencial_id directo, pero el cajero sí).
+    """
     s = SesionCaja.query.filter_by(uuid_publico=uuid_sesion).first()
     if not s:
         return jsonify({"error": {"code": "no_encontrada", "message": "Sesión no encontrada"}}), 404
 
     import io
+    import os
     import datetime as dt
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.units import mm
     from reportlab.lib import colors
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.platypus import Table, TableStyle
-    from flask import send_file
+    from flask import send_file, current_app
 
-    AZUL   = colors.HexColor("#022E45")
+    from app.models.residencial import Residencial, DEFAULT_COLOR_PRIMARIO, DEFAULT_COLOR_SECUNDARIO
+    rid_sesion = s.cajero.residencial_id if s.cajero else None
+    residencial = Residencial.query.get(rid_sesion) if rid_sesion else None
+
+    AZUL   = colors.HexColor((residencial.color_primario if residencial else None) or DEFAULT_COLOR_PRIMARIO)
     GRIS   = colors.HexColor("#6b7280")
     GRIS_C = colors.HexColor("#f4f7fb")
+    nombre_residencial = (residencial.nombre if residencial else None) or "Residencial"
 
     buf = io.BytesIO()
     W, H = letter
     cv = rl_canvas.Canvas(buf, pagesize=letter)
 
-    # Encabezado
+    # Encabezado — mismo criterio de esquinas redondeadas del recibo, para
+    # que los dos documentos se vean como parte de un mismo sistema.
+    ALTO_HEADER = 22 * mm
     cv.setFillColor(AZUL)
-    cv.rect(0, H - 22*mm, W, 22*mm, fill=1, stroke=0)
+    cv.roundRect(0, H - ALTO_HEADER - 2.5 * mm, W, ALTO_HEADER, 4 * mm, fill=1, stroke=0)
+
+    x_texto = 15 * mm
+    if residencial and residencial.logo_archivo:
+        ruta_logo = os.path.join(
+            current_app.config.get("UPLOAD_FOLDER", "/app/uploads"), "residenciales", residencial.logo_archivo)
+        if os.path.exists(ruta_logo):
+            try:
+                tam_logo = 14 * mm
+                cv.drawImage(ruta_logo, 13 * mm, H - 18 * mm, width=tam_logo, height=tam_logo,
+                            preserveAspectRatio=True, mask="auto")
+                x_texto = 13 * mm + tam_logo + 3 * mm
+            except Exception:
+                pass  # un logo corrupto no debe tumbar la generación de la constancia
     cv.setFillColor(colors.white)
     cv.setFont("Helvetica-Bold", 14)
-    cv.drawString(15*mm, H - 10*mm, "Residencial Villas del Sol")
+    cv.drawString(x_texto, H - 10*mm, nombre_residencial)
     cv.setFont("Helvetica", 9)
-    cv.drawString(15*mm, H - 16*mm, "CONSTANCIA DE TURNO DE CAJA")
+    cv.drawString(x_texto, H - 16*mm, "CONSTANCIA DE TURNO DE CAJA")
     cv.setFont("Helvetica-Bold", 10)
     cv.drawRightString(W - 15*mm, H - 10*mm, f"Sesión #{str(s.uuid_publico)[:8].upper()}")
     cv.setFont("Helvetica", 8)
@@ -721,7 +749,7 @@ def constancia_pdf(usuario_actual, uuid_sesion):
     cv.drawCentredString(55*mm, y - 10*mm, nombre_cajero)
     cv.drawCentredString((120*mm + W - 20*mm) / 2, y - 5*mm, "Firma del supervisor")
     cv.setFont("Helvetica", 7)
-    cv.drawCentredString(W/2, 12*mm, f"Generado el {dt.datetime.now().strftime('%d/%m/%Y %I:%M %p')}  ·  SICA-VS  ·  Residencial Villas del Sol")
+    cv.drawCentredString(W/2, 12*mm, f"Generado el {dt.datetime.now().strftime('%d/%m/%Y %I:%M %p')}  ·  SICA-VS  ·  {nombre_residencial}")
 
     cv.showPage(); cv.save(); buf.seek(0)
     return send_file(buf, mimetype="application/pdf", as_attachment=False,
