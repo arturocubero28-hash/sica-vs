@@ -176,28 +176,23 @@ def _generar_pdf_recibo(pago, cfg):
     subtitulo = residencial.direccion if (residencial and residencial.direccion) else None
     telefono = residencial.telefono if (residencial and residencial.telefono) else None
 
-    # Encabezado — Día 54, tercera vuelta de ajustes:
-    # 1) Ancho recortado un 25% (pedido del usuario) -- ya no ocupa todo
-    #    el ancho de la página, queda como una "ficha" angosta pegada a
-    #    la izquierda.
-    # 2) Esquinas: SOLO abajo redondeadas, arriba rectas -- la vez pasada
-    #    quedaron las 4 redondeadas por un error de cálculo propio (el
-    #    rectángulo terminaba justo en el borde de la página en vez de
-    #    pasarse, así que no había nada que "cortara" el redondeo de
-    #    arriba). Esta vez se arma la forma a mano con un path (líneas
-    #    rectas arriba, curvas bezier solo en las dos esquinas de abajo),
-    #    en vez de depender de roundRect (que redondea las 4 por igual).
-    ALTO_HEADER = 32 * mm
-    W_BARRA = W * 0.75
-    y_base_header = H - ALTO_HEADER - 6 * mm
-    y_top_barra = H
+    # Encabezado — Día 54, cuarta vuelta: el usuario aclaró que el recorte
+    # debía ser en ALTO, no en ancho (lo entendí al revés la vez pasada) --
+    # quedaba mucha franja de color vacía debajo de "Teléfono". Se vuelve
+    # al ancho completo de la página, y se recalcula el alto real que
+    # necesita el contenido (logo + nombre + 2 líneas de contacto), con un
+    # margen prudente arriba y abajo -- en vez del valor architrado a mano
+    # (32mm + 6mm) de las vueltas anteriores.
+    ALTO_BARRA = 28 * mm
+    W_BARRA = W
+    y_base_header = H - ALTO_BARRA
     radio_esq = 4 * mm
     kappa = radio_esq * 0.5523  # longitud de control para aproximar un cuarto de círculo con bezier
 
     c.saveState()
     path_mascara = c.beginPath()
-    path_mascara.moveTo(0, y_top_barra)
-    path_mascara.lineTo(W_BARRA, y_top_barra)
+    path_mascara.moveTo(0, H)
+    path_mascara.lineTo(W_BARRA, H)
     path_mascara.lineTo(W_BARRA, y_base_header + radio_esq)
     path_mascara.curveTo(W_BARRA, y_base_header + radio_esq - kappa,
                          W_BARRA - radio_esq + kappa, y_base_header,
@@ -218,20 +213,20 @@ def _generar_pdf_recibo(pago, cfg):
         g = g0 + (1 - g0) * mezcla
         b = b0 + (1 - b0) * mezcla
         c.setFillColorRGB(r, g, b)
-        alto_franja = (ALTO_HEADER + 6 * mm) / franjas
+        alto_franja = ALTO_BARRA / franjas
         c.rect(0, y_base_header + (franjas - 1 - i) * alto_franja, W_BARRA, alto_franja + 0.3 * mm, fill=1, stroke=0)
     c.restoreState()  # cierra el clip -- lo dibujado después ya no queda recortado
 
     # Logo (si la residencial tiene uno), en una placa circular con un
     # anillo blanco fino.
     x_texto = 14 * mm
-    y_centro_logo = H - 16 * mm
+    y_centro_logo = H - 14 * mm
     if residencial and residencial.logo_archivo:
         ruta_logo = os.path.join(
             current_app.config.get("UPLOAD_FOLDER", "/app/uploads"), "residenciales", residencial.logo_archivo)
         if os.path.exists(ruta_logo):
             try:
-                radio = 8.5 * mm
+                radio = 8 * mm
                 cx, cy = 12 * mm + radio, y_centro_logo
                 c.setFillColor(colors.white)
                 c.circle(cx, cy, radio + 0.35 * mm, fill=1, stroke=0)  # anillo blanco fino
@@ -246,25 +241,25 @@ def _generar_pdf_recibo(pago, cfg):
             except Exception:
                 pass  # un logo corrupto no debe tumbar la generación del recibo
     c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(x_texto, y_centro_logo + 3 * mm, nombre_emisor)
+    c.setFont("Helvetica-Bold", 13)
+    c.drawString(x_texto, y_centro_logo + 3.5 * mm, nombre_emisor)
 
     # Datos de contacto, CON etiqueta -- pedido del usuario: antes se
     # mostraba la dirección sola, sin decir qué era. Se arman como una o
     # dos líneas según lo que la residencial tenga cargado.
-    c.setFont("Helvetica", 7.5)
+    c.setFont("Helvetica", 7)
     c.setFillColor(colors.HexColor("#e8f3ee"))
-    y_contacto = y_centro_logo - 4 * mm
+    y_contacto = y_centro_logo - 3.5 * mm
     if subtitulo:
         c.drawString(x_texto, y_contacto, f"Dirección: {subtitulo}")
-        y_contacto -= 3.6 * mm
+        y_contacto -= 3.4 * mm
     if telefono:
         c.drawString(x_texto, y_contacto, f"Teléfono: {telefono}")
 
     # Título RECIBO + número — reposicionado debajo del header, que ahora
     # es más alto (32mm en vez de 22mm) para que quepan las dos líneas del
     # nombre + dirección completas adentro del color.
-    y_bajo_header = H - ALTO_HEADER - 6 * mm - 8 * mm
+    y_bajo_header = y_base_header - 8 * mm
     c.setFillColor(AZUL)
     c.setFont("Helvetica-Bold", 15)
     c.drawRightString(W - 12 * mm, y_bajo_header, "RECIBO DE PAGO")
