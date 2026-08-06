@@ -94,15 +94,17 @@ def generar_cuotas_mensuales():
     """
     Genera una cuota por cada cuenta para el mes en curso.
     Usa UNIQUE (cuenta_id, periodo) para evitar duplicados.
-    El día de pago y los días de gracia vienen de ConfigResidencial
-    (configuración global del admin). La fecha de vencimiento es
-    dia_pago + dias_gracia (ej. si pago es el 1 y gracia es 7,
-    la cuota vence el 7 del mes).
+    El día de pago y los días de gracia vienen de ConfigResidencial,
+    UNA POR RESIDENCIAL (Día 54 — antes era una sola config global,
+    aplicada por igual a las cuentas de TODAS las residenciales del
+    sistema, sin importar lo que cada una hubiera configurado). La
+    fecha de vencimiento es dia_pago + dias_gracia (ej. si pago es el 1
+    y gracia es 7, la cuota vence el 7 del mes).
     """
     import calendar
     from app import create_app
     from app.extensions import db
-    from app.models.cuenta import Cuenta, Cuota, ConfigResidencial
+    from app.models.cuenta import Cuenta, Cuota, ConfigResidencial, Unidad
 
     app = create_app()
     with app.app_context():
@@ -110,12 +112,23 @@ def generar_cuotas_mensuales():
         periodo = dt.date(hoy.year, hoy.month, 1)
         ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
 
-        cfg = ConfigResidencial.get()
-
         cuentas = Cuenta.query.filter_by(activa=True).all()
         ya_tienen = {row[0] for row in db.session.query(Cuota.cuenta_id)
                      .filter(Cuota.periodo == periodo).all()}
         creadas = 0
+
+        # Día 54: residencial_id de cada cuenta, precargado en una sola
+        # consulta (Cuenta no tiene relación ORM a Unidad, solo la FK) --
+        # y una config por residencial, resuelta bajo demanda y cacheada
+        # en este diccionario para no repetir la consulta por cada cuenta.
+        unidad_a_residencial = {u.id: u.residencial_id for u in Unidad.query.all()}
+        configs_por_residencial = {}
+
+        def _config_de(cuenta):
+            rid = unidad_a_residencial.get(cuenta.unidad_id)
+            if rid not in configs_por_residencial:
+                configs_por_residencial[rid] = ConfigResidencial.get(rid)
+            return configs_por_residencial[rid]
 
         for cuenta in cuentas:
             if cuenta.id in ya_tienen:
@@ -123,6 +136,7 @@ def generar_cuotas_mensuales():
             if not cuenta.tarifa:
                 continue
 
+            cfg = _config_de(cuenta)
             # Fecha de vencimiento = día de pago + días de gracia
             dia_pago = min(cfg.dia_pago, ultimo_dia)
             fecha_pago = dt.date(hoy.year, hoy.month, dia_pago)
@@ -196,10 +210,17 @@ def revisar_mora():
             Cuota.fecha_vencimiento <= hoy,
         ).all()
 
-        # Obtener los días de gracia configurados por la administración
+        # Día 54 — bug real: antes se usaba UNA sola ConfigResidencial
+        # global para decidir los días de gracia de TODAS las cuentas del
+        # sistema, sin importar su residencial. Ahora se resuelve por
+        # residencial, cacheada para no repetir la consulta por cuenta.
         from app.models.cuenta import ConfigResidencial
-        cfg = ConfigResidencial.get()
-        dias_gracia = cfg.dias_gracia  # default 7
+        configs_por_residencial = {}
+
+        def _dias_gracia_de(residencial_id):
+            if residencial_id not in configs_por_residencial:
+                configs_por_residencial[residencial_id] = ConfigResidencial.get(residencial_id)
+            return configs_por_residencial[residencial_id].dias_gracia
 
         for cuota in cuotas:
             dias = (hoy - cuota.fecha_vencimiento).days
@@ -217,6 +238,8 @@ def revisar_mora():
             unidad = Unidad.query.get(cuenta.unidad_id)
             if unidad and not plan_permite(unidad.residencial_id, "cuotas"):
                 continue
+
+            dias_gracia = _dias_gracia_de(unidad.residencial_id if unidad else None)
 
             if dias >= dias_gracia:
                 cuota.estado = "vencida"

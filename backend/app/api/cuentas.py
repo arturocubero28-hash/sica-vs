@@ -416,7 +416,7 @@ def crear_cuenta(usuario_actual):
             from app.models.cuenta import Cuota, ConfigResidencial
             import calendar
             hoy = dt.date.today()
-            cfg = ConfigResidencial.get()
+            cfg = ConfigResidencial.get(usuario_actual.residencial_id)
             dia_pago_cfg = cfg.dia_pago
 
             if hoy.day > dia_pago_cfg:
@@ -602,7 +602,7 @@ def nivelar_saldo(usuario_actual, cuenta_uuid):
         return _err("sin_cuotas", "No hay cuotas pendientes que nivelar. El saldo ya está en 0.", 400)
 
     from app.models.cuenta import ConfigResidencial
-    cfg = ConfigResidencial.get()
+    cfg = ConfigResidencial.get(usuario_actual.residencial_id)
     dia_pago_cfg = cfg.dia_pago
 
     ajustes = []
@@ -1084,7 +1084,7 @@ def validar_codigo_enrolamiento(usuario_actual, codigo):
 @requiere_funcion_plan("cuotas")
 def leer_config_residencial(usuario_actual):
     from app.models.cuenta import ConfigResidencial
-    cfg = ConfigResidencial.get()
+    cfg = ConfigResidencial.get(usuario_actual.residencial_id)
     return jsonify({"data": cfg.to_dict()})
 
 
@@ -1093,9 +1093,19 @@ def leer_config_residencial(usuario_actual):
 @requiere_funcion_plan("cuotas")
 def editar_config_residencial(usuario_actual):
     """Edita día de pago y/o días de gracia. Al cambiar el día de pago,
-    se aplica a TODAS las cuentas activas automáticamente."""
-    from app.models.cuenta import ConfigResidencial, Cuenta
-    cfg = ConfigResidencial.get()
+    se aplica a TODAS las cuentas activas de ESTA residencial automáticamente.
+
+    Día 54 — bug real encontrado por el usuario: esta función tenía DOS
+    problemas de aislamiento multi-tenant a la vez, no solo uno.
+    1) ConfigResidencial.get() sin residencial_id -- una sola fila
+       compartida por todas las residenciales (ver el modelo).
+    2) Cuenta.query.filter_by(activa=True) SIN filtrar por residencial --
+       cambiar el día de pago desde UNA residencial lo aplicaba a las
+       cuentas de TODAS las residenciales del sistema. Corregido con un
+       join a Unidad para filtrar por residencial_id real.
+    """
+    from app.models.cuenta import ConfigResidencial, Cuenta, Unidad
+    cfg = ConfigResidencial.get(usuario_actual.residencial_id)
     body = request.get_json(silent=True) or {}
 
     cambio_dia = False
@@ -1109,10 +1119,14 @@ def editar_config_residencial(usuario_actual):
         if 0 <= dg <= 15:
             cfg.dias_gracia = dg
 
-    # Si cambió el día de pago, aplicar a TODAS las cuentas activas
+    # Si cambió el día de pago, aplicar a TODAS las cuentas activas DE ESTA
+    # RESIDENCIAL (no de todo el sistema).
     actualizadas = 0
     if cambio_dia:
-        cuentas = Cuenta.query.filter_by(activa=True).all()
+        cuentas = (Cuenta.query.join(Unidad, Cuenta.unidad_id == Unidad.id)
+                   .filter(Cuenta.activa == True,  # noqa: E712
+                           Unidad.residencial_id == usuario_actual.residencial_id)
+                   .all())
         for c in cuentas:
             c.dia_pago = cfg.dia_pago
             actualizadas += 1

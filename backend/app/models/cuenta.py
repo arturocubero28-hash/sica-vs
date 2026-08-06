@@ -1037,21 +1037,36 @@ class VentaTarjeta(db.Model):
 
 class ConfigResidencial(db.Model):
     """
-    Configuración global de la residencial (una sola fila, id=1).
-    Controla parámetros que aplican a todas las cuentas por igual.
+    Configuración de una residencial (día de pago, días de gracia).
+    Controla parámetros que aplican a todas las cuentas de ESA residencial.
+
+    Día 54 — bug real encontrado por el usuario, sin relación con los
+    niveles de plan: esta tabla estaba diseñada como UNA SOLA FILA global
+    (id=1), compartida por TODAS las residenciales del sistema. Cambiar
+    el día de pago desde una residencial lo cambiaba para todas. Nunca se
+    había notado porque hasta ahora nunca hubo dos residenciales usando
+    cuotas al mismo tiempo. Se agrega residencial_id (única, una config
+    por residencial) y get() pasa a exigir de cuál residencial se habla.
     """
     __tablename__ = "config_residencial"
 
     id               = db.Column(db.BigInteger, primary_key=True)
+    residencial_id   = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"), unique=True, nullable=True)
     dia_pago         = db.Column(db.Integer, nullable=False, default=1)    # día del mes para el cobro
     dias_gracia      = db.Column(db.Integer, nullable=False, default=7)    # días adicionales antes de bloquear
     actualizado_en   = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
     @classmethod
-    def get(cls):
-        cfg = cls.query.get(1)
+    def get(cls, residencial_id=None):
+        """
+        Una config por residencial. residencial_id=None se mantiene por
+        compatibilidad con instalaciones viejas de un solo tenant (la fila
+        legado id=1, sin residencial_id, migrada así a propósito -- ver
+        migración) -- todo caller nuevo debe pasar residencial_id real.
+        """
+        cfg = cls.query.filter_by(residencial_id=residencial_id).first()
         if not cfg:
-            cfg = cls(id=1, dia_pago=1, dias_gracia=7)
+            cfg = cls(residencial_id=residencial_id, dia_pago=1, dias_gracia=7)
             db.session.add(cfg)
             db.session.commit()
         return cfg

@@ -323,6 +323,22 @@ def create_app(config_class=Config):
             "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS acceso_pausado BOOLEAN NOT NULL DEFAULT false",
             # Día 53 — Sprint 2: tercer flag de plan, para el plan Intermedio.
             "ALTER TABLE planes ADD COLUMN IF NOT EXISTS permite_control_fisico BOOLEAN NOT NULL DEFAULT true",
+            # Día 54 — bug real: config_residencial era una sola fila
+            # global, compartida por TODAS las residenciales. Se agrega
+            # residencial_id (una config por residencial). La fila legado
+            # (id=1, sin residencial_id) se backfillea a Villas del Sol --
+            # la residencial original del proyecto, la que más probable
+            # venía usando esos valores hasta ahora. Cualquier otra
+            # residencial que ya tuviera cuotas activas (ej. una recién
+            # subida a un plan con cuotas) arranca con los valores por
+            # defecto (día 1, 7 días de gracia) la primera vez que se
+            # consulte su config -- conviene revisarlos a mano si no son
+            # los que corresponden.
+            "ALTER TABLE config_residencial ADD COLUMN IF NOT EXISTS residencial_id BIGINT REFERENCES residenciales(id)",
+            """UPDATE config_residencial SET residencial_id = (
+                   SELECT id FROM residenciales WHERE nombre = 'Villas del Sol' LIMIT 1
+               ) WHERE residencial_id IS NULL""",
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_config_residencial_unica ON config_residencial (residencial_id)",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de
