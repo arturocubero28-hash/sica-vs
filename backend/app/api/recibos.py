@@ -151,7 +151,6 @@ def _generar_pdf_recibo(pago, cfg):
     (ej. la razón social legal) del que usa en el resto del sistema.
     """
     import os
-    from reportlab.lib.pagesizes import A5
     from reportlab.lib.units import mm
     from reportlab.lib import colors
     from reportlab.pdfgen import canvas
@@ -166,34 +165,55 @@ def _generar_pdf_recibo(pago, cfg):
     nombre_emisor = cfg.nombre_emisor or (residencial.nombre if residencial else None) or "Residencial"
 
     buf = io.BytesIO()
-    W, H = A5
-    c = canvas.Canvas(buf, pagesize=A5)
+    # Día 54 — pedido del usuario: A5 completo (210mm de alto) dejaba mucho
+    # espacio en blanco al final, el contenido real ocupa mucho menos.
+    # Tamaño recortado a medida (mismo ancho de A5, alto ajustado al
+    # contenido real: header + datos + total + pie, con margen prudente).
+    W, H = 148 * mm, 145 * mm
+    c = canvas.Canvas(buf, pagesize=(W, H))
 
     numero = cfg.numero_formateado(pago.numero_recibo)
 
-    # Encabezado — franja con las cuatro esquinas redondeadas (antes era un
-    # rectángulo cuadrado sin ninguna curva; pedido explícito del usuario).
-    ALTO_HEADER = 20 * mm
-    MARGEN_SUP = 2.5 * mm
+    # Encabezado — pedido del usuario: la franja debe llegar hasta el borde
+    # superior real de la página (antes quedaba un margen blanco arriba), y
+    # con las esquinas redondeadas solo abajo (las de arriba se "cortan"
+    # solas contra el borde de la página, a propósito: el rectángulo se
+    # dibuja más alto de lo que se ve, así el redondeo de arriba queda
+    # fuera del área visible y ahí se ve recto, pegado al borde).
+    ALTO_HEADER = 22 * mm
     c.setFillColor(NARANJA)
-    c.roundRect(0, H - ALTO_HEADER - MARGEN_SUP, W, ALTO_HEADER, 4 * mm, fill=1, stroke=0)
+    c.roundRect(0, H - ALTO_HEADER - 6 * mm, W, ALTO_HEADER + 6 * mm, 4 * mm, fill=1, stroke=0)
 
-    # Logo (si la residencial tiene uno) + nombre
+    # Logo (si la residencial tiene uno), en una placa circular blanca --
+    # pedido del usuario: que se vea "profesional, como un círculo", no la
+    # imagen cruda pegada sobre el color. Se recorta la imagen en círculo
+    # con un clip path (si el logo es rectangular, no se deforma ni se ve
+    # el fondo cuadrado asomando).
     x_texto = 12 * mm
     if residencial and residencial.logo_archivo:
         ruta_logo = os.path.join(
             current_app.config.get("UPLOAD_FOLDER", "/app/uploads"), "residenciales", residencial.logo_archivo)
         if os.path.exists(ruta_logo):
             try:
-                tam_logo = 12 * mm
-                c.drawImage(ruta_logo, 10 * mm, H - 17 * mm, width=tam_logo, height=tam_logo,
+                radio = 7 * mm
+                cx, cy = 10 * mm + radio, H - 11 * mm
+                # Placa blanca de fondo, un poco más grande que la imagen,
+                # para que quede un borde parejo alrededor del logo.
+                c.setFillColor(colors.white)
+                c.circle(cx, cy, radio + 0.8 * mm, fill=1, stroke=0)
+                c.saveState()
+                path = c.beginPath()
+                path.circle(cx, cy, radio)
+                c.clipPath(path, stroke=0, fill=0)
+                c.drawImage(ruta_logo, cx - radio, cy - radio, width=radio * 2, height=radio * 2,
                            preserveAspectRatio=True, mask="auto")
-                x_texto = 10 * mm + tam_logo + 3 * mm
+                c.restoreState()
+                x_texto = cx + radio + 4 * mm
             except Exception:
                 pass  # un logo corrupto no debe tumbar la generación del recibo
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 13)
-    c.drawString(x_texto, H - 12 * mm, nombre_emisor)
+    c.drawString(x_texto, H - 13 * mm, nombre_emisor)
 
     # Título RECIBO + número
     c.setFillColor(AZUL)
