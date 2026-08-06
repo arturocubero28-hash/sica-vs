@@ -169,38 +169,60 @@ def _generar_pdf_recibo(pago, cfg):
     # espacio en blanco al final, el contenido real ocupa mucho menos.
     # Tamaño recortado a medida (mismo ancho de A5, alto ajustado al
     # contenido real: header + datos + total + pie, con margen prudente).
-    W, H = 148 * mm, 145 * mm
+    W, H = 148 * mm, 165 * mm
     c = canvas.Canvas(buf, pagesize=(W, H))
 
     numero = cfg.numero_formateado(pago.numero_recibo)
+    subtitulo = residencial.direccion if (residencial and residencial.direccion) else None
 
-    # Encabezado — pedido del usuario: la franja debe llegar hasta el borde
-    # superior real de la página (antes quedaba un margen blanco arriba), y
-    # con las esquinas redondeadas solo abajo (las de arriba se "cortan"
-    # solas contra el borde de la página, a propósito: el rectángulo se
-    # dibuja más alto de lo que se ve, así el redondeo de arriba queda
-    # fuera del área visible y ahí se ve recto, pegado al borde).
-    ALTO_HEADER = 22 * mm
-    c.setFillColor(NARANJA)
-    c.roundRect(0, H - ALTO_HEADER - 6 * mm, W, ALTO_HEADER + 6 * mm, 4 * mm, fill=1, stroke=0)
+    # Encabezado — Día 54, segunda vuelta de ajustes contra la referencia
+    # visual que mandó el usuario:
+    # 1) Degradado real (antes era un color sólido plano) -- reportlab no
+    #    tiene un "rellenar rectángulo con degradado" de una sola llamada
+    #    confiable entre versiones, así que se simula con franjas
+    #    horizontales muy finas, interpolando entre una versión más clara
+    #    del color de marca (arriba) y el color real (abajo).
+    # 2) Header más alto (32mm, antes 22mm) -- con solo el nombre entraba,
+    #    pero el subtítulo (dirección) se salía del área de color y quedaba
+    #    flotando raro en la zona blanca. Ahora las dos líneas quedan
+    #    completas adentro.
+    ALTO_HEADER = 32 * mm
+    y_base_header = H - ALTO_HEADER - 6 * mm
+    # El clip se aplica ANTES de pintar las franjas del degradado -- así
+    # todo lo que se dibuje mientras esté activo (las 60 franjas) queda
+    # recortado a la forma redondeada, en vez de rectángulos rectos que
+    # se salen del borde.
+    c.saveState()
+    path_mascara = c.beginPath()
+    path_mascara.roundRect(0, y_base_header, W, ALTO_HEADER + 6 * mm, 4 * mm)
+    c.clipPath(path_mascara, stroke=0, fill=0)
 
-    # Logo (si la residencial tiene uno), en una placa circular blanca --
-    # pedido del usuario: que se vea "profesional, como un círculo", no la
-    # imagen cruda pegada sobre el color. Se recorta la imagen en círculo
-    # con un clip path (si el logo es rectangular, no se deforma ni se ve
-    # el fondo cuadrado asomando).
-    x_texto = 12 * mm
+    franjas = 60
+    r0, g0, b0 = NARANJA.red, NARANJA.green, NARANJA.blue
+    for i in range(franjas):
+        t = i / franjas  # 0 arriba (más claro) -> 1 abajo (color real)
+        mezcla = 0.55 * (1 - t)  # arriba: 55% mezclado con blanco; abajo: color puro
+        r = r0 + (1 - r0) * mezcla
+        g = g0 + (1 - g0) * mezcla
+        b = b0 + (1 - b0) * mezcla
+        c.setFillColorRGB(r, g, b)
+        alto_franja = (ALTO_HEADER + 6 * mm) / franjas
+        c.rect(0, y_base_header + (franjas - 1 - i) * alto_franja, W, alto_franja + 0.3 * mm, fill=1, stroke=0)
+    c.restoreState()  # cierra el clip -- lo dibujado después ya no queda recortado
+
+    # Logo (si la residencial tiene uno), en una placa circular con un
+    # anillo blanco FINO (antes quedaba grueso y se veía oscuro/pesado).
+    x_texto = 14 * mm
+    y_centro_logo = H - 16 * mm
     if residencial and residencial.logo_archivo:
         ruta_logo = os.path.join(
             current_app.config.get("UPLOAD_FOLDER", "/app/uploads"), "residenciales", residencial.logo_archivo)
         if os.path.exists(ruta_logo):
             try:
-                radio = 7 * mm
-                cx, cy = 10 * mm + radio, H - 11 * mm
-                # Placa blanca de fondo, un poco más grande que la imagen,
-                # para que quede un borde parejo alrededor del logo.
+                radio = 8.5 * mm
+                cx, cy = 12 * mm + radio, y_centro_logo
                 c.setFillColor(colors.white)
-                c.circle(cx, cy, radio + 0.8 * mm, fill=1, stroke=0)
+                c.circle(cx, cy, radio + 0.35 * mm, fill=1, stroke=0)  # anillo blanco fino
                 c.saveState()
                 path = c.beginPath()
                 path.circle(cx, cy, radio)
@@ -208,23 +230,30 @@ def _generar_pdf_recibo(pago, cfg):
                 c.drawImage(ruta_logo, cx - radio, cy - radio, width=radio * 2, height=radio * 2,
                            preserveAspectRatio=True, mask="auto")
                 c.restoreState()
-                x_texto = cx + radio + 4 * mm
+                x_texto = cx + radio + 5 * mm
             except Exception:
                 pass  # un logo corrupto no debe tumbar la generación del recibo
     c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 13)
-    c.drawString(x_texto, H - 13 * mm, nombre_emisor)
+    c.setFont("Helvetica-Bold", 15)
+    c.drawString(x_texto, y_centro_logo + 2 * mm, nombre_emisor)
+    if subtitulo:
+        c.setFont("Helvetica", 9)
+        c.setFillColor(colors.HexColor("#e8f3ee"))
+        c.drawString(x_texto, y_centro_logo - 5 * mm, subtitulo)
 
-    # Título RECIBO + número
+    # Título RECIBO + número — reposicionado debajo del header, que ahora
+    # es más alto (32mm en vez de 22mm) para que quepan las dos líneas del
+    # nombre + dirección completas adentro del color.
+    y_bajo_header = H - ALTO_HEADER - 6 * mm - 8 * mm
     c.setFillColor(AZUL)
     c.setFont("Helvetica-Bold", 15)
-    c.drawRightString(W - 12 * mm, H - 30 * mm, "RECIBO DE PAGO")
+    c.drawRightString(W - 12 * mm, y_bajo_header, "RECIBO DE PAGO")
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(NARANJA)
-    c.drawRightString(W - 12 * mm, H - 36 * mm, f"No. {numero}")
+    c.drawRightString(W - 12 * mm, y_bajo_header - 6 * mm, f"No. {numero}")
 
     # Datos del emisor
-    y = H - 30 * mm
+    y = y_bajo_header
     c.setFillColor(GRIS)
     c.setFont("Helvetica", 8)
     if cfg.rtn_emisor:
@@ -272,37 +301,85 @@ def _generar_pdf_recibo(pago, cfg):
         p = pago.cuota.periodo
         concepto = f"Pago de cuota — {meses[p.month - 1].capitalize()} {p.year}"
 
-    def fila(label, valor, bold_val=False):
+    def _icono(tipo, cx, cy, color):
+        """
+        Día 54: íconos chicos dibujados con formas simples de reportlab
+        (no son de una librería de diseño como los de la referencia que
+        mandó el usuario — esa usa un set de íconos real tipo Lucide,
+        reportlab no tiene equivalente nativo). Son una aproximación
+        geométrica minimalista, reconocible, no un calco exacto.
+        """
+        r = 1.6 * mm
+        c.setStrokeColor(color)
+        c.setFillColor(color)
+        c.setLineWidth(0.6)
+        if tipo == "calendario":
+            c.roundRect(cx - r, cy - r, r * 2, r * 1.8, 0.3 * mm, fill=0, stroke=1)
+            c.line(cx - r, cy + r * 0.3, cx + r, cy + r * 0.3)
+            c.line(cx - r * 0.5, cy + r, cx - r * 0.5, cy + r * 0.5)
+            c.line(cx + r * 0.5, cy + r, cx + r * 0.5, cy + r * 0.5)
+        elif tipo == "casa":
+            c.line(cx - r, cy - r * 0.2, cx, cy + r)
+            c.line(cx, cy + r, cx + r, cy - r * 0.2)
+            c.rect(cx - r * 0.7, cy - r, r * 1.4, r * 0.8, fill=0, stroke=1)
+        elif tipo == "persona":
+            c.circle(cx, cy + r * 0.5, r * 0.55, fill=1, stroke=0)
+            path = c.beginPath()
+            path.arc(cx - r, cy - r * 1.1, cx + r, cy + r * 0.3, 0, 180)
+            c.drawPath(path, fill=0, stroke=1)
+        elif tipo == "etiqueta":
+            path = c.beginPath()
+            path.moveTo(cx - r, cy)
+            path.lineTo(cx - r * 0.2, cy + r)
+            path.lineTo(cx + r, cy + r * 0.3)
+            path.lineTo(cx + r, cy - r * 0.3)
+            path.lineTo(cx - r * 0.2, cy - r)
+            path.close()
+            c.drawPath(path, fill=0, stroke=1)
+            c.circle(cx - r * 0.5, cy, 0.35 * mm, fill=1, stroke=0)
+        elif tipo == "dinero":
+            c.circle(cx, cy, r, fill=0, stroke=1)
+            c.setFont("Helvetica-Bold", 6)
+            c.drawCentredString(cx, cy - 1.1 * mm, "L")
+
+    def fila(label, valor, icono=None, bold_val=False):
         nonlocal y
+        if icono:
+            _icono(icono, 13.5 * mm, y + 1 * mm, AZUL)
         c.setFont("Helvetica", 9)
         c.setFillColor(GRIS)
-        c.drawString(12 * mm, y, label)
+        c.drawString(18 * mm, y, label)
         c.setFont("Helvetica-Bold" if bold_val else "Helvetica", 9)
         c.setFillColor(AZUL)
         c.drawRightString(W - 12 * mm, y, str(valor))
-        y -= 6.5 * mm
+        y -= 5.5 * mm
+        # Línea fina entre filas (en la referencia visual cada dato queda
+        # separado del siguiente, no todo pegado).
+        c.setStrokeColor(colors.HexColor("#eef1f6"))
+        c.setLineWidth(0.5)
+        c.line(12 * mm, y, W - 12 * mm, y)
+        y -= 2.5 * mm
 
-    fila("Fecha:", fecha_str)
-    fila("Casa / Unidad:", unidad)
-    fila("Recibí de:", titular)
-    fila("Concepto:", concepto[:40])
-    fila("Forma de pago:", metodo_label)
+    fila("Fecha:", fecha_str, icono="calendario")
+    fila("Casa / Unidad:", unidad, icono="casa")
+    fila("Recibí de:", titular, icono="persona")
+    fila("Concepto:", concepto[:40], icono="etiqueta")
+    fila("Forma de pago:", metodo_label, icono="dinero")
 
-    # Monto destacado
-    y -= 4 * mm
-    c.setFillColor(colors.HexColor("#f9fbfd"))
-    c.rect(12 * mm, y - 8 * mm, W - 24 * mm, 14 * mm, fill=1, stroke=0)
-    c.setStrokeColor(NARANJA)
-    c.setLineWidth(1)
-    c.rect(12 * mm, y - 8 * mm, W - 24 * mm, 14 * mm, fill=0, stroke=1)
+    # Monto destacado — Día 54: fondo suave sin borde (antes era un
+    # rectángulo con línea alrededor), esquinas redondeadas, siguiendo la
+    # referencia visual del usuario.
+    y -= 2 * mm
+    c.setFillColor(colors.HexColor("#eaf6f0"))
+    c.roundRect(12 * mm, y - 10 * mm, W - 24 * mm, 16 * mm, 3 * mm, fill=1, stroke=0)
     c.setFont("Helvetica-Bold", 9)
     c.setFillColor(GRIS)
-    c.drawString(16 * mm, y - 1 * mm, "TOTAL PAGADO")
-    c.setFont("Helvetica-Bold", 16)
-    c.setFillColor(NARANJA)
+    c.drawString(17 * mm, y - 2 * mm, "TOTAL PAGADO")
+    c.setFont("Helvetica-Bold", 17)
+    c.setFillColor(AZUL)
     monto_str = "L " + f"{float(pago.monto):,.2f}"
-    c.drawRightString(W - 16 * mm, y - 2.5 * mm, monto_str)
-    y -= 18 * mm
+    c.drawRightString(W - 17 * mm, y - 3.5 * mm, monto_str)
+    y -= 20 * mm
 
     # Pie / aviso de fase
     c.setFont("Helvetica-Oblique", 6.5)
