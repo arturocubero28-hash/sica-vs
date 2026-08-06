@@ -835,9 +835,19 @@ class ConfigRecibo(db.Model):
     id                 = db.Column(db.BigInteger, primary_key=True)
     residencial_id     = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     # Datos del emisor (Fase 1)
-    nombre_emisor      = db.Column(db.String(160), default="Residencial Villas del Sol")
+    # Día 54 — bug real: este default estaba hardcodeado a un nombre
+    # específico. Cada vez que se creaba una fila NUEVA (ej. la primera
+    # vez que Bosques de Jucutuma necesitó su config), SQLAlchemy la
+    # llenaba automáticamente con este texto literal -- nunca quedaba
+    # vacía, así que el fallback dinámico en recibos.py (usar el nombre
+    # real de la residencial si esto no está configurado) nunca se
+    # activaba: cfg.nombre_emisor NUNCA era None/vacío para chequear.
+    # Default correcto: None, dejando que la aplicación decida el
+    # fallback según la residencial real.
+    nombre_emisor      = db.Column(db.String(160), default=None)
     rtn_emisor         = db.Column(db.String(20))
-    direccion_emisor   = db.Column(db.String(255), default="San Pedro Sula, Honduras")
+    # Mismo bug que nombre_emisor arriba, mismo arreglo.
+    direccion_emisor   = db.Column(db.String(255), default=None)
     telefono_emisor    = db.Column(db.String(40))
     # Correlativo interno (Fase 1)
     ultimo_correlativo = db.Column(db.Integer, nullable=False, default=0)

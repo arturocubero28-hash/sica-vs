@@ -359,6 +359,27 @@ def create_app(config_class=Config):
             "DROP INDEX IF EXISTS idx_pagos_numero_recibo_unico",
             """CREATE UNIQUE INDEX IF NOT EXISTS idx_pagos_numero_recibo_unico
                    ON pagos (residencial_id, numero_recibo) WHERE numero_recibo IS NOT NULL""",
+            # Día 54 — limpieza del bug de arriba: cualquier ConfigRecibo
+            # que haya quedado con el nombre "Residencial Villas del Sol"
+            # PUESTO POR EL DEFAULT VIEJO (no a propósito por el admin) se
+            # limpia a NULL, para que el fallback dinámico (nombre real de
+            # la residencial) se active. Solo toca las filas de
+            # residenciales que NO se llaman así de verdad -- si alguna sí
+            # se llama "Residencial Villas del Sol" de casualidad, no se
+            # le borra nada.
+            """UPDATE config_recibo SET nombre_emisor = NULL
+                   WHERE nombre_emisor = 'Residencial Villas del Sol'
+                   AND residencial_id NOT IN (
+                       SELECT id FROM residenciales WHERE nombre = 'Villas del Sol'
+                   )""",
+            # Mismo arreglo, mismo criterio, para direccion_emisor (otro
+            # default hardcodeado encontrado en el mismo modelo apenas se
+            # revisó con cuidado: "San Pedro Sula, Honduras" fijo).
+            """UPDATE config_recibo SET direccion_emisor = NULL
+                   WHERE direccion_emisor = 'San Pedro Sula, Honduras'
+                   AND residencial_id NOT IN (
+                       SELECT id FROM residenciales WHERE nombre = 'Villas del Sol'
+                   )""",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de
