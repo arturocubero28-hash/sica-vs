@@ -12,6 +12,7 @@ Sigue el patrón del modelo Usuario (uuid_publico, to_dict, timestamps).
 import uuid
 import datetime as dt
 
+from sqlalchemy import event
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.extensions import db
 
@@ -571,6 +572,15 @@ class Pago(db.Model):
     cuota_id             = db.Column(db.BigInteger, db.ForeignKey("cuotas.id"), nullable=True)
     abono_id             = db.Column(db.BigInteger, db.ForeignKey("abonos_arreglo.id"), nullable=True)
     cuenta_id            = db.Column(db.BigInteger, db.ForeignKey("cuentas.id"), nullable=False, index=True)
+    # Día 54 — bug real: numero_recibo tenía un índice único GLOBAL
+    # (idx_pagos_numero_recibo_unico), pero el correlativo se calcula POR
+    # RESIDENCIAL (ConfigRecibo, ya corregido desde el Día 48) -- en
+    # cuanto dos residenciales llegaban a su propio recibo #1, chocaban
+    # contra la restricción de la base. Pago no tenía residencial_id
+    # directo (solo cuenta_id, del cual se puede resolver vía unidad) --
+    # se desnormaliza acá para poder armar el índice único compuesto
+    # (residencial_id, numero_recibo) en vez de uno global.
+    residencial_id       = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
     subido_por           = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"), nullable=False)
     # ENUMs reales de PostgreSQL — fix Día 36.
     metodo = db.Column(
@@ -641,6 +651,32 @@ class Pago(db.Model):
             "revisado_en":         self.revisado_en.isoformat() if self.revisado_en else None,
             "created_at":          self.created_at.isoformat(),
         }
+
+
+@event.listens_for(Pago, "before_insert")
+def _pago_completar_residencial_id(mapper, connection, pago):
+    """
+    Día 54: completa Pago.residencial_id automáticamente antes de guardar,
+    resolviéndolo desde cuenta_id -> unidad_id -> residencial_id -- sin
+    depender de que cada uno de los 5 lugares donde se crea un Pago
+    (cuotas.py x2, caja.py x2, arreglos.py) lo complete a mano. Cuenta no
+    tiene relación ORM a Unidad (solo unidad_id, columna suelta), así que
+    se resuelve con una consulta directa a la conexión de bajo nivel
+    (estamos en un evento pre-flush, todavía no conviene usar la sesión
+    ORM completa acá).
+    """
+    if pago.residencial_id is not None or not pago.cuenta_id:
+        return
+    fila_cuenta = connection.execute(
+        db.text("SELECT unidad_id FROM cuentas WHERE id = :id"), {"id": pago.cuenta_id}
+    ).first()
+    if not fila_cuenta:
+        return
+    fila_unidad = connection.execute(
+        db.text("SELECT residencial_id FROM unidades WHERE id = :id"), {"id": fila_cuenta[0]}
+    ).first()
+    if fila_unidad:
+        pago.residencial_id = fila_unidad[0]
 
 
 class ComprobantePago(db.Model):

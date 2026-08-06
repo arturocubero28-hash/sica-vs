@@ -339,6 +339,26 @@ def create_app(config_class=Config):
                    SELECT id FROM residenciales WHERE nombre = 'Villas del Sol' LIMIT 1
                ) WHERE residencial_id IS NULL""",
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_config_residencial_unica ON config_residencial (residencial_id)",
+            # Día 54 — Sprint 2: numero_recibo tenía un índice único GLOBAL,
+            # pero el correlativo se calcula por residencial (ConfigRecibo,
+            # ya corregido desde el Día 48) -- dos residenciales con su
+            # propio primer recibo chocaban contra la restricción de la
+            # base ("duplicate key... numero_recibo=1"). Se agrega
+            # residencial_id a pagos (desnormalizado, ver evento
+            # before_insert en models/cuenta.py), se backfillean los pagos
+            # existentes resolviendo su residencial vía cuenta->unidad, se
+            # quita el índice global viejo y se crea uno compuesto nuevo
+            # (residencial_id, numero_recibo) -- cada residencial puede
+            # tener su propio recibo #1 sin chocar con las demás.
+            "ALTER TABLE pagos ADD COLUMN IF NOT EXISTS residencial_id BIGINT REFERENCES residenciales(id)",
+            """UPDATE pagos SET residencial_id = (
+                   SELECT u.residencial_id FROM cuentas c
+                   JOIN unidades u ON u.id = c.unidad_id
+                   WHERE c.id = pagos.cuenta_id
+               ) WHERE residencial_id IS NULL""",
+            "DROP INDEX IF EXISTS idx_pagos_numero_recibo_unico",
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_pagos_numero_recibo_unico
+                   ON pagos (residencial_id, numero_recibo) WHERE numero_recibo IS NOT NULL""",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de
