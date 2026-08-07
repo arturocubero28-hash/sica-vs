@@ -15,32 +15,33 @@ def calcular_cuota_prorrateada(monto_tarifa, dia_pago, dias_gracia, hoy=None):
     Calcula la primera cuota prorrateada de una casa que empieza a pagar a
     mitad de mes (alta nueva, o activación de cuotas al subir de plan).
 
-    Regla (Opción A, confirmada con el usuario): se cobra proporcionalmente
-    desde HOY hasta el fin del ciclo actual, usando SIEMPRE mes comercial de
-    30 días — así en meses de 31 días no se cobra de más. El primer cobro
-    completo del ciclo normal lo hace después el cron mensual.
+    Modelo real del sistema (aclarado por el usuario el Día 55): el cron
+    mensual corre el DÍA 1 de cada mes y genera la cuota de ESE mes, con
+    período = 1° del mes y vencimiento = día de pago DE ESE MISMO MES +
+    gracia. El "día de pago" es solo la fecha de vencimiento dentro del
+    mes, NO cuándo empieza el ciclo.
 
-    Devuelve un dict con periodo, monto, fecha_vencimiento y dias_restantes,
-    o None si no corresponde generar cuota (ej. hoy es el día de pago o
-    antes — el ciclo normal ya la cubre, no hay fracción que prorratear).
+    Por lo tanto, la primera cuota (activación a mitad de mes) se prorratea
+    por los días que quedan DESDE HOY HASTA FIN DE MES (mes comercial de 30
+    días), con período = mes actual y vencimiento = día de pago de este
+    mismo mes + gracia. El 1° del mes siguiente, el cron ya genera la cuota
+    completa normal.
 
-    - monto_tarifa: monto mensual completo de la tarifa.
-    - dia_pago: día del mes en que se cobra (1..28).
-    - dias_gracia: días después del pago antes de que venza.
-    - hoy: fecha de referencia (default: hoy real). Parametrizable para test.
+    Regla de negocio (Opción A, confirmada): la responsabilidad arranca
+    hoy, cada casa empieza limpia, sin mirar historial previo.
+
+    Devuelve dict con periodo, monto, fecha_vencimiento, dias_restantes;
+    o None si no corresponde (hoy es día 30/fin de mes comercial, no queda
+    fracción). Recibe 'hoy' parametrizable para test.
     """
     if hoy is None:
         hoy = dt.date.today()
 
-    # Si todavía no pasó el día de pago de este mes, el ciclo normal cubre
-    # el período completo — no hay fracción que prorratear.
-    if hoy.day <= dia_pago:
-        return None
-
-    # Mes comercial de 30 días, también para contar los días restantes.
+    # Días que quedan del mes, en mes comercial de 30 días. Ej: hoy es el 7
+    # -> se cobran del 7 al 30 = 24 días (incluyendo hoy). Así el residente
+    # paga desde el día que entra al sistema hasta fin de mes.
     efectivo_dia = min(hoy.day, 30)
-    posicion_en_ciclo = ((efectivo_dia - dia_pago) % 30) + 1  # 1..30
-    dias_restantes = 30 - posicion_en_ciclo
+    dias_restantes = 30 - efectivo_dia + 1  # incluye el día de hoy
 
     if dias_restantes <= 0:
         return None
@@ -48,16 +49,17 @@ def calcular_cuota_prorrateada(monto_tarifa, dia_pago, dias_gracia, hoy=None):
     monto_diario = float(monto_tarifa) / 30
     monto_prorrateado = round(monto_diario * dias_restantes, 2)
 
-    # El vencimiento se ancla al PRÓXIMO día de pago + gracia (el ciclo que
-    # esta cuota parcial cubre termina en el próximo día de pago).
-    if hoy.month == 12:
-        prox_pago = dt.date(hoy.year + 1, 1, dia_pago)
-    else:
-        ultimo_dia_prox = calendar.monthrange(hoy.year, hoy.month + 1)[1]
-        prox_pago = dt.date(hoy.year, hoy.month + 1, min(dia_pago, ultimo_dia_prox))
+    # Vencimiento: día de pago de ESTE MISMO MES + gracia (igual que el cron
+    # mensual). Si el día de pago ya pasó este mes (ej. hoy 15, pago 11), la
+    # cuota vence igual el 11 + gracia -- ya "nace vencida" en su ventana de
+    # gracia, lo cual es correcto: el residente entró tarde y debe ponerse
+    # al día. min() por si el mes no llega a ese día (febrero, etc.).
+    ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
+    dia_venc = min(dia_pago, ultimo_dia)
+    fecha_pago = dt.date(hoy.year, hoy.month, dia_venc)
+    vencimiento = fecha_pago + dt.timedelta(days=dias_gracia)
 
     periodo = dt.date(hoy.year, hoy.month, 1)
-    vencimiento = prox_pago + dt.timedelta(days=dias_gracia)
 
     return {
         "periodo": periodo,
