@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import {
   dashboardMetricas, dashboardVisitas, dashboardVisitasActivas, urlFotoGuardia,
-  reporteMoraPorCasa,
+  reporteMoraPorCasa, estadoConfigCuotas,
   type MetricasDTO, type VisitaTablaDTO, type VisitaActivaDTO, type CasaMoraDTO,
 } from "../../api/client";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { L } from "../../utils/formato";
 import { useMiResidencial } from "../../hooks/useMiResidencial";
+import { WizardActivarCuotas } from "../cuotas/WizardActivarCuotas";
 import { Building2, Car, Circle, FileText, PartyPopper, Search, Users } from "lucide-react";
 
 function horaCorta(iso?: string): string {
@@ -29,6 +30,9 @@ export function DashboardAdmin() {
   const [vistaActivas, setVistaActivas] = useState(false);
   const [modalMora, setModalMora] = useState<CasaMoraDTO[] | null>(null);
   const [cargandoMora, setCargandoMora] = useState(false);
+  // Día 55 — wizard de activación de cuotas: si la residencial subió a un
+  // plan con cuotas y todavía no configuró, se muestra obligatorio.
+  const [mostrarWizard, setMostrarWizard] = useState(false);
   // Día 51 — niveles de plan: si el plan no incluye cuotas, sin esto el
   // modal mostraba "no hay cuentas en mora 🎉" — engañoso, da a entender
   // que todo está al día cuando en realidad la función ni está disponible.
@@ -51,6 +55,10 @@ export function DashboardAdmin() {
       dashboardVisitas().then(setVisitas).catch(() => {});
     }
     cargar();
+    // Día 55 — chequear si hay que mostrar el wizard de activación de cuotas.
+    estadoConfigCuotas()
+      .then((e) => setMostrarWizard(e.config_pendiente))
+      .catch(() => {});
     // Refrescar las métricas cada 60s para que el Centro de Monitoreo refleje
     // los accesos que el guardia registra en tiempo real. Se limpia el intervalo
     // al desmontar (mismo patrón que el badge de pagos pendientes).
@@ -62,6 +70,11 @@ export function DashboardAdmin() {
 
   if (vistaActivas) {
     return <VisitasAdentro onVolver={() => setVistaActivas(false)} totalEsperado={m?.adentro_ahora} />;
+  }
+
+  // Día 55 — el wizard tapa el dashboard hasta que se complete (obligatorio).
+  if (mostrarWizard) {
+    return <WizardActivarCuotas onCompletado={() => setMostrarWizard(false)} />;
   }
 
   const estadoColor: Record<string, string> = {

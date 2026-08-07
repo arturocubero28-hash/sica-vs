@@ -1208,6 +1208,23 @@ export const setConfigResidencial = (body: Partial<ConfigResidencial>) =>
   request<ConfigResidencial & { cuentas_actualizadas?: number }>(
     "/unidades/config-residencial", { method: "PUT", body: JSON.stringify(body) });
 
+// ── Día 55: wizard de activación de cuotas al subir de plan ────────────────
+export interface EstadoConfigCuotas {
+  config_pendiente: boolean;
+  casas_sin_tarifa: number;
+  hay_tarifas: boolean;
+}
+export const estadoConfigCuotas = () =>
+  request<EstadoConfigCuotas>("/unidades/estado-config-cuotas");
+
+export interface ResultadoActivarCuotas {
+  cuotas_generadas: number;
+  casas_sin_prorrateo: number;
+  total_casas_con_tarifa: number;
+}
+export const activarCuotas = () =>
+  request<ResultadoActivarCuotas>("/unidades/activar-cuotas", { method: "POST" });
+
 // ── Mi Residencial: nombre y logo (bases multi-residencial, Día 37) ────────
 // Distinto de ConfigResidencial (arriba, que es día de pago/gracia). Esto es
 // la identidad visual del cliente — el mismo endpoint sirve para uno o para

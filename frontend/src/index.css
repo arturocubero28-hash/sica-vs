@@ -3711,3 +3711,53 @@ input.input-error, select.input-error, textarea.input-error {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ══════ Día 55 — wizard de activación de cuotas ══════ */
+.wizard-overlay {
+  min-height: 60vh; display: flex; align-items: flex-start; justify-content: center;
+  padding: 24px 16px;
+}
+.wizard-card {
+  width: 100%; max-width: 620px; background: #fff; border-radius: 16px;
+  border: 1px solid #e3e9f2; box-shadow: 0 8px 30px rgba(2,46,69,.08);
+  padding: 28px;
+}
+.wizard-head h2 { margin: 0 0 6px; color: var(--marca-azul, #022E45); font-size: 21px; }
+.wizard-head p { margin: 0 0 20px; }
+
+.wizard-steps { display: flex; gap: 6px; margin-bottom: 22px; }
+.wizard-step {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 10px 4px; border-radius: 10px; background: #f4f7fb; color: #94a3b8;
+  position: relative; transition: background .16s, color .16s;
+}
+.wizard-step-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 50%; background: #e2e8f0; color: #94a3b8;
+}
+.wizard-step-label { font-size: 11.5px; font-weight: 600; }
+.wizard-step.activo { background: #eaf1fb; color: var(--marca-azul, #022E45); }
+.wizard-step.activo .wizard-step-icon { background: var(--marca-azul, #022E45); color: #fff; }
+.wizard-step.hecho { color: #15803d; }
+.wizard-step.hecho .wizard-step-icon { background: #dcfce7; color: #15803d; }
+
+.wizard-body h3 { margin: 0 0 4px; color: var(--marca-azul, #022E45); font-size: 16px; }
+.wizard-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 16px 0;
+}
+.wizard-ejemplo {
+  background: #f4f7fb; border-radius: 10px; padding: 12px 14px;
+  font-size: 13px; color: #475569; border: 1px solid #e3e9f2;
+}
+.wizard-tarifas-existentes {
+  background: #f4f7fb; border-radius: 10px; padding: 10px 14px; margin: 12px 0;
+}
+.wizard-tarifas-existentes ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.wizard-acciones {
+  display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;
+  padding-top: 16px; border-top: 1px solid #eef2f8;
+}
+@media (max-width: 560px) {
+  .wizard-grid { grid-template-columns: 1fr; }
+  .wizard-step-label { font-size: 10px; }
+}
