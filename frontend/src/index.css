@@ -3394,6 +3394,88 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   margin-left: 4px; vertical-align: middle;
 }
 
+/* ══════ Día 55 — modernización de la lista de casas y residentes ══════ */
+.tabla-casas { min-width: 640px; }
+.tabla-casas td { padding: 13px 14px; vertical-align: middle; }
+.tabla-casas th { padding: 11px 14px; font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: .04em; color: #8a94a2; }
+
+/* Columna principal: ícono en un contenedor de color suave + textos apilados */
+.casa-cell { display: flex; align-items: center; gap: 11px; }
+.casa-icono {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+}
+.casa-icono--casa     { background: #e0f2fe; color: #0369a1; }
+.casa-icono--edificio { background: #ede9fe; color: #6d28d9; }
+.casa-icono--apto     { background: #dcfce7; color: #15803d; }
+.casa-cell-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.casa-id {
+  font-weight: 600; font-size: 14px; color: var(--marca-azul, #022E45);
+  display: flex; align-items: center; gap: 4px;
+}
+.casa-titular { font-size: 12.5px; color: #6b7280; }
+
+/* Columna de cuota: monto arriba, detalle chico debajo */
+.casa-cuota { display: flex; flex-direction: column; gap: 1px; }
+.casa-cuota b { font-size: 13.5px; color: var(--marca-azul, #022E45); }
+
+/* Acciones: botones-ícono compactos, con color solo al hacer hover */
+.casa-acciones { display: flex; gap: 4px; justify-content: flex-end; }
+.icono-accion {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 8px;
+  background: #f1f5f9; color: #475569; border: none; cursor: pointer;
+  transition: background .14s ease, color .14s ease, transform .1s ease;
+}
+.icono-accion:hover:not(:disabled) { background: #e2e8f0; transform: translateY(-1px); }
+.icono-accion:disabled { opacity: .4; cursor: not-allowed; }
+.icono-accion--ver:hover:not(:disabled)  { background: #dbeafe; color: #1d4ed8; }
+.icono-accion--ok:hover:not(:disabled),
+.icono-accion--ok                         { background: #dcfce7; color: #15803d; }
+.icono-accion--baja:hover:not(:disabled)  { background: #fee2e2; color: #b91c1c; }
+
+@media (max-width: 640px) {
+  .casa-titular { font-size: 11.5px; }
+  .icono-accion { width: 30px; height: 30px; }
+}
+
+/* ── Día 55 — formulario de edición de casa, moderno ── */
+.editar-casa-card {
+  margin-top: 10px; border: 1px solid #e3e9f2; border-radius: 12px;
+  background: #fbfcfe; padding: 16px; box-shadow: 0 1px 3px rgba(2,46,69,.04);
+}
+.editar-casa-head { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 14px; }
+.editar-casa-head-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+  background: #fef3c7; color: #92400e;
+}
+.editar-casa-head b { font-size: 14px; color: var(--marca-azul, #022E45); }
+.editar-casa-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px;
+}
+.campo-moderno { display: flex; flex-direction: column; gap: 5px; }
+.campo-label { font-size: 12px; font-weight: 600; color: #475569; }
+.campo-moderno select, .campo-moderno input {
+  padding: 9px 11px; border: 1px solid #d7dde5; border-radius: 8px;
+  font-size: 13.5px; background: #fff; transition: border-color .14s ease, box-shadow .14s ease;
+}
+.campo-moderno select:focus, .campo-moderno input:focus {
+  outline: none; border-color: var(--marca-naranja, #F48723);
+  box-shadow: 0 0 0 3px rgba(244,135,35,.12);
+}
+.campo-ayuda { font-size: 11px; color: #8a94a2; }
+.editar-casa-acciones {
+  display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px;
+  padding-top: 12px; border-top: 1px solid #eef2f8;
+}
+@media (max-width: 640px) {
+  .editar-casa-grid { grid-template-columns: 1fr; }
+}
+
+
+
 /* ── Icono tipo en el modal de detalle ── */
 .modal-head-titulo { display: flex; align-items: center; gap: 8px; }
 .modal-tipo-icon {

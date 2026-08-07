@@ -11,7 +11,7 @@ import {
 import { LectorTarjeta } from "./LectorTarjeta";
 import { InfoTip } from "../../components/InfoTip";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
-import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle } from "lucide-react";
+import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause } from "lucide-react";
 
 /** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
  *  Solo acepta números y coloca los guiones automáticamente. */
@@ -179,8 +179,8 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
         <p className="muted">No hay casas que coincidan con la búsqueda.</p>
       ) : (
         <div className="lista-card"><div className="scroll-x">
-          <table className="data">
-            <thead><tr><th>Identificador</th><th>Titular</th><th>Tarifa</th><th>Día pago</th><th>Cuotas</th><th>Estado</th><th></th></tr></thead>
+          <table className="data tabla-casas">
+            <thead><tr><th>Casa / Residente</th><th>Cuota</th><th>Estado de pago</th><th>Estado</th><th></th></tr></thead>
             <tbody>
               {filtradas.map((c) => {
                 const dadaBaja = c.activa === false;
@@ -194,33 +194,38 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
                 const administra = esContenedor || esAdminRes;
                 return (
                   <tr key={c.id} className={dadaBaja ? "fila-baja" : pausada ? "fila-pausada" : (administra ? "fila-edificio" : (esApto ? "fila-apto" : ""))}>
+                    {/* Columna principal: tipo + identificador arriba (protagonista),
+                        titular debajo en gris -- agrupa la info relacionada en vez
+                        de esparcirla en columnas sueltas. */}
                     <td>
-                      <div className="id-cell">
-                        {administra ? (
-                          <span className="badge-tipo badge-tipo--edificio"><Building size={13} /> EDIFICIO</span>
-                        ) : esApto ? (
-                          <span className="badge-tipo badge-tipo--apto"><DoorOpen size={13} /> APTO</span>
-                        ) : (
-                          <span className="badge-tipo badge-tipo--casa"><Home size={13} /> CASA</span>
-                        )}
-                        <span className="id-nombre">
-                          {esAdminRes
-                            ? <>{c.identificador} · <span className="apto-num">Apto {c.apartamento}</span> <span className="badge-admin-inline"><Crown size={11} /> Admin</span></>
-                            : esApto
-                            ? <>{c.identificador} · <span className="apto-num">Apto {c.apartamento}</span></>
-                            : (c.nombre_completo || c.identificador || "Casa")}
+                      <div className="casa-cell">
+                        <span className={`casa-icono casa-icono--${administra ? "edificio" : esApto ? "apto" : "casa"}`}>
+                          {administra ? <Building size={16} /> : esApto ? <DoorOpen size={16} /> : <Home size={16} />}
                         </span>
+                        <div className="casa-cell-txt">
+                          <span className="casa-id">
+                            {esAdminRes
+                              ? <>{c.identificador} · Apto {c.apartamento} <span className="badge-admin-inline"><Crown size={11} /> Admin</span></>
+                              : esApto
+                              ? <>{c.identificador} · Apto {c.apartamento}</>
+                              : (c.nombre_completo || c.identificador || "Casa")}
+                          </span>
+                          <span className="casa-titular">
+                            {c.titular?.nombre || <span className="muted">Sin titular asignado</span>}
+                          </span>
+                        </div>
                       </div>
                     </td>
-                    <td>{c.titular?.nombre || <span className="muted">— sin titular —</span>}</td>
-                    <td>{esContenedor ? <span className="muted small">No paga cuota</span> : `${c.tarifa} (L ${c.monto})`}</td>
-                    <td>{esContenedor ? "—" : c.dia_pago}</td>
+                    <td>{esContenedor
+                      ? <span className="muted small">No paga cuota</span>
+                      : <div className="casa-cuota"><b>L {c.monto}</b><span className="muted small">{c.tarifa} · día {c.dia_pago}</span></div>}
+                    </td>
                     <td>
                       {esContenedor
                         ? <span className="muted">—</span>
                         : pend === 0
                         ? <span className="pill green">Al día</span>
-                        : <span className="pill red">{pend} pend.</span>}
+                        : <span className="pill red">{pend} pendiente{pend > 1 ? "s" : ""}</span>}
                     </td>
                     <td>
                       {dadaBaja
@@ -231,17 +236,26 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
                         ? <span className="pill" style={{ background: "#044a6e", color: "#fff" }}>Administración</span>
                         : <span className={c.bloqueada ? "pill red" : "pill green"}>{c.bloqueada ? "Bloqueada" : c.estado}</span>}
                     </td>
-                    <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <button className="btn-tabla btn-tabla-ver" onClick={() => onAbrir(c)}>Ver</button>
-                      {dadaBaja
-                        ? <button className="btn-tabla btn-tabla-ok" disabled={procesando === c.id} onClick={() => reactivar(c)}>Reactivar</button>
-                        : <>
-                          <button className={`btn-tabla ${pausada ? "btn-tabla-ok" : "btn-tabla-neutro"}`}
-                            disabled={procesando === c.id} onClick={() => alternarPausa(c)}>
-                            {pausada ? "Reanudar acceso" : "Pausar acceso"}
-                          </button>
-                          <button className="btn-tabla btn-tabla-baja" disabled={procesando === c.id} onClick={() => setCuentaBaja(c)}>Dar de baja</button>
-                        </>}
+                    <td>
+                      <div className="casa-acciones">
+                        <button className="icono-accion icono-accion--ver" title="Ver detalle" onClick={() => onAbrir(c)}>
+                          <Eye size={16} />
+                        </button>
+                        {dadaBaja
+                          ? <button className="icono-accion icono-accion--ok" title="Reactivar" disabled={procesando === c.id} onClick={() => reactivar(c)}>
+                              <RefreshCw size={16} />
+                            </button>
+                          : <>
+                            <button className={`icono-accion ${pausada ? "icono-accion--ok" : ""}`}
+                              title={pausada ? "Reanudar acceso" : "Pausar acceso"}
+                              disabled={procesando === c.id} onClick={() => alternarPausa(c)}>
+                              {pausada ? <Play size={16} /> : <Pause size={16} />}
+                            </button>
+                            <button className="icono-accion icono-accion--baja" title="Dar de baja" disabled={procesando === c.id} onClick={() => setCuentaBaja(c)}>
+                              <Trash2 size={16} />
+                            </button>
+                          </>}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1074,13 +1088,19 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
         )}
 
         {editando && (
-          <div className="detalle-config-box" style={{ marginTop: 8 }}>
-            <div className="sub" style={{ marginTop: 0 }}>Editar información de la casa</div>
-            <p className="muted small" style={{ marginTop: 0 }}>
-              Cambiar la tarifa afecta solo las cuotas <b>futuras</b>; las ya generadas conservan su monto.
-            </p>
-            <div className="row">
-              <label style={{ flex: 1 }}>Tarifa mensual
+          <div className="editar-casa-card">
+            <div className="editar-casa-head">
+              <span className="editar-casa-head-icon"><Pencil size={15} /></span>
+              <div>
+                <b>Editar información de la casa</b>
+                <p className="muted small" style={{ margin: "2px 0 0" }}>
+                  Cambiar la tarifa afecta solo las cuotas <b>futuras</b>; las ya generadas conservan su monto.
+                </p>
+              </div>
+            </div>
+            <div className="editar-casa-grid">
+              <label className="campo-moderno">
+                <span className="campo-label">Tarifa mensual</span>
                 <select value={edTarifaId} onChange={(e) => setEdTarifaId(Number(e.target.value))}>
                   <option value={0}>— Sin tarifa —</option>
                   {tarifasEd.map((t) => (
@@ -1088,29 +1108,30 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
                   ))}
                 </select>
               </label>
-              <label style={{ flex: 1 }}>Día de pago
+              <label className="campo-moderno">
+                <span className="campo-label">Día de pago</span>
                 <input type="number" min={1} max={28} value={edDiaPago}
                   onChange={(e) => setEdDiaPago(e.target.value)} />
               </label>
-            </div>
-            <div className="row">
-              <label style={{ flex: 1 }}>Días de gracia
+              <label className="campo-moderno">
+                <span className="campo-label">Días de gracia</span>
                 <input type="number" min={0} max={30} value={edDiasGracia}
                   placeholder="Global de la residencial"
                   onChange={(e) => setEdDiasGracia(e.target.value)} />
-                <span className="muted small">Vacío = usa el valor global de la residencial.</span>
+                <span className="campo-ayuda">Vacío = usa el valor global de la residencial.</span>
               </label>
-              <label style={{ flex: 1 }}>Identificador
+              <label className="campo-moderno">
+                <span className="campo-label">Identificador</span>
                 <input type="text" value={edIdentificador}
                   onChange={(e) => setEdIdentificador(e.target.value)} />
               </label>
             </div>
-            {errEd && <p className="err small">{errEd}</p>}
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            {errEd && <p className="err small" style={{ marginTop: 4 }}>{errEd}</p>}
+            <div className="editar-casa-acciones">
+              <button className="ghost" onClick={() => setEditando(false)} disabled={guardandoEd}>Cancelar</button>
               <button onClick={guardarEdicion} disabled={guardandoEd}>
                 {guardandoEd ? "Guardando…" : "Guardar cambios"}
               </button>
-              <button className="ghost" onClick={() => setEditando(false)} disabled={guardandoEd}>Cancelar</button>
             </div>
           </div>
         )}
