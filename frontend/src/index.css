@@ -3422,22 +3422,23 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 
 /* Acciones: botones-ícono compactos, con color solo al hacer hover */
 .casa-acciones { display: flex; gap: 4px; justify-content: flex-end; }
-.icono-accion {
+.casa-acciones .icono-accion {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; border-radius: 8px;
+  width: 32px; height: 32px; border-radius: 8px; padding: 0;
   background: #f1f5f9; color: #475569; border: none; cursor: pointer;
   transition: background .14s ease, color .14s ease, transform .1s ease;
 }
-.icono-accion:hover:not(:disabled) { background: #e2e8f0; transform: translateY(-1px); }
-.icono-accion:disabled { opacity: .4; cursor: not-allowed; }
-.icono-accion--ver:hover:not(:disabled)  { background: #dbeafe; color: #1d4ed8; }
-.icono-accion--ok:hover:not(:disabled),
-.icono-accion--ok                         { background: #dcfce7; color: #15803d; }
-.icono-accion--baja:hover:not(:disabled)  { background: #fee2e2; color: #b91c1c; }
+.casa-acciones .icono-accion svg { stroke: currentColor; }
+.casa-acciones .icono-accion:hover:not(:disabled) { background: #e2e8f0; color: #334155; transform: translateY(-1px); box-shadow: none; }
+.casa-acciones .icono-accion:disabled { opacity: .4; cursor: not-allowed; }
+.casa-acciones .icono-accion--ver:hover:not(:disabled)  { background: #dbeafe; color: #1d4ed8; }
+.casa-acciones .icono-accion--ok                         { background: #dcfce7; color: #15803d; }
+.casa-acciones .icono-accion--ok:hover:not(:disabled)    { background: #bbf7d0; color: #15803d; }
+.casa-acciones .icono-accion--baja:hover:not(:disabled)  { background: #fee2e2; color: #b91c1c; }
 
 @media (max-width: 640px) {
   .casa-titular { font-size: 11.5px; }
-  .icono-accion { width: 30px; height: 30px; }
+  .casa-acciones .icono-accion { width: 30px; height: 30px; }
 }
 
 /* ── Día 55 — formulario de edición de casa, moderno ── */
