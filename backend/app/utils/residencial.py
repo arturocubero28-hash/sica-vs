@@ -414,6 +414,15 @@ def marcar_config_cuotas_si_corresponde(residencial, anterior_tenia_cuotas):
     ANTES de tocar plan_id y pasar ya el bool -- un primitivo no muta
     cuando la relación se recarga.
     """
+    # IMPORTANTE: residencial.plan puede estar cacheado con el plan VIEJO.
+    # Cambiar residencial.plan_id + flush() NO recarga automáticamente la
+    # relación .plan si ya estaba cargada en memoria (SQLAlchemy conserva
+    # el objeto viejo). Por eso se expira el atributo antes de leerlo -- el
+    # próximo acceso a .plan dispara una recarga lazy con el plan_id nuevo.
+    # Este fue el bug real que hizo que la marca nunca se encendiera al
+    # probar: el helper leía el plan anterior y salía temprano.
+    from app.extensions import db
+    db.session.expire(residencial, ["plan"])
     plan_nuevo = residencial.plan
     if not plan_nuevo or not plan_nuevo.permite_cuotas:
         return
