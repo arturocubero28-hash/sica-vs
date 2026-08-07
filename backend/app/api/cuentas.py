@@ -409,45 +409,25 @@ def crear_cuenta(usuario_actual):
 
     db.session.commit()
 
-    # Generar la PRIMERA CUOTA prorrateada (Día 29).
+    # Generar la PRIMERA CUOTA prorrateada (Día 29). Día 55 — ahora usa la
+    # función compartida calcular_cuota_prorrateada (misma lógica que el
+    # wizard de activar cuotas), en vez de una copia inline.
     # Solo si tiene tarifa asignada (las cuentas contenedoras de edificio no pagan).
     if tarifa:
         try:
             from app.models.cuenta import Cuota, ConfigResidencial
-            import calendar
-            hoy = dt.date.today()
+            from app.utils.cuotas import calcular_cuota_prorrateada
             cfg = ConfigResidencial.get(usuario_actual.residencial_id)
-            dia_pago_cfg = cfg.dia_pago
-
-            if hoy.day > dia_pago_cfg:
-                # Mes comercial de 30 días SIEMPRE, también para contar los días
-                # restantes (no calendario real). Así en meses de 31 días (como
-                # julio) no se cobran de más. Ej: hoy es el 7, día de pago es el 1
-                # → quedan 30-7=23 días comerciales, no los 25 días reales hasta
-                # el 1 de agosto.
-                efectivo_dia = min(hoy.day, 30)
-                posicion_en_ciclo = ((efectivo_dia - dia_pago_cfg) % 30) + 1  # 1..30
-                dias_restantes = 30 - posicion_en_ciclo
-
-                if dias_restantes > 0:
-                    monto_diario = float(tarifa.monto) / 30
-                    monto_prorrateado = round(monto_diario * dias_restantes, 2)
-
-                    if hoy.month == 12:
-                        prox_pago = dt.date(hoy.year + 1, 1, dia_pago_cfg)
-                    else:
-                        prox_pago = dt.date(hoy.year, hoy.month + 1,
-                                            min(dia_pago_cfg, calendar.monthrange(hoy.year, hoy.month + 1)[1]))
-                    periodo = dt.date(hoy.year, hoy.month, 1)
-                    vencimiento = prox_pago + dt.timedelta(days=cfg.dias_gracia)
-
-                    cuota = Cuota(
-                        cuenta_id=cuenta.id, periodo=periodo,
-                        monto=monto_prorrateado, fecha_vencimiento=vencimiento,
-                        estado="pendiente",
-                    )
-                    db.session.add(cuota)
-                    db.session.commit()
+            gracia = cuenta.dias_gracia if cuenta.dias_gracia is not None else cfg.dias_gracia
+            datos = calcular_cuota_prorrateada(tarifa.monto, cfg.dia_pago, gracia)
+            if datos is not None:
+                cuota = Cuota(
+                    cuenta_id=cuenta.id, periodo=datos["periodo"],
+                    monto=datos["monto"], fecha_vencimiento=datos["fecha_vencimiento"],
+                    estado="pendiente",
+                )
+                db.session.add(cuota)
+                db.session.commit()
         except Exception:
             pass
 
@@ -1168,6 +1148,87 @@ def estado_config_cuotas(usuario_actual):
         "config_pendiente": pendiente,
         "casas_sin_tarifa": casas_sin_tarifa,
         "hay_tarifas": hay_tarifas,
+    }})
+
+
+@cuentas_bp.post("/activar-cuotas")
+@roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
+def activar_cuotas(usuario_actual):
+    """
+    Día 55 — Sprint 2b. Paso final del wizard de activación de cuotas al
+    subir de plan. Genera la primera cuota PRORRATEADA (Opción A) para cada
+    casa activa con tarifa de la residencial, y apaga la marca
+    cuotas_config_pendiente.
+
+    Regla de negocio (confirmada con el usuario): la responsabilidad del
+    sistema arranca el día del cambio -- cada casa empieza limpia, no se
+    mira ningún historial previo. El cliente es responsable de que sus
+    residentes tengan deuda cero antes de entrar.
+
+    Idempotente por (cuenta, período): si una casa ya tiene cuota de este
+    período (por el índice único cuenta_id+periodo), se la saltea sin
+    romper -- así reintentar el wizard no duplica cuotas.
+    """
+    from app.models.cuenta import Cuenta, Unidad, Cuota, ConfigResidencial
+    from app.models.residencial import Residencial
+    from app.utils.cuotas import calcular_cuota_prorrateada
+
+    residencial = Residencial.query.get(usuario_actual.residencial_id)
+    if not residencial:
+        return _err("sin_residencial", "No se encontró la residencial.", 400)
+
+    cfg = ConfigResidencial.get(usuario_actual.residencial_id)
+    hoy = dt.date.today()
+    periodo_actual = dt.date(hoy.year, hoy.month, 1)
+
+    # Casas activas con tarifa (las que pagan). El contenedor de edificio no
+    # tiene tarifa, así que queda naturalmente afuera de este filtro.
+    casas = (Cuenta.query.join(Unidad, Cuenta.unidad_id == Unidad.id)
+             .filter(Unidad.residencial_id == usuario_actual.residencial_id,
+                     Cuenta.activa == True,  # noqa: E712
+                     Cuenta.tarifa_id.isnot(None))
+             .all())
+
+    # Períodos ya existentes, para no duplicar si se reintenta el wizard.
+    ya_tienen = {row[0] for row in db.session.query(Cuota.cuenta_id)
+                 .filter(Cuota.periodo == periodo_actual,
+                         Cuota.cuenta_id.in_([c.id for c in casas] or [0])).all()}
+
+    generadas = 0
+    sin_prorrateo = 0
+    for casa in casas:
+        if casa.id in ya_tienen:
+            continue
+        if not casa.tarifa:
+            continue
+        # Día de pago y gracia: los de la casa si tiene override, si no los
+        # globales de la residencial.
+        dia_pago = casa.dia_pago or cfg.dia_pago
+        gracia = casa.dias_gracia if casa.dias_gracia is not None else cfg.dias_gracia
+
+        datos = calcular_cuota_prorrateada(casa.tarifa.monto, dia_pago, gracia, hoy=hoy)
+        if datos is None:
+            # Hoy es el día de pago o antes -> no hay fracción; el cron
+            # mensual generará la cuota completa cuando corresponda.
+            sin_prorrateo += 1
+            continue
+
+        cuota = Cuota(
+            cuenta_id=casa.id, periodo=datos["periodo"], monto=datos["monto"],
+            fecha_vencimiento=datos["fecha_vencimiento"], estado="pendiente",
+        )
+        db.session.add(cuota)
+        generadas += 1
+
+    # Wizard completado -> apagar la marca.
+    residencial.cuotas_config_pendiente = False
+    db.session.commit()
+
+    return jsonify({"data": {
+        "cuotas_generadas": generadas,
+        "casas_sin_prorrateo": sin_prorrateo,
+        "total_casas_con_tarifa": len(casas),
     }})
 
 
