@@ -391,7 +391,7 @@ def plan_permite(residencial_id, funcion):
     return getattr(residencial.plan, f"permite_{funcion}", True)
 
 
-def marcar_config_cuotas_si_corresponde(residencial, plan_anterior):
+def marcar_config_cuotas_si_corresponde(residencial, anterior_tenia_cuotas):
     """
     Día 55 — Sprint 2a. Se llama JUSTO DESPUÉS de cambiarle el plan a una
     residencial (en ambos caminos: admin auto-upgrade en suscripcion.py,
@@ -405,12 +405,17 @@ def marcar_config_cuotas_si_corresponde(residencial, plan_anterior):
     - ya venía con cuotas (Intermedio -> Premium, por ejemplo — ya está
       todo configurado, no hay nada que pedirle al admin).
 
-    Recibe el plan_anterior como objeto (o None) capturado ANTES del
-    cambio, porque residencial.plan ya apunta al nuevo cuando esto corre.
+    IMPORTANTE — recibe anterior_tenia_cuotas como un BOOLEAN ya resuelto,
+    NO como el objeto Plan. Motivo (bug real encontrado al probar): si se
+    captura `plan_anterior = residencial.plan` y luego se hace flush()
+    tras cambiar plan_id, SQLAlchemy RECARGA esa relación y la variable
+    termina apuntando al plan NUEVO, no al viejo. Por eso el llamador
+    debe leer `residencial.plan.permite_cuotas` (o el criterio que sea)
+    ANTES de tocar plan_id y pasar ya el bool -- un primitivo no muta
+    cuando la relación se recarga.
     """
     plan_nuevo = residencial.plan
     if not plan_nuevo or not plan_nuevo.permite_cuotas:
         return
-    anterior_tenia_cuotas = bool(plan_anterior and plan_anterior.permite_cuotas)
     if not anterior_tenia_cuotas:
         residencial.cuotas_config_pendiente = True

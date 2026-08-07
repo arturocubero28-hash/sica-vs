@@ -785,7 +785,10 @@ def editar_residencial(usuario_actual, res_uuid):
 
     if "plan_id" in body:
         plan_id_pedido = body["plan_id"]
-        plan_anterior = residencial.plan  # capturar ANTES de cambiarlo
+        # Día 55 — capturar el BOOL (no el objeto Plan) ANTES de tocar
+        # plan_id: si se guardara la relación y luego se hace flush(),
+        # SQLAlchemy la recarga y apuntaría al plan nuevo (ver el helper).
+        anterior_tenia_cuotas = bool(residencial.plan and residencial.plan.permite_cuotas)
         if plan_id_pedido in (None, ""):
             residencial.plan_id = None
         else:
@@ -803,7 +806,7 @@ def editar_residencial(usuario_actual, res_uuid):
             # wizard de configuración obligatorio.
             from app.utils.residencial import marcar_config_cuotas_si_corresponde
             db.session.flush()  # asegura que residencial.plan refleje el nuevo plan_id
-            marcar_config_cuotas_si_corresponde(residencial, plan_anterior)
+            marcar_config_cuotas_si_corresponde(residencial, anterior_tenia_cuotas)
 
     if "dias_gracia" in body:
         try:
