@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { CalendarClock, Tag, ListChecks, CheckCircle2 } from "lucide-react";
 import {
-  estadoConfigCuotas, setConfigResidencial, crearTarifa, listarTarifas,
-  type EstadoConfigCuotas, type Tarifa,
+  setConfigResidencial, crearTarifa, listarTarifas,
+  listarCuentas, editarInfoCasa, activarCuotas,
+  type Tarifa, type Cuenta,
 } from "../../api/client";
 
 /**
@@ -26,7 +27,6 @@ const PASOS = [
 ];
 
 export function WizardActivarCuotas({ onCompletado }: { onCompletado: () => void }) {
-  const [estado, setEstado] = useState<EstadoConfigCuotas | null>(null);
   const [paso, setPaso] = useState(1);
 
   // Paso 1 — configuración de cobro
@@ -40,10 +40,19 @@ export function WizardActivarCuotas({ onCompletado }: { onCompletado: () => void
   const [montoTarifa, setMontoTarifa] = useState("");
   const [guardando2, setGuardando2] = useState(false);
 
+  // Paso 3 — asignar tarifa a las casas sin tarifa
+  const [casasSinTarifa, setCasasSinTarifa] = useState<Cuenta[]>([]);
+  const [asignaciones, setAsignaciones] = useState<Record<string, number>>({});
+  const [tarifaMasiva, setTarifaMasiva] = useState<number>(0);
+  const [guardando3, setGuardando3] = useState(false);
+
+  // Paso 4 — generar
+  const [generando, setGenerando] = useState(false);
+  const [resultado, setResultado] = useState<{ generadas: number; total: number } | null>(null);
+
   const [err, setErr] = useState("");
 
   useEffect(() => {
-    estadoConfigCuotas().then(setEstado).catch(() => {});
     listarTarifas().then(setTarifas).catch(() => {});
   }, []);
 
@@ -68,14 +77,57 @@ export function WizardActivarCuotas({ onCompletado }: { onCompletado: () => void
       const actualizadas = await listarTarifas();
       setTarifas(actualizadas);
       setNombreTarifa(""); setMontoTarifa("");
-      setPaso(3);
+      await irAPaso3();
     } catch (e) { setErr((e as Error).message); }
     finally { setGuardando2(false); }
   }
 
-  function saltarSiYaHayTarifas() {
-    // Si ya existe alguna tarifa, el paso 2 es opcional — se puede avanzar.
-    setPaso(3);
+  async function irAPaso3() {
+    setErr("");
+    // Cargar las casas sin tarifa de esta residencial. listar_cuentas ya
+    // devuelve tarifa_id; se filtran acá las que no tienen, excluyendo el
+    // contenedor de edificio (que no paga cuota).
+    try {
+      const todas = await listarCuentas();
+      const lista = Array.isArray(todas) ? todas : (todas as { cuentas: Cuenta[] }).cuentas || [];
+      const sinTarifa = lista.filter(
+        (c) => !c.tarifa_id && c.tipo_cuenta !== "edificio_contenedor" && c.activa !== false);
+      setCasasSinTarifa(sinTarifa);
+      setPaso(3);
+    } catch (e) { setErr((e as Error).message); }
+  }
+
+  function aplicarTarifaATodas() {
+    if (!tarifaMasiva) return;
+    const nuevo: Record<string, number> = {};
+    casasSinTarifa.forEach((c) => { nuevo[c.id] = tarifaMasiva; });
+    setAsignaciones(nuevo);
+  }
+
+  async function guardarAsignaciones() {
+    setGuardando3(true); setErr("");
+    try {
+      // Asignar la tarifa elegida a cada casa (reutiliza editarInfoCasa).
+      // Solo las que tienen una tarifa seleccionada.
+      const pendientes = casasSinTarifa.filter((c) => asignaciones[c.id]);
+      if (pendientes.length === 0) {
+        setErr("Asigná una tarifa a al menos una casa (o a todas de una vez).");
+        setGuardando3(false); return;
+      }
+      for (const c of pendientes) {
+        await editarInfoCasa(c.id, { tarifa_id: asignaciones[c.id] });
+      }
+      setPaso(4);
+    } catch (e) { setErr((e as Error).message); }
+    finally { setGuardando3(false); }
+  }
+
+  async function generarCuotas() {
+    setGenerando(true); setErr("");
+    try {
+      const r = await activarCuotas();
+      setResultado({ generadas: r.cuotas_generadas, total: r.total_casas_con_tarifa });
+    } catch (e) { setErr((e as Error).message); setGenerando(false); }
   }
 
   return (
@@ -173,7 +225,7 @@ export function WizardActivarCuotas({ onCompletado }: { onCompletado: () => void
             <div className="wizard-acciones">
               <button className="ghost" onClick={() => setPaso(1)}>Atrás</button>
               {tarifas.length > 0 && (
-                <button className="ghost" onClick={saltarSiYaHayTarifas}>Usar las que tengo</button>
+                <button className="ghost" onClick={irAPaso3}>Usar las que tengo</button>
               )}
               <button onClick={crearPrimeraTarifa} disabled={guardando2}>
                 {guardando2 ? "Creando…" : "Crear y continuar"}
@@ -182,29 +234,90 @@ export function WizardActivarCuotas({ onCompletado }: { onCompletado: () => void
           </div>
         )}
 
-        {/* ── PASO 3 y 4 — andamiaje, se completa en el 2d ── */}
+        {/* ── PASO 3 — asignar tarifa a las casas ── */}
         {paso === 3 && (
           <div className="wizard-body">
             <h3>3 · Asigná tarifa a las casas</h3>
-            <p className="muted">
-              {estado ? `Tenés ${estado.casas_sin_tarifa} casa(s) sin tarifa.` : "Cargando…"}
-            </p>
-            <p className="muted small">(Este paso se completa en la próxima entrega.)</p>
+            {casasSinTarifa.length === 0 ? (
+              <p className="muted">Todas tus casas ya tienen tarifa. Podés continuar.</p>
+            ) : (
+              <>
+                <p className="muted small">
+                  {casasSinTarifa.length} casa(s) sin tarifa. Asigná una a cada una, o poné la misma a todas de un tirón.
+                </p>
+                <div className="wizard-masiva">
+                  <select value={tarifaMasiva} onChange={(e) => setTarifaMasiva(Number(e.target.value))}>
+                    <option value={0}>— Elegí una tarifa —</option>
+                    {tarifas.map((t) => <option key={t.id} value={t.id}>{t.nombre} — L {t.monto}</option>)}
+                  </select>
+                  <button className="ghost" onClick={aplicarTarifaATodas} disabled={!tarifaMasiva}>
+                    Aplicar a todas
+                  </button>
+                </div>
+                <div className="wizard-casas-lista">
+                  {casasSinTarifa.map((c) => (
+                    <div key={c.id} className="wizard-casa-row">
+                      <span className="wizard-casa-nombre">
+                        {c.identificador || c.nombre_completo}
+                        {c.apartamento ? ` · Apto ${c.apartamento}` : ""}
+                      </span>
+                      <select value={asignaciones[c.id] || 0}
+                        onChange={(e) => setAsignaciones({ ...asignaciones, [c.id]: Number(e.target.value) })}>
+                        <option value={0}>— Sin asignar —</option>
+                        {tarifas.map((t) => <option key={t.id} value={t.id}>{t.nombre} — L {t.monto}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             <div className="wizard-acciones">
               <button className="ghost" onClick={() => setPaso(2)}>Atrás</button>
-              <button onClick={() => setPaso(4)}>Continuar</button>
+              {casasSinTarifa.length === 0
+                ? <button onClick={() => setPaso(4)}>Continuar</button>
+                : <button onClick={guardarAsignaciones} disabled={guardando3}>
+                    {guardando3 ? "Asignando…" : "Asignar y continuar"}
+                  </button>}
             </div>
           </div>
         )}
 
+        {/* ── PASO 4 — confirmar y generar ── */}
         {paso === 4 && (
           <div className="wizard-body">
             <h3>4 · Confirmá y generá las cuotas</h3>
-            <p className="muted small">(Este paso se completa en la próxima entrega.)</p>
-            <div className="wizard-acciones">
-              <button className="ghost" onClick={() => setPaso(3)}>Atrás</button>
-              <button onClick={onCompletado}>Finalizar</button>
-            </div>
+            {resultado ? (
+              <>
+                <div className="wizard-exito">
+                  <CheckCircle2 size={40} />
+                  <b>¡Listo! Se generaron {resultado.generadas} cuota(s).</b>
+                  <p className="muted small">
+                    Cada casa con tarifa tiene su primera cuota prorrateada desde hoy hasta fin de ciclo.
+                    De acá en adelante, el sistema genera las cuotas automáticamente cada mes.
+                  </p>
+                </div>
+                <div className="wizard-acciones">
+                  <button onClick={onCompletado}>Ir al panel</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="muted small">
+                  Se generará la <b>primera cuota prorrateada</b> (desde hoy hasta el fin del ciclo actual)
+                  para cada casa que ya tiene tarifa. El próximo mes, el ciclo normal se encarga solo.
+                </p>
+                <div className="wizard-ejemplo">
+                  Recordá: tu responsabilidad de cobro arranca hoy. Asegurate de que los residentes
+                  no tengan deuda pendiente de antes de entrar al sistema.
+                </div>
+                <div className="wizard-acciones">
+                  <button className="ghost" onClick={() => setPaso(3)} disabled={generando}>Atrás</button>
+                  <button onClick={generarCuotas} disabled={generando}>
+                    {generando ? "Generando…" : "Generar cuotas ahora"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
