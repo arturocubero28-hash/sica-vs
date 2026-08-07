@@ -4,7 +4,7 @@ import {
   detalleCuenta, agregarMiembro, quitarMiembro, regenerarEnlace,
   asignarTarjeta, darBajaCuenta, reactivarCuenta, pausarAcceso, reanudarAcceso, editarUsuario,
   crearTarifa, editarTarifa, desactivarTarifa,
-  validarCodigoEnrolamiento, toggleQrRecurrente, editarTipoAccesoVirtual, editarUnidad,
+  validarCodigoEnrolamiento, toggleQrRecurrente, editarTipoAccesoVirtual, editarUnidad, editarInfoCasa,
   listarSolicitudesBaja, resolverSolicitudBaja, nivelarSaldo, getMiResidencial,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO, type SolicitudBajaDTO,
 } from "../../api/client";
@@ -823,6 +823,22 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
   const [maxAptos, setMaxAptos] = useState(cuenta.unidad?.max_apartamentos?.toString() ?? "");
   const [guardandoAptos, setGuardandoAptos] = useState(false);
   const [msgConfig, setMsgConfig] = useState("");
+  // Día 55 — edición de la info de la casa (tarifa, día de pago, días de
+  // gracia, identificador). Arranca cerrado; se abre con el botón "Editar".
+  const [editando, setEditando] = useState(false);
+  const [edTarifaId, setEdTarifaId] = useState<number>(cuenta.tarifa_id ?? 0);
+  const [edDiaPago, setEdDiaPago] = useState<string>(cuenta.dia_pago?.toString() ?? "");
+  const [edDiasGracia, setEdDiasGracia] = useState<string>(cuenta.dias_gracia?.toString() ?? "");
+  const [edIdentificador, setEdIdentificador] = useState(cuenta.unidad?.identificador ?? cuenta.identificador ?? "");
+  const [tarifasEd, setTarifasEd] = useState<Tarifa[]>([]);
+  const [guardandoEd, setGuardandoEd] = useState(false);
+  const [errEd, setErrEd] = useState("");
+
+  useEffect(() => {
+    if (editando && permiteCuotas && tarifasEd.length === 0) {
+      listarTarifas().then(setTarifasEd).catch(() => {});
+    }
+  }, [editando, permiteCuotas]);
   // Tipo de acceso de la tarjeta. Si la cuenta es un apartamento, se sugiere
   // peatonal (común en estudiantes); si es casa, vehicular.
   const [tipoAcceso, setTipoAcceso] = useState<"vehicular" | "peatonal">(
@@ -847,6 +863,29 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
   const [mErrors, setMErrors] = useState<Record<string, string>>({});
   const [msgMiembro, setMsgMiembro] = useState("");
   function clearMError(k: string) { setMErrors(prev => { const c = { ...prev }; delete c[k]; return c; }); }
+
+  async function guardarEdicion() {
+    setGuardandoEd(true); setErrEd("");
+    try {
+      const cambios: Parameters<typeof editarInfoCasa>[1] = {};
+      // Solo mandar lo que cambió, para no pisar valores sin querer.
+      if (edTarifaId !== (cuenta.tarifa_id ?? 0)) cambios.tarifa_id = edTarifaId || null;
+      if (edDiaPago && Number(edDiaPago) !== cuenta.dia_pago) cambios.dia_pago = Number(edDiaPago);
+      const graciaActual = cuenta.dias_gracia ?? null;
+      const graciaNueva = edDiasGracia === "" ? null : Number(edDiasGracia);
+      if (graciaNueva !== graciaActual) cambios.dias_gracia = graciaNueva;
+      const idActual = cuenta.unidad?.identificador ?? cuenta.identificador ?? "";
+      if (edIdentificador.trim() && edIdentificador.trim() !== idActual) cambios.identificador = edIdentificador.trim();
+
+      if (Object.keys(cambios).length === 0) { setEditando(false); return; }
+      await editarInfoCasa(cuenta.id, cambios);
+      setMsgConfig("✓ Información actualizada");
+      setEditando(false);
+      onCambio();
+      setTimeout(() => setMsgConfig(""), 2500);
+    } catch (e) { setErrEd((e as Error).message); }
+    finally { setGuardandoEd(false); }
+  }
 
   async function guardarQrRecurrente(valor: boolean) {
     setGuardandoQr(true); setMsgConfig("");
@@ -998,6 +1037,10 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
                 <span className="muted small">Día de pago</span>
                 <b>{cuenta.dia_pago ? `Día ${cuenta.dia_pago}` : "—"}</b>
               </div>
+              <div className="detalle-info-item">
+                <span className="muted small">Días de gracia</span>
+                <b>{cuenta.dias_gracia != null ? `${cuenta.dias_gracia} día(s)` : "Global de la residencial"}</b>
+              </div>
             </>
           )}
           <div className="detalle-info-item">
@@ -1014,6 +1057,63 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
             </div>
           )}
         </div>
+
+        {/* Día 55 — editar la información de la casa. Solo para cuentas que
+            pagan cuota (no el contenedor de edificio) y solo si el plan
+            incluye cuotas. */}
+        {cuenta.tipo_cuenta !== "edificio_contenedor" && permiteCuotas && !editando && (
+          <button className="mini" style={{ marginTop: 4 }} onClick={() => {
+            setEdTarifaId(cuenta.tarifa_id ?? 0);
+            setEdDiaPago(cuenta.dia_pago?.toString() ?? "");
+            setEdDiasGracia(cuenta.dias_gracia?.toString() ?? "");
+            setEdIdentificador(cuenta.unidad?.identificador ?? cuenta.identificador ?? "");
+            setErrEd(""); setEditando(true);
+          }}>
+            <Pencil size={13} style={{ marginRight: 5 }} /> Editar información
+          </button>
+        )}
+
+        {editando && (
+          <div className="detalle-config-box" style={{ marginTop: 8 }}>
+            <div className="sub" style={{ marginTop: 0 }}>Editar información de la casa</div>
+            <p className="muted small" style={{ marginTop: 0 }}>
+              Cambiar la tarifa afecta solo las cuotas <b>futuras</b>; las ya generadas conservan su monto.
+            </p>
+            <div className="row">
+              <label style={{ flex: 1 }}>Tarifa mensual
+                <select value={edTarifaId} onChange={(e) => setEdTarifaId(Number(e.target.value))}>
+                  <option value={0}>— Sin tarifa —</option>
+                  {tarifasEd.map((t) => (
+                    <option key={t.id} value={t.id}>{t.nombre} — L {t.monto}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ flex: 1 }}>Día de pago
+                <input type="number" min={1} max={28} value={edDiaPago}
+                  onChange={(e) => setEdDiaPago(e.target.value)} />
+              </label>
+            </div>
+            <div className="row">
+              <label style={{ flex: 1 }}>Días de gracia
+                <input type="number" min={0} max={30} value={edDiasGracia}
+                  placeholder="Global de la residencial"
+                  onChange={(e) => setEdDiasGracia(e.target.value)} />
+                <span className="muted small">Vacío = usa el valor global de la residencial.</span>
+              </label>
+              <label style={{ flex: 1 }}>Identificador
+                <input type="text" value={edIdentificador}
+                  onChange={(e) => setEdIdentificador(e.target.value)} />
+              </label>
+            </div>
+            {errEd && <p className="err small">{errEd}</p>}
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button onClick={guardarEdicion} disabled={guardandoEd}>
+                {guardandoEd ? "Guardando…" : "Guardar cambios"}
+              </button>
+              <button className="ghost" onClick={() => setEditando(false)} disabled={guardandoEd}>Cancelar</button>
+            </div>
+          </div>
+        )}
 
         {/* Últimas cuotas: historial rápido (no aplica al contenedor de edificio) */}
         {cuenta.tipo_cuenta !== "edificio_contenedor" && cuenta.cuotas_recientes && cuenta.cuotas_recientes.length > 0 && (

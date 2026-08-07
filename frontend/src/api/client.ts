@@ -130,8 +130,8 @@ export interface Cuenta {
   id: string; apartamento?: string; identificador?: string; nombre_completo?: string;
   es_apartamento?: boolean; es_contenedor?: boolean; administra_edificio?: boolean;
   tipo_cuenta?: "casa" | "edificio_contenedor" | "edificio_admin" | "apartamento";
-  dia_pago: number; estado: string;
-  bloqueada: boolean; activa?: boolean; acceso_pausado?: boolean; tarifa: string; monto: number;
+  dia_pago: number; dias_gracia?: number | null; estado: string;
+  bloqueada: boolean; activa?: boolean; acceso_pausado?: boolean; tarifa_id?: number | null; tarifa: string; monto: number;
   titular?: ResidenteDTO; total_residentes: number; total_tarjetas: number;
   cuotas_pendientes?: number; qr_recurrente_habilitado?: boolean; created_at?: string;
   tipo_acceso_virtual?: "peatonal" | "vehicular";
@@ -1351,6 +1351,18 @@ export const toggleCuentaActiva = (cuentaUuid: string, activa: boolean) =>
   request<object>(
     `/unidades/cuentas/${cuentaUuid}`,
     { method: "PUT", body: JSON.stringify({ activa }) });
+
+// Día 55 — editar la información de una casa ya creada (tarifa, día de pago,
+// días de gracia, identificador). Solo los campos presentes se actualizan;
+// cambiar la tarifa afecta únicamente las cuotas futuras. dias_gracia null
+// = usa el global de la residencial.
+export const editarInfoCasa = (cuentaUuid: string, cambios: {
+  tarifa_id?: number | null; dia_pago?: number;
+  dias_gracia?: number | null; identificador?: string;
+}) =>
+  request<Cuenta>(
+    `/unidades/cuentas/${cuentaUuid}`,
+    { method: "PUT", body: JSON.stringify(cambios) });
 
 // ── Tipo de acceso virtual (QR/BLE) por cuenta (admin) ──────────────────────
 // Define qué trancas puede abrir el QR permanente y el BLE de los residentes

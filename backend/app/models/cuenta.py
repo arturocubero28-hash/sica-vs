@@ -86,6 +86,11 @@ class Cuenta(db.Model):
     apartamento = db.Column(db.String(40))                 # NULL si es casa; "1A" si es apto
     tarifa_id = db.Column(db.BigInteger, db.ForeignKey("tarifas.id"), nullable=True)
     dia_pago = db.Column(db.SmallInteger, nullable=True)   # 1..28 (null = cuenta contenedora sin cuota)
+    # Día 55 — días de gracia POR CASA. NULL = usa el valor global de la
+    # residencial (ConfigResidencial.dias_gracia). Un número = override
+    # individual, para el caso de un residente puntual que negoció un
+    # plazo distinto, sin cambiarle la gracia a toda la residencial.
+    dias_gracia = db.Column(db.SmallInteger, nullable=True)
     fecha_alta = db.Column(db.Date, nullable=False, default=dt.date.today)
     estado = db.Column(db.String(20), nullable=False, default="al_dia")
     bloqueada = db.Column(db.Boolean, nullable=False, default=False)
@@ -218,12 +223,14 @@ class Cuenta(db.Model):
             "es_contenedor": tc == "edificio_contenedor",
             "administra_edificio": administra,
             "dia_pago": self.dia_pago,
+            "dias_gracia": self.dias_gracia,
             "estado": self.estado,
             "bloqueada": self.bloqueada,
             "activa": self.activa,
             "acceso_pausado": self.acceso_pausado,
             "qr_recurrente_habilitado": self.qr_recurrente_habilitado,
             "tipo_acceso_virtual": self.tipo_acceso_virtual,
+            "tarifa_id": self.tarifa_id,
             "tarifa": self.tarifa.nombre if self.tarifa else None,
             "monto": float(self.tarifa.monto) if self.tarifa else None,
             "titular": t.to_dict() if t else None,

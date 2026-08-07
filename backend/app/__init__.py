@@ -380,6 +380,10 @@ def create_app(config_class=Config):
                    AND residencial_id NOT IN (
                        SELECT id FROM residenciales WHERE nombre = 'Villas del Sol'
                    )""",
+            # Día 55 — días de gracia por casa (override del global de la
+            # residencial). NULL = usa el global; no hace falta backfill,
+            # null ya significa "sin override" para este campo.
+            "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS dias_gracia SMALLINT",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de

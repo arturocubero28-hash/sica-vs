@@ -137,10 +137,13 @@ def generar_cuotas_mensuales():
                 continue
 
             cfg = _config_de(cuenta)
-            # Fecha de vencimiento = día de pago + días de gracia
+            # Fecha de vencimiento = día de pago + días de gracia.
+            # Día 55: la cuenta puede tener su propio dias_gracia (override
+            # individual); si es NULL, usa el global de la residencial.
             dia_pago = min(cfg.dia_pago, ultimo_dia)
             fecha_pago = dt.date(hoy.year, hoy.month, dia_pago)
-            vencimiento = fecha_pago + dt.timedelta(days=cfg.dias_gracia)
+            gracia = cuenta.dias_gracia if cuenta.dias_gracia is not None else cfg.dias_gracia
+            vencimiento = fecha_pago + dt.timedelta(days=gracia)
 
             cuota = Cuota(
                 cuenta_id=cuenta.id,
@@ -239,7 +242,14 @@ def revisar_mora():
             if unidad and not plan_permite(unidad.residencial_id, "cuotas"):
                 continue
 
-            dias_gracia = _dias_gracia_de(unidad.residencial_id if unidad else None)
+            # Día 55: respeta el override de días de gracia por casa
+            # (cuenta.dias_gracia); si es NULL, usa el global de la
+            # residencial. Mismo criterio que la generación de cuotas.
+            # (Nota: el conteo de mora acá sobre fecha_vencimiento es un
+            # comportamiento preexistente que no se toca en este cambio;
+            # solo se sustituye de dónde sale el número de días de gracia.)
+            dias_gracia = (cuenta.dias_gracia if cuenta.dias_gracia is not None
+                           else _dias_gracia_de(unidad.residencial_id if unidad else None))
 
             if dias >= dias_gracia:
                 cuota.estado = "vencida"

@@ -503,6 +503,56 @@ def editar_cuenta(usuario_actual, cuenta_uuid):
         dp = int(body["dia_pago"])
         if 1 <= dp <= 28:
             cuenta.dia_pago = dp
+    # Día 55 — edición de la info de una casa ya creada. Los tres campos
+    # nuevos (tarifa, días de gracia, identificador) son de cuotas, así que
+    # se gatean con el mismo criterio: sin plan de cuotas no se tocan. Se
+    # chequea una sola vez, solo si el body trae alguno de ellos.
+    if any(k in body for k in ("tarifa_id", "dias_gracia", "identificador")):
+        from app.utils.residencial import plan_permite
+        if not plan_permite(usuario_actual.residencial_id, "cuotas"):
+            return _err("funcion_no_incluida",
+                        "Tu plan actual no incluye cuotas de residentes — "
+                        "hablá con tu proveedor para subir de plan.", 402)
+
+        if "tarifa_id" in body:
+            # Cambiar la tarifa solo afecta las cuotas FUTURAS -- las ya
+            # generadas conservan el monto con el que nacieron (decisión
+            # de negocio confirmada con el usuario). Se valida que la
+            # tarifa exista y sea de ESTA residencial.
+            tid = body["tarifa_id"]
+            if tid in (None, "", 0):
+                cuenta.tarifa_id = None
+            else:
+                tarifa = Tarifa.query.filter_by(
+                    id=int(tid), residencial_id=usuario_actual.residencial_id).first()
+                if not tarifa:
+                    return _err("tarifa_invalida", "La tarifa seleccionada no existe.", 400)
+                cuenta.tarifa_id = tarifa.id
+
+        if "dias_gracia" in body:
+            dg = body["dias_gracia"]
+            if dg in (None, ""):
+                cuenta.dias_gracia = None   # vuelve a usar el global
+            else:
+                dg = int(dg)
+                if 0 <= dg <= 30:
+                    cuenta.dias_gracia = dg
+
+        if "identificador" in body:
+            nuevo_id = (body["identificador"] or "").strip()
+            if nuevo_id and cuenta.unidad:
+                # Misma validación de unicidad POR residencial del Día 52
+                # (crear_unidad): el identificador es único dentro de la
+                # residencial, no global en todo el sistema.
+                choque = Unidad.query.filter(
+                    Unidad.identificador == nuevo_id,
+                    Unidad.residencial_id == cuenta.unidad.residencial_id,
+                    Unidad.id != cuenta.unidad_id,
+                ).first()
+                if choque:
+                    return _err("duplicado", f"Ya existe la unidad '{nuevo_id}' en esta residencial", 409)
+                cuenta.unidad.identificador = nuevo_id
+
     if "activa" in body:
         cuenta.activa = bool(body["activa"])
     db.session.commit()
