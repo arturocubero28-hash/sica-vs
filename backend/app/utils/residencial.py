@@ -389,3 +389,28 @@ def plan_permite(residencial_id, funcion):
     if not residencial or not residencial.plan_id or not residencial.plan:
         return True
     return getattr(residencial.plan, f"permite_{funcion}", True)
+
+
+def marcar_config_cuotas_si_corresponde(residencial, plan_anterior):
+    """
+    Día 55 — Sprint 2a. Se llama JUSTO DESPUÉS de cambiarle el plan a una
+    residencial (en ambos caminos: admin auto-upgrade en suscripcion.py,
+    y dev en desarrollador.py). Enciende cuotas_config_pendiente si el
+    plan NUEVO incluye cuotas y el ANTERIOR no las incluía — es decir,
+    solo en la transición "sin cuotas -> con cuotas", que es cuando el
+    admin necesita el wizard de configuración.
+
+    No se enciende si:
+    - el plan nuevo no tiene cuotas (Básico -> Básico, o bajar a Básico);
+    - ya venía con cuotas (Intermedio -> Premium, por ejemplo — ya está
+      todo configurado, no hay nada que pedirle al admin).
+
+    Recibe el plan_anterior como objeto (o None) capturado ANTES del
+    cambio, porque residencial.plan ya apunta al nuevo cuando esto corre.
+    """
+    plan_nuevo = residencial.plan
+    if not plan_nuevo or not plan_nuevo.permite_cuotas:
+        return
+    anterior_tenia_cuotas = bool(plan_anterior and plan_anterior.permite_cuotas)
+    if not anterior_tenia_cuotas:
+        residencial.cuotas_config_pendiente = True

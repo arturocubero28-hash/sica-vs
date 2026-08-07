@@ -1129,6 +1129,48 @@ def validar_codigo_enrolamiento(usuario_actual, codigo):
 # CONFIGURACIÓN GLOBAL DE LA RESIDENCIAL (Día 29)
 # =====================================================================
 
+@cuentas_bp.get("/estado-config-cuotas")
+@roles_required("admin", "super_admin")
+def estado_config_cuotas(usuario_actual):
+    """
+    Día 55 — Sprint 2a. El frontend del admin consulta esto al entrar para
+    saber si debe mostrar el wizard obligatorio de configuración de cuotas.
+    Devuelve la marca cuotas_config_pendiente, más datos que el wizard
+    necesita para armar sus pasos: cuántas casas hay sin tarifa, y si ya
+    existe alguna tarifa creada (para saber si el paso de crear tarifa es
+    obligatorio o solo opcional).
+    """
+    from app.models.residencial import Residencial
+    from app.models.cuenta import Cuenta, Unidad, Tarifa
+
+    residencial = Residencial.query.get(usuario_actual.residencial_id)
+    pendiente = bool(residencial and residencial.cuotas_config_pendiente)
+
+    # Casas activas de esta residencial que todavía no tienen tarifa (las
+    # que el wizard deberá listar en su paso 3). Hay que excluir el
+    # contenedor de edificio, que no paga cuota -- pero tipo_cuenta es una
+    # @property calculada, no filtrable en SQL. Un contenedor se
+    # caracteriza por unidad tipo 'edificio' + sin apartamento + sin
+    # tarifa; como acá ya filtramos por tarifa NULL, basta con excluir las
+    # cuentas que son la raíz de un edificio (tipo edificio y sin
+    # apartamento propio) para no contar los contenedores.
+    casas_sin_tarifa = (Cuenta.query.join(Unidad, Cuenta.unidad_id == Unidad.id)
+                        .filter(Unidad.residencial_id == usuario_actual.residencial_id,
+                                Cuenta.activa == True,  # noqa: E712
+                                Cuenta.tarifa_id.is_(None),
+                                db.not_(db.and_(Unidad.tipo == "edificio",
+                                                Cuenta.apartamento.is_(None))))
+                        .count())
+    hay_tarifas = (Tarifa.query.filter_by(
+        residencial_id=usuario_actual.residencial_id, activa=True).count() > 0)
+
+    return jsonify({"data": {
+        "config_pendiente": pendiente,
+        "casas_sin_tarifa": casas_sin_tarifa,
+        "hay_tarifas": hay_tarifas,
+    }})
+
+
 @cuentas_bp.get("/config-residencial")
 @roles_required("admin", "super_admin", "desarrollador")
 @requiere_funcion_plan("cuotas")

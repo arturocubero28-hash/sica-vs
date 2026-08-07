@@ -73,6 +73,13 @@ class Residencial(db.Model):
     # suspensión no tiene sentido sin un plan de referencia. El
     # desarrollador le asigna un plan cuando corresponda.
     plan_id = db.Column(db.BigInteger, db.ForeignKey("planes.id"))
+    # Día 55 — Sprint 2: cuando el plan cambia a uno CON cuotas (desde uno
+    # sin cuotas), esta marca se enciende. El admin de la residencial ve
+    # entonces un wizard obligatorio para configurar el cobro (día de pago,
+    # tarifas, asignarlas a las casas) y generar la primera cuota
+    # prorrateada. Se apaga sola al completar el wizard. NULL/false = nada
+    # pendiente (residencial sin cuotas, o ya configurada).
+    cuotas_config_pendiente = db.Column(db.Boolean, nullable=False, default=False)
     fecha_proximo_pago = db.Column(db.Date)
     # Días después de fecha_proximo_pago durante los cuales el servicio
     # sigue activo aunque no haya pagado todavía. Default de 5 días —
@@ -121,6 +128,7 @@ class Residencial(db.Model):
             "activa": self.activa,
             # Día 50 — sistema de suscripciones.
             "plan": self.plan.to_dict() if self.plan else None,
+            "cuotas_config_pendiente": self.cuotas_config_pendiente,
             "fecha_proximo_pago": self.fecha_proximo_pago.isoformat() if self.fecha_proximo_pago else None,
             "dias_gracia": self.dias_gracia,
             "suspendida": self.esta_suspendida(),

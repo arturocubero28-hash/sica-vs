@@ -785,6 +785,7 @@ def editar_residencial(usuario_actual, res_uuid):
 
     if "plan_id" in body:
         plan_id_pedido = body["plan_id"]
+        plan_anterior = residencial.plan  # capturar ANTES de cambiarlo
         if plan_id_pedido in (None, ""):
             residencial.plan_id = None
         else:
@@ -797,6 +798,12 @@ def editar_residencial(usuario_actual, res_uuid):
             # solicitud de upgrade pendiente — es justo lo que el admin
             # estaba pidiendo.
             residencial.upgrade_solicitado = False
+            # Día 55 — Sprint 2a: si el dev activa cuotas por primera vez,
+            # marcar para que al admin de esa residencial se le dispare el
+            # wizard de configuración obligatorio.
+            from app.utils.residencial import marcar_config_cuotas_si_corresponde
+            db.session.flush()  # asegura que residencial.plan refleje el nuevo plan_id
+            marcar_config_cuotas_si_corresponde(residencial, plan_anterior)
 
     if "dias_gracia" in body:
         try:

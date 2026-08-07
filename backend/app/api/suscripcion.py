@@ -107,9 +107,14 @@ def subir_plan(usuario_actual):
                                   "message": "Ese plan no es más caro que el actual — "
                                              "para bajar de plan, contactá a tu proveedor"}}), 400
 
+    plan_anterior = residencial.plan  # capturar ANTES de cambiarlo
     residencial.plan_id = plan_nuevo.id
     # fecha_proximo_pago NO se toca a propósito — el precio nuevo se cobra
     # recién en el ciclo que ya tenía, no antes.
+    # Día 55 — Sprint 2a: si este upgrade activa cuotas por primera vez,
+    # marcar para que el admin vea el wizard de configuración.
+    from app.utils.residencial import marcar_config_cuotas_si_corresponde
+    marcar_config_cuotas_si_corresponde(residencial, plan_anterior)
     db.session.commit()
     return jsonify({"data": residencial.to_dict(incluir_stats=True)})
 

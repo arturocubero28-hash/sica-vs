@@ -384,6 +384,11 @@ def create_app(config_class=Config):
             # residencial). NULL = usa el global; no hace falta backfill,
             # null ya significa "sin override" para este campo.
             "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS dias_gracia SMALLINT",
+            # Día 55 — Sprint 2a: marca de "cuotas pendientes de configurar".
+            # Default false: ninguna residencial arranca con el wizard
+            # pendiente; se enciende solo en la transición sin-cuotas ->
+            # con-cuotas (ver marcar_config_cuotas_si_corresponde).
+            "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS cuotas_config_pendiente BOOLEAN NOT NULL DEFAULT false",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de
