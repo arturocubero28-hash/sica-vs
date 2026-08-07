@@ -5,6 +5,7 @@ import {
   type UsuarioAdminDTO,
 } from "../../api/client";
 import { fechaRelativa } from "../../utils/formato";
+import { KeyRound, Ban, CheckCircle } from "lucide-react";
 
 const ROL_LABEL: Record<string, string> = {
   super_admin: "Super Admin", admin: "Administrador", supervisor: "Supervisor",
@@ -108,24 +109,35 @@ export function UsuariosAdmin() {
         <div className="casas-contador muted small">{filtrados.length} de {usuarios.length} usuarios</div>
 
         {cargando ? <p className="muted">Cargando…</p> : (
-          <div className="scroll-x">
-            <table className="data">
+          <div className="lista-card"><div className="scroll-x">
+            <table className="data tabla-casas">
               <thead>
                 <tr>
-                  <th>Nombre</th><th>Correo</th><th>Rol</th>
-                  <th>Último acceso</th><th>Estado</th><th>Acciones</th>
+                  <th>Usuario</th><th>Rol</th>
+                  <th>Último acceso</th><th>Estado</th><th></th>
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map(u => (
+                {filtrados.map(u => {
+                  const inicial = (u.nombre || "?").charAt(0).toUpperCase();
+                  return (
                   <tr key={u.id} className={!u.activo ? "fila-baja" : ""}>
+                    {/* Columna principal: avatar con inicial + nombre arriba,
+                        correo en gris debajo -- misma jerarquía que casas. */}
                     <td>
-                      {u.nombre} {u.apellido}
-                      {u.debe_cambiar_password && (
-                        <span className="badge-pendiente" title="Debe cambiar su contraseña">🔑</span>
-                      )}
+                      <div className="casa-cell">
+                        <span className={`casa-icono casa-icono--rol-${u.rol}`}>{inicial}</span>
+                        <div className="casa-cell-txt">
+                          <span className="casa-id">
+                            {u.nombre} {u.apellido}
+                            {u.debe_cambiar_password && (
+                              <span className="badge-pendiente" title="Debe cambiar su contraseña">🔑</span>
+                            )}
+                          </span>
+                          <span className="casa-titular">{u.email}</span>
+                        </div>
+                      </div>
                     </td>
-                    <td className="small">{u.email}</td>
                     <td><span className="pill">{ROL_LABEL[u.rol] || u.rol}</span></td>
                     <td className="small muted">{u.ultimo_acceso ? fechaRelativa(u.ultimo_acceso) : "Nunca"}</td>
                     <td>
@@ -134,28 +146,29 @@ export function UsuariosAdmin() {
                         : <span className="pill">Inactivo</span>}
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <div className="casa-acciones">
                         {(u.rol === "guardia" || u.rol === "cajero") && (
-                          <button className="btn-tabla btn-tabla-neutro"
-                            disabled={procesando === u.id}
+                          <button className="icono-accion" disabled={procesando === u.id}
                             onClick={() => reset(u)}
                             title="Generar nueva contraseña — guardias y cajeros usan credencial local, no correo">
-                            🔑 Reset clave
+                            <KeyRound size={16} />
                           </button>
                         )}
                         <button
-                          className={`btn-tabla ${u.activo ? "btn-tabla-baja" : "btn-tabla-ok"}`}
+                          className={`icono-accion ${u.activo ? "icono-accion--baja" : "icono-accion--ok"}`}
                           disabled={procesando === u.id}
-                          onClick={() => toggle(u)}>
-                          {procesando === u.id ? "…" : u.activo ? "Desactivar" : "Activar"}
+                          onClick={() => toggle(u)}
+                          title={u.activo ? "Desactivar" : "Activar"}>
+                          {u.activo ? <Ban size={16} /> : <CheckCircle size={16} />}
                         </button>
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
-          </div>
+          </div></div>
         )}
       </div>
 

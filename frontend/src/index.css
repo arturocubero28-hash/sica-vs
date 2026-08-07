@@ -3409,6 +3409,15 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 .casa-icono--casa     { background: #e0f2fe; color: #0369a1; }
 .casa-icono--edificio { background: #ede9fe; color: #6d28d9; }
 .casa-icono--apto     { background: #dcfce7; color: #15803d; }
+/* Día 55 — mismo componente de ícono reutilizado como avatar de usuario
+   (inicial del nombre), con color por rol. */
+.casa-icono--rol-admin, .casa-icono--rol-super_admin { background: #e0e7ff; color: #4338ca; }
+.casa-icono--rol-supervisor { background: #fef3c7; color: #92400e; }
+.casa-icono--rol-guardia    { background: #dbeafe; color: #1d4ed8; }
+.casa-icono--rol-cajero     { background: #dcfce7; color: #15803d; }
+.casa-icono--rol-residente  { background: #f1f5f9; color: #475569; }
+.casa-icono--rol-desarrollador { background: #fae8ff; color: #a21caf; }
+.casa-icono[class*="--rol-"] { font-weight: 700; font-size: 14px; }
 .casa-cell-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .casa-id {
   font-weight: 600; font-size: 14px; color: var(--marca-azul, #022E45);
