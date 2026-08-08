@@ -389,6 +389,31 @@ def create_app(config_class=Config):
             # pendiente; se enciende solo en la transición sin-cuotas ->
             # con-cuotas (ver marcar_config_cuotas_si_corresponde).
             "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS cuotas_config_pendiente BOOLEAN NOT NULL DEFAULT false",
+            # Día 55 — el CHECK constraint de la base topaba dia_pago en 28,
+            # así que guardar día 30 reventaba el commit con error 500 (el
+            # "<!doctype" que veía el frontend). Se busca el constraint por
+            # su definición (el nombre lo autogenera Postgres y puede variar)
+            # y se reemplaza por uno que permita 1..30. El bloque DO/plpgsql
+            # lo hace de forma segura aunque el constraint no exista o ya
+            # esté actualizado.
+            """DO $$
+               DECLARE cname text;
+               BEGIN
+                 SELECT conname INTO cname FROM pg_constraint
+                 WHERE conrelid = 'cuentas'::regclass
+                   AND contype = 'c'
+                   AND pg_get_constraintdef(oid) ILIKE '%dia_pago%28%';
+                 IF cname IS NOT NULL THEN
+                   EXECUTE 'ALTER TABLE cuentas DROP CONSTRAINT ' || quote_ident(cname);
+                 END IF;
+                 IF NOT EXISTS (
+                   SELECT 1 FROM pg_constraint
+                   WHERE conrelid = 'cuentas'::regclass AND conname = 'cuentas_dia_pago_check_30'
+                 ) THEN
+                   ALTER TABLE cuentas ADD CONSTRAINT cuentas_dia_pago_check_30
+                     CHECK (dia_pago BETWEEN 1 AND 30);
+                 END IF;
+               END $$;""",
             # Colores personalizables por residencial (Día 47). NULL =
             # usa el valor de fábrica (ver DEFAULT_COLOR_* en models/
             # residencial.py) — no hace falta backfill, a diferencia de

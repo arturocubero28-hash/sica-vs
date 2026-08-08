@@ -98,8 +98,8 @@ CREATE TABLE cuentas (
     unidad_id       BIGINT      NOT NULL REFERENCES unidades(id),
     apartamento     VARCHAR(40),                           -- NULL si es casa; "1A","2B" si es apto
     tarifa_id       BIGINT      NOT NULL REFERENCES tarifas(id),
-    dia_pago        SMALLINT    NOT NULL CHECK (dia_pago BETWEEN 1 AND 28),
-                                -- día del mes en que vence la cuota (autollenado al alta, modificable)
+    dia_pago        SMALLINT    NOT NULL CHECK (dia_pago BETWEEN 1 AND 30),
+                                -- día del mes en que vence la cuota (autollenado al alta, modificable). Día 55: 1..30 (mes comercial), el sistema ajusta a fin de mes real si no llega
     fecha_alta      DATE        NOT NULL DEFAULT CURRENT_DATE,
     estado          VARCHAR(20) NOT NULL DEFAULT 'al_dia',
                                 -- 'al_dia' | 'por_vencer' | 'vencida' | 'en_mora'(bloqueada)
