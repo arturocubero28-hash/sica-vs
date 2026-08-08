@@ -169,7 +169,7 @@ export function WizardActivarCuotas({ onCompletado }: { onCompletado: () => void
               <label className="campo-moderno">
                 <span className="campo-label">Día de pago del mes</span>
                 <select value={diaPago} onChange={(e) => setDiaPago(Number(e.target.value))}>
-                  {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                  {Array.from({ length: 30 }, (_, i) => i + 1).map((d) => (
                     <option key={d} value={d}>Día {d}</option>
                   ))}
                 </select>
@@ -185,8 +185,8 @@ export function WizardActivarCuotas({ onCompletado }: { onCompletado: () => void
               </label>
             </div>
             <div className="wizard-ejemplo">
-              La cuota se genera el <b>día {diaPago}</b> y el residente tiene hasta el{" "}
-              <b>día {Math.min(diaPago + diasGracia, 28)}</b> para pagar sin bloqueo.
+              La cuota vence el <b>día {diaPago}</b> de cada mes, y el residente tiene{" "}
+              <b>{diasGracia} día{diasGracia !== 1 ? "s" : ""}</b> de gracia antes de que se bloquee por mora.
             </div>
             <div className="wizard-acciones">
               <button onClick={guardarPaso1} disabled={guardando1}>

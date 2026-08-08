@@ -297,8 +297,8 @@ def crear_cuenta(usuario_actual):
         if not tarifa or not pertenece_a_mi_residencial(tarifa, usuario_actual):
             return _err("tarifa_invalida", "La tarifa indicada no existe", 400)
         dia_pago = data.get("dia_pago")
-        if not isinstance(dia_pago, int) or not (1 <= dia_pago <= 28):
-            return _err("dia_pago_invalido", "El día de pago debe estar entre 1 y 28", 400)
+        if not isinstance(dia_pago, int) or not (1 <= dia_pago <= 30):
+            return _err("dia_pago_invalido", "El día de pago debe estar entre 1 y 30", 400)
 
     apartamento = data.get("apartamento")
     if unidad.tipo == "edificio" and not apartamento and not es_solo_contenedor:
@@ -481,7 +481,7 @@ def editar_cuenta(usuario_actual, cuenta_uuid):
             cuenta.tipo_acceso_virtual = valor
     if "dia_pago" in body:
         dp = int(body["dia_pago"])
-        if 1 <= dp <= 28:
+        if 1 <= dp <= 30:
             cuenta.dia_pago = dp
     # Día 55 — edición de la info de una casa ya creada. Los tres campos
     # nuevos (tarifa, días de gracia, identificador) son de cuotas, así que
@@ -1264,7 +1264,7 @@ def editar_config_residencial(usuario_actual):
     cambio_dia = False
     if "dia_pago" in body:
         dp = int(body["dia_pago"])
-        if 1 <= dp <= 28:
+        if 1 <= dp <= 30:
             cfg.dia_pago = dp
             cambio_dia = True
     if "dias_gracia" in body:

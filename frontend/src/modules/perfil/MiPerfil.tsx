@@ -644,7 +644,7 @@ function ConfigPanel() {
             </label>
             <select value={diaPago} onChange={(e) => setDiaPago(Number(e.target.value))}
               style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)" }}>
-              {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+              {Array.from({ length: 30 }, (_, i) => i + 1).map(d => (
                 <option key={d} value={d}>Día {d}</option>
               ))}
             </select>
@@ -666,7 +666,7 @@ function ConfigPanel() {
           background: "var(--fondo)", borderRadius: 10, border: "1px solid var(--borde)" }}>
           <b>Ejemplo con la configuración actual:</b><br/>
           La cuota se genera el <b>día {diaPago}</b> de cada mes.
-          El residente tiene hasta el <b>día {Math.min(diaPago + diasGracia, 28)}</b> para pagar.
+          El residente tiene <b>{diasGracia} día{diasGracia !== 1 ? "s" : ""}</b> de gracia después del día de pago antes de que se bloquee por mora.
           Si no paga, su cuenta se bloquea automáticamente por mora.
         </div>
 

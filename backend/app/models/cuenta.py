@@ -85,7 +85,7 @@ class Cuenta(db.Model):
     unidad_id = db.Column(db.BigInteger, db.ForeignKey("unidades.id"), nullable=False)
     apartamento = db.Column(db.String(40))                 # NULL si es casa; "1A" si es apto
     tarifa_id = db.Column(db.BigInteger, db.ForeignKey("tarifas.id"), nullable=True)
-    dia_pago = db.Column(db.SmallInteger, nullable=True)   # 1..28 (null = cuenta contenedora sin cuota)
+    dia_pago = db.Column(db.SmallInteger, nullable=True)   # 1..30 (null = cuenta contenedora sin cuota). Mes comercial: si el mes real no llega al día, se ajusta al último día vía min(dia_pago, ultimo_dia)
     # Día 55 — días de gracia POR CASA. NULL = usa el valor global de la
     # residencial (ConfigResidencial.dias_gracia). Un número = override
     # individual, para el caso de un residente puntual que negoció un
