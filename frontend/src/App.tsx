@@ -12,7 +12,7 @@ import {
   loginConHuella, soportaHuella, estadisticasPublicas,
   type Usuario, type Rol,
 } from "./api/client";
-import { aplicarColoresResidencial } from "./utils/colores";
+import { aplicarColoresResidencial, restablecerColoresFabrica } from "./utils/colores";
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
 import { ResidentePortal } from "./modules/residente/ResidentePortal";
 import { GuardiaPanel } from "./modules/guardia/GuardiaPanel";
@@ -66,7 +66,15 @@ export function App() {
   }, [usuario]);
 
   function onLogin(u: Usuario) { setUsuario(u); setVista("login"); }
-  function onLogout() { logout(); setUsuario(null); setVista("landing"); }
+  function onLogout() {
+    logout();
+    setUsuario(null);
+    setVista("landing");
+    // Día 57 — limpiar los colores personalizados de la residencial al salir,
+    // para que las pantallas de landing/login no hereden el color de la
+    // sesión anterior (vuelven a los de fábrica).
+    restablecerColoresFabrica();
+  }
 
   if (cargando) return <div className="center">Cargando…</div>;
 

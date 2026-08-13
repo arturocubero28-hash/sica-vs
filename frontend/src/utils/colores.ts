@@ -64,3 +64,24 @@ function aclarar(hex: string, cantidad: number): string {
   };
   return `#${[canal(16), canal(8), canal(0)].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
 }
+
+/**
+ * Día 57 — restablece los colores de fábrica, quitando las variables CSS
+ * personalizadas que aplicarColoresResidencial haya inyectado en :root.
+ *
+ * Se llama al CERRAR SESIÓN. El problema que resuelve: aplicarColoresResidencial
+ * setea las variables inline en document.documentElement.style; si no se
+ * limpian, quedan pegadas y las pantallas de landing/login heredan los
+ * colores de la residencial de la sesión anterior.
+ *
+ * Se usa removeProperty (no setProperty con valores de fábrica): al quitar
+ * la variable inline, el CSS "cae" al valor de fábrica ya definido en el
+ * stylesheet base (:root en index.css, --marca-azul: #022E45, etc.). Así se
+ * vuelve exactamente al estado inicial sin hardcodear los valores acá.
+ */
+export function restablecerColoresFabrica() {
+  const raiz = document.documentElement.style;
+  for (const prop of ["--marca-azul", "--marca-azul-2", "--marca-naranja", "--azul", "--azul2"]) {
+    raiz.removeProperty(prop);
+  }
+}
