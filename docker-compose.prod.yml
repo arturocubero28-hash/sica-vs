@@ -1,0 +1,118 @@
+# =====================================================================
+# SICA-VS — Docker Compose de PRODUCCIÓN (VPS Hostinger)
+#
+# Diferencias clave contra docker-compose.yml (desarrollo):
+#   - NO expone los puertos de db/redis al exterior (solo accesibles
+#     entre contenedores, en la red interna de Docker) -- en desarrollo
+#     se exponían para poder conectarse con un cliente de BD local.
+#   - El backend NO sobreescribe el CMD del Dockerfile, así que corre
+#     con gunicorn (el default) en vez de "flask run --debug".
+#   - Sin volúmenes de hot-reload (./backend:/app) -- el código que
+#     corre es el que se copió al construir la imagen, no el del disco.
+#   - Todas las credenciales salen de un archivo .env (nunca de este
+#     archivo ni del repo) -- ver .env.example para la plantilla.
+#   - No incluye el contenedor de frontend: el frontend en producción es
+#     un build estático (vite build) servido por Nginx directamente
+#     desde el sistema de archivos del VPS, no por un contenedor.
+#
+# Primer arranque:
+#   1. cp .env.example .env   y completar TODOS los valores
+#   2. docker compose -f docker-compose.prod.yml up -d --build
+#   3. Ver deploy/GUIA_DEPLOY.md para los pasos de Nginx/Certbot/frontend
+#
+# Actualizar código después de un cambio (git pull ya hecho):
+#   docker compose -f docker-compose.prod.yml up -d --build backend worker
+# =====================================================================
+services:
+
+  db:
+    image: postgres:15
+    container_name: sicavs_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sicavs}
+      POSTGRES_USER: ${POSTGRES_USER:-sicavs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/migrations/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./backend/migrations/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sicavs}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # Sin "ports": — solo accesible desde otros contenedores de esta red.
+    # Si alguna vez hace falta entrar con un cliente de BD desde afuera,
+    # usar un túnel SSH puntual en vez de dejar el puerto abierto siempre:
+    #   ssh -L 5432:localhost:5432 root@<ip-del-vps>
+
+  redis:
+    image: redis:7-alpine
+    container_name: sicavs_redis
+    restart: unless-stopped
+    # Sin "ports": — mismo criterio que la base de datos.
+
+  backend:
+    build: ./backend
+    container_name: sicavs_backend
+    restart: unless-stopped
+    # Sin "command": — usa el CMD del Dockerfile (gunicorn), no flask run.
+    # Publicado solo en 127.0.0.1: Nginx (fuera de Docker, en el propio
+    # VPS) le hace proxy_pass por localhost; no queda expuesto a Internet
+    # directo en el puerto 5000.
+    ports:
+      - "127.0.0.1:5000:5000"
+    environment:
+      FLASK_APP: wsgi.py
+      SICAVS_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sicavs}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sicavs}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?falta JWT_SECRET en .env}
+      JWT_EXPIRES_HOURS: ${JWT_EXPIRES_HOURS:-12}
+      CORS_ORIGINS: ${CORS_ORIGINS:?falta CORS_ORIGINS en .env, ej. https://patronatovillasdelsol.com}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?falta WEBAUTHN_RP_ID en .env, ej. patronatovillasdelsol.com}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:?falta WEBAUTHN_ORIGIN en .env, ej. https://patronatovillasdelsol.com}
+      WEBAUTHN_RP_NAME: SICA-VS
+      # Almacenamiento de archivos — DigitalOcean Spaces (decisión Día 58,
+      # por riesgo de que el disco del VPS se llene y tumbe el servidor).
+      STORAGE_BACKEND: spaces
+      SPACES_KEY: ${SPACES_KEY:?falta SPACES_KEY en .env}
+      SPACES_SECRET: ${SPACES_SECRET:?falta SPACES_SECRET en .env}
+      SPACES_BUCKET: ${SPACES_BUCKET:?falta SPACES_BUCKET en .env}
+      SPACES_REGION: ${SPACES_REGION:-nyc3}
+      SPACES_CDN_URL: ${SPACES_CDN_URL:?falta SPACES_CDN_URL en .env}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      LOGO_URL: ${LOGO_URL:-}
+      GOOGLE_ISSUER_ID: ${GOOGLE_ISSUER_ID:-}
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
+      GOOGLE_SERVICE_ACCOUNT_KEY: ${GOOGLE_SERVICE_ACCOUNT_KEY:-}
+      RATE_LIMIT_DEFAULT: ${RATE_LIMIT_DEFAULT:-600 per hour}
+      LOGIN_RATE_LIMIT_OVERRIDE: ${LOGIN_RATE_LIMIT_OVERRIDE:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    build: ./backend
+    container_name: sicavs_worker
+    restart: unless-stopped
+    command: celery -A app.tasks.celery_app.celery worker --beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sicavs}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sicavs}
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_BACKEND: spaces
+      SPACES_KEY: ${SPACES_KEY}
+      SPACES_SECRET: ${SPACES_SECRET}
+      SPACES_BUCKET: ${SPACES_BUCKET}
+      SPACES_REGION: ${SPACES_REGION:-nyc3}
+      SPACES_CDN_URL: ${SPACES_CDN_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+    depends_on:
+      - backend
+      - redis
+
+volumes:
+  pgdata:
