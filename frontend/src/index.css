@@ -2588,12 +2588,26 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   display: inline-flex; align-items: center; gap: 7px; }
 .htab.activo { color: var(--marca-naranja); border-bottom-color: var(--marca-naranja); }
 .htab:hover {
-  color: var(--marca-azul);
+  /* Día 59 — el arreglo del Día 53 (comentario de abajo) quedó incompleto:
+     le puso !important al fondo pero no al color, y por eso el texto SEGUÍA
+     perdiendo contra el button:hover global. La razón es sutil: en
+     especificidad CSS, :not(:disabled) cuenta como una clase más (no como
+     "nada"), así que button:hover:not(:disabled) EMPATA con .htab:hover en
+     ese nivel -- y en un empate, gana quien tenga más selectores de
+     ELEMENTO (button cuenta 1; .htab no tiene ninguno). El global ganaba el
+     color aunque .htab:hover perdiera el fondo -- texto blanco sobre fondo
+     transparente, invisible (justo lo que reportó el usuario: "no se lee
+     lo que dicen"). Se agrega !important también al color, y se cubre
+     aparte el caso de pasar el mouse sobre la pestaña YA activa (antes
+     hubiera quedado blanca también, por el mismo motivo). */
+  color: var(--marca-azul) !important;
   /* Mismo bug que .detalle-tabs (Día 53): sin esto, hereda el fondo azul
      del button:hover global -- texto azul sobre fondo azul, ilegible. */
   background: none !important;
   transform: none !important;
+  box-shadow: none !important;
 }
+.htab.activo:hover { color: var(--marca-naranja) !important; }
 
 /* Arreglos de pago */
 .cuotas-check-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto;
@@ -3291,10 +3305,15 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   transition: color .15s, border-color .15s;
 }
 .detalle-tabs button:hover {
-  color: var(--marca-azul);
+  color: var(--marca-azul) !important;
   /* El botón global (button:hover) pone fondo azul + texto blanco por
      defecto -- acá se anula el fondo para que solo cambie el color de
-     texto (bug real: quedaba texto azul sobre fondo azul, ilegible). */
+     texto (bug real: quedaba texto azul sobre fondo azul, ilegible).
+     Día 59: el color también se refuerza con !important -- sin esto,
+     esta regla le empataba en especificidad al button:hover global y
+     ganaba solo por estar más abajo en el archivo (orden de cascada);
+     funcionaba de casualidad, no por diseño, y cualquier reordenamiento
+     futuro del CSS lo hubiera roto en silencio (como pasó con .htab). */
   background: none !important;
   transform: none !important;
 }
