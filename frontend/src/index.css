@@ -928,7 +928,8 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .lp-v2.tema-claro .lp-pilar-content { border: 1px solid #eeede8; }
 .lp-v2.tema-claro .lp-stats { box-shadow: 0 4px 20px rgba(2,46,69,.05); }
 .lp-v2.tema-claro .lp-nav-btn-v2 { background: var(--marca-naranja); color: #fff; }
-.lp-v2.tema-claro .lp-tema-btn { background: #fff; border-color: #e3e9f2; }
+/* .lp-tema-btn (fondo + color del ícono en modo claro) se define más abajo,
+   junto a su comentario, para no repetir la regla en dos lugares. */
 /* La banda y el cierre se mantienen oscuros (azul de marca) en ambos temas,
    así que sus textos siguen claros — no se tocan. */
 
@@ -1081,6 +1082,33 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 /* En modo oscuro la sombra del texto va oscura (para que resalte sobre claro de la foto) */
 .lp-v2.tema-claro .lp-brand-name, .lp-v2.tema-claro .lp-brand-sub { text-shadow: 0 1px 6px rgba(255,255,255,0.8); }
 
+/* Día 59 — mientras el nav flota SIN scroll, está siempre encima de la foto
+   del hero (o del degradado de respaldo si la residencial no subió foto), y
+   el texto de marca dependía solo de un text-shadow sutil para el contraste
+   -- insuficiente contra una foto con zonas claras y oscuras a la vez (el
+   nombre "Villas del Sol" quedaba casi ilegible). En vez de intentar
+   adivinar el color según lo que haya detrás, se le da al texto su propio
+   respaldo (chip oscuro con blur) que funciona igual sin importar la
+   imagen ni el tema -- una vez que el usuario hace scroll, el nav ya tiene
+   su propio fondo sólido (.scrolled) y ahí sí alcanza con el color del
+   tema normal, así que este respaldo extra se quita.
+*/
+.lp-nav-v2:not(.scrolled) .lp-brand-text {
+  background: rgba(10, 14, 23, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 5px 12px;
+  border-radius: 10px;
+}
+.lp-nav-v2:not(.scrolled) .lp-brand-name {
+  color: #fff;
+  text-shadow: none;
+}
+.lp-nav-v2:not(.scrolled) .lp-brand-sub {
+  color: rgba(255,255,255,0.75);
+  text-shadow: none;
+}
+
 .lp-nav-btn-v2 {
   display: flex;
   align-items: center;
@@ -1111,8 +1139,18 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   font-size: 17px; cursor: pointer; background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.1); transition: all .25s cubic-bezier(0.16,0.84,0.44,1);
   backdrop-filter: blur(10px); padding: 0;
+  color: #fff; /* Sol/luna en modo oscuro: el botón queda semitransparente sobre la foto, ícono blanco visible. */
 }
 .lp-tema-btn:hover { transform: translateY(-1px) rotate(12deg); border-color: rgba(244,135,35,0.4); }
+/* Día 59 — bug real: en modo claro el botón pasa a fondo blanco (línea de
+   abajo), pero nada anulaba el color:#fff que pone el estilo GLOBAL de
+   <button> (ver el bloque `button { ... color: #fff ... }` cerca del
+   principio de este archivo) -- resultado: luna blanca sobre círculo
+   blanco, invisible (el usuario solo veía un cuadrito en blanco). En modo
+   oscuro no se notaba porque el sol blanco sí resalta sobre el fondo
+   oscuro/transparente. Se fuerza el color acá, con más especificidad que
+   la regla global. */
+.lp-v2.tema-claro .lp-tema-btn { background: #fff; border-color: #e3e9f2; color: var(--marca-azul, #022E45); }
 
 /* ---- Hero V2 ---- */
 .lp-hero-v2 {
@@ -1714,6 +1752,16 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   font-size: 12px;
   color: rgba(255,255,255,0.3);
 }
+
+/* Día 59 — el mismo bug que el nav de arriba, pero acá el footer NO tenía
+   ningún respaldo (chip/foto) que disimulara el problema: los colores
+   estaban fijos en blanco (pensados solo para el fondo oscuro del footer
+   en tema oscuro), sin ninguna variante para tema claro. En tema claro el
+   footer tiene fondo claro (--lp-bg claro), así que ese texto casi blanco
+   quedaba prácticamente invisible -- "Residencial Villas del Sol" ilegible,
+   igual que arriba. */
+.lp-v2.tema-claro .lp-footer-brand-v2 span:first-child { color: rgba(2,46,69,0.75); }
+.lp-v2.tema-claro .lp-footer-brand-v2 span:last-child { color: rgba(2,46,69,0.45); }
 
 .lp-footer-year {
   font-size: 13px;
