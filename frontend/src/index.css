@@ -3947,3 +3947,28 @@ input.input-error, select.input-error, textarea.input-error {
   background: #fef2d5; border-color: #f3d99a;
 }
 .dev-residencial-seccion.sin-asignar .dev-residencial-header-ic { background: #b45309; }
+
+/* Día 59 — "Datos personales": reemplaza el patrón viejo de columna
+   (etiqueta arriba, valor abajo) que se veía desalineado en producción,
+   por filas horizontales explícitas -- ícono + etiqueta a la izquierda,
+   valor en negrita a la derecha, separadas por una línea fina. Patrón
+   robusto tipo "fila de ajustes" (el mismo lenguaje que usan la mayoría
+   de apps de configuración), sin ambigüedad de alineación. */
+.perfil-campos-lista { display: flex; flex-direction: column; }
+.perfil-campo-fila {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0; border-bottom: 1px solid #eef2f8; gap: 16px; flex-wrap: wrap;
+}
+.perfil-campo-fila:last-child { border-bottom: none; }
+.perfil-campo-etiqueta {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; color: #6b7280; font-weight: 500; flex-shrink: 0;
+}
+.perfil-campo-valor {
+  font-size: 14.5px; font-weight: 700; color: var(--marca-azul, #022E45);
+  text-align: right; word-break: break-word;
+}
+@media (max-width: 480px) {
+  .perfil-campo-fila { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .perfil-campo-valor { text-align: left; }
+}

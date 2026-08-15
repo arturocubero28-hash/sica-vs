@@ -11,7 +11,7 @@ import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesion
   type SuscripcionPagoDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
 import { aplicarColoresResidencial } from "../../utils/colores";
-import { Fingerprint, Home, Users, HardDrive, CreditCard, TrendingUp, AlertOctagon, AlertTriangle, Lock, Check, CheckCircle2, ArrowRight, Sparkles, User, Settings, DoorOpen, Calendar, Info, Building2, Palette, KeyRound, Laptop2 } from "lucide-react";
+import { Fingerprint, Home, Users, HardDrive, CreditCard, TrendingUp, AlertOctagon, AlertTriangle, Lock, Check, CheckCircle2, ArrowRight, Sparkles, User, Settings, DoorOpen, Calendar, Info, Building2, Palette, KeyRound, Laptop2, Mail, Phone } from "lucide-react";
 
 // Día 47 — colores de fábrica, deben coincidir con backend/app/models/
 // residencial.py (DEFAULT_COLOR_PRIMARIO/SECUNDARIO). Solo se usan acá
@@ -89,26 +89,31 @@ export function MiPerfil() {
 }
 
 function DatosForm({ usuario }: { usuario: Usuario }) {
+  // Día 59 — se reemplaza el patrón viejo (.perfil-info-grid, etiqueta
+  // arriba/valor abajo en columna) por filas horizontales explícitas: cada
+  // campo es UNA fila con ícono + etiqueta a la izquierda y el valor a la
+  // derecha, separadas por una línea divisoria. Además de verse más
+  // moderno, es un layout más robusto (menos casos raros de alineación
+  // que el anterior, que se veía desalineado en producción).
+  const campos: { icono: JSX.Element; etiqueta: string; valor: string }[] = [
+    { icono: <User size={15} />, etiqueta: "Nombre", valor: `${usuario.nombre} ${usuario.apellido}` },
+    { icono: <Mail size={15} />, etiqueta: "Correo", valor: usuario.email },
+  ];
+  if (usuario.telefono) {
+    campos.push({ icono: <Phone size={15} />, etiqueta: "Teléfono", valor: usuario.telefono });
+  }
   return (
     <div className="dash-card">
       <h3><User size={16} /> Datos personales</h3>
-      <div className="perfil-info-grid">
-        <div className="perfil-info-item">
-          <span className="muted small">Nombre</span>
-          <b>{usuario.nombre} {usuario.apellido}</b>
-        </div>
-        <div className="perfil-info-item">
-          <span className="muted small">Correo</span>
-          <b>{usuario.email}</b>
-        </div>
-        {usuario.telefono && (
-          <div className="perfil-info-item">
-            <span className="muted small">Teléfono</span>
-            <b>{usuario.telefono}</b>
+      <div className="perfil-campos-lista">
+        {campos.map((c) => (
+          <div className="perfil-campo-fila" key={c.etiqueta}>
+            <span className="perfil-campo-etiqueta">{c.icono} {c.etiqueta}</span>
+            <span className="perfil-campo-valor">{c.valor}</span>
           </div>
-        )}
+        ))}
       </div>
-      <p className="muted small" style={{ marginTop: 10 }}>
+      <p className="muted small" style={{ marginTop: 12 }}>
         Para cambiar estos datos, contactá a la administración.
       </p>
     </div>
