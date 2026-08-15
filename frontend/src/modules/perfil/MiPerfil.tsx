@@ -11,7 +11,7 @@ import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesion
   type SuscripcionPagoDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
 import { aplicarColoresResidencial } from "../../utils/colores";
-import { Fingerprint, Home, Users, HardDrive, CreditCard, TrendingUp, AlertOctagon, AlertTriangle, Lock, Check, CheckCircle2, ArrowRight, Sparkles } from "lucide-react";
+import { Fingerprint, Home, Users, HardDrive, CreditCard, TrendingUp, AlertOctagon, AlertTriangle, Lock, Check, CheckCircle2, ArrowRight, Sparkles, User, Settings, DoorOpen, Calendar, Info, Building2, Palette, KeyRound, Laptop2 } from "lucide-react";
 
 // Día 47 — colores de fábrica, deben coincidir con backend/app/models/
 // residencial.py (DEFAULT_COLOR_PRIMARIO/SECUNDARIO). Solo se usan acá
@@ -44,11 +44,17 @@ export function MiPerfil() {
       {esAdmin && (
         <div className="tab-bar" style={{ display: "flex", gap: 0, marginBottom: 18 }}>
           <button className={`tab-btn ${tab === "perfil" ? "active" : ""}`}
-            onClick={() => setTab("perfil")}>Mi perfil</button>
+            onClick={() => setTab("perfil")}>
+            <span className="tab-bar-icon"><User size={15} /> Mi perfil</span>
+          </button>
           <button className={`tab-btn ${tab === "config" ? "active" : ""}`}
-            onClick={() => setTab("config")}>⚙ Configuraciones</button>
+            onClick={() => setTab("config")}>
+            <span className="tab-bar-icon"><Settings size={15} /> Configuraciones</span>
+          </button>
           <button className={`tab-btn ${tab === "accesos" ? "active" : ""}`}
-            onClick={() => setTab("accesos")}>🚧 Puntos de acceso</button>
+            onClick={() => setTab("accesos")}>
+            <span className="tab-bar-icon"><DoorOpen size={15} /> Puntos de acceso</span>
+          </button>
           {esDueno && (
             <button className={`tab-btn ${tab === "cuenta" ? "active" : ""}`}
               onClick={() => setTab("cuenta")}><CreditCard size={16} /> Mi cuenta</button>
@@ -85,7 +91,7 @@ export function MiPerfil() {
 function DatosForm({ usuario }: { usuario: Usuario }) {
   return (
     <div className="dash-card">
-      <h3>Datos personales</h3>
+      <h3><User size={16} /> Datos personales</h3>
       <div className="perfil-info-grid">
         <div className="perfil-info-item">
           <span className="muted small">Nombre</span>
@@ -131,7 +137,7 @@ function PasswordForm() {
 
   return (
     <div className="dash-card">
-      <h3>Cambiar contraseña</h3>
+      <h3><KeyRound size={16} /> Cambiar contraseña</h3>
       <div className="form-pago">
         <div className="form-field"><label>Contraseña actual</label>
           <input type="password" value={actual} onChange={e => setActual(e.target.value)} /></div>
@@ -189,7 +195,7 @@ function SesionesForm() {
 
   return (
     <div className="dash-card">
-      <h3>Dispositivos conectados</h3>
+      <h3><Laptop2 size={16} /> Dispositivos conectados</h3>
       <p className="muted small">Estos son los dispositivos donde tu cuenta tiene sesión abierta.
         Si no reconocés alguno, cerralo.</p>
 
@@ -630,31 +636,27 @@ function ConfigPanel() {
         <p className="muted">Cargando configuración…</p>
       ) : (
       <>
-      <div className="dash-card">
-        <h3>📅 Cobro mensual</h3>
-        <p className="muted small" style={{ marginBottom: 12 }}>
-          Estos valores aplican a <b>todas las cuentas</b> de la residencial.
-          Si cambiás el día de pago, se actualiza automáticamente en todas.
-        </p>
+      <div className="config-card">
+        <div className="config-card-head">
+          <span className="config-card-icon"><Calendar size={18} /></span>
+          <div className="config-card-titles">
+            <h3>Cobro mensual</h3>
+            <p>Estos valores aplican a <b>todas las cuentas</b> de la residencial. Si cambiás el día de pago, se actualiza automáticamente en todas.</p>
+          </div>
+        </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 420 }}>
-          <div>
-            <label className="small muted" style={{ display: "block", marginBottom: 4 }}>
-              Día de pago del mes
-            </label>
-            <select value={diaPago} onChange={(e) => setDiaPago(Number(e.target.value))}
-              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)" }}>
+        <div className="config-grid-2">
+          <div className="config-field">
+            <label>Día de pago del mes</label>
+            <select value={diaPago} onChange={(e) => setDiaPago(Number(e.target.value))}>
               {Array.from({ length: 30 }, (_, i) => i + 1).map(d => (
                 <option key={d} value={d}>Día {d}</option>
               ))}
             </select>
           </div>
-          <div>
-            <label className="small muted" style={{ display: "block", marginBottom: 4 }}>
-              Días de gracia después del vencimiento
-            </label>
-            <select value={diasGracia} onChange={(e) => setDiasGracia(Number(e.target.value))}
-              style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)" }}>
+          <div className="config-field">
+            <label>Días de gracia después del vencimiento</label>
+            <select value={diasGracia} onChange={(e) => setDiasGracia(Number(e.target.value))}>
               {Array.from({ length: 16 }, (_, i) => i).map(d => (
                 <option key={d} value={d}>{d} día{d !== 1 ? "s" : ""}</option>
               ))}
@@ -662,17 +664,15 @@ function ConfigPanel() {
           </div>
         </div>
 
-        <div className="muted small" style={{ marginTop: 12, padding: "10px 14px",
-          background: "var(--fondo)", borderRadius: 10, border: "1px solid var(--borde)" }}>
+        <div className="config-ejemplo">
           <b>Ejemplo con la configuración actual:</b><br/>
           La cuota se genera el <b>día {diaPago}</b> de cada mes.
           El residente tiene <b>{diasGracia} día{diasGracia !== 1 ? "s" : ""}</b> de gracia después del día de pago antes de que se bloquee por mora.
           Si no paga, su cuenta se bloquea automáticamente por mora.
         </div>
 
-        <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={guardar} disabled={guardando}
-            style={{ padding: "10px 24px" }}>
+        <div className="config-acciones">
+          <button onClick={guardar} disabled={guardando}>
             {guardando ? "Guardando…" : "Guardar configuración"}
           </button>
           {msg && <span className="ok" style={{ fontSize: 13 }}>{msg}</span>}
@@ -686,15 +686,21 @@ function ConfigPanel() {
         )}
       </div>
 
-      <div className="dash-card" style={{ marginTop: 16 }}>
-        <h3>ℹ️ Sobre estas configuraciones</h3>
-        <div className="muted small" style={{ lineHeight: 1.6 }}>
-          <p><b>Día de pago:</b> Es el día del mes en que se genera la cuota a cada cuenta.
+      <div className="config-card">
+        <div className="config-card-head">
+          <span className="config-card-icon"><Info size={18} /></span>
+          <div className="config-card-titles">
+            <h3>Sobre estas configuraciones</h3>
+            <p>Qué hace cada valor, en simple.</p>
+          </div>
+        </div>
+        <div className="config-help-list">
+          <p><b>Día de pago:</b> es el día del mes en que se genera la cuota a cada cuenta.
           Al cambiarlo, se actualiza en todas las cuentas activas de forma inmediata.</p>
-          <p><b>Días de gracia:</b> Después del día de pago, el residente tiene esta cantidad
+          <p><b>Días de gracia:</b> después del día de pago, el residente tiene esta cantidad
           de días adicionales para pagar sin que su cuenta se bloquee. Si al vencer los días
           de gracia no ha pagado, la cuenta se bloquea automáticamente por mora.</p>
-          <p><b>Prorrateo:</b> Cuando se da de alta una cuenta nueva a mitad de mes, la primera
+          <p><b>Prorrateo:</b> cuando se da de alta una cuenta nueva a mitad de mes, la primera
           cuota se calcula proporcionalmente (los días restantes del mes, usando mes comercial
           de 30 días).</p>
         </div>
@@ -811,32 +817,33 @@ function MiResidencialPanel() {
     // Sin residencial asignada — no debería pasar para un admin normal,
     // pero se muestra un mensaje claro en vez de una pantalla en blanco.
     return (
-      <div className="dash-card" style={{ marginBottom: 16 }}>
-        <h3>🏘️ Mi residencial</h3>
-        <p className="muted small">
-          Tu usuario todavía no tiene una residencial asignada. Contactá al desarrollador.
-        </p>
+      <div className="config-card">
+        <div className="config-card-head">
+          <span className="config-card-icon"><Building2 size={18} /></span>
+          <div className="config-card-titles">
+            <h3>Mi residencial</h3>
+            <p>Tu usuario todavía no tiene una residencial asignada. Contactá al desarrollador.</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="dash-card" style={{ marginBottom: 16 }}>
-      <h3>🏘️ Mi residencial</h3>
-      <p className="muted small" style={{ marginBottom: 14 }}>
-        Nombre y logo que se muestran en la app, la web y los recibos.
-      </p>
+    <div className="config-card">
+      <div className="config-card-head">
+        <span className="config-card-icon"><Building2 size={18} /></span>
+        <div className="config-card-titles">
+          <h3>Mi residencial</h3>
+          <p>Nombre y logo que se muestran en la app, la web y los recibos.</p>
+        </div>
+      </div>
 
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div className="residencial-top">
         <div style={{ textAlign: "center" }}>
-          <div style={{
-            width: 96, height: 96, borderRadius: 16, border: "1px solid var(--borde)",
-            background: "var(--fondo)", display: "flex", alignItems: "center", justifyContent: "center",
-            overflow: "hidden", marginBottom: 8,
-          }}>
+          <div className="residencial-logo-box">
             {res.logo_archivo
-              ? <img src={urlLogoResidencial(res.logo_archivo)} alt="Logo"
-                  style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              ? <img src={urlLogoResidencial(res.logo_archivo)} alt="Logo" />
               : <span className="muted small">Sin logo</span>}
           </div>
           <button onClick={() => inputRef.current?.click()} disabled={subiendoLogo}
@@ -847,15 +854,12 @@ function MiResidencialPanel() {
             style={{ display: "none" }} onChange={onLogoSeleccionado} />
         </div>
 
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <label className="small muted" style={{ display: "block", marginBottom: 4 }}>
-            Nombre de la residencial
-          </label>
+        <div className="residencial-nombre-field config-field">
+          <label>Nombre de la residencial</label>
           <div style={{ display: "flex", gap: 8 }}>
             <input value={nombre} onChange={(e) => setNombre(e.target.value)}
-              style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)" }} />
-            <button onClick={guardarNombre} disabled={guardando || nombre.trim() === res.nombre}
-              style={{ padding: "8px 16px" }}>
+              style={{ flex: 1 }} />
+            <button onClick={guardarNombre} disabled={guardando || nombre.trim() === res.nombre}>
               {guardando ? "…" : "Guardar"}
             </button>
           </div>
@@ -873,40 +877,37 @@ function MiResidencialPanel() {
           botones, pestañas) antes de decidir guardar. Solo se persiste al
           apretar "Guardar colores" — si navega sin guardar, la próxima
           carga de sesión vuelve a aplicar lo que esté guardado de verdad. */}
-      <div style={{ borderTop: "1px solid var(--borde)", marginTop: 18, paddingTop: 16 }}>
-        <label className="small muted" style={{ display: "block", marginBottom: 8 }}>
-          Colores de la residencial
+      <div className="residencial-colores">
+        <label className="small muted" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, fontWeight: 600 }}>
+          <Palette size={14} /> Colores de la residencial
         </label>
         <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="color-opcion">
             <input type="color" value={colorPrimario}
-              onChange={(e) => { setColorPrimario(e.target.value); aplicarColoresResidencial(e.target.value, colorSecundario); }}
-              style={{ width: 44, height: 34, padding: 2, borderRadius: 8, border: "1px solid var(--borde)", cursor: "pointer" }} />
+              onChange={(e) => { setColorPrimario(e.target.value); aplicarColoresResidencial(e.target.value, colorSecundario); }} />
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>Primario</div>
+              <div className="color-opcion-nombre">Primario</div>
               <div className="muted small">El que más resalta (barra lateral, botones)</div>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="color-opcion">
             <input type="color" value={colorSecundario}
-              onChange={(e) => { setColorSecundario(e.target.value); aplicarColoresResidencial(colorPrimario, e.target.value); }}
-              style={{ width: 44, height: 34, padding: 2, borderRadius: 8, border: "1px solid var(--borde)", cursor: "pointer" }} />
+              onChange={(e) => { setColorSecundario(e.target.value); aplicarColoresResidencial(colorPrimario, e.target.value); }} />
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>Secundario</div>
+              <div className="color-opcion-nombre">Secundario</div>
               <div className="muted small">Color de acento (detalles, resaltados)</div>
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+        <div className="config-acciones" style={{ marginTop: 12 }}>
           <button onClick={guardarColores}
             disabled={guardandoColores || (
               colorPrimario.toUpperCase() === res.color_primario.toUpperCase()
               && colorSecundario.toUpperCase() === res.color_secundario.toUpperCase()
-            )}
-            style={{ padding: "8px 16px" }}>
+            )}>
             {guardandoColores ? "…" : "Guardar colores"}
           </button>
-          <button onClick={restablecerColores} disabled={guardandoColores} className="ghost" style={{ padding: "8px 16px" }}>
+          <button onClick={restablecerColores} disabled={guardandoColores} className="ghost">
             Restablecer a los de fábrica
           </button>
         </div>
