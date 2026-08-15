@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { historialAccesos, historialPagos, historialTarjetas, urlFotoGuardia, urlReciboPDF, urlComprobante, type HistorialDTO, type HistorialPagosDTO, type HistorialTarjetasDTO, type EventoHistorialDTO } from "../../api/client";
 import { L } from "../../utils/formato";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
-import { Camera, Car, DollarSign, Footprints, IdCard, Paperclip, QrCode, Receipt, ScrollText } from "lucide-react";
+import { useMiResidencial } from "../../hooks/useMiResidencial";
+import { dibujarEncabezadoReportePDF, NARANJA_TABLA_PDF } from "../../utils/pdfReporte";
+import { Camera, Car, DollarSign, Download, FileSpreadsheet, Footprints, IdCard, Paperclip, QrCode, Receipt, ScrollText } from "lucide-react";
 
 export function HistorialAccesos() {
   const [tab, setTab] = useState<"accesos" | "tarjetas" | "pagos">("accesos");
@@ -31,6 +33,7 @@ export function HistorialAccesos() {
 }
 
 function TabAccesos() {
+  const { nombre: nombreResidencial } = useMiResidencial();
   const [data, setData] = useState<HistorialDTO | null>(null);
   const [cargando, setCargando] = useState(true);
   const [desde, setDesde] = useState("");
@@ -40,6 +43,7 @@ function TabAccesos() {
   const [buscar, setBuscar] = useState("");
   const [pagina, setPagina] = useState(1);
   const [detalleVer, setDetalleVer] = useState<EventoHistorialDTO | null>(null);
+  const [exportando, setExportando] = useState<"pdf" | "excel" | "">("");
 
   function cargar() {
     setCargando(true);
@@ -55,6 +59,57 @@ function TabAccesos() {
   function limpiar() {
     setDesde(""); setHasta(""); setDireccion(""); setEstado(""); setBuscar(""); setPagina(1);
     setTimeout(cargar, 0);
+  }
+
+  // Día 59 — exportar respeta los filtros aplicados en pantalla, pero trae
+  // TODOS los eventos que coinciden (no solo la página visible) con
+  // ?todos=1 — si no, un reporte "filtrado" solo mostraría 30 filas.
+  async function exportarPDF() {
+    setExportando("pdf");
+    try {
+      const completo = await historialAccesos({ desde, hasta, direccion, estado, buscar, todos: true });
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      const doc = new jsPDF();
+      dibujarEncabezadoReportePDF(doc, "Historial de accesos de visitas", nombreResidencial || "");
+      doc.setFontSize(10);
+      doc.text(`${completo.eventos.length} evento(s)${desde || hasta ? ` · ${desde || "…"} a ${hasta || "…"}` : ""}`, 14, 36);
+      autoTable(doc, {
+        startY: 42,
+        head: [["Fecha / Hora", "Dirección", "Visitante", "Unidad", "Acceso", "Placa", "Guardia"]],
+        body: completo.eventos.map(e => [
+          new Date(e.ocurrido_en).toLocaleString("es-HN"),
+          e.direccion === "entrada" ? "Entrada" : "Salida",
+          e.visitante, e.unidad, e.punto_acceso || "—",
+          e.en_vehiculo ? (e.placa || "—") : "Peatonal",
+          e.guardia,
+        ]),
+        headStyles: { fillColor: NARANJA_TABLA_PDF },
+        styles: { fontSize: 8 },
+      });
+      doc.save(`historial-accesos-visitas-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } finally { setExportando(""); }
+  }
+
+  async function exportarExcel() {
+    setExportando("excel");
+    try {
+      const completo = await historialAccesos({ desde, hasta, direccion, estado, buscar, todos: true });
+      const XLSX = await import("xlsx");
+      const filas = [
+        ["Fecha / Hora", "Dirección", "Visitante", "Unidad", "Acceso", "Placa", "Guardia"],
+        ...completo.eventos.map(e => [
+          new Date(e.ocurrido_en).toLocaleString("es-HN"),
+          e.direccion === "entrada" ? "Entrada" : "Salida",
+          e.visitante, e.unidad, e.punto_acceso || "—",
+          e.en_vehiculo ? (e.placa || "—") : "Peatonal",
+          e.guardia,
+        ]),
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filas), "Accesos de visitas");
+      XLSX.writeFile(wb, `historial-accesos-visitas-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } finally { setExportando(""); }
   }
 
   return (
@@ -92,6 +147,12 @@ function TabAccesos() {
         <div className="filtro-botones">
           <button className="cuota-btn-pagar" style={{ maxWidth: 110 }} onClick={aplicarFiltros}>Filtrar</button>
           <button className="ghost mini" onClick={limpiar}>Limpiar</button>
+          <button className="ghost mini" onClick={exportarPDF} disabled={!!exportando}>
+            <Download size={14} /> {exportando === "pdf" ? "…" : "PDF"}
+          </button>
+          <button className="ghost mini" onClick={exportarExcel} disabled={!!exportando}>
+            <FileSpreadsheet size={14} /> {exportando === "excel" ? "…" : "Excel"}
+          </button>
         </div>
       </div>
 
@@ -243,6 +304,7 @@ const METODO_LABEL: Record<string, string> = {
 };
 
 function TabPagos() {
+  const { nombre: nombreResidencial } = useMiResidencial();
   const [data, setData] = useState<HistorialPagosDTO | null>(null);
   const [cargando, setCargando] = useState(true);
   const [desde, setDesde] = useState("");
@@ -251,6 +313,7 @@ function TabPagos() {
   const [buscar, setBuscar] = useState("");
   const [pagina, setPagina] = useState(1);
   const [errorPlan, setErrorPlan] = useState("");
+  const [exportando, setExportando] = useState<"pdf" | "excel" | "">("");
 
   function cargar() {
     setCargando(true);
@@ -262,6 +325,55 @@ function TabPagos() {
   if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
 
   function aplicarFiltros() { setPagina(1); cargar(); }
+
+  async function exportarPDF() {
+    setExportando("pdf");
+    try {
+      const completo = await historialPagos({ desde, hasta, metodo, buscar, todos: true });
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      const doc = new jsPDF();
+      dibujarEncabezadoReportePDF(doc, "Historial de pagos", nombreResidencial || "");
+      doc.setFontSize(10);
+      doc.text(`${completo.pagos.length} pago(s)${desde || hasta ? ` · ${desde || "…"} a ${hasta || "…"}` : ""}`, 14, 36);
+      autoTable(doc, {
+        startY: 42,
+        head: [["Fecha / Hora", "Casa", "Titular", "Monto", "Método", "Cobrado por"]],
+        body: completo.pagos.map(p => [
+          new Date(p.fecha).toLocaleString("es-HN"),
+          p.identificador, p.titular, L(p.monto),
+          METODO_LABEL[p.metodo] || p.metodo, p.cobrado_por,
+        ]),
+        headStyles: { fillColor: NARANJA_TABLA_PDF },
+        styles: { fontSize: 8 },
+      });
+      const total = completo.pagos.reduce((s, p) => s + p.monto, 0);
+      const y = (doc as any).lastAutoTable?.finalY ?? 42;
+      doc.setFontSize(10);
+      doc.setTextColor(2, 46, 69);
+      doc.text(`Total: ${L(total)}`, 14, y + 10);
+      doc.save(`historial-pagos-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } finally { setExportando(""); }
+  }
+
+  async function exportarExcel() {
+    setExportando("excel");
+    try {
+      const completo = await historialPagos({ desde, hasta, metodo, buscar, todos: true });
+      const XLSX = await import("xlsx");
+      const filas = [
+        ["Fecha / Hora", "Casa", "Titular", "Monto", "Método", "Cobrado por"],
+        ...completo.pagos.map(p => [
+          new Date(p.fecha).toLocaleString("es-HN"),
+          p.identificador, p.titular, p.monto,
+          METODO_LABEL[p.metodo] || p.metodo, p.cobrado_por,
+        ]),
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filas), "Pagos");
+      XLSX.writeFile(wb, `historial-pagos-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } finally { setExportando(""); }
+  }
   function limpiar() {
     setDesde(""); setHasta(""); setMetodo(""); setBuscar(""); setPagina(1);
     setTimeout(cargar, 0);
@@ -297,6 +409,12 @@ function TabPagos() {
         <div className="filtro-botones">
           <button className="cuota-btn-pagar" style={{ maxWidth: 110 }} onClick={aplicarFiltros}>Filtrar</button>
           <button className="ghost mini" onClick={limpiar}>Limpiar</button>
+          <button className="ghost mini" onClick={exportarPDF} disabled={!!exportando}>
+            <Download size={14} /> {exportando === "pdf" ? "…" : "PDF"}
+          </button>
+          <button className="ghost mini" onClick={exportarExcel} disabled={!!exportando}>
+            <FileSpreadsheet size={14} /> {exportando === "excel" ? "…" : "Excel"}
+          </button>
         </div>
       </div>
 
@@ -352,6 +470,7 @@ function TabPagos() {
 }
 
 function TabTarjetas() {
+  const { nombre: nombreResidencial } = useMiResidencial();
   const [data, setData] = useState<HistorialTarjetasDTO | null>(null);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -360,6 +479,7 @@ function TabTarjetas() {
   const [pagina, setPagina] = useState(1);
   const [cargando, setCargando] = useState(true);
   const [errorPlan, setErrorPlan] = useState("");
+  const [exportando, setExportando] = useState<"pdf" | "excel" | "">("");
 
   useEffect(() => {
     setCargando(true);
@@ -368,6 +488,52 @@ function TabTarjetas() {
   }, [desde, hasta, direccion, buscar, pagina]);
 
   if (errorPlan) return <FuncionNoIncluida mensaje={errorPlan} />;
+
+  async function exportarPDF() {
+    setExportando("pdf");
+    try {
+      const completo = await historialTarjetas({ desde, hasta, direccion, buscar, todos: true });
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      const doc = new jsPDF();
+      dibujarEncabezadoReportePDF(doc, "Historial de accesos de residentes", nombreResidencial || "");
+      doc.setFontSize(10);
+      doc.text(`${completo.eventos.length} evento(s)${desde || hasta ? ` · ${desde || "…"} a ${hasta || "…"}` : ""}`, 14, 36);
+      autoTable(doc, {
+        startY: 42,
+        head: [["Fecha / Hora", "Residente", "Casa", "Tarjeta", "Tipo", "Acceso", "Dirección"]],
+        body: completo.eventos.map(e => [
+          new Date(e.ocurrido_en).toLocaleString("es-HN"),
+          e.residente, e.unidad, e.tarjeta,
+          e.tipo_acceso === "peatonal" ? "Peatonal" : "Vehicular",
+          e.acceso, e.direccion === "entrada" ? "Entrada" : "Salida",
+        ]),
+        headStyles: { fillColor: NARANJA_TABLA_PDF },
+        styles: { fontSize: 8 },
+      });
+      doc.save(`historial-accesos-residentes-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } finally { setExportando(""); }
+  }
+
+  async function exportarExcel() {
+    setExportando("excel");
+    try {
+      const completo = await historialTarjetas({ desde, hasta, direccion, buscar, todos: true });
+      const XLSX = await import("xlsx");
+      const filas = [
+        ["Fecha / Hora", "Residente", "Casa", "Tarjeta", "Tipo", "Acceso", "Dirección"],
+        ...completo.eventos.map(e => [
+          new Date(e.ocurrido_en).toLocaleString("es-HN"),
+          e.residente, e.unidad, e.tarjeta,
+          e.tipo_acceso === "peatonal" ? "Peatonal" : "Vehicular",
+          e.acceso, e.direccion === "entrada" ? "Entrada" : "Salida",
+        ]),
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filas), "Accesos de residentes");
+      XLSX.writeFile(wb, `historial-accesos-residentes-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } finally { setExportando(""); }
+  }
 
   return (
     <>
@@ -381,6 +547,12 @@ function TabTarjetas() {
         </select>
         <input placeholder="Buscar residente, casa o tarjeta…" value={buscar}
           onChange={e => { setBuscar(e.target.value); setPagina(1); }} />
+        <button className="ghost mini" onClick={exportarPDF} disabled={!!exportando}>
+          <Download size={14} /> {exportando === "pdf" ? "…" : "PDF"}
+        </button>
+        <button className="ghost mini" onClick={exportarExcel} disabled={!!exportando}>
+          <FileSpreadsheet size={14} /> {exportando === "excel" ? "…" : "Excel"}
+        </button>
       </div>
 
       {cargando ? <p className="muted">Cargando…</p> : !data || data.eventos.length === 0 ? (

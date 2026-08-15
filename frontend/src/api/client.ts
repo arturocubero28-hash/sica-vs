@@ -609,7 +609,7 @@ export interface HistorialDTO {
   pagina: number; por_pagina: number; total: number; total_paginas: number;
 }
 export const historialAccesos = (params: {
-  desde?: string; hasta?: string; direccion?: string; estado?: string; buscar?: string; pagina?: number;
+  desde?: string; hasta?: string; direccion?: string; estado?: string; buscar?: string; pagina?: number; todos?: boolean;
 }) => {
   const q = new URLSearchParams();
   if (params.desde) q.set("desde", params.desde);
@@ -618,6 +618,7 @@ export const historialAccesos = (params: {
   if (params.estado) q.set("estado", params.estado);
   if (params.buscar) q.set("buscar", params.buscar);
   if (params.pagina) q.set("pagina", String(params.pagina));
+  if (params.todos) q.set("todos", "1");
   const qs = q.toString();
   return request<HistorialDTO>(`/dashboard/historial${qs ? "?" + qs : ""}`);
 };
@@ -631,7 +632,7 @@ export interface HistorialTarjetasDTO {
   pagina: number; por_pagina: number; total: number; total_paginas: number;
 }
 export const historialTarjetas = (params: {
-  desde?: string; hasta?: string; direccion?: string; buscar?: string; pagina?: number;
+  desde?: string; hasta?: string; direccion?: string; buscar?: string; pagina?: number; todos?: boolean;
 }) => {
   const q = new URLSearchParams();
   if (params.desde) q.set("desde", params.desde);
@@ -639,6 +640,7 @@ export const historialTarjetas = (params: {
   if (params.direccion) q.set("direccion", params.direccion);
   if (params.buscar) q.set("buscar", params.buscar);
   if (params.pagina) q.set("pagina", String(params.pagina));
+  if (params.todos) q.set("todos", "1");
   const qs = q.toString();
   return request<HistorialTarjetasDTO>(`/dashboard/historial-tarjetas${qs ? "?" + qs : ""}`);
 };
@@ -974,7 +976,7 @@ export interface HistorialPagosDTO {
   pagos: PagoHistorialItem[]; pagina: number; total_paginas: number; total: number;
 }
 export const historialPagos = (params: {
-  desde?: string; hasta?: string; metodo?: string; buscar?: string; pagina?: number;
+  desde?: string; hasta?: string; metodo?: string; buscar?: string; pagina?: number; todos?: boolean;
 }) => {
   const q = new URLSearchParams();
   if (params.desde) q.set("desde", params.desde);
@@ -982,6 +984,7 @@ export const historialPagos = (params: {
   if (params.metodo) q.set("metodo", params.metodo);
   if (params.buscar) q.set("buscar", params.buscar);
   if (params.pagina) q.set("pagina", String(params.pagina));
+  if (params.todos) q.set("todos", "1");
   return request<HistorialPagosDTO>(`/cuotas/historial-pagos?${q.toString()}`);
 };
 

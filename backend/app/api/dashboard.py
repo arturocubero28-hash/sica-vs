@@ -295,7 +295,14 @@ def historial_accesos(usuario_actual):
     estado_filtro = request.args.get("estado")  # 'adentro' para solo los que están dentro
     buscar = (request.args.get("buscar") or "").strip().lower()
     pagina = max(1, int(request.args.get("pagina", 1)))
-    por_pagina = 30
+    # Día 59 — ?todos=1: para exportar (PDF/Excel) el TOTAL de resultados que
+    # coinciden con el filtro, no solo la página visible en pantalla. Cambio
+    # aditivo y acotado (tope de 3000 filas) -- no afecta el comportamiento
+    # normal cuando el parámetro no viene.
+    exportar_todos = request.args.get("todos") == "1"
+    por_pagina = 3000 if exportar_todos else 30
+    if exportar_todos:
+        pagina = 1
 
     # Solo eventos de VISITAS (los de tarjeta de residente van en su propio
     # historial). Antes traía todos; ahora que existen accesos por tarjeta,
@@ -424,11 +431,12 @@ def historial_accesos_tarjeta(usuario_actual):
     direccion = request.args.get("direccion")
     buscar = (request.args.get("buscar") or "").strip().lower()
     pagina = max(1, int(request.args.get("pagina", 1)))
-    por_pagina = 30
-
-    from app.utils.residencial import scope_eventos
-    q = scope_eventos(EventoAcceso.query, usuario_actual).filter(
-        EventoAcceso.origen == "residente")
+    # Día 59 — mismo criterio que en historial_accesos: ?todos=1 trae el
+    # total filtrado para exportar, sin afectar la paginación normal.
+    exportar_todos = request.args.get("todos") == "1"
+    por_pagina = 3000 if exportar_todos else 30
+    if exportar_todos:
+        pagina = 1
 
     if desde:
         try:

@@ -619,7 +619,12 @@ def historial_pagos(usuario_actual):
     metodo = request.args.get("metodo")
     buscar = (request.args.get("buscar") or "").strip().lower()
     pagina = max(1, int(request.args.get("pagina", 1)))
-    por_pagina = 30
+    # Día 59 — mismo criterio que en dashboard.py: ?todos=1 trae el total
+    # filtrado para exportar (PDF/Excel), sin afectar la paginación normal.
+    exportar_todos = request.args.get("todos") == "1"
+    por_pagina = 3000 if exportar_todos else 30
+    if exportar_todos:
+        pagina = 1
 
     from app.utils.residencial import scope_pagos
     q = scope_pagos(Pago.query, usuario_actual).filter(Pago.estado == "aprobado")
