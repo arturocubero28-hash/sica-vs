@@ -35,8 +35,17 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD en .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./backend/migrations/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-      - ./backend/migrations/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+      # Día 58 — corregido: NO se monta schema.sql/seed.sql en producción.
+      # schema.sql quedó desactualizado (le falta usuarios.residencial_id y
+      # posiblemente otras columnas -- causó un 500 en el primer arranque
+      # real: "column usuarios.residencial_id does not exist"). La fuente de
+      # verdad correcta es el modelo de SQLAlchemy, que el backend aplica
+      # solo con db.create_all() al arrancar (ver app/__init__.py). Y
+      # seed.sql está marcado explícitamente "NUNCA en producción" (trae
+      # usuarios con contraseñas conocidas) -- no debía estar montado acá,
+      # fue un error al armar este compose. Pendiente real: migrar a
+      # Alembic (DB-13) para que esto no vuelva a pasar en el próximo
+      # despliegue desde cero.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sicavs}"]
       interval: 5s
