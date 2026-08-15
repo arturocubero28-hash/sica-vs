@@ -293,7 +293,9 @@ function HeroFondo() {
 function Landing({ onEntrar }: { onEntrar: () => void }) {
   const scrolled = useLandingFx();
   const [tema, setTema] = useState<"oscuro" | "claro">("claro");
-  // Cantidad real de familias (unidades activas) y accesos (trancas activas).
+  // Cantidad real de familias (unidades activas) y accesos (puntos de
+  // acceso/portones distintos — Día 59: antes contaba trancas individuales,
+  // ver backend/app/api/publico.py).
   const [familias, setFamilias] = useState<number | null>(null);
   const [accesos, setAccesos] = useState<number | null>(null);
   useEffect(() => {

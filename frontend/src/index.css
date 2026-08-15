@@ -1109,6 +1109,24 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
   text-shadow: none;
 }
 
+/* Día 59 — el nav (logo + nombre + el chip de arriba) no tenía NINGÚN
+   ajuste para pantallas de celular: el logo quedaba fijo en 80px, sin
+   achicarse, y todo se apretaba contra el botón de tema y "Ingresar" —
+   se veía amontonado (reportado por el usuario). Se reduce el logo, el
+   texto y el padding del chip proporcionalmente en móvil. */
+@media (max-width: 600px) {
+  .lp-nav-v2 { padding: 12px 14px; }
+  .lp-brand-v2 { gap: 8px; }
+  .lp-brand-glow img { width: 40px; height: 40px; border-radius: 11px; }
+  .lp-brand-glow::before { inset: -4px; border-radius: 14px; }
+  .lp-brand-name { font-size: 14px; }
+  .lp-brand-sub { font-size: 10px; }
+  .lp-nav-v2:not(.scrolled) .lp-brand-text { padding: 3px 8px; border-radius: 8px; }
+  .lp-nav-acciones { gap: 6px; }
+  .lp-tema-btn { width: 36px; height: 36px; border-radius: 10px; }
+  .lp-nav-btn-v2 { padding: 8px 14px; font-size: 13px; }
+}
+
 .lp-nav-btn-v2 {
   display: flex;
   align-items: center;
