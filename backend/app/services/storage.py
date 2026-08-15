@@ -222,6 +222,30 @@ def eliminar_archivo(clave: str) -> bool:
     return _get_backend().eliminar(clave)
 
 
+def leer_bytes(clave: str) -> bytes | None:
+    """
+    Día 59 — lee un archivo y devuelve sus bytes crudos, sin pasar por una
+    respuesta Flask. Para los lugares que necesitan el CONTENIDO del
+    archivo directamente (ej. reportlab dibujando el logo dentro de un PDF
+    con canvas.drawImage/ImageReader), no una respuesta HTTP para servir al
+    navegador -- eso ya lo cubre servir_archivo(). Funciona igual en modo
+    local (lee del disco) y en modo nube (descarga de Spaces).
+    Devuelve None si el archivo no existe o algo falla.
+    """
+    try:
+        stream, _content_type = _get_backend().stream(clave)
+        if stream is None:
+            return None
+        datos = stream.read()
+        try:
+            stream.close()
+        except Exception:
+            pass
+        return datos
+    except Exception:
+        return None
+
+
 def es_modo_nube() -> bool:
     """True si el sistema está usando almacenamiento en la nube."""
     return os.environ.get("STORAGE_BACKEND", "local").lower() in ("spaces", "s3")

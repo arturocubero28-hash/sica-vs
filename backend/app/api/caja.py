@@ -568,12 +568,19 @@ def constancia_pdf(usuario_actual, uuid_sesion):
 
     x_texto = 15 * mm
     if residencial and residencial.logo_archivo:
-        ruta_logo = os.path.join(
-            current_app.config.get("UPLOAD_FOLDER", "/app/uploads"), "residenciales", residencial.logo_archivo)
-        if os.path.exists(ruta_logo):
+        # Día 59 — mismo bug y mismo fix que en recibos.py: leía directo
+        # del disco local, ignorando STORAGE_BACKEND=spaces en producción.
+        from app.services import storage
+        clave_logo = (residencial.logo_archivo if residencial.logo_archivo.startswith("residenciales/")
+                     else f"residenciales/{residencial.logo_archivo}")
+        datos_logo = storage.leer_bytes(clave_logo)
+        if datos_logo:
             try:
+                from reportlab.lib.utils import ImageReader
+                import io
                 tam_logo = 14 * mm
-                cv.drawImage(ruta_logo, 13 * mm, H - 18 * mm, width=tam_logo, height=tam_logo,
+                imagen_logo = ImageReader(io.BytesIO(datos_logo))
+                cv.drawImage(imagen_logo, 13 * mm, H - 18 * mm, width=tam_logo, height=tam_logo,
                             preserveAspectRatio=True, mask="auto")
                 x_texto = 13 * mm + tam_logo + 3 * mm
             except Exception:

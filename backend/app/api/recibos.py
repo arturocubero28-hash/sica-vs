@@ -222,10 +222,27 @@ def _generar_pdf_recibo(pago, cfg):
     x_texto = 14 * mm
     y_centro_logo = H - 14 * mm
     if residencial and residencial.logo_archivo:
-        ruta_logo = os.path.join(
-            current_app.config.get("UPLOAD_FOLDER", "/app/uploads"), "residenciales", residencial.logo_archivo)
-        if os.path.exists(ruta_logo):
+        # Día 59 — bug real encontrado: esto leía directo del disco local
+        # del servidor (os.path.join(UPLOAD_FOLDER, ...)), ignorando que la
+        # producción usa STORAGE_BACKEND=spaces (Día 58) -- el logo casi
+        # nunca se encontraba ahí (se pierde en cada rebuild, no hay
+        # volumen persistente), y el try/except de abajo silenciaba el
+        # error, generando el recibo sin logo sin que se notara.
+        #
+        # Fix: usar storage.leer_bytes(), que ya sabe leer de Spaces o de
+        # disco local según corresponda. Detalle: guardar_imagen_segura
+        # devuelve la CLAVE CON el prefijo de subcarpeta en modo nube
+        # ("residenciales/xxx.webp") pero SOLO el nombre en modo local
+        # ("xxx.webp") -- se normaliza acá para que ambos casos armen la
+        # misma clave relativa que storage.py espera.
+        from app.services import storage
+        clave_logo = (residencial.logo_archivo if residencial.logo_archivo.startswith("residenciales/")
+                     else f"residenciales/{residencial.logo_archivo}")
+        datos_logo = storage.leer_bytes(clave_logo)
+        if datos_logo:
             try:
+                from reportlab.lib.utils import ImageReader
+                import io
                 radio = 8 * mm
                 cx, cy = 12 * mm + radio, y_centro_logo
                 c.setFillColor(colors.white)
@@ -234,7 +251,8 @@ def _generar_pdf_recibo(pago, cfg):
                 path = c.beginPath()
                 path.circle(cx, cy, radio)
                 c.clipPath(path, stroke=0, fill=0)
-                c.drawImage(ruta_logo, cx - radio, cy - radio, width=radio * 2, height=radio * 2,
+                imagen_logo = ImageReader(io.BytesIO(datos_logo))
+                c.drawImage(imagen_logo, cx - radio, cy - radio, width=radio * 2, height=radio * 2,
                            preserveAspectRatio=True, mask="auto")
                 c.restoreState()
                 x_texto = cx + radio + 5 * mm
