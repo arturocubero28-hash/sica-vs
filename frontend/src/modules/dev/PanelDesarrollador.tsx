@@ -765,15 +765,198 @@ function ConfigTrancas() {
     ? listaCompleta.filter((a) => a.residencial?.id === filtroResidencial)
     : listaCompleta;
   const puntos = Array.from(new Set(lista.map((a) => a.punto_acceso).filter(Boolean)));
-  const grupos: { punto: string; items: AccesoFisicoDTO[] }[] = [];
-  const sinPunto: AccesoFisicoDTO[] = [];
+
+  // Día 59, a pedido del usuario: agrupar primero por RESIDENCIAL y recién
+  // dentro de cada una por punto de acceso — antes era una lista plana de
+  // puntos con solo una etiqueta chica indicando la residencial, difícil
+  // de escanear de un vistazo con varias residenciales mezcladas (y el
+  // caso va a crecer a medida que se sumen clientes del SaaS). Cada
+  // residencial arma sus propios "grupos" (misma lógica de agrupar por
+  // punto_acceso que ya existía, solo que ahora corre una vez por
+  // residencial en vez de una vez para toda la lista).
+  type Grupo = { punto: string; items: AccesoFisicoDTO[] };
+  function agruparPorPunto(items: AccesoFisicoDTO[]): Grupo[] {
+    const grupos: Grupo[] = [];
+    const sinPunto: AccesoFisicoDTO[] = [];
+    items.forEach((a) => {
+      if (!a.punto_acceso) { sinPunto.push(a); return; }
+      let g = grupos.find((x) => x.punto === a.punto_acceso);
+      if (!g) { g = { punto: a.punto_acceso, items: [] }; grupos.push(g); }
+      g.items.push(a);
+    });
+    if (sinPunto.length) grupos.push({ punto: "", items: sinPunto });
+    return grupos;
+  }
+
+  const seccionesResidencial: { id: string; nombre: string; grupos: Grupo[] }[] = [];
+  const sinResidencial: AccesoFisicoDTO[] = [];
   lista.forEach((a) => {
-    if (!a.punto_acceso) { sinPunto.push(a); return; }
-    let g = grupos.find((x) => x.punto === a.punto_acceso);
-    if (!g) { g = { punto: a.punto_acceso, items: [] }; grupos.push(g); }
-    g.items.push(a);
+    if (!a.residencial) { sinResidencial.push(a); return; }
+    let s = seccionesResidencial.find((x) => x.id === a.residencial!.id);
+    if (!s) { s = { id: a.residencial.id, nombre: a.residencial.nombre, grupos: [] }; seccionesResidencial.push(s); }
   });
-  if (sinPunto.length) grupos.push({ punto: "", items: sinPunto });
+  seccionesResidencial.forEach((s) => {
+    s.grupos = agruparPorPunto(lista.filter((a) => a.residencial?.id === s.id));
+  });
+  seccionesResidencial.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const gruposSinResidencial = sinResidencial.length ? agruparPorPunto(sinResidencial) : [];
+
+  // Día 59 — la tarjeta de un punto de acceso (con sus trancas adentro) se
+  // repite igual dentro de cada sección de residencial y en la de "sin
+  // asignar" — se saca a una función para no duplicar el JSX. Ya NO
+  // muestra la etiqueta chica de residencial en el título del punto (Día
+  // 49) porque ahora esa información ya la da el encabezado de la sección
+  // que la contiene — hubiera quedado repetida dos veces.
+  function renderGrupo(g: Grupo) {
+    return (
+      <div key={g.punto || "sin-punto"} className="dev-punto-grupo">
+        <div className="dev-punto-titulo">
+          <span className="dev-punto-ic"><Router size={16} /></span>
+          <span>{g.punto || "Sin punto asignado"}</span>
+          <span className="dev-punto-sub">{g.punto ? `Raspberry Pi · ${g.items.length} dispositivo(s)` : `${g.items.length} acceso(s) sin asignar a una Pi`}</span>
+          {g.punto && (
+            <div className="dev-modo-selector dev-modo-selector-punto">
+              <button type="button"
+                className={`dev-modo-btn ${(edits[g.items[0]?.id]?.modo_control || "gpio") === "gpio" ? "sel" : ""}`}
+                onClick={() => cambiarModoDelPunto(g.items, "gpio")}>
+                <Cpu size={16} />
+                <span className="dev-modo-btn-texto">
+                  <strong>Económico</strong>
+                  <span>Wiegand + GPIO</span>
+                </span>
+              </button>
+              <button type="button"
+                className={`dev-modo-btn ${(edits[g.items[0]?.id]?.modo_control || "gpio") === "modbus" ? "sel" : ""}`}
+                onClick={() => cambiarModoDelPunto(g.items, "modbus")}>
+                <Radio size={16} />
+                <span className="dev-modo-btn-texto">
+                  <strong>Premium</strong>
+                  <span>Cidron + OSDP/Modbus</span>
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="dev-trancas-grid">
+          {g.items.map((a) => {
+            const ed = edits[a.id] || {
+              nombre: "", tipo: "vehicular", relay_pin: "", pulso_ms: "", punto_acceso: "", direccion: "entrada",
+              modo_control: "gpio" as const,
+              wiegand_d0_pin: "", wiegand_d1_pin: "", relay_canal: "", lector_direccion_osdp: "",
+            };
+            // Día 49: "sin configurar" depende del modo — en GPIO
+            // alcanza con el pin del relay; en Modbus hace falta el
+            // canal Y la dirección del lector (ambos, para que el
+            // punto quede realmente operativo).
+            const sinConfig = a.modo_control === "modbus"
+              ? (a.relay_canal == null || a.lector_direccion_osdp == null)
+              : a.relay_pin == null;
+            return (
+              <div key={a.id} className={`dev-tranca-card ${!a.activo ? "inactiva" : ""}`}>
+                <div className="dev-tranca-head">
+                  <input className="dev-tranca-nombre-input" value={ed.nombre} maxLength={80}
+                    onChange={(e) => setCampo(a.id, "nombre", e.target.value)} />
+                  <span className={`dev-tranca-badge ${sinConfig ? "sin" : "ok"}`}>
+                    {sinConfig ? "Sin configurar" : "Configurada"}
+                  </span>
+                </div>
+                <div className="dev-tranca-fila">
+                  <select className="dev-tranca-tipo-sel" value={ed.tipo} onChange={(e) => setCampo(a.id, "tipo", e.target.value)}>
+                    <option value="vehicular">Vehicular</option>
+                    <option value="peatonal">Peatonal</option>
+                  </select>
+                  <button className={`dev-tranca-toggle ${a.activo ? "on" : "off"}`} onClick={() => alternarActivo(a)}>
+                    {a.activo ? "Activa" : "Inactiva"}
+                  </button>
+                </div>
+                <div className="dev-tranca-dir">
+                  <button className={`dev-dir-btn ${ed.direccion === "entrada" ? "sel-ent" : ""}`}
+                    onClick={() => setCampo(a.id, "direccion", "entrada")}>↓ Entrada</button>
+                  <button className={`dev-dir-btn ${ed.direccion === "salida" ? "sel-sal" : ""}`}
+                    onClick={() => setCampo(a.id, "direccion", "salida")}>↑ Salida</button>
+                </div>
+                <label className="dev-tranca-punto">
+                  <span>Punto de acceso (Raspberry Pi)</span>
+                  <input type="text" placeholder="Ej: Acceso Principal" maxLength={80} list="puntos-existentes"
+                    value={ed.punto_acceso} onChange={(e) => setCampo(a.id, "punto_acceso", e.target.value)} />
+                </label>
+                <label className="dev-tranca-punto">
+                  <span>Residencial</span>
+                  <select value={a.residencial?.id || ""} onChange={(e) => asignarResidencial(a, e.target.value)}
+                    className="dev-tranca-tipo-sel" style={{ width: "100%" }}>
+                    <option value="">— Sin asignar —</option>
+                    {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                  </select>
+                </label>
+                {/* Día 49, corregido: la tecnología ya no se elige acá
+                    — se eligió una sola vez arriba, en el encabezado
+                    del punto (ver cambiarModoDelPunto), para que no se
+                    pueda desincronizar entre las trancas de un mismo
+                    punto. Esto es solo un indicador de solo lectura,
+                    para confirmar cuál está activa sin poder tocarla. */}
+                <div className="dev-tranca-modo-indicador">
+                  {ed.modo_control === "gpio" ? <Cpu size={13} /> : <Radio size={13} />}
+                  <span>{ed.modo_control === "gpio" ? "Económico — Wiegand + GPIO" : "Premium — Cidron + OSDP/Modbus"}</span>
+                </div>
+
+                {ed.modo_control === "gpio" ? (
+                  <div className="dev-tranca-campos">
+                    <label>
+                      <span>Pin GPIO (relay)</span>
+                      <input type="number" min={0} max={40} placeholder="—"
+                        value={ed.relay_pin} onChange={(e) => setCampo(a.id, "relay_pin", e.target.value)} />
+                    </label>
+                    <label>
+                      <span>Wiegand D0</span>
+                      <input type="number" min={0} max={40} placeholder="—"
+                        value={ed.wiegand_d0_pin} onChange={(e) => setCampo(a.id, "wiegand_d0_pin", e.target.value)} />
+                    </label>
+                    <label>
+                      <span>Wiegand D1</span>
+                      <input type="number" min={0} max={40} placeholder="—"
+                        value={ed.wiegand_d1_pin} onChange={(e) => setCampo(a.id, "wiegand_d1_pin", e.target.value)} />
+                    </label>
+                    <label>
+                      <span>Pulso (ms)</span>
+                      <input type="number" min={100} max={5000} step={50}
+                        value={ed.pulso_ms} onChange={(e) => setCampo(a.id, "pulso_ms", e.target.value)} />
+                    </label>
+                  </div>
+                ) : (
+                  <div className="dev-tranca-campos">
+                    <label>
+                      <span>Canal del relay (1-4)</span>
+                      <input type="number" min={1} max={4} placeholder="—"
+                        value={ed.relay_canal} onChange={(e) => setCampo(a.id, "relay_canal", e.target.value)} />
+                    </label>
+                    <label>
+                      <span>Dirección OSDP del lector</span>
+                      <input type="number" min={0} max={126} placeholder="—"
+                        value={ed.lector_direccion_osdp} onChange={(e) => setCampo(a.id, "lector_direccion_osdp", e.target.value)} />
+                    </label>
+                    <label>
+                      <span>Pulso (ms)</span>
+                      <input type="number" min={100} max={5000} step={50}
+                        value={ed.pulso_ms} onChange={(e) => setCampo(a.id, "pulso_ms", e.target.value)} />
+                    </label>
+                  </div>
+                )}
+                {msg && msg.id === a.id && (
+                  <div className={`dev-tranca-msg ${msg.ok ? "ok" : "err"}`}>{msg.texto}</div>
+                )}
+                <div className="dev-tranca-acciones">
+                  <button className="dev-tranca-btn" disabled={guardando === a.id} onClick={() => guardar(a)}>
+                    {guardando === a.id ? "Guardando…" : "Guardar"}
+                  </button>
+                  <button className="dev-tranca-del" onClick={() => pedirBorrar(a)} title="Eliminar acceso"><Trash2 size={16} /></button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dev-trancas">
@@ -807,168 +990,33 @@ function ConfigTrancas() {
           Mi Perfil → Puntos de acceso; una vez creados, aparecen acá para configurar su hardware.
         </p>
       ) : (
-        grupos.map((g) => {
-          // Día 49, a pedido del usuario: mostrar a qué residencial
-          // pertenece cada grupo, para que sea más entendible de un
-          // vistazo (sobre todo con varias residenciales mezcladas en la
-          // misma pantalla). Se toma del primer ítem del grupo — todas
-          // las trancas de un mismo punto deberían tener la misma
-          // residencial, ya que se hereda al crearlas desde Mi Perfil.
-          const residencialDelGrupo = g.items[0]?.residencial?.nombre;
-          return (
-          <div key={g.punto || "sin-punto"} className="dev-punto-grupo">
-            <div className="dev-punto-titulo">
-              <span className="dev-punto-ic"><Router size={16} /></span>
-              <span>{g.punto || "Sin punto asignado"}</span>
-              {residencialDelGrupo && (
-                <span className="dev-punto-residencial">
-                  <Building2 size={12} /> {residencialDelGrupo}
+        <>
+          {seccionesResidencial.map((s) => (
+            <div key={s.id} className="dev-residencial-seccion">
+              <div className="dev-residencial-header">
+                <span className="dev-residencial-header-ic"><Building2 size={17} /></span>
+                <span className="dev-residencial-header-nombre">{s.nombre}</span>
+                <span className="dev-residencial-header-count">
+                  {s.grupos.length} punto{s.grupos.length !== 1 ? "s" : ""} de acceso
                 </span>
-              )}
-              <span className="dev-punto-sub">{g.punto ? `Raspberry Pi · ${g.items.length} dispositivo(s)` : `${g.items.length} acceso(s) sin asignar a una Pi`}</span>
-              {g.punto && (
-                <div className="dev-modo-selector dev-modo-selector-punto">
-                  <button type="button"
-                    className={`dev-modo-btn ${(edits[g.items[0]?.id]?.modo_control || "gpio") === "gpio" ? "sel" : ""}`}
-                    onClick={() => cambiarModoDelPunto(g.items, "gpio")}>
-                    <Cpu size={16} />
-                    <span className="dev-modo-btn-texto">
-                      <strong>Económico</strong>
-                      <span>Wiegand + GPIO</span>
-                    </span>
-                  </button>
-                  <button type="button"
-                    className={`dev-modo-btn ${(edits[g.items[0]?.id]?.modo_control || "gpio") === "modbus" ? "sel" : ""}`}
-                    onClick={() => cambiarModoDelPunto(g.items, "modbus")}>
-                    <Radio size={16} />
-                    <span className="dev-modo-btn-texto">
-                      <strong>Premium</strong>
-                      <span>Cidron + OSDP/Modbus</span>
-                    </span>
-                  </button>
-                </div>
-              )}
+              </div>
+              {s.grupos.map(renderGrupo)}
             </div>
-            <div className="dev-trancas-grid">
-              {g.items.map((a) => {
-                const ed = edits[a.id] || {
-                  nombre: "", tipo: "vehicular", relay_pin: "", pulso_ms: "", punto_acceso: "", direccion: "entrada",
-                  modo_control: "gpio" as const,
-                  wiegand_d0_pin: "", wiegand_d1_pin: "", relay_canal: "", lector_direccion_osdp: "",
-                };
-                // Día 49: "sin configurar" depende del modo — en GPIO
-                // alcanza con el pin del relay; en Modbus hace falta el
-                // canal Y la dirección del lector (ambos, para que el
-                // punto quede realmente operativo).
-                const sinConfig = a.modo_control === "modbus"
-                  ? (a.relay_canal == null || a.lector_direccion_osdp == null)
-                  : a.relay_pin == null;
-                return (
-                  <div key={a.id} className={`dev-tranca-card ${!a.activo ? "inactiva" : ""}`}>
-                    <div className="dev-tranca-head">
-                      <input className="dev-tranca-nombre-input" value={ed.nombre} maxLength={80}
-                        onChange={(e) => setCampo(a.id, "nombre", e.target.value)} />
-                      <span className={`dev-tranca-badge ${sinConfig ? "sin" : "ok"}`}>
-                        {sinConfig ? "Sin configurar" : "Configurada"}
-                      </span>
-                    </div>
-                    <div className="dev-tranca-fila">
-                      <select className="dev-tranca-tipo-sel" value={ed.tipo} onChange={(e) => setCampo(a.id, "tipo", e.target.value)}>
-                        <option value="vehicular">Vehicular</option>
-                        <option value="peatonal">Peatonal</option>
-                      </select>
-                      <button className={`dev-tranca-toggle ${a.activo ? "on" : "off"}`} onClick={() => alternarActivo(a)}>
-                        {a.activo ? "Activa" : "Inactiva"}
-                      </button>
-                    </div>
-                    <div className="dev-tranca-dir">
-                      <button className={`dev-dir-btn ${ed.direccion === "entrada" ? "sel-ent" : ""}`}
-                        onClick={() => setCampo(a.id, "direccion", "entrada")}>↓ Entrada</button>
-                      <button className={`dev-dir-btn ${ed.direccion === "salida" ? "sel-sal" : ""}`}
-                        onClick={() => setCampo(a.id, "direccion", "salida")}>↑ Salida</button>
-                    </div>
-                    <label className="dev-tranca-punto">
-                      <span>Punto de acceso (Raspberry Pi)</span>
-                      <input type="text" placeholder="Ej: Acceso Principal" maxLength={80} list="puntos-existentes"
-                        value={ed.punto_acceso} onChange={(e) => setCampo(a.id, "punto_acceso", e.target.value)} />
-                    </label>
-                    <label className="dev-tranca-punto">
-                      <span>Residencial</span>
-                      <select value={a.residencial?.id || ""} onChange={(e) => asignarResidencial(a, e.target.value)}
-                        className="dev-tranca-tipo-sel" style={{ width: "100%" }}>
-                        <option value="">— Sin asignar —</option>
-                        {residenciales.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-                      </select>
-                    </label>
-                    {/* Día 49, corregido: la tecnología ya no se elige acá
-                        — se eligió una sola vez arriba, en el encabezado
-                        del punto (ver cambiarModoDelPunto), para que no se
-                        pueda desincronizar entre las trancas de un mismo
-                        punto. Esto es solo un indicador de solo lectura,
-                        para confirmar cuál está activa sin poder tocarla. */}
-                    <div className="dev-tranca-modo-indicador">
-                      {ed.modo_control === "gpio" ? <Cpu size={13} /> : <Radio size={13} />}
-                      <span>{ed.modo_control === "gpio" ? "Económico — Wiegand + GPIO" : "Premium — Cidron + OSDP/Modbus"}</span>
-                    </div>
+          ))}
 
-                    {ed.modo_control === "gpio" ? (
-                      <div className="dev-tranca-campos">
-                        <label>
-                          <span>Pin GPIO (relay)</span>
-                          <input type="number" min={0} max={40} placeholder="—"
-                            value={ed.relay_pin} onChange={(e) => setCampo(a.id, "relay_pin", e.target.value)} />
-                        </label>
-                        <label>
-                          <span>Wiegand D0</span>
-                          <input type="number" min={0} max={40} placeholder="—"
-                            value={ed.wiegand_d0_pin} onChange={(e) => setCampo(a.id, "wiegand_d0_pin", e.target.value)} />
-                        </label>
-                        <label>
-                          <span>Wiegand D1</span>
-                          <input type="number" min={0} max={40} placeholder="—"
-                            value={ed.wiegand_d1_pin} onChange={(e) => setCampo(a.id, "wiegand_d1_pin", e.target.value)} />
-                        </label>
-                        <label>
-                          <span>Pulso (ms)</span>
-                          <input type="number" min={100} max={5000} step={50}
-                            value={ed.pulso_ms} onChange={(e) => setCampo(a.id, "pulso_ms", e.target.value)} />
-                        </label>
-                      </div>
-                    ) : (
-                      <div className="dev-tranca-campos">
-                        <label>
-                          <span>Canal del relay (1-4)</span>
-                          <input type="number" min={1} max={4} placeholder="—"
-                            value={ed.relay_canal} onChange={(e) => setCampo(a.id, "relay_canal", e.target.value)} />
-                        </label>
-                        <label>
-                          <span>Dirección OSDP del lector</span>
-                          <input type="number" min={0} max={126} placeholder="—"
-                            value={ed.lector_direccion_osdp} onChange={(e) => setCampo(a.id, "lector_direccion_osdp", e.target.value)} />
-                        </label>
-                        <label>
-                          <span>Pulso (ms)</span>
-                          <input type="number" min={100} max={5000} step={50}
-                            value={ed.pulso_ms} onChange={(e) => setCampo(a.id, "pulso_ms", e.target.value)} />
-                        </label>
-                      </div>
-                    )}
-                    {msg && msg.id === a.id && (
-                      <div className={`dev-tranca-msg ${msg.ok ? "ok" : "err"}`}>{msg.texto}</div>
-                    )}
-                    <div className="dev-tranca-acciones">
-                      <button className="dev-tranca-btn" disabled={guardando === a.id} onClick={() => guardar(a)}>
-                        {guardando === a.id ? "Guardando…" : "Guardar"}
-                      </button>
-                      <button className="dev-tranca-del" onClick={() => pedirBorrar(a)} title="Eliminar acceso"><Trash2 size={16} /></button>
-                    </div>
-                  </div>
-                );
-              })}
+          {gruposSinResidencial.length > 0 && (
+            <div className="dev-residencial-seccion sin-asignar">
+              <div className="dev-residencial-header">
+                <span className="dev-residencial-header-ic"><AlertTriangle size={17} /></span>
+                <span className="dev-residencial-header-nombre">Sin residencial asignada</span>
+                <span className="dev-residencial-header-count">
+                  {gruposSinResidencial.length} punto{gruposSinResidencial.length !== 1 ? "s" : ""} de acceso
+                </span>
+              </div>
+              {gruposSinResidencial.map(renderGrupo)}
             </div>
-          </div>
-          );
-        })
+          )}
+        </>
       )}
 
       {borrar && (

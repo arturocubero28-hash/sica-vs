@@ -3923,3 +3923,27 @@ input.input-error, select.input-error, textarea.input-error {
   .config-grid-2 { grid-template-columns: 1fr; }
   .residencial-top { flex-direction: column; }
 }
+
+/* Día 59 — agrupación por residencial en el panel dev (Trancas). Antes
+   era una lista plana de puntos de acceso con una etiqueta chica de a
+   qué residencial pertenecía cada uno; a pedido del usuario, ahora se
+   agrupan visualmente por residencial primero, para verlo de un vistazo
+   sin usar el filtro. */
+.dev-residencial-seccion { margin-bottom: 34px; }
+.dev-residencial-seccion:last-child { margin-bottom: 0; }
+.dev-residencial-header {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+  background: #f4f7fb; border: 1px solid #e3e9f2; border-radius: 12px;
+  margin-bottom: 18px;
+}
+.dev-residencial-header-ic {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 9px; flex-shrink: 0;
+  background: var(--marca-naranja); color: #fff;
+}
+.dev-residencial-header-nombre { font-weight: 700; font-size: 15.5px; color: var(--marca-azul); }
+.dev-residencial-header-count { margin-left: auto; font-size: 12px; color: #8a94a2; font-weight: 500; }
+.dev-residencial-seccion.sin-asignar .dev-residencial-header {
+  background: #fef2d5; border-color: #f3d99a;
+}
+.dev-residencial-seccion.sin-asignar .dev-residencial-header-ic { background: #b45309; }
