@@ -5,6 +5,7 @@ import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos, rep
 import { L } from "../../utils/formato";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { useMiResidencial } from "../../hooks/useMiResidencial";
+import { dibujarEncabezadoConMarca, colorTablaPDF, colorPrimarioPDF } from "../../utils/pdfReporte";
 import { GraficoBarras, GraficoDona, GraficoLinea, GraficoBarrasCant, GraficoBarrasHoriz } from "./Graficos";
 import {
   Star, DollarSign, FileText, Landmark, ShieldCheck, Ticket,
@@ -30,7 +31,11 @@ export function Reporteria() {
   const [tab, setTab] = useState<"ejecutivo" | "financiero" | "mora" | "caja" | "accesos" | "inventario">("ejecutivo");
   // Día 46: nombre real de la residencial (en vez de "Villas del Sol" fijo),
   // cargado una vez acá y pasado a cada sub-reporte para sus exportaciones.
-  const { nombre: nombreResidencial } = useMiResidencial();
+  // Día 60 — se pasa el objeto COMPLETO (antes solo nombreResidencial: string)
+  // para que cada exportarPDF pueda armar el mismo encabezado con marca real
+  // (logo, colores, dirección) que ya usa Historial desde el Día 59, en vez
+  // del azul/naranja fijos que tenía cada reporte hasta ahora.
+  const residencial = useMiResidencial();
   return (
     <div className="reporteria">
       <div className="historial-tabs" style={{ marginBottom: 14 }}>
@@ -53,17 +58,22 @@ export function Reporteria() {
           <Ticket size={15} /> Inventario
         </button>
       </div>
-      {tab === "ejecutivo" && <ReporteEjecutivoVista nombreResidencial={nombreResidencial} />}
-      {tab === "financiero" && <ReporteFinancieroVista nombreResidencial={nombreResidencial} />}
-      {tab === "mora" && <ReporteMoraPorCasa nombreResidencial={nombreResidencial} />}
-      {tab === "caja" && <ReporteCajaVista nombreResidencial={nombreResidencial} />}
-      {tab === "accesos" && <ReporteAccesosVista nombreResidencial={nombreResidencial} />}
-      {tab === "inventario" && <ReporteInventarioVista nombreResidencial={nombreResidencial} />}
+      {tab === "ejecutivo" && <ReporteEjecutivoVista residencial={residencial} />}
+      {tab === "financiero" && <ReporteFinancieroVista residencial={residencial} />}
+      {tab === "mora" && <ReporteMoraPorCasa residencial={residencial} />}
+      {tab === "caja" && <ReporteCajaVista residencial={residencial} />}
+      {tab === "accesos" && <ReporteAccesosVista residencial={residencial} />}
+      {tab === "inventario" && <ReporteInventarioVista residencial={residencial} />}
     </div>
   );
 }
 
-function ReporteFinancieroVista({ nombreResidencial }: { nombreResidencial: string }) {
+// Día 60 — tipo compartido para el objeto que useMiResidencial() devuelve,
+// usado como prop en las 6 vistas de reporte (antes cada una recibía solo
+// nombreResidencial: string).
+type ResidencialParaPDF = ReturnType<typeof useMiResidencial>;
+
+function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaPDF }) {
   const hoy = new Date();
   const [modo, setModo] = useState<"mes" | "rango">("mes");
   const [anio, setAnio] = useState(hoy.getFullYear());
@@ -100,17 +110,8 @@ function ReporteFinancieroVista({ nombreResidencial }: { nombreResidencial: stri
     const { jsPDF } = await import("jspdf");
     const autoTable = (await import("jspdf-autotable")).default;
     const doc = new jsPDF();
+    await dibujarEncabezadoConMarca(doc, "Reporte Financiero", residencial);
 
-    doc.setFillColor(2, 46, 69);
-    doc.rect(0, 0, 210, 28, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(18);
-    doc.text("Reporte Financiero", 14, 13);
-    doc.setFontSize(10);
-    doc.setTextColor(245, 197, 24);
-    doc.text(`Residencial ${nombreResidencial}`, 14, 21);
-
-    doc.setTextColor(40, 52, 64);
     doc.setFontSize(12);
     doc.text(`Periodo: ${data!.mes_label}`, 14, 38);
     doc.setFontSize(10);
@@ -123,7 +124,7 @@ function ReporteFinancieroVista({ nombreResidencial }: { nombreResidencial: stri
       startY: 72,
       head: [["Unidad", "Titular", "Monto", "Días atraso"]],
       body: data!.morosos.map(m => [m.unidad, m.titular, L(m.monto), String(m.dias_atraso)]),
-      headStyles: { fillColor: [244, 135, 35] },
+      headStyles: { fillColor: colorTablaPDF(residencial) },
       didDrawPage: () => {
         doc.setFontSize(11);
         doc.setTextColor(200, 30, 30);
@@ -159,7 +160,7 @@ function ReporteFinancieroVista({ nombreResidencial }: { nombreResidencial: stri
     const wb = XLSX.utils.book_new();
 
     const resumen = [
-      [`Reporte Financiero — ${nombreResidencial}`],
+      [`Reporte Financiero — ${residencial.nombre}`],
       ["Periodo", data!.mes_label],
       [],
       ["Total esperado", data!.total_esperado],
@@ -439,7 +440,7 @@ function ReporteFinancieroVista({ nombreResidencial }: { nombreResidencial: stri
   );
 }
 
-function ReporteMoraPorCasa({ nombreResidencial }: { nombreResidencial: string }) {
+function ReporteMoraPorCasa({ residencial }: { residencial: ResidencialParaPDF }) {
   const [data, setData] = useState<MoraPorCasaDTO | null>(null);
   const [cargando, setCargando] = useState(true);
   const [expandida, setExpandida] = useState<string | null>(null);
@@ -455,16 +456,14 @@ function ReporteMoraPorCasa({ nombreResidencial }: { nombreResidencial: string }
     const { jsPDF } = await import("jspdf");
     const autoTable = (await import("jspdf-autotable")).default;
     const doc = new jsPDF();
-    doc.setFontSize(16); doc.setTextColor("#022E45");
-    doc.text("Reporte de Mora por Casa", 14, 20);
-    doc.setFontSize(10); doc.setTextColor("#6b7280");
-    doc.text(`Residencial ${nombreResidencial}`, 14, 27);
-    doc.text(`Generado: ${new Date(data.generado).toLocaleDateString("es-HN")}`, 14, 33);
-    doc.text(`Total adeudado: ${L(data.total_general_adeudado)}  ·  ${data.total_casas_mora} casas en mora`, 14, 39);
-    let startY = 45;
+    const yInicio = await dibujarEncabezadoConMarca(doc, "Reporte de Mora por Casa", residencial);
+    doc.setFontSize(10);
+    doc.text(`Generado: ${new Date(data.generado).toLocaleDateString("es-HN")}`, 14, yInicio);
+    doc.text(`Total adeudado: ${L(data.total_general_adeudado)}  ·  ${data.total_casas_mora} casas en mora`, 14, yInicio + 6);
+    let startY = yInicio + 12;
     if (data.aging) {
       autoTable(doc, {
-        startY: 45,
+        startY,
         head: [["Antigüedad de la deuda", "Monto"]],
         body: [
           ["1 – 30 días", L(data.aging.d_1_30)],
@@ -472,7 +471,7 @@ function ReporteMoraPorCasa({ nombreResidencial }: { nombreResidencial: string }
           ["61 – 90 días", L(data.aging.d_61_90)],
           ["90+ días (difícil cobro)", L(data.aging.d_90_mas)],
         ],
-        theme: "grid", headStyles: { fillColor: [2, 46, 69] }, styles: { fontSize: 8 },
+        theme: "grid", headStyles: { fillColor: colorPrimarioPDF(residencial) }, styles: { fontSize: 8 },
       });
       startY = (doc as any).lastAutoTable.finalY + 6;
     }
@@ -486,7 +485,7 @@ function ReporteMoraPorCasa({ nombreResidencial }: { nombreResidencial: string }
       head: [["Casa", "Titular", "Teléfono", "Meses", "Períodos que debe", "Total"]],
       body: filas,
       styles: { fontSize: 7 },
-      headStyles: { fillColor: [244, 135, 35] },
+      headStyles: { fillColor: colorTablaPDF(residencial) },
       columnStyles: { 4: { cellWidth: 55 } },
     });
     doc.save(`mora-por-casa-${data.generado}.pdf`);
@@ -500,7 +499,7 @@ function ReporteMoraPorCasa({ nombreResidencial }: { nombreResidencial: string }
     // Hoja 1: resumen + antigüedad de la deuda (aging)
     const resumen: (string | number)[][] = [
       ["Reporte de Mora por Casa"],
-      [`Residencial ${nombreResidencial}`],
+      [`Residencial ${residencial.nombre}`],
       ["Generado", new Date(data.generado).toLocaleDateString("es-HN")],
       [],
       ["Total adeudado", data.total_general_adeudado],
@@ -648,7 +647,7 @@ function ReporteMoraPorCasa({ nombreResidencial }: { nombreResidencial: string }
 // ════════════════════════════════════════════════════════════════
 // REPORTE DE CAJA Y ARQUEO (tesorero)
 // ════════════════════════════════════════════════════════════════
-function ReporteCajaVista({ nombreResidencial }: { nombreResidencial: string }) {
+function ReporteCajaVista({ residencial }: { residencial: ResidencialParaPDF }) {
   const [ini, fin] = rangoMesActual();
   const [desde, setDesde] = useState(ini);
   const [hasta, setHasta] = useState(fin);
@@ -669,15 +668,10 @@ function ReporteCajaVista({ nombreResidencial }: { nombreResidencial: string }) 
     const { jsPDF } = await import("jspdf");
     const autoTable = (await import("jspdf-autotable")).default;
     const doc = new jsPDF();
-    doc.setFillColor(2, 46, 69); doc.rect(0, 0, 210, 28, "F");
-    doc.setTextColor(255); doc.setFontSize(16);
-    doc.text("Reporte de Caja y Arqueo", 14, 13);
-    doc.setFontSize(10);
-    doc.text(`${nombreResidencial} · ${data.periodo_label}`, 14, 21);
-    doc.setTextColor(0);
+    const yInicio = await dibujarEncabezadoConMarca(doc, `Reporte de Caja y Arqueo — ${data.periodo_label}`, residencial);
 
     autoTable(doc, {
-      startY: 34,
+      startY: yInicio,
       head: [["Resumen", ""]],
       body: [
         ["Sesiones cerradas", String(data.total_sesiones)],
@@ -687,7 +681,7 @@ function ReporteCajaVista({ nombreResidencial }: { nombreResidencial: string }) 
         ["Diferencia acumulada", L(data.total_diferencia)],
         ["Sesiones descuadradas", String(data.sesiones_descuadradas)],
       ],
-      theme: "grid", headStyles: { fillColor: [244, 135, 35] },
+      theme: "grid", headStyles: { fillColor: colorTablaPDF(residencial) },
     });
 
     autoTable(doc, {
@@ -696,7 +690,7 @@ function ReporteCajaVista({ nombreResidencial }: { nombreResidencial: string }) 
         c.cajero, String(c.sesiones), L(c.efectivo), L(c.pos),
         String(c.cobros), L(c.diferencia),
       ]),
-      theme: "striped", headStyles: { fillColor: [2, 46, 69] },
+      theme: "striped", headStyles: { fillColor: colorPrimarioPDF(residencial) },
     });
     doc.save(`reporte-caja-${data.periodo_label.replace(/[/\s–]/g, "-")}.pdf`);
   }
@@ -706,7 +700,7 @@ function ReporteCajaVista({ nombreResidencial }: { nombreResidencial: string }) 
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const resumen = [
-      [`Reporte de Caja — ${nombreResidencial}`], [data.periodo_label], [],
+      [`Reporte de Caja — ${residencial.nombre}`], [data.periodo_label], [],
       ["Sesiones cerradas", data.total_sesiones],
       ["Total efectivo", data.total_efectivo],
       ["Total POS", data.total_pos],
@@ -801,7 +795,7 @@ function ReporteCajaVista({ nombreResidencial }: { nombreResidencial: string }) 
 // ════════════════════════════════════════════════════════════════
 // REPORTE DE ACCESOS Y SEGURIDAD (administrador)
 // ════════════════════════════════════════════════════════════════
-function ReporteAccesosVista({ nombreResidencial }: { nombreResidencial: string }) {
+function ReporteAccesosVista({ residencial }: { residencial: ResidencialParaPDF }) {
   const [ini, fin] = rangoMesActual();
   const [desde, setDesde] = useState(ini);
   const [hasta, setHasta] = useState(fin);
@@ -825,14 +819,9 @@ function ReporteAccesosVista({ nombreResidencial }: { nombreResidencial: string 
     const { jsPDF } = await import("jspdf");
     const autoTable = (await import("jspdf-autotable")).default;
     const doc = new jsPDF();
-    doc.setFillColor(2, 46, 69); doc.rect(0, 0, 210, 28, "F");
-    doc.setTextColor(255); doc.setFontSize(16);
-    doc.text("Reporte de Accesos y Seguridad", 14, 13);
-    doc.setFontSize(10);
-    doc.text(`${nombreResidencial} · ${data.periodo_label}`, 14, 21);
-    doc.setTextColor(0);
+    const yInicio = await dibujarEncabezadoConMarca(doc, `Reporte de Accesos y Seguridad — ${data.periodo_label}`, residencial);
     autoTable(doc, {
-      startY: 34,
+      startY: yInicio,
       head: [["Resumen", ""]],
       body: [
         ["Total de visitas (QR)", String(data.total_visitas)],
@@ -841,13 +830,13 @@ function ReporteAccesosVista({ nombreResidencial }: { nombreResidencial: string 
         ["Recurrentes", String(data.por_tipo.recurrente)],
         ["Repartidores", String(data.por_tipo.repartidor)],
       ],
-      theme: "grid", headStyles: { fillColor: [244, 135, 35] },
+      theme: "grid", headStyles: { fillColor: colorTablaPDF(residencial) },
     });
     if (data.top_casas.length) {
       autoTable(doc, {
         head: [["Casa con más visitas", "Visitas"]],
         body: data.top_casas.map(c => [c.casa, String(c.visitas)]),
-        theme: "striped", headStyles: { fillColor: [2, 46, 69] },
+        theme: "striped", headStyles: { fillColor: colorPrimarioPDF(residencial) },
       });
     }
     doc.save(`reporte-accesos-${data.periodo_label.replace(/[/\s–]/g, "-")}.pdf`);
@@ -858,7 +847,7 @@ function ReporteAccesosVista({ nombreResidencial }: { nombreResidencial: string 
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const resumen = [
-      [`Reporte de Accesos — ${nombreResidencial}`], [data.periodo_label], [],
+      [`Reporte de Accesos — ${residencial.nombre}`], [data.periodo_label], [],
       ["Total de visitas", data.total_visitas],
       ["Entradas registradas", data.total_entradas],
       ["Visitas únicas", data.por_tipo.unica],
@@ -959,7 +948,7 @@ function ReporteAccesosVista({ nombreResidencial }: { nombreResidencial: string 
 // ════════════════════════════════════════════════════════════════
 // REPORTE DE INVENTARIO DE TARJETAS (administración)
 // ════════════════════════════════════════════════════════════════
-function ReporteInventarioVista({ nombreResidencial }: { nombreResidencial: string }) {
+function ReporteInventarioVista({ residencial }: { residencial: ResidencialParaPDF }) {
   const [ini, fin] = rangoMesActual();
   const [desde, setDesde] = useState(ini);
   const [hasta, setHasta] = useState(fin);
@@ -980,14 +969,9 @@ function ReporteInventarioVista({ nombreResidencial }: { nombreResidencial: stri
     const { jsPDF } = await import("jspdf");
     const autoTable = (await import("jspdf-autotable")).default;
     const doc = new jsPDF();
-    doc.setFillColor(2, 46, 69); doc.rect(0, 0, 210, 28, "F");
-    doc.setTextColor(255); doc.setFontSize(16);
-    doc.text("Reporte de Inventario de Tarjetas", 14, 13);
-    doc.setFontSize(10);
-    doc.text(`${nombreResidencial} · ${data.periodo_label}`, 14, 21);
-    doc.setTextColor(0);
+    const yInicio = await dibujarEncabezadoConMarca(doc, `Reporte de Inventario de Tarjetas — ${data.periodo_label}`, residencial);
     autoTable(doc, {
-      startY: 34,
+      startY: yInicio,
       head: [["Resumen", ""]],
       body: [
         ["Tarjetas vendidas (período)", String(data.total_vendidas)],
@@ -995,7 +979,7 @@ function ReporteInventarioVista({ nombreResidencial }: { nombreResidencial: stri
         ["Stock total en bodega", String(data.stock_total)],
         ["Tipos en bajo stock", String(data.tipos_bajo_stock)],
       ],
-      theme: "grid", headStyles: { fillColor: [244, 135, 35] },
+      theme: "grid", headStyles: { fillColor: colorTablaPDF(residencial) },
     });
     autoTable(doc, {
       head: [["Tipo", "Acceso", "Precio", "Stock", "Vendidas", "Recaudado"]],
@@ -1003,7 +987,7 @@ function ReporteInventarioVista({ nombreResidencial }: { nombreResidencial: stri
         t.nombre, t.tipo_acceso === "peatonal" ? "Corto alcance" : "Largo alcance",
         L(t.precio), String(t.stock), String(t.vendidas_periodo), L(t.recaudado_periodo),
       ]),
-      theme: "striped", headStyles: { fillColor: [2, 46, 69] },
+      theme: "striped", headStyles: { fillColor: colorPrimarioPDF(residencial) },
     });
     doc.save(`reporte-inventario-${data.periodo_label.replace(/[/\s–]/g, "-")}.pdf`);
   }
@@ -1013,7 +997,7 @@ function ReporteInventarioVista({ nombreResidencial }: { nombreResidencial: stri
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const resumen = [
-      [`Reporte de Inventario — ${nombreResidencial}`], [data.periodo_label], [],
+      [`Reporte de Inventario — ${residencial.nombre}`], [data.periodo_label], [],
       ["Tarjetas vendidas (período)", data.total_vendidas],
       ["Recaudado (período)", data.total_recaudado],
       ["Stock total en bodega", data.stock_total],
@@ -1088,7 +1072,7 @@ function ReporteInventarioVista({ nombreResidencial }: { nombreResidencial: stri
 }
 
 
-function ReporteEjecutivoVista({ nombreResidencial }: { nombreResidencial: string }) {
+function ReporteEjecutivoVista({ residencial }: { residencial: ResidencialParaPDF }) {
   const hoy = new Date();
   const fmtL = (n: number) => new Intl.NumberFormat("es-HN", { style: "currency", currency: "HNL", maximumFractionDigits: 0 }).format(n);
   const [mes, setMes] = useState(hoy.getMonth() + 1);
@@ -1112,13 +1096,15 @@ function ReporteEjecutivoVista({ nombreResidencial }: { nombreResidencial: strin
     if (!data) return;
     const { jsPDF } = await import("jspdf");
     const doc = new jsPDF();
-    // Encabezado
-    doc.setFillColor(2, 46, 69); doc.rect(0, 0, 210, 30, "F");
-    doc.setTextColor(255); doc.setFontSize(18);
-    doc.text("Resumen Ejecutivo", 14, 14);
-    doc.setFontSize(11); doc.text(`Residencial ${nombreResidencial}`, 14, 22);
-    doc.setTextColor(244, 135, 35); doc.setFontSize(12);
+    // Encabezado con marca real (logo, colores, nombre) + el período del
+    // reporte, alineado a la derecha dentro de la misma franja -- detalle
+    // propio de este reporte que dibujarEncabezadoConMarca no cubre, así
+    // que se agrega encima después de la llamada compartida.
+    await dibujarEncabezadoConMarca(doc, "Resumen Ejecutivo", residencial);
+    const [rs, gs, bs] = colorTablaPDF(residencial);
+    doc.setTextColor(rs, gs, bs); doc.setFontSize(12);
     doc.text(data.mes_label, 196, 22, { align: "right" });
+    doc.setTextColor(40, 52, 64);
 
     let y = 44;
     const kpi = (titulo: string, valor: string, sub?: string) => {

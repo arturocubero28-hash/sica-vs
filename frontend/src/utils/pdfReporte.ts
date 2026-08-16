@@ -127,3 +127,12 @@ export async function dibujarEncabezadoConMarca(
 export function colorTablaPDF(residencial: DatosResidencialPDF): [number, number, number] {
   return hexARgb(residencial.colorSecundario);
 }
+
+/**
+ * Mismo criterio que colorTablaPDF, pero con el PRIMARIO -- para las tablas
+ * que en el diseño original usaban el azul de marca en vez del naranja
+ * (ej. la tabla de "antigüedad de la deuda" en el reporte de mora).
+ */
+export function colorPrimarioPDF(residencial: DatosResidencialPDF): [number, number, number] {
+  return hexARgb(residencial.colorPrimario);
+}
