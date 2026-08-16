@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Video, Building2, Users, ScrollText, CreditCard, Receipt,
   Handshake, TrendingUp, Ticket, Megaphone, User, Settings, Monitor, Home,
   QrCode, ClipboardList, Shield, Building, Sun, Moon, Menu as MenuIcon,
-  Fingerprint, ArrowRight, ArrowLeft, Check, type LucideIcon,
+  Fingerprint, ArrowRight, ArrowLeft, Check, Smartphone, Download, type LucideIcon,
 } from "lucide-react";
 import {
   login, getMe, logout, getToken, setToken,
@@ -477,6 +477,38 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
           <h2>Bienvenido a casa.</h2>
           <p>Ingresá al portal para gestionar tus visitas y mantenerte al día con la comunidad.</p>
           <button className="lp-cta-v2 lp-cta-large" onClick={onEntrar}>Ingresar al portal</button>
+        </div>
+      </section>
+
+      {/* Descarga de la app — Día 61. El botón de Android ya descarga el
+          APK real (servido como archivo estático desde este mismo
+          dominio, en /descargas/sicavs.apk). El de iOS queda visualmente
+          presente pero deshabilitado -- iOS no permite instalar un .apk
+          (ni nada por fuera de la App Store), así que hasta que la app
+          esté publicada ahí, este botón no tiene a dónde llevar. Cuando
+          se publique, solo hay que cambiar su href y sacarle la clase
+          "lp-descarga-pendiente". */}
+      <section className="lp-descarga-v2 lp-reveal">
+        <div className="lp-descarga-content">
+          <span className="lp-descarga-eyebrow"><Smartphone size={14} /> Aplicación móvil</span>
+          <h2>Llevá SICA-VS en el bolsillo.</h2>
+          <p>Generá tu código QR de visitas, recibí notificaciones y gestioná tus accesos desde tu teléfono.</p>
+          <div className="lp-descarga-botones">
+            <a className="lp-descarga-btn" href="/descargas/sicavs.apk" download>
+              <Download size={20} />
+              <span>
+                <strong>Descargar para</strong>
+                Android
+              </span>
+            </a>
+            <div className="lp-descarga-btn lp-descarga-pendiente" title="Próximamente en App Store">
+              <Smartphone size={20} />
+              <span>
+                <strong>Próximamente en</strong>
+                iOS
+              </span>
+            </div>
+          </div>
         </div>
       </section>
 

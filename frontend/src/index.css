@@ -3972,3 +3972,110 @@ input.input-error, select.input-error, textarea.input-error {
   .perfil-campo-fila { flex-direction: column; align-items: flex-start; gap: 4px; }
   .perfil-campo-valor { text-align: left; }
 }
+
+/* ---- Descarga de la app (Día 61) ---- */
+.lp-descarga-v2 {
+  position: relative;
+  z-index: 1;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 20px 24px 100px;
+  text-align: center;
+}
+
+.lp-descarga-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #F48723;
+  font-weight: 600;
+  margin-bottom: 20px;
+  padding: 8px 18px;
+  background: rgba(244,135,35,0.08);
+  border: 1px solid rgba(244,135,35,0.15);
+  border-radius: 100px;
+}
+
+.lp-descarga-v2 h2 {
+  font-size: clamp(26px, 4vw, 38px);
+  color: var(--lp-text-strong);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 14px;
+}
+
+.lp-descarga-v2 p {
+  font-size: 16px;
+  color: var(--lp-text-soft);
+  margin: 0 0 32px;
+  line-height: 1.5;
+}
+
+.lp-descarga-botones {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.lp-descarga-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px;
+  border-radius: 14px;
+  background: var(--lp-card-bg);
+  border: 1px solid var(--lp-border);
+  color: var(--lp-text-strong);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 180px;
+}
+
+.lp-descarga-btn span {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.lp-descarga-btn span strong {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--lp-text-faint);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* El botón de Android SÍ descarga -- resalta con el naranja de marca. */
+a.lp-descarga-btn:hover {
+  border-color: rgba(244,135,35,0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(244,135,35,0.15);
+}
+a.lp-descarga-btn svg { color: #F48723; }
+
+/* El de iOS está deshabilitado a propósito (ver comentario en App.tsx) --
+   se ve claramente distinto (atenuado, sin hover, cursor normal) para que
+   no parezca un link roto sino "todavía no disponible". */
+.lp-descarga-pendiente {
+  opacity: 0.5;
+  cursor: default;
+}
+.lp-descarga-pendiente:hover {
+  border-color: var(--lp-border);
+  transform: none;
+  box-shadow: none;
+}
+
+@media (max-width: 480px) {
+  .lp-descarga-botones { flex-direction: column; align-items: stretch; }
+  .lp-descarga-btn { justify-content: center; }
+}
