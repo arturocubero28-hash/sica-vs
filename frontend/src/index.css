@@ -1177,12 +1177,26 @@ html { scroll-behavior: smooth; }
   transition: background 0.2s ease, color 0.2s ease;
 }
 .lp-nav-links a:hover { background: rgba(244,135,35,0.1); color: #F48723; }
+
+/* Día 61 — mismo problema que ya se corrigió con el nombre de marca
+   (Día 59): el color de texto solo no alcanza para contraste sobre una
+   foto con zonas claras y oscuras a la vez. En vez de depender del
+   color, se le da al grupo entero de enlaces su propio respaldo (chip
+   oscuro con blur) mientras el nav no tiene scroll -- un solo chip
+   agrupando los 4 enlaces, más prolijo que uno por palabra suelta. */
+.lp-nav-v2:not(.scrolled) .lp-nav-links {
+  background: rgba(10, 14, 23, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 4px;
+  border-radius: 12px;
+}
 .lp-nav-v2:not(.scrolled) .lp-nav-links a {
   color: #fff;
-  text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+  text-shadow: none;
 }
 .lp-nav-v2:not(.scrolled) .lp-nav-links a:hover {
-  background: rgba(10, 14, 23, 0.4);
+  background: rgba(255, 255, 255, 0.12);
   color: #F5C518;
 }
 
