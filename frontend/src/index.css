@@ -1152,6 +1152,46 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 
 /* Acciones del navbar + botón de tema */
 .lp-nav-acciones { display: flex; align-items: center; gap: 10px; }
+
+html { scroll-behavior: smooth; }
+
+/* Margen para que el nav fijo no tape el inicio de la sección al saltar
+   con los enlaces del header (Día 61). */
+#beneficios, #infraestructura, #compromiso, #app { scroll-margin-top: 90px; }
+
+/* Día 61 — pestañas de navegación rápida en el header, a pedido del
+   usuario, para saltar directo a una sección sin scrollear a mano.
+   Mismo criterio de contraste que el nombre de marca (Día 59): sin
+   scroll, el nav flota sobre la foto del hero, así que el texto solo
+   con color no alcanza -- se le da un respaldo propio (chip oscuro con
+   blur) mientras no hay scroll; una vez que el nav tiene fondo sólido
+   propio, el chip se quita y basta con el color del tema. */
+.lp-nav-links { display: flex; align-items: center; gap: 4px; }
+.lp-nav-links a {
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--lp-text-strong);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.lp-nav-links a:hover { background: rgba(244,135,35,0.1); color: #F48723; }
+.lp-nav-v2:not(.scrolled) .lp-nav-links a {
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0,0,0,0.4);
+}
+.lp-nav-v2:not(.scrolled) .lp-nav-links a:hover {
+  background: rgba(10, 14, 23, 0.4);
+  color: #F5C518;
+}
+
+/* En pantallas chicas, prioridad al logo y al botón "Ingresar" -- los
+   enlaces de navegación se esconden, mismo criterio que el resto de
+   los ajustes de nav para móvil (Día 59). */
+@media (max-width: 900px) {
+  .lp-nav-links { display: none; }
+}
 .lp-tema-btn {
   width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
   font-size: 17px; cursor: pointer; background: rgba(255,255,255,0.06);

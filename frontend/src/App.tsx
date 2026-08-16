@@ -347,6 +347,12 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
               <span className="lp-brand-sub">San Pedro Sula</span>
             </div>
           </div>
+          <div className="lp-nav-links">
+            <a href="#beneficios">Beneficios</a>
+            <a href="#infraestructura">Infraestructura</a>
+            <a href="#compromiso">Compromiso</a>
+            <a href="#app">App</a>
+          </div>
           <div className="lp-nav-acciones">
             <button className="lp-tema-btn" onClick={() => setTema(t => t === "oscuro" ? "claro" : "oscuro")}
               aria-label="Cambiar tema" title={tema === "oscuro" ? "Modo claro" : "Modo oscuro"}>
@@ -392,7 +398,7 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
       </section>
 
       {/* Pilares */}
-      <section className="lp-pilares-v2">
+      <section className="lp-pilares-v2" id="beneficios">
         <div className="lp-section-header lp-reveal">
           <span className="lp-section-tag">Por qué vivir acá</span>
           <h2>Tu tranquilidad, nuestra prioridad</h2>
@@ -414,7 +420,7 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
       </section>
 
       {/* Galería de infraestructura */}
-      <section className="lp-galeria">
+      <section className="lp-galeria" id="infraestructura">
         <div className="lp-section-header lp-reveal">
           <span className="lp-section-tag">Infraestructura</span>
           <h2>Seguridad que se ve y se siente</h2>
@@ -444,7 +450,7 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
       <ComoFunciona />
 
       {/* Banda de compromiso */}
-      <section className="lp-banda-v2 lp-reveal">
+      <section className="lp-banda-v2 lp-reveal" id="compromiso">
         <div className="lp-banda-glow" />
         <div className="lp-banda-grid">
           <div className="lp-banda-info">
@@ -488,10 +494,10 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
           esté publicada ahí, este botón no tiene a dónde llevar. Cuando
           se publique, solo hay que cambiar su href y sacarle la clase
           "lp-descarga-pendiente". */}
-      <section className="lp-descarga-v2 lp-reveal">
+      <section className="lp-descarga-v2 lp-reveal" id="app">
         <div className="lp-descarga-content">
           <span className="lp-descarga-eyebrow"><Smartphone size={14} /> Aplicación móvil</span>
-          <h2>Llevá SICA-VS en el bolsillo.</h2>
+          <h2>Llevá Villas del Sol en el bolsillo.</h2>
           <p>Generá tu código QR de visitas, recibí notificaciones y gestioná tus accesos desde tu teléfono.</p>
           <div className="lp-descarga-botones">
             <a className="lp-descarga-btn" href="/descargas/sicavs.apk" download>
