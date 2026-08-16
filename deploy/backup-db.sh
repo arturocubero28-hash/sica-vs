@@ -35,13 +35,27 @@ if [ ! -f "$ARCHIVO_ENV" ]; then
   exit 1
 fi
 
-# Carga las variables del .env (POSTGRES_USER, POSTGRES_DB, SPACES_KEY,
-# SPACES_SECRET, SPACES_BUCKET, SPACES_REGION) sin exponerlas en el
-# historial de comandos.
-set -a
-# shellcheck disable=SC1090
-source "$ARCHIVO_ENV"
-set +a
+# Carga SOLO las variables puntuales que este script necesita, leyéndolas
+# como texto plano -- NO se hace "source" de todo el archivo.
+#
+# Por qué: un `source` normal ejecuta el .env como si fuera código bash
+# real, línea por línea. Si CUALQUIER otra variable del archivo (una que
+# ni siquiera usa este script) tiene un valor sin comillas con espacios
+# -- por ejemplo RATE_LIMIT_DEFAULT=600 per hour, tal como viene en la
+# plantilla -- bash interpreta "per" como un COMANDO aparte a ejecutar,
+# no como parte del valor, y el script entero falla con un error que no
+# tiene nada que ver con backups. Leyendo target solo las variables que
+# hacen falta, ninguna variable ajena puede romper esto.
+leer_var() {
+  grep -E "^$1=" "$ARCHIVO_ENV" | tail -1 | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//"
+}
+POSTGRES_USER=$(leer_var POSTGRES_USER)
+POSTGRES_DB=$(leer_var POSTGRES_DB)
+POSTGRES_PASSWORD=$(leer_var POSTGRES_PASSWORD)
+SPACES_KEY=$(leer_var SPACES_KEY)
+SPACES_SECRET=$(leer_var SPACES_SECRET)
+SPACES_BUCKET=$(leer_var SPACES_BUCKET)
+SPACES_REGION=$(leer_var SPACES_REGION)
 
 FECHA=$(date +%Y%m%d-%H%M%S)
 ARCHIVO="sicavs-${FECHA}.dump"

@@ -29,10 +29,21 @@ COMPOSE="docker compose -f $DIR_PROYECTO/docker-compose.prod.yml"
 CARPETA_BACKUPS_SPACES="backups-db"
 TMPDIR="/tmp/sicavs-backups"
 
-set -a
-# shellcheck disable=SC1090
-source "$ARCHIVO_ENV"
-set +a
+# Mismo criterio que backup-db.sh: se leen SOLO las variables puntuales
+# que hacen falta, en vez de un "source" de todo el .env -- un source
+# ejecuta el archivo como código bash real, y cualquier valor sin
+# comillas con espacios en OTRA variable (ej. RATE_LIMIT_DEFAULT=600 per
+# hour) rompe todo el script con un error que no tiene nada que ver.
+leer_var() {
+  grep -E "^$1=" "$ARCHIVO_ENV" | tail -1 | cut -d '=' -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//"
+}
+POSTGRES_USER=$(leer_var POSTGRES_USER)
+POSTGRES_DB=$(leer_var POSTGRES_DB)
+POSTGRES_PASSWORD=$(leer_var POSTGRES_PASSWORD)
+SPACES_KEY=$(leer_var SPACES_KEY)
+SPACES_SECRET=$(leer_var SPACES_SECRET)
+SPACES_BUCKET=$(leer_var SPACES_BUCKET)
+SPACES_REGION=$(leer_var SPACES_REGION)
 
 mkdir -p "$TMPDIR"
 export AWS_ACCESS_KEY_ID="$SPACES_KEY"

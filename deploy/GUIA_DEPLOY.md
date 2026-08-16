@@ -216,7 +216,14 @@ cd /opt/sicavs
 Si todo sale bien, el final del log dice `Backup completo. OK.`. Confirmá que el archivo apareció en Spaces:
 
 ```bash
-source .env
+# No usar "source .env" a mano -- si alguna otra variable del archivo
+# tiene un valor sin comillas con espacios (ej. RATE_LIMIT_DEFAULT=600
+# per hour), bash lo interpreta como un comando aparte y falla. Se leen
+# solo las 3 variables puntuales que hacen falta acá.
+SPACES_KEY=$(grep -E '^SPACES_KEY=' .env | cut -d '=' -f2-)
+SPACES_SECRET=$(grep -E '^SPACES_SECRET=' .env | cut -d '=' -f2-)
+SPACES_BUCKET=$(grep -E '^SPACES_BUCKET=' .env | cut -d '=' -f2-)
+SPACES_REGION=$(grep -E '^SPACES_REGION=' .env | cut -d '=' -f2-)
 export AWS_ACCESS_KEY_ID=$SPACES_KEY AWS_SECRET_ACCESS_KEY=$SPACES_SECRET
 aws s3 ls s3://$SPACES_BUCKET/backups-db/ --endpoint-url https://$SPACES_REGION.digitaloceanspaces.com
 ```
@@ -226,6 +233,10 @@ aws s3 ls s3://$SPACES_BUCKET/backups-db/ --endpoint-url https://$SPACES_REGION.
 Un backup que nunca se probó restaurar no es un backup de fiar. **No lo pruebes directo contra la base real** — primero contra una base descartable, para confirmar que el mecanismo funciona sin ningún riesgo:
 
 ```bash
+# Mismas variables puntuales que antes, más las de Postgres
+POSTGRES_USER=$(grep -E '^POSTGRES_USER=' .env | cut -d '=' -f2-)
+POSTGRES_PASSWORD=$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d '=' -f2-)
+
 # Crear una base de prueba, separada de la real
 docker compose -f docker-compose.prod.yml exec -T -e PGPASSWORD=$POSTGRES_PASSWORD db \
   psql -U $POSTGRES_USER -c "CREATE DATABASE sicavs_test_restore;"
