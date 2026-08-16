@@ -1407,17 +1407,40 @@ def subir_logo_residencial(usuario_actual):
     return jsonify({"data": r.to_dict()})
 
 
-@cuentas_bp.get("/mi-residencial/logo/<nombre_archivo>")
+@cuentas_bp.get("/mi-residencial/logo/<path:nombre_archivo>")
 @token_required
 def ver_logo_residencial(usuario_actual, nombre_archivo):
     """Sirve el archivo del logo. Cualquier usuario autenticado puede verlo
-    (es la marca visual que ve toda la residencial, no un dato privado)."""
+    (es la marca visual que ve toda la residencial, no un dato privado).
+
+    Día 59 — BUG REAL: el convertidor de ruta era <nombre_archivo> (string
+    simple), que NO admite barras "/" dentro del segmento. En modo nube
+    (Spaces), logo_archivo se guarda CON el prefijo de subcarpeta
+    ("residenciales/xxxx.jpeg" — ver guardar_imagen_segura en
+    utils/archivos.py), así que la URL real que arma el frontend
+    (urlLogoResidencial, que usa residencial.logo_archivo tal cual) SIEMPRE
+    tenía una barra en producción -- y esa ruta nunca coincidía con
+    ninguna vista registrada, 404 directo, sin llegar siquiera al
+    query de abajo. <path:nombre_archivo> sí admite barras.
+    """
     from app.models.residencial import Residencial
     existe = Residencial.query.filter_by(logo_archivo=nombre_archivo).first()
     if not existe:
         return jsonify({"error": {"code": "no_encontrado",
                                   "message": "Logo no encontrado"}}), 404
-    return servir_archivo_seguro(_carpeta_logos(), nombre_archivo)
+    # No se usa servir_archivo_seguro(carpeta, nombre_archivo) a propósito:
+    # esa función, en modo nube, RECONSTRUYE la clave sumando la subcarpeta
+    # (derivada de `carpeta`) + nombre_archivo -- una lógica pensada para
+    # cuando nombre_archivo es SOLO el nombre del archivo, sin prefijo. Pero
+    # acá, con el fix de <path:nombre_archivo> de arriba, nombre_archivo YA
+    # llega completo con el prefijo en modo nube ("residenciales/xxx.jpeg",
+    # tal como está guardado en la base) -- sumarle la subcarpeta de nuevo
+    # duplicaría el prefijo ("residenciales/residenciales/xxx.jpeg") y
+    # rompería la búsqueda en Spaces. Se llama directo a storage.py con la
+    # clave ya normalizada (mismo criterio que en recibos.py/caja.py).
+    from app.services import storage
+    clave = nombre_archivo if nombre_archivo.startswith("residenciales/") else f"residenciales/{nombre_archivo}"
+    return storage.servir_archivo(clave)
 
 # =====================================================================
 # SOLICITUDES DE BAJA (admin de edificio pide dar de baja a un inquilino)
