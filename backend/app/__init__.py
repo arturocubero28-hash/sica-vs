@@ -41,7 +41,26 @@ def create_app(config_class=Config):
     CORS(app, origins=app.config["CORS_ORIGINS"], supports_credentials=True)
 
     # Rate limiter con Redis como almacenamiento (consistente entre workers)
-    limiter.storage_uri = app.config["REDIS_URL"]
+    #
+    # Día 61 — bug real encontrado: el código anterior hacía
+    # `limiter.storage_uri = app.config["REDIS_URL"]`, que PARECE
+    # configurar el storage pero es un no-op silencioso. Flask-Limiter
+    # guarda ese valor internamente como el atributo PRIVADO
+    # `self._storage_uri` (con guion bajo), fijado una sola vez en el
+    # constructor de Limiter() -- asignar `limiter.storage_uri` (sin
+    # guion bajo, un nombre distinto) después de construido el objeto
+    # solo crea un atributo nuevo y sin relación que la librería nunca
+    # lee. Confirmado leyendo el código fuente instalado de
+    # Flask-Limiter 3.8.0: init_app() busca primero la clave de
+    # configuración de Flask RATELIMIT_STORAGE_URI, y si no la
+    # encuentra, cae a "memory://" -- exactamente la advertencia
+    # "Using the in-memory storage..." que aparecía en cada arranque
+    # del backend desde el Día 50, sin que nadie lo notara porque el
+    # rate limiting seguía funcionando igual (solo que sin persistir
+    # entre reinicios ni compartirse entre el proceso backend y el
+    # worker). El fix real: setear la clave de configuración de Flask
+    # que la librería sí lee, ANTES de init_app().
+    app.config["RATELIMIT_STORAGE_URI"] = app.config["REDIS_URL"]
     limiter.init_app(app)
 
     # --- Importar modelos (para que SQLAlchemy / Migrate los conozca) ---
