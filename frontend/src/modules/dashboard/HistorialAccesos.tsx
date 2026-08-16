@@ -3,7 +3,7 @@ import { historialAccesos, historialPagos, historialTarjetas, urlFotoGuardia, ur
 import { L } from "../../utils/formato";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { useMiResidencial } from "../../hooks/useMiResidencial";
-import { dibujarEncabezadoReportePDF, NARANJA_TABLA_PDF } from "../../utils/pdfReporte";
+import { dibujarEncabezadoConMarca, colorTablaPDF } from "../../utils/pdfReporte";
 import { Camera, Car, DollarSign, Download, FileSpreadsheet, Footprints, IdCard, Paperclip, QrCode, Receipt, ScrollText } from "lucide-react";
 
 export function HistorialAccesos() {
@@ -33,7 +33,7 @@ export function HistorialAccesos() {
 }
 
 function TabAccesos() {
-  const { nombre: nombreResidencial } = useMiResidencial();
+  const residencial = useMiResidencial();
   const [data, setData] = useState<HistorialDTO | null>(null);
   const [cargando, setCargando] = useState(true);
   const [desde, setDesde] = useState("");
@@ -71,11 +71,11 @@ function TabAccesos() {
       const { jsPDF } = await import("jspdf");
       const autoTable = (await import("jspdf-autotable")).default;
       const doc = new jsPDF();
-      dibujarEncabezadoReportePDF(doc, "Historial de accesos de visitas", nombreResidencial || "");
+      const yInicio = await dibujarEncabezadoConMarca(doc, "Historial de accesos de visitas", residencial);
       doc.setFontSize(10);
-      doc.text(`${completo.eventos.length} evento(s)${desde || hasta ? ` · ${desde || "…"} a ${hasta || "…"}` : ""}`, 14, 36);
+      doc.text(`${completo.eventos.length} evento(s)${desde || hasta ? ` · ${desde || "…"} a ${hasta || "…"}` : ""}`, 14, yInicio);
       autoTable(doc, {
-        startY: 42,
+        startY: yInicio + 6,
         head: [["Fecha / Hora", "Dirección", "Visitante", "Unidad", "Acceso", "Placa", "Guardia"]],
         body: completo.eventos.map(e => [
           new Date(e.ocurrido_en).toLocaleString("es-HN"),
@@ -84,7 +84,7 @@ function TabAccesos() {
           e.en_vehiculo ? (e.placa || "—") : "Peatonal",
           e.guardia,
         ]),
-        headStyles: { fillColor: NARANJA_TABLA_PDF },
+        headStyles: { fillColor: colorTablaPDF(residencial) },
         styles: { fontSize: 8 },
       });
       doc.save(`historial-accesos-visitas-${new Date().toISOString().slice(0, 10)}.pdf`);
@@ -304,7 +304,7 @@ const METODO_LABEL: Record<string, string> = {
 };
 
 function TabPagos() {
-  const { nombre: nombreResidencial } = useMiResidencial();
+  const residencial = useMiResidencial();
   const [data, setData] = useState<HistorialPagosDTO | null>(null);
   const [cargando, setCargando] = useState(true);
   const [desde, setDesde] = useState("");
@@ -333,25 +333,25 @@ function TabPagos() {
       const { jsPDF } = await import("jspdf");
       const autoTable = (await import("jspdf-autotable")).default;
       const doc = new jsPDF();
-      dibujarEncabezadoReportePDF(doc, "Historial de pagos", nombreResidencial || "");
+      const yInicio = await dibujarEncabezadoConMarca(doc, "Historial de pagos", residencial);
       doc.setFontSize(10);
-      doc.text(`${completo.pagos.length} pago(s)${desde || hasta ? ` · ${desde || "…"} a ${hasta || "…"}` : ""}`, 14, 36);
+      doc.text(`${completo.pagos.length} pago(s)${desde || hasta ? ` · ${desde || "…"} a ${hasta || "…"}` : ""}`, 14, yInicio);
       autoTable(doc, {
-        startY: 42,
+        startY: yInicio + 6,
         head: [["Fecha / Hora", "Casa", "Titular", "Monto", "Método", "Cobrado por"]],
         body: completo.pagos.map(p => [
           new Date(p.fecha).toLocaleString("es-HN"),
           p.identificador, p.titular, L(p.monto),
           METODO_LABEL[p.metodo] || p.metodo, p.cobrado_por,
         ]),
-        headStyles: { fillColor: NARANJA_TABLA_PDF },
+        headStyles: { fillColor: colorTablaPDF(residencial) },
         styles: { fontSize: 8 },
       });
-      const total = completo.pagos.reduce((s, p) => s + p.monto, 0);
-      const y = (doc as any).lastAutoTable?.finalY ?? 42;
+      const total = completo.pagos.reduce((suma, p) => suma + p.monto, 0);
+      const yFinal = (doc as any).lastAutoTable?.finalY ?? yInicio;
       doc.setFontSize(10);
       doc.setTextColor(2, 46, 69);
-      doc.text(`Total: ${L(total)}`, 14, y + 10);
+      doc.text(`Total: ${L(total)}`, 14, yFinal + 10);
       doc.save(`historial-pagos-${new Date().toISOString().slice(0, 10)}.pdf`);
     } finally { setExportando(""); }
   }
@@ -470,7 +470,7 @@ function TabPagos() {
 }
 
 function TabTarjetas() {
-  const { nombre: nombreResidencial } = useMiResidencial();
+  const residencial = useMiResidencial();
   const [data, setData] = useState<HistorialTarjetasDTO | null>(null);
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
@@ -496,11 +496,11 @@ function TabTarjetas() {
       const { jsPDF } = await import("jspdf");
       const autoTable = (await import("jspdf-autotable")).default;
       const doc = new jsPDF();
-      dibujarEncabezadoReportePDF(doc, "Historial de accesos de residentes", nombreResidencial || "");
+      const yInicio = await dibujarEncabezadoConMarca(doc, "Historial de accesos de residentes", residencial);
       doc.setFontSize(10);
-      doc.text(`${completo.eventos.length} evento(s)${desde || hasta ? ` · ${desde || "…"} a ${hasta || "…"}` : ""}`, 14, 36);
+      doc.text(`${completo.eventos.length} evento(s)${desde || hasta ? ` · ${desde || "…"} a ${hasta || "…"}` : ""}`, 14, yInicio);
       autoTable(doc, {
-        startY: 42,
+        startY: yInicio + 6,
         head: [["Fecha / Hora", "Residente", "Casa", "Tarjeta", "Tipo", "Acceso", "Dirección"]],
         body: completo.eventos.map(e => [
           new Date(e.ocurrido_en).toLocaleString("es-HN"),
@@ -508,7 +508,7 @@ function TabTarjetas() {
           e.tipo_acceso === "peatonal" ? "Peatonal" : "Vehicular",
           e.acceso, e.direccion === "entrada" ? "Entrada" : "Salida",
         ]),
-        headStyles: { fillColor: NARANJA_TABLA_PDF },
+        headStyles: { fillColor: colorTablaPDF(residencial) },
         styles: { fontSize: 8 },
       });
       doc.save(`historial-accesos-residentes-${new Date().toISOString().slice(0, 10)}.pdf`);
