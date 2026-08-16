@@ -193,3 +193,82 @@ cd /opt/sicavs/frontend
 VITE_API_URL=https://patronatovillasdelsol.com/api/v1 npm run build
 cp -r dist/* /var/www/sicavs/
 ```
+
+## Backups automáticos de la base de datos (Día 60)
+
+Genera un dump comprimido de Postgres todos los días y lo sube a DigitalOcean Spaces (no al disco del VPS — si el servidor falla, un backup guardado ahí mismo no protege de nada). Conserva los últimos 14 días, borrando los más viejos automáticamente.
+
+### 1. Instalar AWS CLI (una sola vez)
+
+El script sube los backups a Spaces usando esta herramienta (Spaces es compatible con S3, así que funciona igual que con Amazon).
+
+```bash
+apt install -y awscli
+```
+
+### 2. Probar el backup a mano, antes de automatizarlo
+
+```bash
+cd /opt/sicavs
+./deploy/backup-db.sh
+```
+
+Si todo sale bien, el final del log dice `Backup completo. OK.`. Confirmá que el archivo apareció en Spaces:
+
+```bash
+source .env
+export AWS_ACCESS_KEY_ID=$SPACES_KEY AWS_SECRET_ACCESS_KEY=$SPACES_SECRET
+aws s3 ls s3://$SPACES_BUCKET/backups-db/ --endpoint-url https://$SPACES_REGION.digitaloceanspaces.com
+```
+
+### 3. Probar la restauración — sin arriesgar producción
+
+Un backup que nunca se probó restaurar no es un backup de fiar. **No lo pruebes directo contra la base real** — primero contra una base descartable, para confirmar que el mecanismo funciona sin ningún riesgo:
+
+```bash
+# Crear una base de prueba, separada de la real
+docker compose -f docker-compose.prod.yml exec -T -e PGPASSWORD=$POSTGRES_PASSWORD db \
+  psql -U $POSTGRES_USER -c "CREATE DATABASE sicavs_test_restore;"
+
+# Restaurar el backup MÁS RECIENTE ahí (reemplazá el nombre del archivo
+# por el que viste en el paso 2)
+docker compose -f docker-compose.prod.yml exec -T -e PGPASSWORD=$POSTGRES_PASSWORD db \
+  pg_restore -U $POSTGRES_USER -d sicavs_test_restore --no-owner < /tmp/sicavs-backups/ELNOMBREQUEVISTE.dump
+
+# Confirmar que trajo datos reales (por ejemplo, contar usuarios)
+docker compose -f docker-compose.prod.yml exec -T -e PGPASSWORD=$POSTGRES_PASSWORD db \
+  psql -U $POSTGRES_USER -d sicavs_test_restore -c "SELECT count(*) FROM usuarios;"
+
+# Borrar la base de prueba una vez confirmado
+docker compose -f docker-compose.prod.yml exec -T -e PGPASSWORD=$POSTGRES_PASSWORD db \
+  psql -U $POSTGRES_USER -c "DROP DATABASE sicavs_test_restore;"
+```
+
+Si el conteo de usuarios coincide con lo real, confirmado: el backup sirve. Guardá `deploy/restore-db.sh` como referencia para el día que haga falta restaurar de verdad (ese sí pide confirmación explícita antes de tocar la base real).
+
+### 4. Automatizar con cron — que corra solo, todos los días
+
+```bash
+crontab -e
+```
+
+Agregar esta línea al final (corre todos los días a las 3:00 AM, hora de menor uso):
+
+```
+0 3 * * * /opt/sicavs/deploy/backup-db.sh >> /var/log/sicavs-backup.log 2>&1
+```
+
+Guardar y salir. Confirmar que quedó registrado:
+
+```bash
+crontab -l
+```
+
+### 5. Verificar de vez en cuando que los backups siguen corriendo
+
+```bash
+tail -20 /var/log/sicavs-backup.log
+```
+
+Si en algún momento deja de aparecer un backup nuevo cada día, algo se rompió (credenciales vencidas, disco lleno, etc.) — vale la pena chequear este log cada tanto, no asumir que "como lo configuré una vez, sigue andando solo para siempre".
+
