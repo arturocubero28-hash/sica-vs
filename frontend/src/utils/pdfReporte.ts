@@ -78,6 +78,16 @@ export async function dibujarEncabezadoConMarca(
   const [r, g, b] = hexARgb(residencial.colorPrimario);
   const ALTO = 30;
   doc.setFillColor(r, g, b);
+  // Se mantiene un rectángulo recto (no roundedRect): redondear las 4
+  // esquinas se descartó a propósito -- las de ARRIBA quedan pegadas al
+  // borde mismo de la página (y=0), así que redondearlas dejaría una
+  // muesca visible en las puntas superiores (no hay margen arriba contra
+  // el que "disimular" la curva, a diferencia del recibo, que redondea
+  // SOLO abajo con un path armado a mano en reportlab). jsPDF no permite
+  // elegir esquinas individuales con una sola llamada simple, y sin poder
+  // generar+ver el PDF en este entorno (a diferencia de los PDFs del
+  // backend, donde sí se puede con pdftoppm), no vale arriesgar un path
+  // bezier a ciegas que podría salir peor que el rectángulo recto actual.
   doc.rect(0, 0, 210, ALTO, "F");
 
   let xTexto = 14;
