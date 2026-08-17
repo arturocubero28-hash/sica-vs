@@ -304,7 +304,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
   const [enrolInfo, setEnrolInfo] = useState<{ edificio_nombre: string; apartamento_sugerido?: string | null; dueno_nombre?: string | null } | null>(null);
   const [duenoVive, setDuenoVive] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
-  const [enlace, setEnlace] = useState<{ email: string; url: string } | null>(null);
+  const [enlace, setEnlace] = useState<{ email: string; url: string | null } | null>(null);
   const [nuevaUnidadTipo, setNuevaUnidadTipo] = useState<"casa" | "edificio">("casa");
   const [nuevaUnidadId, setNuevaUnidadId] = useState("");
   const [maxApartamentos, setMaxApartamentos] = useState("");
@@ -448,7 +448,14 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
           contacto_emergencia_telefono: emergTel,
         },
       });
-      const url = `${window.location.origin}/?activar=${res.activacion.token_activacion}`;
+      // Día 61 — en producción el backend NO devuelve token_activacion (por
+      // diseño: el token solo debe viajar por correo, nunca en la
+      // respuesta de la API -- ver _bloque_activacion en cuentas.py). Antes
+      // esto armaba igual un link con "?activar=undefined", confuso y roto.
+      // Ahora se detecta la ausencia del token y se muestra un mensaje de
+      // "se envió el correo" en vez de un link que nunca iba a funcionar.
+      const token = res.activacion.token_activacion;
+      const url = token ? `${window.location.origin}/?activar=${token}` : null;
       setEnlace({ email: res.activacion.usuario_email, url });
       setMsg({ tipo: "ok", texto: "Cuenta creada exitosamente." });
       onCreada();
@@ -456,7 +463,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
   }
 
   function copiarEnlace() {
-    if (!enlace) return;
+    if (!enlace || !enlace.url) return;
     navigator.clipboard.writeText(enlace.url);
   }
 
@@ -473,16 +480,32 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
 
         <div className="modal-alta-body">
 
-      {/* Resultado: enlace de activación */}
+      {/* Resultado: enlace de activación (o aviso de correo enviado) */}
       {enlace && (
         <div className="activacion-box">
-          <div className="activacion-titulo">✓ Cuenta creada — Enlace de activación</div>
-          <p>Compartí este enlace con <b>{enlace.email}</b> para que defina su contraseña:</p>
-          <div className="activacion-url">{enlace.url}</div>
-          <div className="row-btns" style={{ marginTop: 8 }}>
-            <button className="mini" onClick={copiarEnlace}>Copiar enlace</button>
-            <button className="ghost mini" onClick={() => setEnlace(null)}>Dar de alta otra cuenta</button>
-          </div>
+          {enlace.url ? (
+            <>
+              <div className="activacion-titulo">✓ Cuenta creada — Enlace de activación</div>
+              <p>Compartí este enlace con <b>{enlace.email}</b> para que defina su contraseña:</p>
+              <div className="activacion-url">{enlace.url}</div>
+              <div className="row-btns" style={{ marginTop: 8 }}>
+                <button className="mini" onClick={copiarEnlace}>Copiar enlace</button>
+                <button className="ghost mini" onClick={() => setEnlace(null)}>Dar de alta otra cuenta</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="activacion-titulo">✓ Cuenta creada exitosamente</div>
+              <p>
+                Le enviamos un correo a <b>{enlace.email}</b> con instrucciones para
+                que defina su contraseña. Pedile que revise su bandeja de entrada
+                (y la carpeta de spam, por si acaso).
+              </p>
+              <div className="row-btns" style={{ marginTop: 8 }}>
+                <button className="ghost mini" onClick={() => setEnlace(null)}>Dar de alta otra cuenta</button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -867,7 +890,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
   const [mEmergNombre, setMEmergNombre] = useState("");
   const [mEmergTel, setMEmergTel] = useState("");
   const [msg, setMsg] = useState("");
-  const [miembroEnlace, setMiembroEnlace] = useState<{ email: string; url: string } | null>(null);
+  const [miembroEnlace, setMiembroEnlace] = useState<{ email: string; url: string | null } | null>(null);
   const [mostrarAgregar, setMostrarAgregar] = useState(false);
   // UX Día 43: el detalle de cuenta se separa en pestañas (datos / miembros /
   // accesos) para eliminar el scroll largo. Antes todas las secciones se
@@ -982,10 +1005,12 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
         contacto_emergencia_nombre: mEmergNombre, contacto_emergencia_telefono: mEmergTel,
       });
       const token = (res as any).activacion?.token_activacion;
-      if (token) {
-        const url = `${window.location.origin}/?activar=${token}`;
-        setMiembroEnlace({ email: mEmail, url });
-      }
+      // Día 61 — antes solo se guardaba el enlace si había token real (dev).
+      // En producción esto dejaba silencio total: el admin no se enteraba
+      // de que el correo se había enviado igual. Ahora siempre se guarda
+      // el resultado, con o sin token, para poder avisar en cualquier caso.
+      const url = token ? `${window.location.origin}/?activar=${token}` : null;
+      setMiembroEnlace({ email: mEmail, url });
       setMNombre(""); setMEmail(""); setMApellido(""); setMTelefono("");
       setMDni(""); setMProfesion(""); setMEmergNombre(""); setMEmergTel("");
       setMErrors({}); setMsg(""); onCambio();
@@ -1287,11 +1312,20 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
 
         {miembroEnlace && (
           <div className="activacion-box">
-            <div className="activacion-titulo">Enlace de activación para miembro</div>
-            <div className="activacion-url">{miembroEnlace.url}</div>
-            <button className="mini" onClick={() => navigator.clipboard.writeText(miembroEnlace.url)}>
-              Copiar enlace
-            </button>
+            {miembroEnlace.url ? (
+              <>
+                <div className="activacion-titulo">Enlace de activación para miembro</div>
+                <div className="activacion-url">{miembroEnlace.url}</div>
+                <button className="mini" onClick={() => navigator.clipboard.writeText(miembroEnlace.url!)}>
+                  Copiar enlace
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="activacion-titulo">✓ Miembro agregado exitosamente</div>
+                <p>Le enviamos un correo a <b>{miembroEnlace.email}</b> con instrucciones para que defina su contraseña.</p>
+              </>
+            )}
           </div>
         )}
 
