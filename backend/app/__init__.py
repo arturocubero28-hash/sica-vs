@@ -561,6 +561,34 @@ def create_app(config_class=Config):
         if request.path.startswith("/api/v1/dev/"):
             return response
         try:
+            # Día 61 — BUG REAL encontrado (reportado en vivo: al crear una
+            # casa con un email duplicado, la casa quedaba creada igual
+            # pese al error). Causa: este commit() de más abajo, pensado
+            # solo para guardar el registro de auditoría, en realidad
+            # confirma TODO lo que haya quedado pendiente (flush() sin
+            # commit ni rollback) en la sesión de SQLAlchemy durante el
+            # resto del request -- incluyendo escrituras de negocio que
+            # deberían haberse descartado porque el request terminó en
+            # error. Caso real: crear_cuenta() guarda (flush) la Unidad
+            # nueva ANTES de validar el email del titular; si el email ya
+            # existe, el endpoint devuelve un error sin hacer rollback --
+            # pero este commit() de auditoría, que corre en TODAS las
+            # respuestas sin excepción, terminaba confirmando esa Unidad
+            # "fantasma" igual, dejando la casa creada aunque el usuario
+            # viera un error.
+            #
+            # Fix: se descarta primero cualquier cosa pendiente de negocio
+            # (rollback) -- inofensivo si no hay nada pendiente, que es el
+            # caso normal en un request exitoso donde el propio endpoint ya
+            # hizo su commit -- y recién ahí se agrega y confirma el
+            # registro de auditoría en una transacción propia y limpia. Así
+            # el log de auditoría queda desacoplado de cualquier escritura
+            # de negocio a medio hacer, sin importar si el endpoint que
+            # corrió antes se olvidó de un rollback explícito en alguno de
+            # sus caminos de error -- corrige esto de raíz para TODOS los
+            # endpoints del backend, no solo crear_cuenta.
+            db.session.rollback()
+
             usuario = getattr(g, "usuario_actual", None)
             email_log = usuario.email if usuario else getattr(g, "email_intento", None)
             ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
