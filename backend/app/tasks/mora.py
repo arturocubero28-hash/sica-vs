@@ -64,16 +64,12 @@ def _avisar_cuotas_logica(Cuota, _notif):
 
         if dias == 3:
             titulo = "Tu cuota vence pronto"
-            # Día 62: antes decía "para evitar el bloqueo por mora", pero el
-            # bloqueo NO ocurre al vencer -- ocurre recién al agotarse los
-            # días de gracia posteriores. Se corrige el texto para no
-            # asustar de más ni desinformar sobre cuándo se corta.
-            cuerpo = (f"La cuota de {monto_txt} vence en 3 días. "
-                      f"Pagá a tiempo para evitar entrar en mora.")
+            cuerpo = (f"Tu cuota de {monto_txt} vence el "
+                      f"{_fecha_larga(cuota.fecha_vencimiento)}.")
         else:  # dias == 0
             titulo = "Tu cuota vence hoy"
-            cuerpo = (f"Hoy vence la cuota de {monto_txt}. "
-                      f"Realizá tu pago para mantener tu cuenta al día.")
+            cuerpo = (f"Hoy vence tu cuota de {monto_txt}. "
+                      f"Realizá tu pago para mantener tu servicio activo.")
 
         try:
             # Encolado (async) en vez de enviar directo -- así cada aviso se
@@ -192,48 +188,71 @@ def generar_cuotas_mensuales():
 
 
 # ── Revisión diaria de mora ────────────────────────────────────────────────────
-def _mensaje_mora(dias, monto_txt, dias_gracia=None):
+_MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+             "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def _fecha_larga(fecha):
     """
-    Genera el aviso de mora que escala de tono según los días de atraso.
-    Devuelve (titulo, cuerpo).
+    Formatea una fecha en español para los avisos al residente:
+    date(2026, 9, 5) -> "5 de septiembre".
 
-    Día 62 — reescrito: los mensajes anteriores tenían hardcodeado el
-    modelo viejo ("mañana tu cuenta será bloqueada" en el día 2, "cuenta
-    bloqueada" desde el día 3), que asumía 3 días fijos de gracia sin
-    importar lo que el admin hubiera configurado. Con 7 días de gracia,
-    por ejemplo, el residente recibía "cuenta bloqueada" al 3er día
-    aunque su cuenta siguiera perfectamente activa -- un aviso falso.
+    No se usa strftime con locale porque el locale de español no está
+    garantizado en el contenedor (y depende de que esté instalado en el
+    sistema) -- con una lista de meses el resultado es siempre el mismo,
+    sin depender del entorno.
+    """
+    if not fecha:
+        return ""
+    return f"{fecha.day} de {_MESES_ES[fecha.month - 1]}"
 
-    Ahora los mensajes se arman con los días de gracia REALES de esa
-    cuenta: mientras esté dentro de la gracia, se avisa cuántos días le
-    quedan antes del corte; una vez superada, se avisa que el servicio
-    está suspendido.
+
+def _mensaje_mora(dias, monto_txt, dias_gracia=None, fecha_venc=None):
+    """
+    Genera el aviso de cuota pendiente. Devuelve (titulo, cuerpo).
+
+    Día 62 — reescrito dos veces el mismo día. Primero para que usara los
+    días de gracia REALES (antes tenía hardcodeado un modelo de 3 días
+    fijos, y con 7 días configurados avisaba "cuenta bloqueada" al 3er día
+    aunque la cuenta siguiera activa: un aviso falso). Después, a pedido
+    del usuario, para bajarle el tono: los mensajes sonaban amenazantes,
+    poniendo el énfasis en la consecuencia ("para evitar la suspensión de
+    visitas y accesos...") en vez de en lo que la persona necesita saber.
+
+    Criterios del tono actual:
+      - Sin las palabras "mora", "atraso" ni "bloqueada" de cara al
+        residente (suenan a cobranza). Se usa "pendiente", "venció" y
+        "suspendido".
+      - Se incluye la FECHA REAL de vencimiento, más útil y menos
+        acusatorio que un contador de días de atraso.
+      - Los títulos no cuentan días ("4 días de mora"); el dato va en el
+        cuerpo, en el título solo genera alarma.
     """
     if dias_gracia is None:
         dias_gracia = 0
+    venc_txt = _fecha_larga(fecha_venc) if fecha_venc else None
 
     # Dentro de la ventana de gracia: todavía tiene servicio.
     if dias <= dias_gracia:
-        restantes = dias_gracia - dias + 1  # incluye hoy
-        if restantes == 1:
-            cuando = "hoy es tu último día"
-        else:
-            cuando = f"te quedan {restantes} días"
-        titulo = "Cuota vencida" if dias == 1 else f"{dias} días de atraso"
-        return (titulo,
-                f"Tu cuota de {monto_txt} está vencida ({dias} "
-                f"{'día' if dias == 1 else 'días'} de atraso). Para evitar la "
-                f"suspensión de visitas y accesos, {cuando} para ponerte al día.")
+        # Último día antes del corte: se avisa explícitamente, sin rodeos.
+        if dias == dias_gracia:
+            return ("Último día para pagar",
+                    f"Hoy es el último día para pagar tu cuota de {monto_txt} "
+                    f"y mantener tu servicio activo.")
+        vencio = f" venció el {venc_txt}" if venc_txt else " está pendiente"
+        return ("Cuota pendiente",
+                f"Tu cuota de {monto_txt}{vencio}. Realizá tu pago lo antes "
+                f"posible para evitar suspensiones.")
 
     # Ya superó la gracia: servicio suspendido.
     if dias < 15:
-        return (f"Servicio suspendido · {dias} días de mora",
-                f"Tu acceso a la residencial y la generación de visitas están "
-                f"suspendidos por {monto_txt} en mora ({dias} días). Regularizá "
-                f"tu pago para recuperar el acceso.")
-    return (f"Mora crítica · {dias} días",
-            f"Tu cuenta lleva {dias} días de mora ({monto_txt}) con el servicio "
-            f"suspendido. Contactá a administración a la brevedad.")
+        vencio = f" venció el {venc_txt} y" if venc_txt else ""
+        return ("Servicio suspendido",
+                f"Tu cuota de {monto_txt}{vencio} tu servicio está suspendido. "
+                f"Realizá tu pago para rehabilitarlo.")
+    return ("Servicio suspendido",
+            f"Tu cuota de {monto_txt} lleva {dias} días pendiente. Acercate a "
+            f"administración para regularizar tu situación.")
 
 
 @celery.task(name="tasks.revisar_mora")
@@ -340,10 +359,15 @@ def revisar_mora():
                 avisos_mora.setdefault(cuenta.id, {
                     "cuenta": cuenta, "dias": dias, "monto": 0.0,
                     "dias_gracia": dias_gracia,
+                    "fecha_venc": cuota.fecha_vencimiento,
                 })
                 # Guardar el mayor atraso y sumar el monto adeudado
                 if dias > avisos_mora[cuenta.id]["dias"]:
                     avisos_mora[cuenta.id]["dias"] = dias
+                    # La fecha que se muestra es la de la cuota MÁS vieja
+                    # pendiente (la que lleva más días), coherente con el
+                    # número de días que se informa.
+                    avisos_mora[cuenta.id]["fecha_venc"] = cuota.fecha_vencimiento
                 avisos_mora[cuenta.id]["monto"] += float(cuota.monto)
 
             procesadas += 1
@@ -356,9 +380,9 @@ def revisar_mora():
             for cuenta in cuentas_bloqueadas:
                 _notif.notificar_cuenta_async(
                     cuenta.id,
-                    "Cuenta bloqueada por mora",
-                    "Tu cuenta fue bloqueada por cuotas vencidas. "
-                    "Regularizá tu pago para recuperar el acceso.",
+                    "Servicio suspendido",
+                    "Tu servicio fue suspendido por falta de pago. "
+                    "Realizá tu pago para rehabilitarlo.",
                     {"tipo": "cuenta_bloqueada"},
                 )
         except Exception:
@@ -373,7 +397,8 @@ def revisar_mora():
             cuenta = info["cuenta"]
             dias = info["dias"]
             monto_txt = f"L {info['monto']:,.2f}"
-            titulo, cuerpo = _mensaje_mora(dias, monto_txt, info.get("dias_gracia"))
+            titulo, cuerpo = _mensaje_mora(dias, monto_txt, info.get("dias_gracia"),
+                                           info.get("fecha_venc"))
             try:
                 # Encolado (async): cada aviso se reparte como tarea propia
                 # entre los procesos del worker, en paralelo -- antes se
