@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { reporteFinanciero, reporteMoraPorCasa, reporteCaja, reporteAccesos, reporteInventario, reporteEjecutivo,
-  type ReporteFinancieroDTO, type MoraPorCasaDTO, type CasaMoraDTO,
+  type ReporteFinancieroDTO, type CuentaAlDiaDTO, type CuentaConDeudaDTO, type MoraPorCasaDTO, type CasaMoraDTO,
   type ReporteCajaDTO, type ReporteAccesosDTO, type ReporteInventarioDTO, type ReporteEjecutivoDTO } from "../../api/client";
 import { L } from "../../utils/formato";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
@@ -9,7 +9,7 @@ import { dibujarEncabezadoConMarca, colorTablaPDF, colorPrimarioPDF } from "../.
 import { GraficoBarras, GraficoDona, GraficoLinea, GraficoBarrasCant, GraficoBarrasHoriz } from "./Graficos";
 import {
   Star, DollarSign, FileText, Landmark, ShieldCheck, Ticket,
-  Download, ArrowRight, Banknote, CreditCard, Globe, PartyPopper, Footprints, Car,
+  Download, FileSpreadsheet, ArrowRight, Banknote, CreditCard, Globe, PartyPopper, Footprints, Car,
 } from "lucide-react";
 
 // Devuelve [primerDía, últimoDía] del mes actual en formato YYYY-MM-DD,
@@ -120,35 +120,45 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
     doc.text(`Total pendiente: ${L(data!.total_pendiente)}`, 14, 58);
     doc.text(`Cobranza: ${data!.pct_cobranza}%`, 14, 64);
 
+    // Día 62 — 3 tablas en vez de 2 (mora / pago pendiente / al día), cada
+    // una arrancando debajo de la anterior; si no cabe, autoTable pasa
+    // sola a la página siguiente.
+    let y = 72;
+    doc.setFontSize(11);
+    doc.setTextColor(200, 30, 30);
+    doc.text(`Cuentas en mora (${data!.cuentas_en_mora.length})`, 14, y);
     autoTable(doc, {
-      startY: 72,
-      head: [["Unidad", "Titular", "Monto", "Días atraso"]],
-      body: data!.morosos.map(m => [m.unidad, m.titular, L(m.monto), String(m.dias_atraso)]),
-      headStyles: { fillColor: colorTablaPDF(residencial) },
-      didDrawPage: () => {
-        doc.setFontSize(11);
-        doc.setTextColor(200, 30, 30);
-        doc.text("Cuentas en mora", 14, 70);
-      },
+      startY: y + 4,
+      head: [["Unidad", "Titular", "Meses", "Adeudado", "Días atraso"]],
+      body: data!.cuentas_en_mora.map(c => [
+        c.unidad, c.titular, String(c.meses_adeudados), L(c.monto_adeudado), String(c.dias_atraso ?? 0),
+      ]),
+      headStyles: { fillColor: [200, 30, 30] },
     });
+    y = ((doc as any).lastAutoTable?.finalY ?? y) + 14;
+    if (y > 250) { doc.addPage(); y = 20; }
 
-    // Tabla de cuentas al día — antes solo estaba en el Excel; se agrega al
-    // PDF para que ambos formatos muestren el mismo detalle. Arranca debajo
-    // de la tabla de morosos. Si no cabe, autoTable la pasa a otra página.
-    const finMorosos = (doc as any).lastAutoTable?.finalY ?? 72;
-    let tituloAlDiaY = finMorosos + 14;
-    // Si no queda espacio para el título + unas filas, empezar página nueva.
-    if (tituloAlDiaY > 260) {
-      doc.addPage();
-      tituloAlDiaY = 20;
-    }
+    doc.setFontSize(11);
+    doc.setTextColor(154, 103, 0);
+    doc.text(`Cuentas con pago pendiente (${data!.cuentas_pago_pendiente.length})`, 14, y);
+    autoTable(doc, {
+      startY: y + 4,
+      head: [["Unidad", "Titular", "Meses", "Adeudado"]],
+      body: data!.cuentas_pago_pendiente.map(c => [
+        c.unidad, c.titular, String(c.meses_adeudados), L(c.monto_adeudado),
+      ]),
+      headStyles: { fillColor: [154, 103, 0] },
+    });
+    y = ((doc as any).lastAutoTable?.finalY ?? y) + 14;
+    if (y > 250) { doc.addPage(); y = 20; }
+
     doc.setFontSize(11);
     doc.setTextColor(22, 101, 52);
-    doc.text("Cuentas al día", 14, tituloAlDiaY);
+    doc.text(`Cuentas al día (${data!.cuentas_al_dia.length})`, 14, y);
     autoTable(doc, {
-      startY: tituloAlDiaY + 4,
-      head: [["Unidad", "Titular", "Monto"]],
-      body: data!.al_dia.map(a => [a.unidad, a.titular, L(a.monto)]),
+      startY: y + 4,
+      head: [["Unidad", "Titular", "Correo", "Teléfono"]],
+      body: data!.cuentas_al_dia.map(a => [a.unidad, a.titular, a.correo || "—", a.telefono || "—"]),
       headStyles: { fillColor: [22, 101, 52] },
     });
 
@@ -167,20 +177,34 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
       ["Total recaudado", data!.total_recaudado],
       ["Total pendiente", data!.total_pendiente],
       ["Cobranza %", data!.pct_cobranza],
-      ["Cuentas al día", data!.cuentas_al_dia],
-      ["Cuentas morosas", data!.cuentas_morosas],
+      ["Cuentas al día", data!.cuentas_al_dia_count],
+      ["Cuentas con pago pendiente", data!.cuentas_pago_pendiente_count],
+      ["Cuentas en mora", data!.cuentas_en_mora_count],
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
 
-    const morosos = [
-      ["Unidad", "Titular", "Monto", "Estado", "Vencimiento", "Días atraso"],
-      ...data!.morosos.map(m => [m.unidad, m.titular, m.monto, m.estado, m.vencimiento, m.dias_atraso]),
+    // Día 62 — 3 hojas en vez de 2 (mora / pago pendiente / al día), con
+    // info de contacto completa para gestión de cobro.
+    const enMora = [
+      ["Unidad", "Titular", "Correo", "Teléfono", "Meses adeudados", "Monto adeudado", "Días atraso"],
+      ...data!.cuentas_en_mora.map(c => [
+        c.unidad, c.titular, c.correo || "", c.telefono || "",
+        c.meses_adeudados, c.monto_adeudado, c.dias_atraso ?? 0,
+      ]),
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(morosos), "Morosos");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(enMora), "En mora");
+
+    const pagoPendiente = [
+      ["Unidad", "Titular", "Correo", "Teléfono", "Meses adeudados", "Monto adeudado"],
+      ...data!.cuentas_pago_pendiente.map(c => [
+        c.unidad, c.titular, c.correo || "", c.telefono || "", c.meses_adeudados, c.monto_adeudado,
+      ]),
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pagoPendiente), "Pago pendiente");
 
     const alDia = [
-      ["Unidad", "Titular", "Monto"],
-      ...data!.al_dia.map(a => [a.unidad, a.titular, a.monto]),
+      ["Unidad", "Titular", "Correo", "Teléfono"],
+      ...data!.cuentas_al_dia.map(a => [a.unidad, a.titular, a.correo || "", a.telefono || ""]),
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(alDia), "Al día");
 
@@ -268,8 +292,9 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
       {!esRango && (
       <div className="cobranza-bar-wrap">
         <div className="cobranza-bar-label">
-          <span>{data.cuentas_al_dia} al día</span>
-          <span>{data.cuentas_morosas} en mora</span>
+          <span>{data.cuentas_al_dia_count} al día</span>
+          <span>{data.cuentas_pago_pendiente_count} con pago pendiente</span>
+          <span>{data.cuentas_en_mora_count} en mora</span>
         </div>
         <div className="cobranza-bar">
           <div className="cobranza-fill" style={{ width: `${data.pct_cobranza}%` }} />
@@ -390,54 +415,151 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
       </div>
       )}
 
-      {/* Morosos (solo modo mes) */}
+      {/* Día 62 — reemplaza las 2 secciones binarias (morosos/al día) por 3
+          categorías reales, a pedido del usuario, con exportación a
+          PDF/Excel por sección. Cada sección usa las mismas 2 funciones
+          compartidas de exportación (exportarSeccionPDF/Excel) en vez de
+          repetir la lógica 3 veces. */}
       {!esRango && (
-      <div className="dash-card">
-        <h3 style={{ color: "#c81e1e" }}>Cuentas en mora ({data.morosos.length})</h3>
-        {data.morosos.length === 0 ? (
-          <p className="muted">Ninguna cuenta en mora este mes.</p>
-        ) : (
-          <div className="scroll-x">
-            <table className="data">
-              <thead><tr><th>Unidad</th><th>Titular</th><th>Monto</th><th>Días atraso</th></tr></thead>
-              <tbody>
-                {data.morosos.map((m, i) => (
-                  <tr key={i}>
-                    <td>{m.unidad}</td>
-                    <td>{m.titular}</td>
-                    <td>{L(m.monto)}</td>
-                    <td>{m.dias_atraso > 0 ? <span className="pill red">{m.dias_atraso} días</span> : <span className="pill amber">Por vencer</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        <SeccionCuentas
+          titulo="Cuentas en mora" color="#c81e1e" pillClass="red"
+          filas={data.cuentas_en_mora} incluyeDeuda mostrarDiasAtraso
+          vacioTexto="Ninguna cuenta en mora."
+          onExportarPDF={() => exportarSeccionPDF(data.cuentas_en_mora, "Cuentas en mora", true, residencial)}
+          onExportarExcel={() => exportarSeccionExcel(data.cuentas_en_mora, "Cuentas en mora", true)}
+        />
       )}
-
-      {/* Al día (solo modo mes) */}
       {!esRango && (
-      <div className="dash-card">
-        <h3 style={{ color: "#1d8a4a" }}>Cuentas al día ({data.al_dia.length})</h3>
-        {data.al_dia.length === 0 ? (
-          <p className="muted">Aún no hay pagos aprobados este mes.</p>
-        ) : (
-          <div className="scroll-x">
-            <table className="data">
-              <thead><tr><th>Unidad</th><th>Titular</th><th>Monto</th></tr></thead>
-              <tbody>
-                {data.al_dia.map((a, i) => (
-                  <tr key={i}><td>{a.unidad}</td><td>{a.titular}</td><td>{L(a.monto)}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+        <SeccionCuentas
+          titulo="Cuentas con pago pendiente" color="#9a6700" pillClass="amber"
+          filas={data.cuentas_pago_pendiente} incluyeDeuda
+          vacioTexto="Ninguna cuenta con pago pendiente."
+          onExportarPDF={() => exportarSeccionPDF(data.cuentas_pago_pendiente, "Cuentas con pago pendiente", true, residencial)}
+          onExportarExcel={() => exportarSeccionExcel(data.cuentas_pago_pendiente, "Cuentas con pago pendiente", true)}
+        />
+      )}
+      {!esRango && (
+        <SeccionCuentas
+          titulo="Cuentas al día" color="#1d8a4a" pillClass="green"
+          filas={data.cuentas_al_dia} incluyeDeuda={false}
+          vacioTexto="Ninguna cuenta al día todavía."
+          onExportarPDF={() => exportarSeccionPDF(data.cuentas_al_dia, "Cuentas al día", false, residencial)}
+          onExportarExcel={() => exportarSeccionExcel(data.cuentas_al_dia, "Cuentas al día", false)}
+        />
       )}
     </>
   );
+}
+
+/**
+ * Día 62 — tarjeta reutilizable para cada una de las 3 secciones del
+ * Reporte Financiero (al día / pago pendiente / en mora). Muestra la
+ * lista con su color propio y los botones de exportar PDF/Excel.
+ */
+function SeccionCuentas({ titulo, color, pillClass, filas, incluyeDeuda, mostrarDiasAtraso, vacioTexto, onExportarPDF, onExportarExcel }: {
+  titulo: string; color: string; pillClass: string;
+  filas: (CuentaAlDiaDTO | CuentaConDeudaDTO)[]; incluyeDeuda: boolean; mostrarDiasAtraso?: boolean;
+  vacioTexto: string; onExportarPDF: () => void; onExportarExcel: () => void;
+}) {
+  const [exportando, setExportando] = useState<"pdf" | "excel" | "">("");
+  return (
+    <div className="dash-card">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <h3 style={{ color }}>{titulo} ({filas.length})</h3>
+        {filas.length > 0 && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="ghost mini" disabled={!!exportando}
+              onClick={async () => { setExportando("pdf"); try { await onExportarPDF(); } finally { setExportando(""); } }}>
+              <Download size={14} /> {exportando === "pdf" ? "…" : "PDF"}
+            </button>
+            <button className="ghost mini" disabled={!!exportando}
+              onClick={async () => { setExportando("excel"); try { await onExportarExcel(); } finally { setExportando(""); } }}>
+              <FileSpreadsheet size={14} /> {exportando === "excel" ? "…" : "Excel"}
+            </button>
+          </div>
+        )}
+      </div>
+      {filas.length === 0 ? (
+        <p className="muted">{vacioTexto}</p>
+      ) : (
+        <div className="scroll-x">
+          <table className="data">
+            <thead><tr>
+              <th>Unidad</th><th>Titular</th><th>Correo</th><th>Teléfono</th>
+              {incluyeDeuda && <><th>Meses</th><th>Adeudado</th></>}
+              {mostrarDiasAtraso && <th>Días atraso</th>}
+            </tr></thead>
+            <tbody>
+              {filas.map((f, i) => {
+                const conDeuda = f as CuentaConDeudaDTO;
+                return (
+                  <tr key={i}>
+                    <td>{f.unidad}</td>
+                    <td>{f.titular}</td>
+                    <td>{f.correo || "—"}</td>
+                    <td>{f.telefono || "—"}</td>
+                    {incluyeDeuda && <>
+                      <td>{conDeuda.meses_adeudados}</td>
+                      <td>{L(conDeuda.monto_adeudado)}</td>
+                    </>}
+                    {mostrarDiasAtraso && (
+                      <td><span className={`pill ${pillClass}`}>{conDeuda.dias_atraso ?? 0} día{(conDeuda.dias_atraso ?? 0) !== 1 ? "s" : ""}</span></td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Exportación PDF compartida por las 3 secciones del Reporte Financiero. */
+async function exportarSeccionPDF(
+  filas: (CuentaAlDiaDTO | CuentaConDeudaDTO)[], titulo: string, incluyeDeuda: boolean,
+  residencial: ResidencialParaPDF,
+) {
+  const { jsPDF } = await import("jspdf");
+  const autoTable = (await import("jspdf-autotable")).default;
+  const doc = new jsPDF();
+  const yInicio = await dibujarEncabezadoConMarca(doc, titulo, residencial);
+  const head = incluyeDeuda
+    ? [["Casa", "Titular", "Correo", "Teléfono", "Meses", "Adeudado"]]
+    : [["Casa", "Titular", "Correo", "Teléfono"]];
+  const body = filas.map((f) => {
+    const c = f as CuentaConDeudaDTO;
+    return incluyeDeuda
+      ? [f.unidad, f.titular, f.correo || "—", f.telefono || "—", String(c.meses_adeudados), L(c.monto_adeudado)]
+      : [f.unidad, f.titular, f.correo || "—", f.telefono || "—"];
+  });
+  doc.setFontSize(10);
+  doc.text(`${filas.length} cuenta(s)`, 14, yInicio);
+  autoTable(doc, {
+    startY: yInicio + 6, head, body,
+    headStyles: { fillColor: colorTablaPDF(residencial) }, styles: { fontSize: 8 },
+  });
+  doc.save(`${titulo.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+/** Exportación Excel compartida por las 3 secciones del Reporte Financiero. */
+async function exportarSeccionExcel(
+  filas: (CuentaAlDiaDTO | CuentaConDeudaDTO)[], titulo: string, incluyeDeuda: boolean,
+) {
+  const XLSX = await import("xlsx");
+  const cabecera = incluyeDeuda
+    ? ["Casa", "Titular", "Correo", "Teléfono", "Meses adeudados", "Monto adeudado"]
+    : ["Casa", "Titular", "Correo", "Teléfono"];
+  const filasXlsx = [cabecera, ...filas.map((f) => {
+    const c = f as CuentaConDeudaDTO;
+    return incluyeDeuda
+      ? [f.unidad, f.titular, f.correo || "", f.telefono || "", c.meses_adeudados, c.monto_adeudado]
+      : [f.unidad, f.titular, f.correo || "", f.telefono || ""];
+  })];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filasXlsx), titulo.slice(0, 31));
+  XLSX.writeFile(wb, `${titulo.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 function ReporteMoraPorCasa({ residencial }: { residencial: ResidencialParaPDF }) {

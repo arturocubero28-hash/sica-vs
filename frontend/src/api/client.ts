@@ -485,11 +485,20 @@ export function urlComprobante(nombre: string): string {
 }
 
 // ── REPORTES ──────────────────────────────────────────────────────────────────
-export interface MorosoDTO {
-  unidad: string; titular: string; monto: number;
-  estado: string; vencimiento: string; dias_atraso: number;
+// Día 62 — reemplaza AlDiaDTO/MorosoDTO (binario) por 3 categorías reales.
+// Antes cualquier cuota no pagada se mostraba como "morosa" sin mirar si
+// su vencimiento ya había pasado -- con el modelo de cobro nuevo (vence el
+// mes siguiente), eso mostraba cuentas al día como si debieran. Ahora se
+// clasifica correctamente en 3 estados, y con info de contacto completa
+// para poder gestionar el cobro (exportar a Excel/PDF por sección).
+export interface CuentaAlDiaDTO {
+  unidad: string; titular: string; correo: string | null; telefono: string | null;
 }
-export interface AlDiaDTO { unidad: string; titular: string; monto: number; }
+export interface CuentaConDeudaDTO {
+  unidad: string; titular: string; correo: string | null; telefono: string | null;
+  meses_adeudados: number; monto_adeudado: number; vencimiento_mas_antiguo: string;
+  dias_atraso?: number;  // solo presente en "en_mora"
+}
 export interface TendenciaDTO { mes_label: string; esperado: number; recaudado: number; }
 export interface PagoDetalleDTO {
   unidad: string; titular: string; monto: number; metodo: string; fecha: string | null;
@@ -497,9 +506,13 @@ export interface PagoDetalleDTO {
 export interface ReporteFinancieroDTO {
   periodo: string; mes_label: string; modo?: "mes" | "rango";
   total_esperado: number; total_recaudado: number; total_pendiente: number;
-  pct_cobranza: number; cuentas_al_dia: number; cuentas_morosas: number;
+  pct_cobranza: number;
+  cuentas_al_dia_count: number; cuentas_pago_pendiente_count: number; cuentas_en_mora_count: number;
   recaudado_por_metodo?: { efectivo: number; tarjeta_pos: number; transferencia: number; linea: number };
-  al_dia: AlDiaDTO[]; morosos: MorosoDTO[]; tendencia: TendenciaDTO[];
+  cuentas_al_dia: CuentaAlDiaDTO[];
+  cuentas_pago_pendiente: CuentaConDeudaDTO[];
+  cuentas_en_mora: CuentaConDeudaDTO[];
+  tendencia: TendenciaDTO[];
   detalle_pagos?: PagoDetalleDTO[]; total_pagos?: number;
 }
 export interface MesMoraDTO {

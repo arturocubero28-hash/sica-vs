@@ -108,8 +108,12 @@ def reporte_financiero(usuario_actual):
                 "transferencia": dinero.a_float(por_metodo.get("transferencia", dinero.CERO)),
                 "linea": dinero.a_float(por_metodo.get("linea", dinero.CERO)),
             },
-            "al_dia": [],
-            "morosos": [],
+            "cuentas_al_dia": [],
+            "cuentas_pago_pendiente": [],
+            "cuentas_en_mora": [],
+            "cuentas_al_dia_count": 0,
+            "cuentas_pago_pendiente_count": 0,
+            "cuentas_en_mora_count": 0,
             "tendencia": [],
             "detalle_pagos": detalle_pagos,
             "total_pagos": len(pagos_rango),
@@ -123,41 +127,98 @@ def reporte_financiero(usuario_actual):
     cuotas = scope_cuotas(Cuota.query, usuario_actual).filter(
         Cuota.periodo == periodo).all()
 
-    # O3.2: acumuladores en Decimal; los montos que van al JSON usan a_float.
+    # Día 62 — reescrito de raíz, a pedido del usuario, en dos sentidos:
+    #
+    # 1) BUG REAL (mismo patrón que se encontró y corrigió hoy en
+    #    "Mora por Casa"): antes, cualquier cuota con estado != "pagada"
+    #    se clasificaba directo como "morosa", sin mirar si su fecha de
+    #    vencimiento ya había pasado. Con el modelo nuevo (vencimiento en
+    #    el mes SIGUIENTE), una cuota recién generada queda "pendiente"
+    #    legítimamente durante semanas antes de estar vencida de verdad.
+    #
+    # 2) DE 2 A 3 CATEGORÍAS: antes "al día" / "morosos" (binario). Ahora:
+    #      - Al día: sin ninguna cuota pendiente.
+    #      - Con pago pendiente: tiene una cuota generada, pero su fecha
+    #        de vencimiento todavía no llegó -- no es mora, solo no pagó
+    #        todavía porque no le tocaba.
+    #      - En mora: al menos una cuota con vencimiento ya pasado.
+    #
+    # Y a diferencia de antes (que solo miraba la cuota del PERÍODO
+    # seleccionado), ahora se mira el estado de deuda REAL de cada cuenta
+    # a través de TODOS los períodos pendientes -- así "cuántos meses
+    # debe" tiene sentido real, no solo si debe o no el mes puntual que
+    # se esté mirando. Mismo criterio que ya usa el reporte "Mora por
+    # Casa" (agrupar por cuenta, todos los períodos no pagados).
+    todas_pendientes = (scope_cuotas(Cuota.query, usuario_actual)
+                        .filter(Cuota.estado != "pagada")
+                        .order_by(Cuota.periodo.asc()).all())
+    pendientes_por_cuenta = defaultdict(list)
+    for c in todas_pendientes:
+        pendientes_por_cuenta[c.cuenta_id].append(c)
+
+    def _info_contacto(cuenta):
+        unidad = cuenta.unidad.identificador if cuenta.unidad else "—"
+        titular_nombre, correo, telefono = "—", None, None
+        tit = next((r for r in cuenta.residentes if r.rol_cuenta == "titular"), None)
+        if tit and tit.usuario:
+            titular_nombre = f"{tit.usuario.nombre} {tit.usuario.apellido}"
+            correo = tit.usuario.email
+            telefono = tit.usuario.telefono
+        return unidad, titular_nombre, correo, telefono
+
+    cuentas_al_dia, cuentas_pago_pendiente, cuentas_en_mora = [], [], []
+    # Solo cuentas que realmente participan del sistema de cuotas (tienen
+    # tarifa asignada) -- las cuentas "contenedoras" de un edificio no
+    # pagan cuota propia, no tiene sentido que aparezcan como "al día".
+    cuentas_con_tarifa = (scope_cuentas(Cuenta.query, usuario_actual)
+                          .filter(Cuenta.activa == True,  # noqa: E712
+                                  Cuenta.tarifa_id.isnot(None)).all())
+    for cuenta in cuentas_con_tarifa:
+        pendientes = pendientes_por_cuenta.get(cuenta.id, [])
+        unidad, titular_nombre, correo, telefono = _info_contacto(cuenta)
+
+        if not pendientes:
+            cuentas_al_dia.append({
+                "unidad": unidad, "titular": titular_nombre,
+                "correo": correo, "telefono": telefono,
+            })
+            continue
+
+        monto_total = dinero.suma(p.monto for p in pendientes)
+        # La cuota MÁS VIEJA (menor vencimiento) es la que decide si esta
+        # cuenta ya está en mora, o si todavía está dentro del plazo.
+        mas_vieja = min(pendientes, key=lambda p: p.fecha_vencimiento)
+        fila = {
+            "unidad": unidad, "titular": titular_nombre,
+            "correo": correo, "telefono": telefono,
+            "meses_adeudados": len(pendientes),
+            "monto_adeudado": dinero.a_float(monto_total),
+            "vencimiento_mas_antiguo": mas_vieja.fecha_vencimiento.isoformat(),
+        }
+        if mas_vieja.fecha_vencimiento < hoy:
+            fila["dias_atraso"] = (hoy - mas_vieja.fecha_vencimiento).days
+            cuentas_en_mora.append(fila)
+        else:
+            cuentas_pago_pendiente.append(fila)
+
+    cuentas_en_mora.sort(key=lambda f: f["dias_atraso"], reverse=True)
+    cuentas_pago_pendiente.sort(key=lambda f: f["vencimiento_mas_antiguo"])
+    cuentas_al_dia.sort(key=lambda f: f["unidad"])
+
+    # ── Totales del período seleccionado (esperado/recaudado/pendiente) ──
+    # Esto SÍ sigue acotado al período elegido (anio/mes) -- responde
+    # "cuánto se esperaba y se recaudó ESTE mes", una pregunta distinta de
+    # "quién me debe ahora mismo" (las 3 listas de arriba).
     total_esperado = dinero.CERO
     total_recaudado = dinero.CERO
-    al_dia = []
-    morosos = []
-
     for c in cuotas:
         monto = dinero.a_decimal(c.monto)
         total_esperado += monto
-        cuenta = c.cuenta
-        unidad = cuenta.unidad.identificador if cuenta and cuenta.unidad else "—"
-        titular = "—"
-        if cuenta:
-            tit = next((r for r in cuenta.residentes if r.rol_cuenta == "titular"), None)
-            if tit and tit.usuario:
-                titular = f"{tit.usuario.nombre} {tit.usuario.apellido}"
-
-        monto_json = dinero.a_float(monto)
         if c.estado == "pagada":
             total_recaudado += monto
-            al_dia.append({"unidad": unidad, "titular": titular, "monto": monto_json})
-        else:
-            dias_atraso = (hoy - c.fecha_vencimiento).days
-            morosos.append({
-                "unidad": unidad, "titular": titular, "monto": monto_json,
-                "estado": c.estado,
-                "vencimiento": c.fecha_vencimiento.isoformat(),
-                "dias_atraso": dias_atraso if dias_atraso > 0 else 0,
-            })
 
     total_pendiente = total_esperado - total_recaudado
     pct_cobranza = float(total_recaudado / total_esperado * 100) if total_esperado > 0 else 0
-
-    # Ordenar morosos por días de atraso (más atrasados primero)
-    morosos.sort(key=lambda m: m["dias_atraso"], reverse=True)
 
     # ── Desglose de lo recaudado por método de pago ──────────────────────────
     # Tomamos los pagos APROBADOS de las cuotas de este período y los agrupamos.
@@ -209,10 +270,12 @@ def reporte_financiero(usuario_actual):
             "transferencia": dinero.a_float(por_metodo.get("transferencia", dinero.CERO)),
             "linea": dinero.a_float(por_metodo.get("linea", dinero.CERO)),
         },
-        "cuentas_al_dia": len(al_dia),
-        "cuentas_morosas": len(morosos),
-        "al_dia": al_dia,
-        "morosos": morosos,
+        "cuentas_al_dia_count": len(cuentas_al_dia),
+        "cuentas_pago_pendiente_count": len(cuentas_pago_pendiente),
+        "cuentas_en_mora_count": len(cuentas_en_mora),
+        "cuentas_al_dia": cuentas_al_dia,
+        "cuentas_pago_pendiente": cuentas_pago_pendiente,
+        "cuentas_en_mora": cuentas_en_mora,
         "tendencia": tendencia,
     }})
 
