@@ -176,7 +176,7 @@ def crear_visita(usuario_actual):
     cuenta = residente.cuenta
     if cuenta.bloqueada:
         return jsonify({"error": {"code": "cuenta_bloqueada",
-                                  "message": "Tu cuenta está bloqueada por mora. No puedes generar QR."}}), 403
+                                  "message": "Tu servicio está suspendido por falta de pago. Realizá tu pago para volver a generar visitas."}}), 403
     # Día 51 — Cuenta.activa: el interruptor MANUAL del admin, distinto de
     # bloqueada (que es automático, por mora). Existía en el modelo desde
     # hace tiempo pero nunca se conectó a nada -- es la herramienta que le

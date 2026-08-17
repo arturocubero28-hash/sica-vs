@@ -434,8 +434,7 @@ def crear_cuenta(usuario_actual):
             from app.models.cuenta import Cuota, ConfigResidencial
             from app.utils.cuotas import calcular_cuota_prorrateada
             cfg = ConfigResidencial.get(usuario_actual.residencial_id)
-            gracia = cuenta.dias_gracia if cuenta.dias_gracia is not None else cfg.dias_gracia
-            datos = calcular_cuota_prorrateada(tarifa.monto, cfg.dia_pago, gracia)
+            datos = calcular_cuota_prorrateada(tarifa.monto, cfg.dia_pago)
             if datos is not None:
                 cuota = Cuota(
                     cuenta_id=cuenta.id, periodo=datos["periodo"],
@@ -1242,15 +1241,16 @@ def activar_cuotas(usuario_actual):
             continue
         if not casa.tarifa:
             continue
-        # Día de pago y gracia: los de la casa si tiene override, si no los
-        # globales de la residencial.
+        # Día de pago: el de la casa si tiene override, si no el global de
+        # la residencial. (Día 62: ya no se calcula la gracia acá -- dejó
+        # de hacer falta cuando el vencimiento pasó a ser solo el día de
+        # pago, sin sumarle la gracia.)
         dia_pago = casa.dia_pago or cfg.dia_pago
-        gracia = casa.dias_gracia if casa.dias_gracia is not None else cfg.dias_gracia
 
-        datos = calcular_cuota_prorrateada(casa.tarifa.monto, dia_pago, gracia, hoy=hoy)
+        datos = calcular_cuota_prorrateada(casa.tarifa.monto, dia_pago, hoy=hoy)
         if datos is None:
-            # Hoy es el día de pago o antes -> no hay fracción; el cron
-            # mensual generará la cuota completa cuando corresponda.
+            # Hoy pasó el día 30 (mes comercial) -> no queda fracción; el
+            # cron mensual generará la cuota completa cuando corresponda.
             sin_prorrateo += 1
             continue
 

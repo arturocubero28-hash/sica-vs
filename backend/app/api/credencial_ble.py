@@ -102,7 +102,7 @@ def activar_ble(usuario_actual):
 
     if cuenta.bloqueada:
         return _err("cuenta_bloqueada",
-                    "Tu cuenta tiene mora pendiente. Regularizá el pago para activar el acceso BLE.", 403)
+                    "Tu servicio está suspendido por falta de pago. Realizá tu pago para rehabilitar el acceso Bluetooth.", 403)
 
     data = request.get_json(silent=True) or {}
     device_id = (data.get("device_id") or "").strip()
@@ -167,7 +167,7 @@ def reactivar_ble(usuario_actual):
 
     if cuenta.bloqueada:
         return _err("cuenta_bloqueada",
-                    "Tu cuenta tiene mora pendiente. Regularizá el pago para reactivar.", 403)
+                    "Tu servicio está suspendido por falta de pago. Realizá tu pago para rehabilitarlo.", 403)
 
     cred = CredencialBLE.query.filter_by(
         residente_id=residente.id, estado="suspendida").first()

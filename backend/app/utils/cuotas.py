@@ -10,7 +10,7 @@ import calendar
 import datetime as dt
 
 
-def calcular_cuota_prorrateada(monto_tarifa, dia_pago, dias_gracia, hoy=None):
+def calcular_cuota_prorrateada(monto_tarifa, dia_pago, hoy=None):
     """
     Calcula la primera cuota prorrateada de una casa que empieza a pagar a
     mitad de mes (alta nueva, o activación de cuotas al subir de plan).
@@ -34,9 +34,10 @@ def calcular_cuota_prorrateada(monto_tarifa, dia_pago, dias_gracia, hoy=None):
 
     IMPORTANTE: fecha_vencimiento guarda SOLO el día de pago (cuándo empieza
     la mora), NO el día del corte de servicio. El corte se calcula donde se
-    necesita, sumando los días de gracia. dias_gracia se sigue recibiendo
-    como parámetro por compatibilidad con los llamadores, pero ya NO se
-    suma al vencimiento.
+    necesita (revisar_mora en tasks/mora.py), sumando los días de gracia a
+    esta fecha. Por eso esta función ya NO recibe dias_gracia: dejó de
+    usarlo al cambiar el modelo, y se quitó para no dejar un parámetro
+    muerto que confundiera a quien lea el código más adelante.
 
     Regla de negocio (Opción A, confirmada el Día 55): la responsabilidad
     arranca hoy, cada casa empieza limpia, sin mirar historial previo.

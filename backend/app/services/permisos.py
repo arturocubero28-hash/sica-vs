@@ -35,7 +35,7 @@ def motivo_denegacion(tarjeta, acceso=None, residencial_id=None):
     if not cuenta or not cuenta.activa:
         return "La cuenta no está activa"
     if cuenta.bloqueada:
-        return "Cuenta bloqueada por mora"
+        return "Servicio suspendido por falta de pago"
 
     # 3. Bases multi-residencial: la tarjeta debe ser de la misma
     #    residencial que la Pi que está preguntando (si la Pi tiene una

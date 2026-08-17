@@ -78,7 +78,7 @@ def activar_tarjeta_virtual(usuario_actual):
 
     if cuenta.bloqueada:
         return _err("cuenta_bloqueada",
-                    "Tu cuenta tiene mora pendiente. Regularizá el pago para activar la tarjeta virtual.", 403)
+                    "Tu servicio está suspendido por falta de pago. Realizá tu pago para rehabilitar la tarjeta virtual.", 403)
 
     tv = TarjetaVirtual.query.filter_by(cuenta_id=cuenta.id).first()
 
@@ -135,7 +135,7 @@ def reactivar_tarjeta_virtual(usuario_actual):
 
     if cuenta.bloqueada:
         return _err("cuenta_bloqueada",
-                    "Tu cuenta tiene mora pendiente. Regularizá el pago para reactivar.", 403)
+                    "Tu servicio está suspendido por falta de pago. Realizá tu pago para rehabilitarlo.", 403)
 
     tv = TarjetaVirtual.query.filter_by(cuenta_id=cuenta.id, estado="suspendida").first()
     if not tv:
@@ -174,7 +174,7 @@ def wallet_pass(usuario_actual):
 
     if cuenta.bloqueada:
         return _err("cuenta_bloqueada",
-                    "Tu cuenta tiene mora pendiente. La tarjeta está bloqueada.", 403)
+                    "Tu servicio está suspendido por falta de pago. Realizá tu pago para rehabilitarlo.", 403)
 
     titular = residente.usuario
     nombre = f"{titular.nombre} {titular.apellido}" if titular else "Residente"
