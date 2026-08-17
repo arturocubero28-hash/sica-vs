@@ -409,6 +409,22 @@ def crear_cuenta(usuario_actual):
 
     db.session.commit()
 
+    # Día 61 — se dispara DESPUÉS del commit de arriba, nunca antes: si se
+    # disparara antes y algo más adelante en esta misma función fallara,
+    # se habría mandado un correo de activación para un usuario que en
+    # realidad nunca quedó guardado (mismo tipo de problema que el bug
+    # real del hook de auditoría encontrado hoy mismo). Async vía Celery
+    # para no demorar la respuesta al admin con la llamada HTTP a Resend.
+    try:
+        from app.tasks.correo_task import enviar_correo_activacion_task
+        from app.models.residencial import Residencial
+        residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
+        enviar_correo_activacion_task.delay(
+            usuario.email, usuario.nombre, token_o_error,
+            residencial.nombre if residencial else "SICA-VS")
+    except Exception:
+        pass  # un correo que no sale no debe tumbar la creación de la cuenta
+
     # Generar la PRIMERA CUOTA prorrateada (Día 29). Día 55 — ahora usa la
     # función compartida calcular_cuota_prorrateada (misma lógica que el
     # wizard de activar cuotas), en vez de una copia inline.
@@ -768,6 +784,17 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
     db.session.add(residente)
     db.session.commit()
 
+    # Día 61 — mismo criterio que crear_cuenta: recién después del commit.
+    try:
+        from app.tasks.correo_task import enviar_correo_activacion_task
+        from app.models.residencial import Residencial
+        residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
+        enviar_correo_activacion_task.delay(
+            usuario.email, usuario.nombre, token_o_error,
+            residencial.nombre if residencial else "SICA-VS")
+    except Exception:
+        pass
+
     return jsonify({"data": {
         "residente": residente.to_dict(),
         "activacion": _bloque_activacion(usuario, token_o_error),
@@ -836,6 +863,19 @@ def regenerar_enlace(usuario_actual, cuenta_uuid, residente_uuid):
          "exp": dt.datetime.utcnow() + dt.timedelta(hours=48)},
         current_app.config["JWT_SECRET"], algorithm="HS256"
     )
+
+    # Día 61 — no hay ninguna escritura pendiente en esta función (no
+    # se hace db.session.add/commit acá), así que el correo puede
+    # dispararse ya mismo, sin esperar nada.
+    try:
+        from app.tasks.correo_task import enviar_correo_activacion_task
+        from app.models.residencial import Residencial
+        residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
+        enviar_correo_activacion_task.delay(
+            usuario.email, usuario.nombre, token_activacion,
+            residencial.nombre if residencial else "SICA-VS", es_reenvio=True)
+    except Exception:
+        pass
 
     return jsonify({"data": {
         "activacion": _bloque_activacion(usuario, token_activacion,

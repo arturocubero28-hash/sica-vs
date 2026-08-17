@@ -28,6 +28,14 @@ class Config:
 
     # Resend (correo)
     RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+    # Día 61 — dirección remitente y URL del sitio para armar los links de
+    # los correos (activación de cuenta, recuperar contraseña). El
+    # remitente exige un dominio verificado en el panel de Resend (SPF/DKIM
+    # configurados vía DNS) -- si no está verificado, Resend rechaza el
+    # envío o lo manda a spam.
+    RESEND_FROM = os.environ.get(
+        "RESEND_FROM", "SICA-VS <notificaciones@patronatovillasdelsol.com>")
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://patronatovillasdelsol.com")
 
     # ---- Acceso BLE (Bluetooth) ----
     # BLE-BE-18 (Auditoría Día 39): apagado por defecto hasta que exista

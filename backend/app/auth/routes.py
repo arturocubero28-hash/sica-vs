@@ -249,13 +249,17 @@ def solicitar_recuperacion():
     token_reset = _generar_token_temporal(email, "reset", horas=2,
                                           huella=_huella_password(usuario))
 
-    # TODO: Integrar Resend para enviar el correo con el link
-    # resend.Emails.send({
-    #     "from": "SICA-VS <noreply@villasdelsol.hn>",
-    #     "to": email,
-    #     "subject": "Restablecer contraseña - SICA-VS",
-    #     "html": f"<a href='https://sitio/reset?token={token_reset}'>Restablecer</a>"
-    # })
+    # Día 61 — implementado (antes era un TODO sin código real). Sin
+    # escritura pendiente en esta función, se dispara ya mismo. Async vía
+    # Celery para no demorar la respuesta HTTP con la llamada a Resend.
+    try:
+        from app.tasks.correo_task import enviar_correo_reset_task
+        from app.models.residencial import Residencial
+        residencial = Residencial.query.get(usuario.residencial_id) if usuario.residencial_id else None
+        enviar_correo_reset_task.delay(
+            email, token_reset, residencial.nombre if residencial else "SICA-VS")
+    except Exception:
+        pass  # un correo que no sale no debe romper la respuesta al usuario
 
     respuesta = {"message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."}
     # El token se devuelve en pantalla SOLO en desarrollo (no hay correos aún).

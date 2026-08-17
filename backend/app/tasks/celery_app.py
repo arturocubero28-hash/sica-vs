@@ -18,7 +18,7 @@ celery = Celery(
     "sicavs",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["app.tasks.mora", "app.tasks.notificaciones_task"],   # <-- registra las tareas
+    include=["app.tasks.mora", "app.tasks.notificaciones_task", "app.tasks.correo_task"],   # <-- registra las tareas
 )
 
 celery.conf.timezone = "America/Tegucigalpa"
