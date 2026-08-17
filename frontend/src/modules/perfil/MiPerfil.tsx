@@ -671,9 +671,12 @@ function ConfigPanel() {
 
         <div className="config-ejemplo">
           <b>Ejemplo con la configuración actual:</b><br/>
-          La cuota se genera el <b>día {diaPago}</b> de cada mes.
-          El residente tiene <b>{diasGracia} día{diasGracia !== 1 ? "s" : ""}</b> de gracia después del día de pago antes de que se bloquee por mora.
-          Si no paga, su cuenta se bloquea automáticamente por mora.
+          El <b>1 de agosto</b> se genera la cuota de agosto. El residente tiene hasta
+          el <b>día {diaPago} de septiembre</b> (el mes siguiente) para pagarla sin atraso.
+          Después de esa fecha entra en mora y empieza a recibir avisos, pero conserva
+          el servicio durante <b>{diasGracia} día{diasGracia !== 1 ? "s" : ""}</b> más.
+          Al vencerse esos días de gracia, se le suspenden los accesos y la generación
+          de visitas hasta que pague.
         </div>
 
         <div className="config-acciones">
@@ -700,14 +703,19 @@ function ConfigPanel() {
           </div>
         </div>
         <div className="config-help-list">
-          <p><b>Día de pago:</b> es el día del mes en que se genera la cuota a cada cuenta.
-          Al cambiarlo, se actualiza en todas las cuentas activas de forma inmediata.</p>
-          <p><b>Días de gracia:</b> después del día de pago, el residente tiene esta cantidad
-          de días adicionales para pagar sin que su cuenta se bloquee. Si al vencer los días
-          de gracia no ha pagado, la cuenta se bloquea automáticamente por mora.</p>
-          <p><b>Prorrateo:</b> cuando se da de alta una cuenta nueva a mitad de mes, la primera
-          cuota se calcula proporcionalmente (los días restantes del mes, usando mes comercial
-          de 30 días).</p>
+          <p><b>Cómo funciona el cobro:</b> el día 1 de cada mes se genera la cuota
+          de ese mes. El residente la paga durante el mes siguiente — es decir, paga
+          un mes que ya usó.</p>
+          <p><b>Día de pago:</b> es el día <b>del mes siguiente</b> hasta el que puede
+          pagar sin ningún atraso. Ejemplo: con día de pago 5, la cuota de agosto se
+          paga hasta el 5 de septiembre. Ese día recibe un aviso recordándole que vence.</p>
+          <p><b>Días de gracia:</b> los días que siguen al día de pago. En esa ventana
+          ya está en mora y recibe avisos diarios, pero <b>conserva el servicio</b>.
+          Al vencerse el último día de gracia, se le suspenden los accesos (tarjetas,
+          QR, BLE) y la generación de visitas, hasta que regularice el pago.</p>
+          <p><b>Prorrateo:</b> cuando se da de alta una cuenta a mitad de mes, la primera
+          cuota cobra solo los días que quedan de ese mes (usando mes comercial de 30 días),
+          y vence en el mes siguiente como cualquier otra.</p>
         </div>
       </div>
       </>

@@ -569,10 +569,19 @@ def generar_cuotas_manual(usuario_actual):
             continue
         if not cuenta.tarifa:
             continue
-        # Vencimiento según el día de pago de la cuenta (sin pasarse del último día del mes)
-        ultimo_dia = _cal.monthrange(hoy.year, hoy.month)[1]
-        dia = min(cuenta.dia_pago or 15, ultimo_dia)
-        vencimiento = _dt.date(hoy.year, hoy.month, dia)
+        # Día 62 — vencimiento en el MES SIGUIENTE, mismo criterio que el
+        # cron automático (generar_cuotas_mensuales en tasks/mora.py).
+        # Este endpoint tenía su propia copia del cálculo con el modelo
+        # viejo (vencía en el MISMO mes), así que generaba cuotas con
+        # fechas distintas a las del cron -- inconsistencia real que se
+        # corrige acá.
+        if hoy.month == 12:
+            anio_venc, mes_venc = hoy.year + 1, 1
+        else:
+            anio_venc, mes_venc = hoy.year, hoy.month + 1
+        ultimo_dia_venc = _cal.monthrange(anio_venc, mes_venc)[1]
+        dia = min(cuenta.dia_pago or 1, ultimo_dia_venc)
+        vencimiento = _dt.date(anio_venc, mes_venc, dia)
         cuota = Cuota(
             cuenta_id=cuenta.id, periodo=periodo,
             monto=dinero.a_decimal(cuenta.tarifa.monto),

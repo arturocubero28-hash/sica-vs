@@ -4133,3 +4133,18 @@ a.lp-descarga-btn svg { color: #F48723; }
   .lp-descarga-botones { flex-direction: column; align-items: stretch; }
   .lp-descarga-btn { justify-content: center; }
 }
+
+/* Día 62 — ícono de ayuda "i" junto a una etiqueta de formulario, para
+   explicar reglas de negocio que no son obvias (ej. el modelo de cobro
+   en el campo "Día de pago" al dar de alta una cuenta). El texto se
+   muestra con el title nativo del navegador -- simple y confiable, sin
+   depender de una librería de tooltips. */
+.label-con-info { display: inline-flex; align-items: center; gap: 6px; }
+.info-tip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--marca-azul, #022E45); color: #fff;
+  font-size: 10px; font-weight: 700; font-style: italic;
+  cursor: help; flex-shrink: 0; line-height: 1;
+}
+.info-tip:hover { background: var(--marca-naranja, #F48723); }

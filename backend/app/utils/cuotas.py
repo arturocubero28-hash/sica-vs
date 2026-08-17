@@ -15,20 +15,31 @@ def calcular_cuota_prorrateada(monto_tarifa, dia_pago, dias_gracia, hoy=None):
     Calcula la primera cuota prorrateada de una casa que empieza a pagar a
     mitad de mes (alta nueva, o activación de cuotas al subir de plan).
 
-    Modelo real del sistema (aclarado por el usuario el Día 55): el cron
-    mensual corre el DÍA 1 de cada mes y genera la cuota de ESE mes, con
-    período = 1° del mes y vencimiento = día de pago DE ESE MISMO MES +
-    gracia. El "día de pago" es solo la fecha de vencimiento dentro del
-    mes, NO cuándo empieza el ciclo.
+    MODELO DE COBRO (Día 62 — corregido; ver también generar_cuotas_mensuales
+    en tasks/mora.py, que sigue exactamente el mismo criterio):
 
-    Por lo tanto, la primera cuota (activación a mitad de mes) se prorratea
-    por los días que quedan DESDE HOY HASTA FIN DE MES (mes comercial de 30
-    días), con período = mes actual y vencimiento = día de pago de este
-    mismo mes + gracia. El 1° del mes siguiente, el cron ya genera la cuota
-    completa normal.
+      - El MONTO se prorratea por los días que quedan del mes ACTUAL, desde
+        hoy hasta fin de mes (mes comercial de 30 días). Ej: alta el 16 ->
+        se cobran 15 días de agosto.
+      - El VENCIMIENTO cae en el MES SIGUIENTE, en el día de pago
+        configurado -- igual que cualquier otra cuota. El residente paga un
+        mes ya consumido.
 
-    Regla de negocio (Opción A, confirmada): la responsabilidad arranca
-    hoy, cada casa empieza limpia, sin mirar historial previo.
+    Esto corrige un problema real encontrado en producción (Día 62): antes
+    el vencimiento se calculaba en el MISMO mes del alta, así que si el día
+    de pago ya había pasado (ej. alta el 16, día de pago el 7), la cuenta
+    NACÍA EN MORA -- el residente quedaba en atraso por una fecha que ya
+    había pasado antes de que su cuenta existiera, sin ninguna posibilidad
+    real de pagar a tiempo.
+
+    IMPORTANTE: fecha_vencimiento guarda SOLO el día de pago (cuándo empieza
+    la mora), NO el día del corte de servicio. El corte se calcula donde se
+    necesita, sumando los días de gracia. dias_gracia se sigue recibiendo
+    como parámetro por compatibilidad con los llamadores, pero ya NO se
+    suma al vencimiento.
+
+    Regla de negocio (Opción A, confirmada el Día 55): la responsabilidad
+    arranca hoy, cada casa empieza limpia, sin mirar historial previo.
 
     Devuelve dict con periodo, monto, fecha_vencimiento, dias_restantes;
     o None si no corresponde (hoy es día 30/fin de mes comercial, no queda
@@ -37,9 +48,9 @@ def calcular_cuota_prorrateada(monto_tarifa, dia_pago, dias_gracia, hoy=None):
     if hoy is None:
         hoy = dt.date.today()
 
-    # Días que quedan del mes, en mes comercial de 30 días. Ej: hoy es el 7
-    # -> se cobran del 7 al 30 = 24 días (incluyendo hoy). Así el residente
-    # paga desde el día que entra al sistema hasta fin de mes.
+    # Días que quedan del mes ACTUAL, en mes comercial de 30 días. Ej: hoy
+    # es el 7 -> se cobran del 7 al 30 = 24 días (incluyendo hoy). Así el
+    # residente paga desde el día que entra al sistema hasta fin de mes.
     efectivo_dia = min(hoy.day, 30)
     dias_restantes = 30 - efectivo_dia + 1  # incluye el día de hoy
 
@@ -49,15 +60,16 @@ def calcular_cuota_prorrateada(monto_tarifa, dia_pago, dias_gracia, hoy=None):
     monto_diario = float(monto_tarifa) / 30
     monto_prorrateado = round(monto_diario * dias_restantes, 2)
 
-    # Vencimiento: día de pago de ESTE MISMO MES + gracia (igual que el cron
-    # mensual). Si el día de pago ya pasó este mes (ej. hoy 15, pago 11), la
-    # cuota vence igual el 11 + gracia -- ya "nace vencida" en su ventana de
-    # gracia, lo cual es correcto: el residente entró tarde y debe ponerse
-    # al día. min() por si el mes no llega a ese día (febrero, etc.).
-    ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
-    dia_venc = min(dia_pago, ultimo_dia)
-    fecha_pago = dt.date(hoy.year, hoy.month, dia_venc)
-    vencimiento = fecha_pago + dt.timedelta(days=dias_gracia)
+    # Vencimiento: día de pago DEL MES SIGUIENTE (mismo criterio que el
+    # cron mensual). min() por si el mes siguiente no llega a ese día
+    # (ej. día 30 configurado y el mes siguiente es febrero).
+    if hoy.month == 12:
+        anio_venc, mes_venc = hoy.year + 1, 1
+    else:
+        anio_venc, mes_venc = hoy.year, hoy.month + 1
+    ultimo_dia_venc = calendar.monthrange(anio_venc, mes_venc)[1]
+    dia_venc = min(dia_pago, ultimo_dia_venc)
+    vencimiento = dt.date(anio_venc, mes_venc, dia_venc)
 
     periodo = dt.date(hoy.year, hoy.month, 1)
 

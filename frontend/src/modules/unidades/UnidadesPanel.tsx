@@ -693,8 +693,15 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
                 <option key={t.id} value={t.id}>{t.nombre} — L {t.monto}</option>
               ))}
             </select>
-            <label className="diapago">Día de pago
-              <input type="number" min={1} max={28} value={diaPago}
+            <label className="diapago">
+              <span className="label-con-info">
+                Día de pago
+                <span className="info-tip" title="El día 1 de cada mes se genera la cuota de ese mes, y el residente la paga durante el MES SIGUIENTE. Este número es el día del mes siguiente hasta el que puede pagar sin atraso. Ej: con día de pago 5, la cuota de agosto se paga hasta el 5 de septiembre. Después entra en mora (con avisos), y al vencerse los días de gracia configurados en Configuraciones, se le suspenden los accesos.">i</span>
+              </span>
+              {/* Día 62: max corregido de 28 a 30 -- había quedado
+                  desactualizado acá cuando el Día 55 se subió el tope a 30
+                  en el resto del sistema (backend y Configuraciones). */}
+              <input type="number" min={1} max={30} value={diaPago}
                 onChange={(e) => setDiaPago(Number(e.target.value))} />
             </label>
           </div>

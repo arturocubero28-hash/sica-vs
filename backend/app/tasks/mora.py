@@ -64,8 +64,12 @@ def _avisar_cuotas_logica(Cuota, _notif):
 
         if dias == 3:
             titulo = "Tu cuota vence pronto"
+            # Día 62: antes decía "para evitar el bloqueo por mora", pero el
+            # bloqueo NO ocurre al vencer -- ocurre recién al agotarse los
+            # días de gracia posteriores. Se corrige el texto para no
+            # asustar de más ni desinformar sobre cuándo se corta.
             cuerpo = (f"La cuota de {monto_txt} vence en 3 días. "
-                      f"Pagá a tiempo para evitar el bloqueo por mora.")
+                      f"Pagá a tiempo para evitar entrar en mora.")
         else:  # dias == 0
             titulo = "Tu cuota vence hoy"
             cuerpo = (f"Hoy vence la cuota de {monto_txt}. "
@@ -94,12 +98,34 @@ def generar_cuotas_mensuales():
     """
     Genera una cuota por cada cuenta para el mes en curso.
     Usa UNIQUE (cuenta_id, periodo) para evitar duplicados.
-    El día de pago y los días de gracia vienen de ConfigResidencial,
-    UNA POR RESIDENCIAL (Día 54 — antes era una sola config global,
-    aplicada por igual a las cuentas de TODAS las residenciales del
-    sistema, sin importar lo que cada una hubiera configurado). La
-    fecha de vencimiento es dia_pago + dias_gracia (ej. si pago es el 1
-    y gracia es 7, la cuota vence el 7 del mes).
+
+    MODELO DE COBRO (Día 62 — corregido y unificado; antes había una
+    ambigüedad real que hacía que una cuenta pudiera "nacer en mora"):
+
+      1 de agosto        → se genera la cuota de agosto (período = agosto).
+      día_pago de SEPT.  → vence. Ese día se avisa "hoy es tu día de pago".
+                           Hasta acá, sin mora.
+      +1 día             → empieza la mora. Alertas diarias avisando
+                           cuántos días faltan para el corte.
+      +dias_gracia       → al vencerse los días exactos de gracia, se
+                           corta el servicio (bloqueo de accesos).
+
+    Es decir: el residente paga un mes YA CONSUMIDO, con vencimiento en el
+    mes siguiente. El "día de pago" es un día DEL MES SIGUIENTE al período
+    de la cuota (por defecto el 1; configurable por el admin).
+
+    IMPORTANTE — significado de fecha_vencimiento: guarda SOLO el día de
+    pago (cuándo empieza la mora), NO el día del corte. Antes de hoy este
+    campo guardaba día_pago + dias_gracia mezclados en un solo valor, lo
+    que hacía imposible distinguir "está en mora" de "hay que cortarle el
+    servicio" -- y encima revisar_mora() sumaba OTROS 3 días fijos encima,
+    una segunda gracia implícita que nadie había configurado. Ahora el
+    corte se calcula donde se necesita, sumando los días de gracia reales
+    a esta fecha.
+
+    El día de pago y los días de gracia vienen de ConfigResidencial, UNA
+    POR RESIDENCIAL (Día 54 — antes era una sola config global, aplicada
+    por igual a las cuentas de TODAS las residenciales del sistema).
     """
     import calendar
     from app import create_app
@@ -110,7 +136,13 @@ def generar_cuotas_mensuales():
     with app.app_context():
         hoy = dt.date.today()
         periodo = dt.date(hoy.year, hoy.month, 1)
-        ultimo_dia = calendar.monthrange(hoy.year, hoy.month)[1]
+
+        # Día 62 — el vencimiento cae en el MES SIGUIENTE al período.
+        if hoy.month == 12:
+            anio_venc, mes_venc = hoy.year + 1, 1
+        else:
+            anio_venc, mes_venc = hoy.year, hoy.month + 1
+        ultimo_dia_venc = calendar.monthrange(anio_venc, mes_venc)[1]
 
         cuentas = Cuenta.query.filter_by(activa=True).all()
         ya_tienen = {row[0] for row in db.session.query(Cuota.cuenta_id)
@@ -137,13 +169,13 @@ def generar_cuotas_mensuales():
                 continue
 
             cfg = _config_de(cuenta)
-            # Fecha de vencimiento = día de pago + días de gracia.
-            # Día 55: la cuenta puede tener su propio dias_gracia (override
-            # individual); si es NULL, usa el global de la residencial.
-            dia_pago = min(cfg.dia_pago, ultimo_dia)
-            fecha_pago = dt.date(hoy.year, hoy.month, dia_pago)
-            gracia = cuenta.dias_gracia if cuenta.dias_gracia is not None else cfg.dias_gracia
-            vencimiento = fecha_pago + dt.timedelta(days=gracia)
+            # Vencimiento = día de pago DEL MES SIGUIENTE. Sin sumar la
+            # gracia acá: la gracia es lo que va DESPUÉS del vencimiento,
+            # y se aplica en revisar_mora() para decidir el corte.
+            # min() por si el mes siguiente no llega a ese día (ej. día 30
+            # configurado y el mes siguiente es febrero).
+            dia_pago = min(cfg.dia_pago, ultimo_dia_venc)
+            vencimiento = dt.date(anio_venc, mes_venc, dia_pago)
 
             cuota = Cuota(
                 cuenta_id=cuenta.id,
@@ -160,41 +192,77 @@ def generar_cuotas_mensuales():
 
 
 # ── Revisión diaria de mora ────────────────────────────────────────────────────
-def _mensaje_mora(dias, monto_txt):
-    """Genera el aviso de mora que escala de tono según los días de atraso.
-    Devuelve (titulo, cuerpo)."""
-    if dias == 1:
-        return ("Cuota vencida",
-                f"Tu cuota de {monto_txt} venció ayer. Ponete al día para "
-                f"evitar el bloqueo de tu cuenta.")
-    elif dias == 2:
-        return ("2 días de atraso",
-                f"Llevás 2 días de atraso con {monto_txt}. Mañana tu cuenta "
-                f"será bloqueada si no pagás.")
-    elif dias < 7:
-        return (f"Cuenta bloqueada · {dias} días de mora",
-                f"Tu cuenta está bloqueada por {monto_txt} en mora ({dias} días). "
-                f"Regularizá tu pago para recuperar el acceso.")
-    elif dias < 15:
-        return (f"{dias} días de mora acumulada",
-                f"Ya son {dias} días de atraso ({monto_txt}). Acercate a "
-                f"administración para regularizar tu situación.")
-    else:
-        return (f"Mora crítica · {dias} días",
-                f"Tu cuenta lleva {dias} días de mora ({monto_txt}). "
-                f"Contactá a administración a la brevedad.")
+def _mensaje_mora(dias, monto_txt, dias_gracia=None):
+    """
+    Genera el aviso de mora que escala de tono según los días de atraso.
+    Devuelve (titulo, cuerpo).
+
+    Día 62 — reescrito: los mensajes anteriores tenían hardcodeado el
+    modelo viejo ("mañana tu cuenta será bloqueada" en el día 2, "cuenta
+    bloqueada" desde el día 3), que asumía 3 días fijos de gracia sin
+    importar lo que el admin hubiera configurado. Con 7 días de gracia,
+    por ejemplo, el residente recibía "cuenta bloqueada" al 3er día
+    aunque su cuenta siguiera perfectamente activa -- un aviso falso.
+
+    Ahora los mensajes se arman con los días de gracia REALES de esa
+    cuenta: mientras esté dentro de la gracia, se avisa cuántos días le
+    quedan antes del corte; una vez superada, se avisa que el servicio
+    está suspendido.
+    """
+    if dias_gracia is None:
+        dias_gracia = 0
+
+    # Dentro de la ventana de gracia: todavía tiene servicio.
+    if dias <= dias_gracia:
+        restantes = dias_gracia - dias + 1  # incluye hoy
+        if restantes == 1:
+            cuando = "hoy es tu último día"
+        else:
+            cuando = f"te quedan {restantes} días"
+        titulo = "Cuota vencida" if dias == 1 else f"{dias} días de atraso"
+        return (titulo,
+                f"Tu cuota de {monto_txt} está vencida ({dias} "
+                f"{'día' if dias == 1 else 'días'} de atraso). Para evitar la "
+                f"suspensión de visitas y accesos, {cuando} para ponerte al día.")
+
+    # Ya superó la gracia: servicio suspendido.
+    if dias < 15:
+        return (f"Servicio suspendido · {dias} días de mora",
+                f"Tu acceso a la residencial y la generación de visitas están "
+                f"suspendidos por {monto_txt} en mora ({dias} días). Regularizá "
+                f"tu pago para recuperar el acceso.")
+    return (f"Mora crítica · {dias} días",
+            f"Tu cuenta lleva {dias} días de mora ({monto_txt}) con el servicio "
+            f"suspendido. Contactá a administración a la brevedad.")
 
 
 @celery.task(name="tasks.revisar_mora")
 def revisar_mora():
     """
-    Revisa cuotas pendientes/vencidas y aplica la lógica de mora acordada:
-      -1 día  → notificación (futuro: email)
-       0 días → notificación
-      +1, +2  → notificación de atraso
-      +3 o +  → bloquear cuenta (estado='bloqueada', bloqueada=True)
-    El desbloqueo ocurre cuando el admin aprueba un pago, no aquí.
-    Además envía un aviso de mora escalonado día a día (ver _mensaje_mora).
+    Revisa cuotas vencidas y aplica el modelo de cobro (Día 62).
+
+    Con día de pago el 5 de septiembre y 3 días de gracia configurados:
+
+      5 de sept  (día 0)  → día de pago. Aviso "hoy vence tu cuota".
+                            Todavía NO es mora.
+      6 de sept  (día 1)  → 1er día de mora. Aviso de atraso, avisando
+                            en cuántos días se suspende el servicio.
+      7, 8       (2 y 3)  → sigue en mora, con servicio. Últimos días de
+                            la gracia configurada.
+      9 de sept  (día 4)  → se agotaron los 3 días completos de gracia
+                            → SE CORTA el servicio (cuenta bloqueada).
+
+    Es decir: el corte ocurre cuando los días de atraso SUPERAN los días
+    de gracia (dias > dias_gracia), no cuando los igualan -- con 3 días de
+    gracia, el residente los usa completos (días 1, 2 y 3) y recién al 4°
+    se le corta. Antes esto era `dias >= dias_gracia`, que cortaba un día
+    antes de tiempo, comiéndose el último día de gracia.
+
+    fecha_vencimiento guarda SOLO el día de pago (ver
+    generar_cuotas_mensuales), así que `dias` es directamente los días de
+    mora reales, sin gracias implícitas mezcladas.
+
+    El desbloqueo ocurre cuando el admin aprueba un pago, no acá.
     """
     from app import create_app
     from app.extensions import db
@@ -245,13 +313,15 @@ def revisar_mora():
             # Día 55: respeta el override de días de gracia por casa
             # (cuenta.dias_gracia); si es NULL, usa el global de la
             # residencial. Mismo criterio que la generación de cuotas.
-            # (Nota: el conteo de mora acá sobre fecha_vencimiento es un
-            # comportamiento preexistente que no se toca en este cambio;
-            # solo se sustituye de dónde sale el número de días de gracia.)
             dias_gracia = (cuenta.dias_gracia if cuenta.dias_gracia is not None
                            else _dias_gracia_de(unidad.residencial_id if unidad else None))
 
-            if dias >= dias_gracia:
+            # Día 62 — corregido un error de un día: era `dias >=
+            # dias_gracia`, que cortaba el servicio EN el último día de
+            # gracia en vez de después de agotarla. Con 3 días de gracia,
+            # el residente debe poder usar los 3 completos (días 1, 2 y 3
+            # de mora) y recién al día 4 se le corta.
+            if dias > dias_gracia:
                 cuota.estado = "vencida"
                 if not cuenta.bloqueada:
                     cuenta.estado = "bloqueada"
@@ -263,9 +333,13 @@ def revisar_mora():
 
             # Aviso de mora ESCALONADO día a día (independiente del bloqueo).
             # Se acumula por cuenta para no mandar un push por cada cuota.
+            # Día 62: se guarda también dias_gracia, para que el mensaje
+            # pueda decir cuántos días le quedan antes del corte real (en
+            # vez de asumir un modelo fijo de 3 días como antes).
             if dias >= 1:
                 avisos_mora.setdefault(cuenta.id, {
-                    "cuenta": cuenta, "dias": dias, "monto": 0.0
+                    "cuenta": cuenta, "dias": dias, "monto": 0.0,
+                    "dias_gracia": dias_gracia,
                 })
                 # Guardar el mayor atraso y sumar el monto adeudado
                 if dias > avisos_mora[cuenta.id]["dias"]:
@@ -299,7 +373,7 @@ def revisar_mora():
             cuenta = info["cuenta"]
             dias = info["dias"]
             monto_txt = f"L {info['monto']:,.2f}"
-            titulo, cuerpo = _mensaje_mora(dias, monto_txt)
+            titulo, cuerpo = _mensaje_mora(dias, monto_txt, info.get("dias_gracia"))
             try:
                 # Encolado (async): cada aviso se reparte como tarea propia
                 # entre los procesos del worker, en paralelo -- antes se
