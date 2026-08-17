@@ -1177,9 +1177,16 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
               <tbody>
                 {cuenta.cuotas_recientes.map((c, i) => (
                   <tr key={i}>
-                    <td>{new Date(c.periodo).toLocaleDateString("es-HN", { month: "short", year: "numeric" })}</td>
+                    {/* Día 62 — bug real encontrado en producción: sin "T00:00:00",
+                        new Date("2026-08-01") se interpreta como medianoche UTC.
+                        Al mostrarla en hora de Honduras (UTC-6), retrocede al día
+                        anterior -- y como es el 1° del mes, retrocede el MES
+                        completo (agosto se mostraba como julio). Mismo patrón que
+                        ya se usaba correctamente más abajo en este mismo archivo
+                        (línea ~2035), pero acá faltaba. */}
+                    <td>{new Date(c.periodo + "T00:00:00").toLocaleDateString("es-HN", { month: "short", year: "numeric" })}</td>
                     <td>L {c.monto.toFixed(2)}</td>
-                    <td>{new Date(c.fecha_vencimiento).toLocaleDateString("es-HN")}</td>
+                    <td>{new Date(c.fecha_vencimiento + "T00:00:00").toLocaleDateString("es-HN")}</td>
                     <td>
                       <span className={`pill ${c.estado === "pagada" ? "green" : c.estado === "vencida" ? "red" : ""}`}>
                         {c.estado}

@@ -49,11 +49,14 @@ def calcular_cuota_prorrateada(monto_tarifa, dia_pago, hoy=None):
     if hoy is None:
         hoy = dt.date.today()
 
-    # Días que quedan del mes ACTUAL, en mes comercial de 30 días. Ej: hoy
-    # es el 7 -> se cobran del 7 al 30 = 24 días (incluyendo hoy). Así el
-    # residente paga desde el día que entra al sistema hasta fin de mes.
+    # Días que quedan del mes ACTUAL, en mes comercial de 30 días. El día de
+    # la propia alta NO se cobra -- se cobra desde el día SIGUIENTE hasta
+    # fin de mes. Ej: alta el 17 -> se cobran del 18 al 30 = 13 días.
+    # (Día 62, corregido: antes incluía el día de hoy, cobrando un día de
+    # más -- el usuario confirmó en producción que el día de alta debe
+    # quedar libre.)
     efectivo_dia = min(hoy.day, 30)
-    dias_restantes = 30 - efectivo_dia + 1  # incluye el día de hoy
+    dias_restantes = 30 - efectivo_dia
 
     if dias_restantes <= 0:
         return None

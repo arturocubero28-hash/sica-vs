@@ -187,7 +187,10 @@ function AbonoCard({ abono, onPagar }: { abono: AbonoArregloDTO; onPagar: () => 
 function CuotaCard({ cuota, onPagar, esLaMasAntigua = true }: {
   cuota: CuotaDTO; onPagar?: () => void; esLaMasAntigua?: boolean;
 }) {
-  const vencida = new Date(cuota.fecha_vencimiento) < new Date() && cuota.estado !== "pagada";
+  // Día 62: mismo bug de zona horaria -- sin "T00:00:00" esto podía marcar
+  // "vencida" un día antes de tiempo (o, si fecha_vencimiento es el 1° del
+  // mes, hasta con casi un mes de diferencia en el peor caso).
+  const vencida = new Date(cuota.fecha_vencimiento + "T00:00:00") < new Date() && cuota.estado !== "pagada";
   const puedeSubir = (cuota.estado === "pendiente" || cuota.estado === "vencida") && !cuota.en_revision;
   return (
     <div className={`cuota-card ${vencida ? "vencida" : ""}`}>
@@ -201,7 +204,10 @@ function CuotaCard({ cuota, onPagar, esLaMasAntigua = true }: {
         </span>
       </div>
       <div className="cuota-vence">
-        Vence: {new Date(cuota.fecha_vencimiento).toLocaleDateString("es-HN")}
+        {/* Día 62: mismo bug de zona horaria que UnidadesPanel.tsx -- sin
+            "T00:00:00", una fecha del 1° del mes podía mostrarse como el
+            mes anterior en hora de Honduras. */}
+        Vence: {new Date(cuota.fecha_vencimiento + "T00:00:00").toLocaleDateString("es-HN")}
         {vencida && cuota.estado !== "en_revision" && <span className="mora-tag"><AlertTriangle size={16} /> En mora</span>}
       </div>
       {cuota.pago_rechazado && (cuota.estado === "pendiente" || cuota.estado === "vencida") && (
