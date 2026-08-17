@@ -228,9 +228,19 @@ def mora_por_casa(usuario_actual):
     """
     hoy = dt.date.today()
 
-    # Todas las cuotas no pagadas (pendiente, vencida, en_arreglo, etc.)
+    # Día 62 — bug real reportado por el usuario: el filtro anterior traía
+    # CUALQUIER cuota sin pagar (estado != "pagada"), sin importar si su
+    # fecha de vencimiento ya pasó. Con el modelo nuevo (vencimiento en el
+    # MES SIGUIENTE al período), una cuota recién generada está
+    # legítimamente "pendiente" durante semanas antes de estar realmente
+    # vencida -- una casa recién dada de alta, con su primera cuota
+    # venciendo el mes que viene, aparecía en el reporte de MORA sin
+    # deber nada todavía. Se agrega el filtro de fecha: solo cuentan las
+    # cuotas cuyo vencimiento YA PASÓ.
     cuotas = scope_cuotas(Cuota.query, usuario_actual).filter(
-        Cuota.estado != "pagada").order_by(Cuota.periodo.asc()).all()
+        Cuota.estado != "pagada",
+        Cuota.fecha_vencimiento < hoy,
+    ).order_by(Cuota.periodo.asc()).all()
 
     # Agrupar por cuenta
     por_cuenta = defaultdict(list)
