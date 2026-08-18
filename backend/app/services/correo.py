@@ -95,24 +95,60 @@ def _plantilla_base(titulo, cuerpo_html, nombre_residencial, boton_texto=None, b
     </table>"""
 
 
+def _bloque_descarga_app():
+    """
+    Sección de "descargá nuestra app" para el correo de activación (Día 62,
+    pedido del usuario). Android apunta al APK real (mismo archivo que ya
+    se sirve desde la landing page); iOS se menciona como "próximamente" en
+    vez de mostrar un link a la App Store que todavía no existe -- evita
+    que un residente haga clic en un enlace roto. Cuando la app se publique
+    en la App Store, solo hace falta cambiar esa línea acá.
+    """
+    from flask import current_app
+    url_frontend = current_app.config.get("FRONTEND_URL", "https://patronatovillasdelsol.com")
+    url_apk = f"{url_frontend}/descargas/sicavs.apk"
+    return f"""
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
+        <tr><td style="border-top:1px solid #eeede8;padding-top:16px;">
+          <p style="color:#3a4048;font-size:13.5px;margin:0 0 8px;">
+            También podés descargar nuestra aplicación móvil:
+          </p>
+          <a href="{url_apk}" style="color:#F48723;font-size:13.5px;font-weight:600;text-decoration:none;">
+            Descargar para Android
+          </a>
+          <span style="color:#93a0ad;font-size:12.5px;"> · Próximamente en App Store (iOS)</span>
+        </td></tr>
+      </table>"""
+
+
 def enviar_correo_activacion(email, nombre, token, nombre_residencial, es_reenvio=False):
     """Correo con el link para que un residente defina su contraseña."""
     from flask import current_app
     url_frontend = current_app.config.get("FRONTEND_URL", "https://patronatovillasdelsol.com")
     url = f"{url_frontend}/?activar={token}"
+
+    # Día 62 — reescrito a pedido del usuario: el texto anterior era
+    # genérico ("Ya tenés una cuenta en SICA-VS"), sin mencionar el nombre
+    # de la residencial ni personalizar con el nombre del residente. Ahora
+    # el correo es explícitamente multi-residencial: usa el nombre real de
+    # la persona y el nombre real de SU residencial (ambos ya llegaban como
+    # parámetro, solo faltaba usarlos en el texto).
+    saludo = f"Hola {nombre}," if nombre else "Hola,"
     intro = (
-        "Te reenviamos tu enlace de activación." if es_reenvio else
-        f"¡Hola{' ' + nombre if nombre else ''}! Ya tenés una cuenta en SICA-VS."
+        f"{saludo} te reenviamos tu enlace de activación." if es_reenvio else
+        f"{saludo} fuiste registrado/a como residente de "
+        f"<b>{nombre_residencial}</b>."
     )
     cuerpo = f"""
       <p>{intro}</p>
-      <p>Hacé clic en el botón de abajo para definir tu contraseña y empezar a usar la app.</p>
-      <p style="color:#93a0ad;font-size:13px;">Este enlace vence en 48 horas.</p>"""
+      <p>Hacé clic en el botón de abajo para confirmar tu cuenta y definir tu contraseña.</p>
+      <p style="color:#93a0ad;font-size:13px;">Este enlace vence en 48 horas.</p>
+      {_bloque_descarga_app()}"""
     html = _plantilla_base(
         "Activá tu cuenta" if not es_reenvio else "Tu nuevo enlace de activación",
-        cuerpo, nombre_residencial, "Activar mi cuenta", url,
+        cuerpo, nombre_residencial, "Confirmar mi cuenta", url,
     )
-    return _enviar(email, "Activá tu cuenta en SICA-VS", html)
+    return _enviar(email, f"Activá tu cuenta — {nombre_residencial}", html)
 
 
 def enviar_correo_reset(email, token, nombre_residencial):
