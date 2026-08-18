@@ -242,7 +242,15 @@ def _generar_pdf_recibo(pago, cfg):
         if datos_logo:
             try:
                 from reportlab.lib.utils import ImageReader
-                import io
+                # Día 63 — BUG REAL: había un "import io" acá adentro, de más
+                # (io ya está importado arriba del archivo, línea 12). En
+                # Python, si un nombre se importa/asigna EN CUALQUIER parte
+                # de una función, se trata como variable LOCAL en toda esa
+                # función -- incluso ANTES de la línea donde se importa. Eso
+                # rompía "buf = io.BytesIO()" más arriba en esta misma
+                # función (línea 167), con un error real solo visible al
+                # generar el PDF: UnboundLocalError. Se quita el import
+                # redundante.
                 radio = 8 * mm
                 cx, cy = 12 * mm + radio, y_centro_logo
                 c.setFillColor(colors.white)
