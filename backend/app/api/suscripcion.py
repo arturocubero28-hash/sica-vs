@@ -122,7 +122,7 @@ def subir_plan(usuario_actual):
     return jsonify({"data": residencial.to_dict(incluir_stats=True)})
 
 
-@suscripcion_bp.get("/comprobantes/<nombre_archivo>")
+@suscripcion_bp.get("/comprobantes/<path:nombre_archivo>")
 @roles_required("desarrollador")
 def ver_comprobante_suscripcion(usuario_actual, nombre_archivo):
     """

@@ -268,7 +268,7 @@ def visitas_activas(usuario_actual):
 # =====================================================================
 # SERVIR FOTOS TOMADAS POR EL GUARDIA (cédula, placa)
 # =====================================================================
-@dashboard_bp.get("/fotos/<nombre_archivo>")
+@dashboard_bp.get("/fotos/<path:nombre_archivo>")
 @roles_required("admin", "super_admin", "guardia", "cajero", "desarrollador")
 def ver_foto(usuario_actual, nombre_archivo):
     from app.utils.archivos import servir_archivo_seguro

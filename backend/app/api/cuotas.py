@@ -310,7 +310,7 @@ def subir_comprobante_abono(usuario_actual, uuid_abono):
     db.session.commit()
     vincular_pago(nombre_archivo, pago.id)
     return jsonify({"data": pago.to_dict()}), 201
-@cuotas_bp.get("/comprobantes/<nombre_archivo>")
+@cuotas_bp.get("/comprobantes/<path:nombre_archivo>")
 @token_required
 def ver_comprobante(usuario_actual, nombre_archivo):
     # Solo se sirve el archivo si corresponde a un comprobante realmente

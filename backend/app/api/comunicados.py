@@ -91,7 +91,7 @@ def borrar(usuario_actual, uuid_com):
 
 
 # ── Servir imagen del comunicado ──────────────────────────────────────────────
-@comunicados_bp.get("/imagenes/<nombre_archivo>")
+@comunicados_bp.get("/imagenes/<path:nombre_archivo>")
 @token_required
 def ver_imagen(usuario_actual, nombre_archivo):
     return servir_archivo_seguro(_carpeta(), nombre_archivo)
