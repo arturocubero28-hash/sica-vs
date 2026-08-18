@@ -140,7 +140,14 @@ def ver_comprobante_suscripcion(usuario_actual, nombre_archivo):
     if not pago:
         return jsonify({"error": {"code": "no_encontrado",
                                   "message": "Comprobante no encontrado"}}), 404
-    return servir_archivo_seguro(_carpeta_pagos_suscripcion(), nombre_archivo)
+    # Día 62 — mismo bug de doble prefijo que ver_comprobante en
+    # cuotas.py (ver ese archivo para el detalle completo): en modo nube,
+    # nombre_archivo ya llega con el prefijo "suscripcion/" (así quedó
+    # guardado en la base), y servir_archivo_seguro se lo sumaba de
+    # nuevo -- NoSuchKey en Spaces aunque el archivo real sí existiera.
+    from app.services import storage
+    clave = nombre_archivo if nombre_archivo.startswith("suscripcion/") else f"suscripcion/{nombre_archivo}"
+    return storage.servir_archivo(clave)
 
 
 @suscripcion_bp.get("/mi-estado")

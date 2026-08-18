@@ -94,4 +94,13 @@ def borrar(usuario_actual, uuid_com):
 @comunicados_bp.get("/imagenes/<path:nombre_archivo>")
 @token_required
 def ver_imagen(usuario_actual, nombre_archivo):
-    return servir_archivo_seguro(_carpeta(), nombre_archivo)
+    # Día 62 — mismo bug de doble prefijo encontrado en comprobantes de
+    # cuotas (ver cuotas.py, ver_comprobante): servir_archivo_seguro, en
+    # modo nube, le vuelve a sumar la subcarpeta "comunicados/" a un
+    # nombre_archivo que YA la trae (así quedó guardado en la base desde
+    # que se subió la imagen) -- duplicaba el prefijo y rompía la
+    # búsqueda en Spaces con NoSuchKey. Mismo fix: llamar directo a
+    # storage.py con la clave ya normalizada.
+    from app.services import storage
+    clave = nombre_archivo if nombre_archivo.startswith("comunicados/") else f"comunicados/{nombre_archivo}"
+    return storage.servir_archivo(clave)

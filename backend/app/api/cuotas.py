@@ -354,7 +354,23 @@ def ver_comprobante(usuario_actual, nombre_archivo):
         return jsonify({"error": {"code": "acceso_denegado",
                                   "message": "No tenés permiso para ver este comprobante"}}), 403
 
-    return servir_archivo_seguro(_carpeta_comprobantes(), nombre_archivo)
+    # Día 62 — BUG REAL encontrado en producción, misma familia que el
+    # logo (Día 59): no se usa servir_archivo_seguro(carpeta, nombre_archivo)
+    # a propósito. Esa función, en modo nube, RECONSTRUYE la clave sumando
+    # la subcarpeta (derivada de _carpeta_comprobantes()) + nombre_archivo
+    # -- pensada para cuando nombre_archivo es SOLO el nombre del archivo,
+    # sin prefijo. Pero acá nombre_archivo YA llega completo con el
+    # prefijo en modo nube ("comprobantes/xxx.webp", tal como quedó
+    # guardado en comprobante_archivo/archivo en la base) -- sumarle la
+    # subcarpeta de nuevo duplicaba el prefijo
+    # ("comprobantes/comprobantes/xxx.webp"), un NoSuchKey de Spaces
+    # aunque el archivo real SÍ existía con la clave correcta (confirmado
+    # con `aws s3 ls` contra el bucket real). Se llama directo a
+    # storage.py con la clave ya normalizada, mismo criterio que
+    # cuentas.py (logo) y recibos.py/caja.py.
+    from app.services import storage
+    clave = nombre_archivo if nombre_archivo.startswith("comprobantes/") else f"comprobantes/{nombre_archivo}"
+    return storage.servir_archivo(clave)
 
 
 # ── ADMIN: contar pagos pendientes (para notificaciones) ──────────────────────
