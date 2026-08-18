@@ -45,6 +45,23 @@ export async function comprimirImagenWebp(
     );
     if (!blob) return archivo; // navegador sin soporte de codificación WebP
 
+    // Día 62 — BUG REAL encontrado en producción: algunos navegadores (Safari
+    // entre ellos) no fallan limpiamente cuando no soportan bien codificar a
+    // WebP -- en vez de devolver null (lo cual ya está cubierto arriba),
+    // devuelven SILENCIOSAMENTE un blob en OTRO formato (JPEG/PNG) aunque se
+    // les pidió WebP explícitamente. El código no verificaba esto: le
+    // forzaba el nombre ".webp" al archivo sin importar el contenido real
+    // que el navegador realmente había producido. El archivo llegaba al
+    // servidor con extensión .webp pero bytes de otro formato -- el backend
+    // detecta correctamente la discrepancia (validar_contenido en
+    // archivos.py) y lo rechaza como "dañado/formato inválido". Por eso
+    // solo funcionaba en Chrome: es el único navegador con soporte
+    // confiable de codificación WebP vía canvas -- no que los demás
+    // "no soporten comprimir", sino que mentían sobre qué habían producido.
+    if (blob.type !== "image/webp") {
+      return archivo; // el navegador no devolvió lo que pedimos -- usar original, nunca bloquear la subida
+    }
+
     const nombreBase = archivo.name.replace(/\.[^.]+$/, "");
     return new File([blob], `${nombreBase}.webp`, {
       type: "image/webp",
