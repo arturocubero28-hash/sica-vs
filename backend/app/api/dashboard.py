@@ -438,6 +438,17 @@ def historial_accesos_tarjeta(usuario_actual):
     if exportar_todos:
         pagina = 1
 
+    # Día 64 — BUG REAL: la variable q nunca se inicializaba antes de los
+    # filtros, causando UnboundLocalError en producción. El admin veía un
+    # mensaje de "no está en mi plan" porque el error 500 se capturaba y
+    # mostraba como si fuera un problema de permisos, cuando en realidad
+    # era una excepción de Python pura. Mismo patrón que historial_accesos()
+    # más arriba (origen="visita"); acá filtramos origen="residente" para
+    # mostrar solo los accesos por tarjeta RFID del residente.
+    from app.utils.residencial import scope_eventos
+    q = scope_eventos(EventoAcceso.query, usuario_actual).filter(
+        EventoAcceso.origen == "residente")
+
     if desde:
         try:
             q = q.filter(EventoAcceso.ocurrido_en >= dt.datetime.fromisoformat(desde))
