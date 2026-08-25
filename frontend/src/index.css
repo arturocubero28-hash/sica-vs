@@ -1839,6 +1839,19 @@ html { scroll-behavior: smooth; }
   font-size: 13px;
   color: var(--lp-text-faint);
 }
+.lp-footer-legal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.lp-footer-legal a {
+  color: var(--lp-text-faint);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.lp-footer-legal a:hover { color: var(--marca-naranja); }
+.lp-footer-legal span { color: var(--lp-text-faint); opacity: 0.5; }
 
 /* ---- Galería de infraestructura ---- */
 .lp-galeria { padding: 100px 24px; max-width: 1200px; margin: 0 auto; position: relative; z-index: 1; }

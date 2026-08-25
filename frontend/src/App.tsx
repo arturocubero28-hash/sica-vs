@@ -528,6 +528,11 @@ function Landing({ onEntrar }: { onEntrar: () => void }) {
               <span>San Pedro Sula, Cortés · Honduras</span>
             </div>
           </div>
+          <div className="lp-footer-legal">
+            <a href="/terminos.html" target="_blank" rel="noopener noreferrer">Términos y Condiciones</a>
+            <span>·</span>
+            <a href="/privacidad.html" target="_blank" rel="noopener noreferrer">Política de Privacidad</a>
+          </div>
           <span className="lp-footer-year">© 2026 Villas del Sol</span>
         </div>
       </footer>
