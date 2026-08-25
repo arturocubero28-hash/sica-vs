@@ -110,6 +110,11 @@ def login():
                                   "message": "Email o contraseña incorrectos"}}), 401
 
     if not usuario.activo:
+        # AUDIT-12 — también capturamos el email para el log cuando el usuario
+        # existe pero está inactivo: antes solo se capturaba en el caso de
+        # credenciales inválidas, dejando este camino sin actor identificado.
+        from flask import g
+        g.email_intento = usuario.email
         return jsonify({"error": {"code": "usuario_inactivo",
                                   "message": "Tu usuario está inactivo. Revisá tu correo para activar tu cuenta."}}), 403
 
@@ -201,6 +206,10 @@ def activar_cuenta():
         return jsonify({"error": {"code": "token_invalido",
                                   "message": "El enlace de activación es inválido o expiró"}}), 400
 
+    # AUDIT-12 — capturar el email extraído del token para el log de auditoría.
+    from flask import g as _g
+    _g.email_intento = email[:120]
+
     usuario = Usuario.query.filter_by(email=email).first()
     if not usuario:
         return jsonify({"error": {"code": "usuario_no_encontrado",
@@ -229,6 +238,12 @@ def solicitar_recuperacion():
     if not email:
         return jsonify({"error": {"code": "datos_incompletos",
                                   "message": "El correo es obligatorio"}}), 400
+
+    # AUDIT-12 — capturar el email para el log de auditoría, igual que en
+    # el login. Este endpoint no requiere autenticación, así que g.usuario_actual
+    # es None; sin esto, el log quedaría sin actor identificado.
+    from flask import g as _g
+    _g.email_intento = email[:120]
 
     usuario = Usuario.query.filter_by(email=email).first()
 
@@ -290,6 +305,10 @@ def restablecer_password():
     if not email:
         return jsonify({"error": {"code": "token_invalido",
                                   "message": "El enlace de recuperación es inválido o expiró"}}), 400
+
+    # AUDIT-12 — capturar el email extraído del token para el log de auditoría.
+    from flask import g as _g
+    _g.email_intento = email[:120]
 
     usuario = Usuario.query.filter_by(email=email).first()
     if not usuario:
