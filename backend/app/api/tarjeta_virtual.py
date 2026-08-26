@@ -244,7 +244,7 @@ def wallet_pass(usuario_actual):
         import google.auth.transport.requests
         import requests as req
 
-        key_data = json.loads(service_key)
+        key_data = json.loads(service_key.replace('\\n', '\n'))
         issuer_id = current_app.config.get("GOOGLE_ISSUER_ID", "")
         # ROTATION-07: object_id generado por la función centralizada — antes
         # se armaba inline acá y de forma DISTINTA en la tarea nocturna de
