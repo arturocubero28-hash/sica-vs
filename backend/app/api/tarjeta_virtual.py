@@ -221,15 +221,16 @@ def wallet_pass(usuario_actual):
     }
 
     # Si no están configuradas las credenciales de Google → devolver el objeto
-    # sin firmar (modo desarrollo / Apple Wallet usa el QR directo)
-    # Si no está en variable de entorno, intentar desde archivo montado
+    # sin firmar (modo desarrollo / Apple Wallet usa el QR directo)\n    # Si no está en variable de entorno, intentar desde archivo montado
     service_key = current_app.config.get("GOOGLE_SERVICE_ACCOUNT_KEY")
+    service_key_desde_archivo = False
     if not service_key:
         import os
         key_file = "/app/google-wallet-key.json"
         if os.path.exists(key_file):
             with open(key_file) as f:
                 service_key = f.read()
+            service_key_desde_archivo = True
     if not service_key:
         return jsonify({"data": {
             "modo": "desarrollo",
@@ -245,8 +246,12 @@ def wallet_pass(usuario_actual):
         import requests as req
 
         # El .env almacena el JSON con comillas escapadas (\" → ") y saltos
-        # de línea literales (\n → salto real). Normalizamos antes de parsear.
-        service_key_clean = service_key.replace('\\"', '"').replace('\\n', '\n')
+        # de línea literales (\n → salto real). Solo limpiar si viene de
+        # la variable de entorno -- el archivo ya tiene el formato correcto.
+        if service_key_desde_archivo:
+            service_key_clean = service_key
+        else:
+            service_key_clean = service_key.replace('\\"', '"').replace('\\n', '\n')
         key_data = json.loads(service_key_clean)
         issuer_id = current_app.config.get("GOOGLE_ISSUER_ID", "")
         # ROTATION-07: object_id generado por la función centralizada — antes
