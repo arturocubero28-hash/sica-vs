@@ -604,8 +604,9 @@ def _notificar_wallet_actualizacion(pases: list):
             import google.auth.transport.requests
             import google.oauth2.service_account
 
+            service_key_clean = service_key.replace('\\"', '"').replace('\\n', '\n')
             creds = google.oauth2.service_account.Credentials.from_service_account_info(
-                json.loads(service_key.replace('\\n', '\n')),
+                json.loads(service_key_clean),
                 scopes=["https://www.googleapis.com/auth/wallet_object.issuer"])
             session = google.auth.transport.requests.AuthorizedSession(creds)
 
