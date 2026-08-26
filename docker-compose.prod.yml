@@ -108,6 +108,7 @@ services:
     # diera cuenta hasta que un residente reportó no recibir ninguna.
     volumes:
       - ./firebase-credentials.json:/app/firebase-credentials.json:ro
+      - ./google-wallet-key.json:/app/google-wallet-key.json:ro
     depends_on:
       db:
         condition: service_healthy
@@ -137,6 +138,7 @@ services:
     # sí tuviera el archivo.
     volumes:
       - ./firebase-credentials.json:/app/firebase-credentials.json:ro
+      - ./google-wallet-key.json:/app/google-wallet-key.json:ro
     depends_on:
       - backend
       - redis
