@@ -878,3 +878,87 @@ def historial_count_punto(usuario_actual, nombre_punto):
     ids = [t.id for t in trancas]
     n = EventoAcceso.query.filter(EventoAcceso.acceso_id.in_(ids)).count()
     return jsonify({"data": {"eventos": n}})
+
+
+# ── Enrolamiento de dispositivos (Día 67) ────────────────────────────────────
+#
+# Permite que una Raspberry Pi recién instalada se registre sola, sin que el
+# desarrollador tenga que crear el dispositivo a mano en el panel y copiar el
+# token al gabinete.
+#
+# Flujo desde la Pi:
+#   1. El instalador escribe correo y contraseña del ADMIN de la residencial.
+#   2. La Pi hace login normal (/auth/login) y obtiene un JWT de sesión.
+#   3. Con ese JWT pide GET /acceso/puntos → ve los puntos de esa residencial.
+#   4. El instalador elige uno de la lista.
+#   5. La Pi llama a este endpoint → recibe su token de dispositivo UNA vez.
+#   6. La Pi guarda ese token y DESCARTA las credenciales del admin.
+#
+# Seguridad: la residencial NO se toma del cuerpo del request, se deduce de la
+# cuenta del admin autenticado. Así una Pi no puede enrolarse en una
+# residencial ajena aunque alguien manipule el cuerpo del pedido.
+@acceso_bp.post("/dispositivos/enrolar")
+@roles_required("admin", "super_admin")
+@requiere_funcion_plan("control_fisico")
+def enrolar_dispositivo(usuario_actual):
+    from app.models.dispositivo import generar_token, hash_token
+
+    body = request.get_json(silent=True) or {}
+    punto = (body.get("punto_acceso") or "").strip()
+    if not punto:
+        return _err("punto_requerido", "Debés indicar el punto de acceso", 400)
+
+    residencial_id = residencial_id_heredado(usuario_actual)
+
+    # El punto tiene que existir de verdad en ESTA residencial. Se valida
+    # contra las trancas ya configuradas, no se acepta un nombre libre — así
+    # el dispositivo no queda apuntando a un punto inexistente y descargando
+    # una copia vacía sin que nadie lo note.
+    #
+    # OJO: no se usa _trancas_del_punto() acá porque ese helper NO filtra por
+    # residencial. Nombres como "Entrada Principal" se repiten entre
+    # residenciales distintas, así que sin este filtro un admin podría validar
+    # su punto contra las trancas de otra residencial.
+    trancas_q = AccesoFisico.query.filter_by(punto_acceso=punto)
+    if residencial_id is not None:
+        trancas_q = trancas_q.filter_by(residencial_id=residencial_id)
+    if not trancas_q.first():
+        return _err("punto_no_encontrado",
+                    "Ese punto de acceso no existe o no tiene trancas configuradas", 404)
+
+    # Nombre automático a partir del punto elegido (decisión del usuario,
+    # Día 67): un instalador en sitio no debería tener que inventar nombres.
+    nombre = f"Pi {punto}"
+
+    # Si ya hay un dispositivo activo para este punto, se avisa en vez de
+    # crear un duplicado silencioso. Reemplazar una Pi quemada es un caso
+    # real, así que se permite forzar con reemplazar=true: se revoca la
+    # anterior y se entrega un token nuevo.
+    existente_q = Dispositivo.query.filter_by(tipo="acceso", punto_acceso=punto, activo=True)
+    if residencial_id is not None:
+        existente_q = existente_q.filter_by(residencial_id=residencial_id)
+    existente = existente_q.first()
+
+    if existente and not body.get("reemplazar"):
+        return _err("dispositivo_ya_existe",
+                    f"Ya hay un dispositivo activo en «{punto}». "
+                    f"Si estás reemplazando el equipo, confirmá el reemplazo.", 409)
+
+    if existente:
+        # Revocar el anterior: su token deja de servir de inmediato.
+        existente.activo = False
+
+    token_plano = generar_token()
+    disp = Dispositivo(nombre=nombre, tipo="acceso", punto_acceso=punto,
+                       token_hash=hash_token(token_plano), activo=True,
+                       residencial_id=residencial_id)
+    db.session.add(disp)
+    db.session.commit()
+
+    return jsonify({"data": {
+        "id": str(disp.uuid_publico),
+        "nombre": disp.nombre,
+        "punto_acceso": disp.punto_acceso,
+        "token": token_plano,   # se muestra UNA sola vez
+        "reemplazo": bool(existente),
+    }}), 201
