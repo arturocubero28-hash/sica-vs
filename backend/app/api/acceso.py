@@ -445,7 +445,34 @@ def reportar_eventos():
             ignorados += 1
             continue
 
-        tarjeta = Tarjeta.query.filter_by(card_uid=(ev.get("card_uid") or "")).first()
+        # La credencial puede ser una tarjeta física O el código rotativo de
+        # una tarjeta virtual (el QR del residente). Se buscan las dos, en
+        # ese orden.
+        #
+        # Día 67: antes solo se buscaba entre las físicas. Como los QR de
+        # residente viajan por el mismo campo card_uid, los accesos hechos
+        # con QR quedaban guardados sin residente asociado y aparecían sin
+        # nombre en el historial del panel. Hoy en Villas del Sol no hay
+        # ninguna tarjeta física emitida, así que TODOS los accesos por la Pi
+        # caían en ese caso.
+        card_uid = (ev.get("card_uid") or "").strip()
+        tarjeta = Tarjeta.query.filter_by(card_uid=card_uid).first()
+
+        residente_id = None
+        if tarjeta and tarjeta.residente_id:
+            residente_id = tarjeta.residente_id
+        elif card_uid:
+            from app.models.cuenta import TarjetaVirtual
+            # El código de ayer sigue siendo válido durante su ventana de
+            # gracia, así que se acepta cualquiera de los dos: lo que importa
+            # acá es identificar a quién pertenece, no revalidar el permiso
+            # (eso ya lo hizo la Pi contra la lista que el servidor le mandó).
+            virtual = (TarjetaVirtual.query
+                       .filter((TarjetaVirtual.codigo_hoy == card_uid)
+                               | (TarjetaVirtual.codigo_anterior == card_uid))
+                       .first())
+            if virtual:
+                residente_id = virtual.residente_id
 
         # Cuándo ocurrió realmente (lo que reporta la Pi), no cuándo se recibió.
         ocurrido = None
@@ -460,7 +487,7 @@ def reportar_eventos():
             direccion=acceso.direccion or "entrada",   # la define la tranca
             acceso_id=acceso.id,
             tarjeta_id=tarjeta.id if tarjeta else None,
-            residente_id=tarjeta.residente_id if tarjeta and tarjeta.residente_id else None,
+            residente_id=residente_id,
             dispositivo_id=disp.id,  # DEVICE-06: trazabilidad de qué Pi lo generó
             ocurrido_en=ocurrido or dt.datetime.utcnow(),
             sincronizado=True,
