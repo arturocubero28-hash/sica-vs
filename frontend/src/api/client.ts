@@ -109,7 +109,13 @@ export interface ResidenteDTO {
   nombre: string; nombre_solo?: string; apellido?: string; email: string;
   telefono?: string; dni?: string; rtn?: string; direccion_exacta?: string; profesion?: string;
   contacto_emergencia_nombre?: string; contacto_emergencia_telefono?: string;
-  estado_acceso: "activo" | "pendiente";
+  // Día 69 — padrón. "censo" es un TERCER estado, distinto de "pendiente":
+  // esa persona no está esperando activar nada, simplemente no usa el
+  // sistema. Mostrarla como pendiente haría creer que falta mandarle un
+  // correo de activación que no corresponde.
+  estado_acceso: "activo" | "pendiente" | "censo";
+  es_censo?: boolean;
+  foto_url?: string | null;
 }
 export interface TarjetaDTO {
   id: string; card_uid: string; etiqueta?: string; estado: string; asignada_a: string;
@@ -135,6 +141,11 @@ export interface Cuenta {
   titular?: ResidenteDTO; total_residentes: number; total_tarjetas: number;
   cuotas_pendientes?: number; qr_recurrente_habilitado?: boolean; created_at?: string;
   tipo_acceso_virtual?: "peatonal" | "vehicular";
+  // Día 69 — padrón: "censo" = la casa existe para trazabilidad de accesos
+  // pero no genera cuotas ni usa la app. "completa" = lo de siempre.
+  modo_participacion?: "censo" | "completa";
+  es_censo?: boolean;
+  fecha_conversion?: string | null;
   residentes?: ResidenteDTO[]; tarjetas?: TarjetaDTO[];
   unidad?: UnidadDetalle; cuotas_recientes?: CuotaResumen[];
   apartamentos?: ApartamentoResumen[];
@@ -173,6 +184,67 @@ export interface ValidacionEnrolamiento {
 export const validarCodigoEnrolamiento = (codigo: string) =>
   request<ValidacionEnrolamiento>(`/unidades/enrolamiento/validar/${codigo}`);
 export const detalleCuenta = (id: string) => request<Cuenta>(`/unidades/cuentas/${id}`);
+
+// =====================================================================
+// MÓDULO DE CENSO (PADRÓN) — Día 69
+// =====================================================================
+// El patronato no puede obligar a nadie a enrolarse ni a pagar, pero igual
+// necesita saber quién entra y sale. Por eso se carga el censo completo de
+// la colonia: esas casas existen para el guardia, pero no generan cuotas,
+// no entran en mora y no reciben avisos de cobro.
+export const listarCenso = () =>
+  request<{ casas: Cuenta[]; total: number }>("/censo");
+
+export const crearCasaCenso = (body: {
+  identificador?: string; unidad_id?: string;
+  titular: { nombre: string; apellido?: string; dni?: string; telefono?: string; relacion?: string };
+}) => request<{ casa: Cuenta }>("/censo/casas", {
+  method: "POST", body: JSON.stringify(body),
+});
+
+export const agregarPersonaCenso = (cuentaId: string, body: {
+  nombre: string; apellido?: string; dni?: string; telefono?: string; relacion?: string;
+}) => request<{ residente: ResidenteDTO }>(`/censo/casas/${cuentaId}/personas`, {
+  method: "POST", body: JSON.stringify(body),
+});
+
+/** Censo → completa. Las cuotas arrancan en el mes en curso, nunca hacia atrás. */
+export const convertirCasaCenso = (cuentaId: string, body: { tarifa_id?: number; dia_pago?: number }) =>
+  request<{ casa: Cuenta; nota: string }>(`/censo/casas/${cuentaId}/convertir`, {
+    method: "POST", body: JSON.stringify(body),
+  });
+
+/** Le da acceso a la app a una persona que ya estaba en el padrón.
+ *  Es un UPDATE sobre la misma ficha: conserva su historial de accesos. */
+export const darAccesoPersona = (residenteId: string, email: string) =>
+  request<{ residente: ResidenteDTO; token_activacion?: string }>(
+    `/censo/personas/${residenteId}/dar-acceso`,
+    { method: "POST", body: JSON.stringify({ email }) });
+
+// ── Foto del miembro (Día 69) ─────────────────────────────────────────
+// La sube SOLO administración. El residente la ve pero no puede cambiarla:
+// es la que el guardia usa para verificar identidad en el portón.
+export async function subirFotoResidente(
+  cuentaId: string, residenteId: string, archivo: File,
+): Promise<ResidenteDTO> {
+  const token = getToken();
+  const form = new FormData();
+  form.append("foto", archivo);
+  const res = await fetch(
+    `${API_URL}/unidades/cuentas/${cuentaId}/residentes/${residenteId}/foto`,
+    { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {}, body: form },
+  );
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error?.message || "No se pudo subir la foto");
+  return json.data as ResidenteDTO;
+}
+
+/** La foto nunca es pública: se sirve autenticada, igual que las fotos de
+ *  evidencia del guardia (mismo patrón _auth que urlFotoGuardia). */
+export function urlFotoResidente(nombreArchivo: string): string {
+  const token = getToken();
+  return `${API_URL}/unidades/residentes/foto/${nombreArchivo}?_auth=${token}`;
+}
 export const darBajaCuenta = (id: string) =>
   request<Cuenta>(`/unidades/cuentas/${id}/baja`, { method: "POST" });
 export const reactivarCuenta = (id: string) =>

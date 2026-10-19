@@ -136,7 +136,10 @@ export function GuardiaPanel() {
 
   function reiniciar() {
     setStep("scan"); setQrInput(""); setVisita(null); setDireccion("entrada"); setCuentaBloqueada(false);
-    setError(""); setFotoId(""); setFotoPlaca(""); setFotoNumero(""); setResultado("");
+    // Día 69 — eran "" y los estados son Blob | null. Funcionaba de casualidad
+    // porque "" es falsy, pero cualquier chequeo por !== null habría mandado
+    // un campo vacío al servidor en vez de omitir la foto.
+    setError(""); setFotoId(null); setFotoPlaca(null); setFotoNumero(null); setResultado("");
   }
 
   // ─── Pantalla de tomar foto inline ───

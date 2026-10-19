@@ -14,6 +14,7 @@ import {
 } from "./api/client";
 import { aplicarColoresResidencial, restablecerColoresFabrica } from "./utils/colores";
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
+import { CensoPanel } from "./modules/censo/CensoPanel";
 import { ResidentePortal } from "./modules/residente/ResidentePortal";
 import { GuardiaPanel } from "./modules/guardia/GuardiaPanel";
 import { DashboardAdmin } from "./modules/dashboard/DashboardAdmin";
@@ -689,6 +690,7 @@ function ResetPassword({ token, onOk }: { token: string; onOk: () => void }) {
 // ─── Vista admin con pestañas ────────────────────────────────
 function AdminView({ seccion, usuario }: { seccion: string; usuario: Usuario }) {
   if (seccion === "casas") return <UnidadesPanel embedded />;
+  if (seccion === "censo") return <CensoPanel />;
   if (seccion === "pagos") return <PagosAdmin />;
   if (seccion === "monitoreo") return <MonitoreoCamaras />;
   if (seccion === "comunicados") return <ComunicadosAdmin />;
@@ -714,6 +716,10 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
       { id: "monitoreo", label: "Monitoreo", icon: Video },
       { id: "casas", label: "Casas y residentes", icon: Building2 },
+      // Día 69 — el padrón va JUSTO debajo de casas, no al final del menú:
+      // son dos vistas de lo mismo (quién vive acá), separadas solo por si
+      // la familia participa del sistema o no.
+      { id: "censo", label: "Padrón", icon: ClipboardList },
       { id: "usuarios", label: "Usuarios", icon: Users },
       { id: "historial", label: "Historial", icon: ScrollText },
       { id: "pagos", label: "Revisión de pagos", icon: CreditCard },

@@ -126,6 +126,14 @@ function GenerarQR({ bloqueada }: { bloqueada: boolean }) {
 }
 
 function FormQR({ tipo, onVolver }: { tipo: string; onVolver: () => void }) {
+  // Día 69 — BUG REAL encontrado al correr el chequeo de tipos: más abajo
+  // se usaba `nombreResidencial` para armar el mensaje de WhatsApp, pero
+  // esa variable estaba declarada en ResidentePortal, otro componente.
+  // Acá nunca estuvo en alcance, así que tocar "Compartir por WhatsApp"
+  // tiraba ReferenceError y no compartía nada. No lo detectaba el build
+  // porque `vite build` no corre tsc: esbuild borra los tipos sin
+  // chequearlos.
+  const { nombre: nombreResidencial } = useMiResidencial();
   const [nombre, setNombre] = useState("");
   const [documento, setDocumento] = useState("");
   const [telefono, setTelefono] = useState("");
@@ -379,6 +387,9 @@ function Historial() {
 
 // ─── Modal para volver a ver/compartir un código ya generado ──
 function ModalCompartirCodigo({ visita, onCerrar }: { visita: VisitaDTO; onCerrar: () => void }) {
+  // Día 69 — mismo bug que en FormQR: `nombreResidencial` se usaba acá sin
+  // estar en alcance, y compartir desde el historial fallaba igual.
+  const { nombre: nombreResidencial } = useMiResidencial();
   const esDelivery = visita.tipo === "repartidor" && visita.codigo_numerico;
   return (
     <div className="modal" onClick={onCerrar}>

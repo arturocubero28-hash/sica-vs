@@ -4161,3 +4161,42 @@ a.lp-descarga-btn svg { color: #F48723; }
   cursor: help; flex-shrink: 0; line-height: 1;
 }
 .info-tip:hover { background: var(--marca-naranja, #F48723); }
+
+/* ── Día 69 · Padrón (censo) ───────────────────────────────────────────
+   Lista de las personas de una casa del padrón, con su foto. La foto la
+   captura administración y es la que el guardia usa para verificar
+   identidad en el portón, así que se muestra lo bastante grande como
+   para poder reconocer una cara, no como un avatar decorativo. */
+.censo-personas { display: flex; flex-direction: column; gap: 10px; padding: 12px 4px; }
+
+.censo-persona {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 10px;
+  background: #fff; border: 1px solid var(--gris-cl, #f1f3f6);
+}
+
+.censo-foto {
+  width: 52px; height: 52px; flex-shrink: 0;
+  border-radius: 10px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--gris-cl, #f1f3f6);
+}
+.censo-foto .preview-img {
+  width: 100%; height: 100%; max-height: none;
+  object-fit: cover; border-radius: 0;
+}
+.censo-foto .casa-icono {
+  width: 100%; height: 100%; border-radius: 0;
+  font-weight: 700; font-size: 18px;
+  background: transparent; color: var(--gris, #6b7280);
+}
+
+/* El input de archivo va oculto dentro de un <label>, así que el label
+   tiene que comportarse como botón para que se vea igual que el resto
+   de las acciones de la fila. */
+label.icono-accion { display: inline-flex; align-items: center; justify-content: center; }
+
+@media (max-width: 620px) {
+  .censo-persona { flex-wrap: wrap; }
+  .censo-persona .casa-acciones { width: 100%; justify-content: flex-end; }
+}
