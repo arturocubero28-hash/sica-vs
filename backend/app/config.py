@@ -5,11 +5,39 @@ Lee las variables de entorno definidas en docker-compose / .env
 import os
 
 
+def _url_con_driver(url: str) -> str:
+    """
+    Deja escrito el driver de PostgreSQL en la URL de conexión.
+
+    Una URL que arranca con "postgresql://" no dice qué driver usar: lo
+    elige SQLAlchemy. Hasta la versión 2.0 elegía psycopg2; desde la 2.1
+    elige psycopg (v3). Ese cambio tumbó el backend en producción el Día 69
+    —un rebuild de la imagen, sin un solo cambio de código, trajo la 2.1 y
+    gunicorn no pudo levantar ningún worker: ModuleNotFoundError sobre un
+    paquete que nunca estuvo en requirements.txt.
+
+    Escribir "+psycopg2" saca a la librería de la decisión. El requirements
+    también tiene el tope de versión; esto es la otra mitad, y es la que
+    protege cuando la URL viene de la variable de entorno del servidor y no
+    del valor por defecto de este archivo.
+
+    Si algún día se migra a psycopg3, se cambia acá y se agrega el paquete.
+    Una URL que ya trae driver ("postgresql+psycopg://", "sqlite://") no se
+    toca.
+    """
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    # postgres:// (forma vieja, la usan algunos proveedores de hosting)
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    return url
+
+
 class Config:
     # Base de datos
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
+    SQLALCHEMY_DATABASE_URI = _url_con_driver(os.environ.get(
         "DATABASE_URL", "postgresql://sicavs:sicavs_dev@db:5432/sicavs"
-    )
+    ))
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Redis

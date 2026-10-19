@@ -1,5 +1,18 @@
 Flask==3.0.3
 Flask-SQLAlchemy==3.1.1
+# SQLAlchemy FIJADO a propósito (Día 69). Flask-SQLAlchemy 3.1.1 lo pide sin
+# tope de versión, así que cualquier rebuild de la imagen traía la última.
+#
+# En SQLAlchemy 2.1 la URL "postgresql://" dejó de resolver al driver
+# psycopg2 y pasó a resolver a psycopg (v3), que NO está en este archivo.
+# Resultado: un rebuild sin cambios de código tumbó el backend en
+# producción con ModuleNotFoundError: No module named 'psycopg', y gunicorn
+# no levantó ningún worker. La imagen vieja seguía funcionando solo porque
+# se había construido cuando la última era 2.0.x.
+#
+# Además del tope, app/config.py normaliza la URL a "postgresql+psycopg2://"
+# para que el driver quede escrito y no dependa del default de la librería.
+SQLAlchemy>=2.0.30,<2.1
 Flask-Migrate==4.0.7
 Flask-Cors==4.0.1
 # Flask-SocketIO: eliminado en Día 41 (SOCKET-17). Era código muerto —
