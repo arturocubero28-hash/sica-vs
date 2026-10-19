@@ -54,6 +54,11 @@ class Usuario(db.Model):
     # el residente ve en su perfil — en modo lectura: si el propio residente
     # pudiera cambiarla, la verificación del guardia dejaría de servir.
     foto_url = db.Column(db.String(255))
+    # Día 69 — código de emergencia de 6 dígitos para entrar sin teléfono.
+    # Hasheado como una contraseña: no se puede consultar, solo reemplazar.
+    # Ver la nota larga en app/__init__.py sobre por qué existe.
+    codigo_emergencia_hash = db.Column(db.String(255))
+    codigo_emergencia_actualizado = db.Column(db.DateTime(timezone=True))
     # rol global: super_admin | admin | guardia | residente
     # ENUM real de PostgreSQL (rol_global) — fix Día 36.
     rol = db.Column(
@@ -98,6 +103,34 @@ class Usuario(db.Model):
         return bcrypt.checkpw(
             password.encode("utf-8"), self.password_hash.encode("utf-8")
         )
+
+    # ── Código de emergencia (Día 69) ──────────────────────────────────────
+    def set_codigo_emergencia(self, codigo: str):
+        """Guarda el código hasheado. Quien llama ya validó el formato."""
+        import datetime as _dt
+        self.codigo_emergencia_hash = bcrypt.hashpw(
+            codigo.encode("utf-8"), bcrypt.gensalt()
+        ).decode("utf-8")
+        self.codigo_emergencia_actualizado = _dt.datetime.now(_dt.timezone.utc)
+
+    def check_codigo_emergencia(self, codigo: str) -> bool:
+        """
+        Verifica el código de emergencia.
+
+        OJO: este código NO sirve para iniciar sesión ni para nada más del
+        sistema. Es solo para que el guardia encuentre a la persona cuando
+        llega sin teléfono. La autorización real la da el guardia después de
+        verificar la identificación contra la foto en ficha.
+        """
+        if not self.codigo_emergencia_hash or not codigo:
+            return False
+        return bcrypt.checkpw(
+            codigo.encode("utf-8"), self.codigo_emergencia_hash.encode("utf-8")
+        )
+
+    @property
+    def tiene_codigo_emergencia(self) -> bool:
+        return bool(self.codigo_emergencia_hash)
 
     @property
     def puede_iniciar_sesion(self) -> bool:

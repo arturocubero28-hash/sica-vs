@@ -181,6 +181,61 @@ def cambiar_password(usuario_actual):
                              "usuario": usuario_actual.to_dict()}})
 
 
+# ── Código de emergencia (Día 69) ──────────────────────────────
+# Para entrar cuando se quedó sin batería el teléfono y no puede mostrar su
+# QR. El residente le dice al guardia su casa y este código; el guardia lo
+# busca, ve su foto y su nombre, verifica contra la identificación, saca una
+# foto de respaldo y abre. Todo queda en el historial.
+#
+# Reemplaza la propuesta de poner lectores biométricos en el portón: resuelve
+# el mismo problema sin comprar nada y sin que nadie tenga que custodiar
+# datos biométricos de 500 familias.
+@auth_bp.get("/codigo-emergencia")
+@token_required
+def estado_codigo_emergencia(usuario_actual):
+    """Dice si ya tiene código configurado. NUNCA devuelve el código:
+    está hasheado y no se puede recuperar, solo reemplazar."""
+    return jsonify({"data": {
+        "configurado": usuario_actual.tiene_codigo_emergencia,
+        "actualizado_en": (usuario_actual.codigo_emergencia_actualizado.isoformat()
+                           if usuario_actual.codigo_emergencia_actualizado else None),
+    }})
+
+
+@auth_bp.put("/codigo-emergencia")
+@token_required
+def definir_codigo_emergencia(usuario_actual):
+    """
+    El residente define o cambia su código de 6 dígitos.
+
+    Se rechaza que sea igual a su contraseña: si fueran el mismo valor, un
+    código que el guardia escucha en voz alta en el portón pasaría a ser
+    también la llave de su cuenta.
+    """
+    data = request.get_json(silent=True) or {}
+    codigo = (data.get("codigo") or "").strip()
+
+    if not codigo.isdigit() or len(codigo) != 6:
+        return jsonify({"error": {"code": "codigo_invalido",
+                                  "message": "El código debe ser de 6 dígitos"}}), 400
+
+    # Secuencias obvias: son las primeras que probaría cualquiera que quiera
+    # adivinar un código ajeno sabiendo solo el número de casa.
+    if codigo == codigo[0] * 6 or codigo in ("123456", "654321", "012345"):
+        return jsonify({"error": {"code": "codigo_debil",
+                                  "message": "Elegí un código menos obvio, no repitas el mismo "
+                                             "dígito ni uses una secuencia"}}), 400
+
+    if usuario_actual.check_password(codigo):
+        return jsonify({"error": {"code": "codigo_igual_password",
+                                  "message": "El código no puede ser igual a tu contraseña"}}), 400
+
+    usuario_actual.set_codigo_emergencia(codigo)
+    db.session.commit()
+    return jsonify({"data": {"message": "Código de emergencia actualizado",
+                             "configurado": True}})
+
+
 # ── Actualizar perfil (nombre, teléfono) ───────────────────────
 @auth_bp.put("/perfil")
 @token_required

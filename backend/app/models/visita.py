@@ -270,6 +270,17 @@ class EventoAcceso(db.Model):
     # el guardia y siempre guardaba la declarada. Ahora se guardan ambas por
     # separado para poder detectar y auditar discrepancias.
     placa_observada = db.Column(db.String(20))
+    # Día 69 — CÓMO se autorizó este acceso: 'tarjeta', 'qr',
+    # 'codigo_emergencia', 'proveedor'. Sin esto el historial no distingue
+    # un residente que pasó su tarjeta de uno al que el guardia le abrió
+    # tras verificar su identificación, y no se puede ni medir cuánto se
+    # usa cada vía ni auditar un caso puntual.
+    metodo = db.Column(db.String(30))
+    # Accesos de proveedores (origen='proveedor').
+    proveedor_empresa = db.Column(db.String(120))
+    proveedor_conductor = db.Column(db.String(120))
+    autorizado_por_id = db.Column(db.BigInteger,
+                                  db.ForeignKey("autorizadores_proveedor.id"))
     ocurrido_en = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     sincronizado = db.Column(db.Boolean, nullable=False, default=True)
     # Identificador único que genera la Raspberry Pi para cada evento. Permite
@@ -279,6 +290,8 @@ class EventoAcceso(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
 
     guardia = db.relationship("Usuario", foreign_keys=[guardia_id], lazy="joined")
+    # Día 69 — quién autorizó, cuando el acceso fue de un proveedor.
+    autorizado_por = db.relationship("AutorizadorProveedor", lazy="joined")
 
     def to_dict(self):
         placa_declarada = self.placa_vehiculo
@@ -301,7 +314,43 @@ class EventoAcceso(db.Model):
             "foto_identidad": self.foto_identidad,
             "foto_placa": self.foto_placa,
             "foto_numero_asignado": self.foto_numero_asignado,
+            # Día 69 — cómo se autorizó, y los datos del proveedor cuando
+            # el acceso fue de un camión de servicio.
+            "metodo": self.metodo,
+            "proveedor_empresa": self.proveedor_empresa,
+            "proveedor_conductor": self.proveedor_conductor,
+            "autorizado_por": (self.autorizado_por.nombre
+                               if getattr(self, "autorizado_por", None) else None),
             "ocurrido_en": self.ocurrido_en.isoformat() if self.ocurrido_en else None,
+        }
+
+
+class AutorizadorProveedor(db.Model):
+    """
+    Día 69 — quién puede autorizar la entrada de un proveedor (camión de
+    agua, gas, refrescos) en nombre del patronato.
+
+    Es una lista que configura administración, y el guardia elige de ahí.
+    Si fuera un campo de texto libre, el guardia escribiría cualquier cosa
+    y el dato no serviría para auditar nada: la gracia de registrar quién
+    autorizó es justamente que después se pueda verificar.
+    """
+    __tablename__ = "autorizadores_proveedor"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    uuid_publico = _uuid()
+    nombre = db.Column(db.String(120), nullable=False)
+    cargo = db.Column(db.String(120))
+    activo = db.Column(db.Boolean, nullable=False, default=True)
+    residencial_id = db.Column(db.BigInteger, db.ForeignKey("residenciales.id"))
+    created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": str(self.uuid_publico),
+            "nombre": self.nombre,
+            "cargo": self.cargo,
+            "activo": self.activo,
         }
 
 

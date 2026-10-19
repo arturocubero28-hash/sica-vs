@@ -6,15 +6,54 @@ frontend). Listar, editar y resetear contraseña de guardias se hace por los
 endpoints genéricos de /api/v1/usuarios — los duplicados se eliminaron en la
 limpieza de la auditoría del Día 11.
 """
-from flask import Blueprint, request, jsonify
+import os
 
-from app.extensions import db
+from flask import Blueprint, request, jsonify, current_app
+
+from app.extensions import db, limiter
 from app.models.usuario import Usuario
 from app.auth.security import roles_required
 from app.utils.passwords import generar_password_temporal
 from app.utils.residencial import residencial_id_heredado
+from app.utils.archivos import guardar_imagen_segura, EXT_IMAGEN
 
 guardias_bp = Blueprint("guardias", __name__)
+
+
+def _err(code, message, status):
+    return jsonify({"error": {"code": code, "message": message}}), status
+
+
+def _carpeta_accesos():
+    carpeta = os.path.join(current_app.config.get("UPLOAD_FOLDER", "/app/uploads"), "accesos")
+    os.makedirs(carpeta, exist_ok=True)
+    return carpeta
+
+
+def _tranca_del_guardia(usuario_actual, acceso_id_raw):
+    """
+    Resuelve la tranca que el guardia quiere abrir, verificando que sea de
+    SU punto y de SU residencial.
+
+    Misma verificación que abrir_tranca_manual: cada endpoint que abre una
+    tranca comprueba por su cuenta en vez de confiar en que los pasos
+    anteriores del flujo ya lo garantizaron (criterio del Día 48).
+    Devuelve (tranca, None) o (None, respuesta_de_error).
+    """
+    from app.models.visita import AccesoFisico
+
+    acceso_id = (str(acceso_id_raw or "")).strip()
+    if not acceso_id.isdigit():
+        return None, _err("tranca_requerida", "Indicá qué tranca abrir", 400)
+
+    tranca = AccesoFisico.query.filter_by(id=int(acceso_id), activo=True).first()
+    if not tranca:
+        return None, _err("tranca_invalida", "Esa tranca no existe o está inactiva", 400)
+    if (tranca.punto_acceso != usuario_actual.punto_acceso_actual
+            or tranca.residencial_id != usuario_actual.residencial_id):
+        return None, _err("tranca_fuera_de_tu_punto",
+                          "Esa tranca no pertenece a tu punto de acceso", 403)
+    return tranca, None
 
 
 @guardias_bp.post("")
@@ -174,3 +213,266 @@ def abrir_tranca_manual(usuario_actual):
     db.session.commit()
 
     return jsonify({"data": apertura.to_dict()}), 201
+
+
+# =====================================================================
+# ACCESO DE RESIDENTE POR CÓDIGO DE EMERGENCIA (Día 69)
+# =====================================================================
+# El residente llega sin batería en el teléfono, así que no puede mostrar
+# su QR. Le dice al guardia su casa y su código de 6 dígitos; el guardia lo
+# busca acá, ve su foto y su nombre, le pide la identificación, compara,
+# saca una foto de respaldo y abre.
+#
+# POR QUÉ SE PIDE CASA **Y** CÓDIGO, Y NO SOLO EL CÓDIGO:
+# si bastara el código, el guardia podría teclear números al azar y la app
+# le devolvería la foto, el nombre y la casa de cualquier residente. Su
+# pantalla se volvería un directorio de la residencial, recorrible a fuerza
+# de probar. Pidiendo la casa primero, no hay nada que enumerar: hay que
+# saber de antemano a quién se está buscando.
+#
+# QUÉ PROTEGE REALMENTE ESTE FLUJO:
+# el código NO es una credencial fuerte — el guardia lo escucha en voz alta
+# y lo va a recordar. Pero eso no es el agujero que parece: el guardia YA
+# puede abrir la tranca manualmente cuando quiera. Lo que aporta este
+# camino es el rastro: amarra esa apertura a un residente concreto, con
+# foto de su identificación, el guardia que la hizo y la tranca que se
+# abrió. Reemplaza una apertura anónima por una con nombre y evidencia.
+@guardias_bp.post("/residente/buscar")
+@roles_required("guardia")
+@limiter.limit("20 per minute")
+def buscar_residente_por_codigo(usuario_actual):
+    """Busca a la persona por casa + código. No abre nada todavía."""
+    from app.models.cuenta import Cuenta, Residente, Unidad
+
+    data = request.get_json(silent=True) or {}
+    casa = (data.get("casa") or "").strip()
+    codigo = (data.get("codigo") or "").strip()
+
+    if not casa or not codigo:
+        return _err("datos_incompletos", "Indicá la casa y el código", 400)
+
+    unidad = Unidad.query.filter(
+        db.func.lower(Unidad.identificador) == casa.lower(),
+        Unidad.residencial_id == usuario_actual.residencial_id,
+    ).first()
+
+    # Las búsquedas fallidas también se registran. Si un guardia anduvo
+    # probando doce combinaciones en una noche, tiene que poder verse.
+    def _fallo(mensaje):
+        from flask import g
+        g.email_intento = f"casa={casa[:40]}"
+        current_app.logger.warning(
+            "Codigo de emergencia fallido — guardia=%s casa=%s", usuario_actual.id, casa[:40])
+        return _err("no_encontrado", mensaje, 404)
+
+    if not unidad:
+        return _fallo("No encontramos esa casa ni ese código")
+
+    cuentas = Cuenta.query.filter_by(unidad_id=unidad.id, activa=True).all()
+    for cuenta in cuentas:
+        for residente in cuenta.residentes:
+            if not residente.activo or not residente.usuario:
+                continue
+            if residente.usuario.check_codigo_emergencia(codigo):
+                return jsonify({"data": {
+                    "residente": residente.to_dict(),
+                    "casa": unidad.identificador,
+                    # Se avisa de la mora como INFORMACIÓN, nunca como
+                    # bloqueo: impedirle a una familia entrar a su propia
+                    # casa por deber la cuota es terreno legal delicado, y
+                    # el patronato tampoco tiene cómo obligar a nadie a
+                    # pagar. Decisión tomada con el usuario el Día 68.
+                    "cuenta_en_mora": bool(cuenta.bloqueada),
+                }})
+
+    return _fallo("No encontramos esa casa ni ese código")
+
+
+@guardias_bp.post("/residente/registrar")
+@roles_required("guardia")
+def registrar_acceso_residente(usuario_actual):
+    """
+    Registra la entrada o salida del residente, después de que el guardia
+    verificó su identificación contra la foto en ficha.
+
+    La foto de la identificación es OBLIGATORIA en las entradas: es la
+    evidencia de que el guardia efectivamente verificó, y sin ella este
+    camino sería una apertura manual con más pasos.
+    """
+    from app.models.cuenta import Residente
+    from app.models.visita import EventoAcceso
+
+    residente_uuid = (request.form.get("residente_id") or "").strip()
+    direccion = (request.form.get("direccion") or "entrada").strip()
+    if direccion not in ("entrada", "salida"):
+        return _err("direccion_invalida", "La dirección debe ser entrada o salida", 400)
+
+    residente = Residente.query.filter_by(uuid_publico=residente_uuid).first()
+    if not residente or not residente.usuario:
+        return _err("no_encontrado", "Residente no encontrado", 404)
+
+    cuenta = residente.cuenta
+    unidad = cuenta.unidad if cuenta else None
+    if not unidad or unidad.residencial_id != usuario_actual.residencial_id:
+        return _err("residente_ajeno", "Ese residente no pertenece a tu residencial", 403)
+
+    tranca, error = _tranca_del_guardia(usuario_actual, request.form.get("acceso_id"))
+    if error:
+        return error
+
+    foto_nombre = None
+    if "foto_identidad" in request.files and request.files["foto_identidad"].filename:
+        foto_nombre, err_foto, _t = guardar_imagen_segura(
+            request.files["foto_identidad"], _carpeta_accesos(), EXT_IMAGEN)
+        if err_foto:
+            return _err("imagen_invalida", err_foto, 400)
+    elif direccion == "entrada":
+        return _err("foto_requerida",
+                    "La foto de la identificación es obligatoria para registrar la entrada", 400)
+
+    evento = EventoAcceso(
+        origen="residente",
+        direccion=direccion,
+        acceso_id=tranca.id,
+        residente_id=residente.id,
+        guardia_id=usuario_actual.id,
+        foto_identidad=foto_nombre,
+        # Así el historial distingue este acceso de uno hecho con tarjeta,
+        # con QR o por la Raspberry Pi.
+        metodo="codigo_emergencia",
+    )
+    db.session.add(evento)
+    db.session.commit()
+
+    return jsonify({"data": {
+        "evento": evento.to_dict(),
+        "mensaje": f"{direccion.capitalize()} registrada para {residente.usuario.nombre}",
+    }}), 201
+
+
+# =====================================================================
+# ACCESO DE PROVEEDORES (Día 69)
+# =====================================================================
+# Camión de agua, de gas, de refrescos. Antes esto era una apertura manual
+# anónima: quedaba registrado que el guardia abrió una tranca, pero no
+# quién entró, con qué vehículo ni con autorización de quién.
+@guardias_bp.get("/autorizadores")
+@roles_required("guardia", "admin", "super_admin")
+def listar_autorizadores(usuario_actual):
+    """Personas habilitadas para autorizar la entrada de un proveedor."""
+    from app.models.visita import AutorizadorProveedor
+
+    q = AutorizadorProveedor.query.filter_by(activo=True)
+    if usuario_actual.residencial_id:
+        q = q.filter_by(residencial_id=usuario_actual.residencial_id)
+    return jsonify({"data": [a.to_dict() for a in q.order_by(AutorizadorProveedor.nombre).all()]})
+
+
+@guardias_bp.post("/autorizadores")
+@roles_required("admin", "super_admin")
+def crear_autorizador(usuario_actual):
+    from app.models.visita import AutorizadorProveedor
+
+    data = request.get_json(silent=True) or {}
+    nombre = (data.get("nombre") or "").strip()
+    if not nombre:
+        return _err("datos_incompletos", "El nombre es obligatorio", 400)
+
+    autorizador = AutorizadorProveedor(
+        nombre=nombre,
+        cargo=(data.get("cargo") or "").strip() or None,
+        residencial_id=residencial_id_heredado(usuario_actual),
+    )
+    db.session.add(autorizador)
+    db.session.commit()
+    return jsonify({"data": autorizador.to_dict()}), 201
+
+
+@guardias_bp.delete("/autorizadores/<autorizador_uuid>")
+@roles_required("admin", "super_admin")
+def desactivar_autorizador(usuario_actual, autorizador_uuid):
+    """Se desactiva, no se borra: los accesos ya registrados tienen que
+    seguir mostrando quién los autorizó."""
+    from app.models.visita import AutorizadorProveedor
+
+    a = AutorizadorProveedor.query.filter_by(uuid_publico=autorizador_uuid).first()
+    if not a:
+        return _err("no_encontrado", "Autorizador no encontrado", 404)
+    if a.residencial_id and a.residencial_id != usuario_actual.residencial_id:
+        return _err("ajeno", "Ese autorizador no pertenece a tu residencial", 403)
+    a.activo = False
+    db.session.commit()
+    return jsonify({"data": {"message": "Autorizador desactivado"}})
+
+
+@guardias_bp.post("/proveedor/registrar")
+@roles_required("guardia")
+def registrar_acceso_proveedor(usuario_actual):
+    """
+    Registra la entrada de un camión de servicio, con evidencia.
+
+    Quién autorizó se elige de la lista que configura administración, no se
+    escribe a mano: un campo de texto libre lo llenaría el guardia con
+    cualquier cosa y no serviría para auditar nada.
+    """
+    from app.models.visita import EventoAcceso, AutorizadorProveedor
+
+    empresa = (request.form.get("empresa") or "").strip()
+    conductor = (request.form.get("conductor") or "").strip()
+    placa = (request.form.get("placa") or "").strip().upper()
+    autorizador_uuid = (request.form.get("autorizado_por") or "").strip()
+    direccion = (request.form.get("direccion") or "entrada").strip()
+
+    if direccion not in ("entrada", "salida"):
+        return _err("direccion_invalida", "La dirección debe ser entrada o salida", 400)
+    if not empresa or not conductor:
+        return _err("datos_incompletos", "Indicá la empresa y el nombre del conductor", 400)
+
+    autorizador = None
+    if autorizador_uuid:
+        autorizador = AutorizadorProveedor.query.filter_by(
+            uuid_publico=autorizador_uuid, activo=True).first()
+        if not autorizador:
+            return _err("autorizador_invalido", "Esa autorización no es válida", 400)
+        if (autorizador.residencial_id
+                and autorizador.residencial_id != usuario_actual.residencial_id):
+            return _err("autorizador_ajeno",
+                        "Ese autorizador no pertenece a tu residencial", 403)
+    elif direccion == "entrada":
+        return _err("autorizacion_requerida",
+                    "Indicá quién autoriza la entrada de este proveedor", 400)
+
+    tranca, error = _tranca_del_guardia(usuario_actual, request.form.get("acceso_id"))
+    if error:
+        return error
+
+    foto_nombre = None
+    if "foto_identidad" in request.files and request.files["foto_identidad"].filename:
+        foto_nombre, err_foto, _t = guardar_imagen_segura(
+            request.files["foto_identidad"], _carpeta_accesos(), EXT_IMAGEN)
+        if err_foto:
+            return _err("imagen_invalida", err_foto, 400)
+    elif direccion == "entrada":
+        return _err("foto_requerida",
+                    "La foto de la identificación del conductor es obligatoria", 400)
+
+    evento = EventoAcceso(
+        origen="proveedor",
+        direccion=direccion,
+        acceso_id=tranca.id,
+        guardia_id=usuario_actual.id,
+        foto_identidad=foto_nombre,
+        metodo="proveedor",
+        proveedor_empresa=empresa[:120],
+        proveedor_conductor=conductor[:120],
+        placa_observada=placa[:20] or None,
+        en_vehiculo=bool(placa),
+        autorizado_por_id=autorizador.id if autorizador else None,
+    )
+    db.session.add(evento)
+    db.session.commit()
+
+    return jsonify({"data": {
+        "evento": evento.to_dict(),
+        "mensaje": f"{direccion.capitalize()} registrada para {empresa}",
+    }}), 201

@@ -205,6 +205,10 @@ def create_app(config_class=Config):
             "ALTER TYPE metodo_pago ADD VALUE IF NOT EXISTS 'efectivo'",
             "ALTER TYPE metodo_pago ADD VALUE IF NOT EXISTS 'tarjeta_pos'",
             "ALTER TYPE metodo_pago ADD VALUE IF NOT EXISTS 'linea'",
+            # Día 69 — accesos de camiones de servicio (agua, gas, refrescos).
+            # Antes eran aperturas manuales anónimas: quedaba registrado que
+            # el guardia abrió, pero no quién entró ni con qué autorización.
+            "ALTER TYPE origen_evento ADD VALUE IF NOT EXISTS 'proveedor'",
         ]
         for sql in enums:
             try:
@@ -543,6 +547,51 @@ def create_app(config_class=Config):
             # del patronato). Vive en usuarios porque ahí vive la persona,
             # sea del censo o usuario pleno: un solo lugar, sin duplicados.
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_url VARCHAR(255)",
+
+            # ── Día 69 · Código de emergencia ────────────────────────────────
+            # Reemplaza la idea de poner lectores biométricos en el portón.
+            # El problema a resolver era "se me descargó el celular y no puedo
+            # mostrar mi QR". La huella exigía comprar lectores, un lector de
+            # enrolamiento y asumir la custodia de datos biométricos de 500
+            # familias. Esto no cuesta nada y queda auditado.
+            #
+            # El residente define un código de 6 dígitos desde su app. Al
+            # llegar sin teléfono le dice al guardia su casa y su código; el
+            # guardia lo busca, ve su foto y su nombre, verifica contra la
+            # identificación, saca una foto de respaldo y abre.
+            #
+            # Se guarda HASHEADO, igual que una contraseña. No se puede
+            # recuperar, solo reemplazar -- ni el administrador puede verlo.
+            # No es que el código sea un gran secreto (el guardia lo escucha),
+            # pero una filtración de la base no debe entregar los códigos de
+            # toda la residencial, y que nadie pueda consultarlos evita que se
+            # usen como si fueran credenciales.
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS codigo_emergencia_hash VARCHAR(255)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS codigo_emergencia_actualizado TIMESTAMPTZ",
+
+            # ── Día 69 · Cómo se autorizó cada acceso ────────────────────────
+            # Un acceso de residente puede venir de la tarjeta, del QR, de la
+            # Pi o del guardia con el código de emergencia. Antes no había
+            # forma de distinguirlos en el historial, y sin eso no se puede
+            # medir cuánto se usa cada vía ni auditar un caso puntual.
+            "ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS metodo VARCHAR(30)",
+            # Accesos de proveedores (camión de agua, gas, refrescos).
+            "ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS proveedor_empresa VARCHAR(120)",
+            "ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS proveedor_conductor VARCHAR(120)",
+            "ALTER TABLE eventos_acceso ADD COLUMN IF NOT EXISTS autorizado_por_id BIGINT",
+            # Quiénes pueden autorizar la entrada de un proveedor. Es una
+            # lista que configura administración: si fuera texto libre, el
+            # guardia escribiría cualquier cosa y el campo no serviría para
+            # auditar nada.
+            """CREATE TABLE IF NOT EXISTS autorizadores_proveedor (
+                   id BIGSERIAL PRIMARY KEY,
+                   uuid_publico UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+                   nombre VARCHAR(120) NOT NULL,
+                   cargo VARCHAR(120),
+                   activo BOOLEAN NOT NULL DEFAULT TRUE,
+                   residencial_id BIGINT REFERENCES residenciales(id),
+                   created_at TIMESTAMPTZ DEFAULT NOW()
+               )""",
         ]
         for sql in columnas:
             try:

@@ -144,6 +144,32 @@ with app.app_context():
     verificar("una persona del padrón reporta estado_acceso='censo'",
               r3.to_dict()["estado_acceso"] == "censo")
 
+    print("\n10. Código de emergencia")
+    verificar("sin código configurado, tiene_codigo_emergencia es False",
+              persona.tiene_codigo_emergencia is False)
+    verificar("sin código, check devuelve False y no revienta",
+              persona.check_codigo_emergencia("123456") is False)
+
+    persona.set_codigo_emergencia("846213")
+    db.session.commit()
+    verificar("después de definirlo, queda configurado",
+              persona.tiene_codigo_emergencia is True)
+    verificar("el código correcto valida", persona.check_codigo_emergencia("846213") is True)
+    verificar("un código distinto no valida", persona.check_codigo_emergencia("846214") is False)
+    verificar("un código vacío no valida", persona.check_codigo_emergencia("") is False)
+    verificar("queda la fecha de actualización",
+              persona.codigo_emergencia_actualizado is not None)
+
+    print("\n11. El código NO es una contraseña")
+    # Son dos secretos distintos y no deben ser intercambiables: el código
+    # lo escucha el guardia en voz alta en el portón.
+    verificar("el código de emergencia no sirve para iniciar sesión",
+              persona.check_password("846213") is False)
+    verificar("la contraseña no sirve como código de emergencia",
+              persona.check_codigo_emergencia("ClaveSegura1!") is False)
+    verificar("el hash del código es distinto al de la contraseña",
+              persona.codigo_emergencia_hash != persona.password_hash)
+
 print("\n" + "=" * 58)
 if fallos:
     print(f"RESULTADO: {len(fallos)} verificación(es) fallaron")
