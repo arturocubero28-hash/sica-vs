@@ -163,4 +163,11 @@ class Usuario(db.Model):
             "debe_cambiar_password": self.debe_cambiar_password,
             "biometria_activa": self.biometria_activa,
             "punto_acceso_actual": self.punto_acceso_actual,
+            # Día 69 — foto del miembro. El residente la ve en su perfil,
+            # pero NO puede cambiarla: la captura administración, y es la que
+            # el guardia usa para verificar identidad en el portón.
+            "foto_url": self.foto_url,
+            # Si ya configuró su código de emergencia. El código en sí está
+            # hasheado y no se devuelve nunca.
+            "tiene_codigo_emergencia": self.tiene_codigo_emergencia,
         }
