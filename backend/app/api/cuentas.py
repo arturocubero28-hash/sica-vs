@@ -800,6 +800,103 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
     }}), 201
 
 
+def _carpeta_fotos_residentes():
+    carpeta = os.path.join(current_app.config.get("UPLOAD_FOLDER", "/app/uploads"),
+                           "residentes")
+    os.makedirs(carpeta, exist_ok=True)
+    return carpeta
+
+
+@cuentas_bp.post("/cuentas/<cuenta_uuid>/residentes/<residente_uuid>/foto")
+@roles_required("admin", "super_admin")
+def subir_foto_residente(usuario_actual, cuenta_uuid, residente_uuid):
+    """
+    Día 69 — foto del miembro, pedida por el patronato (Día 68).
+
+    SOLO administración la sube. El residente NUNCA puede cambiar su propia
+    foto: es la que el guardia usa para verificar identidad cuando alguien
+    llega sin teléfono y pide acceso con su código de emergencia. Si el
+    propio residente pudiera reemplazarla, bastaría con poner la cara de
+    otra persona para que el guardia le abriera a quien no corresponde —
+    toda la verificación dejaría de servir.
+
+    Sirve para cualquier miembro, del padrón o con cuenta completa: la foto
+    vive en Usuario, que es donde vive la persona.
+
+    Reemplazable: sube una foto nueva y la anterior se borra. La gente
+    cambia, y una foto vieja que ya no se parece es peor que no tenerla.
+    """
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+
+    residente = Residente.query.filter_by(uuid_publico=residente_uuid,
+                                          cuenta_id=cuenta.id).first()
+    if not residente:
+        return _err("no_encontrado", "Residente no encontrado en esta cuenta", 404)
+
+    persona = residente.usuario
+    if not persona:
+        return _err("sin_usuario", "Este residente no tiene ficha de persona", 400)
+
+    if "foto" not in request.files or not request.files["foto"].filename:
+        return _err("sin_archivo", "Adjuntá una foto", 400)
+
+    nombre_archivo, error, _tam = guardar_imagen_segura(
+        request.files["foto"], _carpeta_fotos_residentes(), EXT_IMAGEN
+    )
+    if error:
+        return _err("imagen_invalida", error, 400)
+
+    anterior = persona.foto_url
+    persona.foto_url = nombre_archivo
+    db.session.commit()
+
+    # Recién después del commit: si se borrara antes y el commit fallara,
+    # la persona quedaría apuntando a un archivo que ya no existe.
+    if anterior and anterior != nombre_archivo:
+        try:
+            os.remove(os.path.join(_carpeta_fotos_residentes(), anterior))
+        except OSError:
+            pass
+
+    return jsonify({"data": residente.to_dict()})
+
+
+@cuentas_bp.get("/residentes/foto/<path:nombre_archivo>")
+@token_required
+def ver_foto_residente(usuario_actual, nombre_archivo):
+    """
+    Sirve la foto de un residente, siempre autenticado.
+
+    Nunca queda pública en el bucket: mismo modelo de acceso privado que se
+    aplicó a las fotos de evidencia en FILES-05 (Día 37). Una foto de la
+    cara de un residente es un dato personal, no una imagen de catálogo.
+
+    Se usa <path:...> y no <string> porque en modo nube la clave guardada
+    incluye el prefijo de subcarpeta y lleva una barra — el mismo bug real
+    que tuvo el logo de la residencial el Día 59.
+    """
+    existe = Usuario.query.filter_by(foto_url=nombre_archivo).first()
+    if not existe:
+        return _err("no_encontrada", "Foto no encontrada", 404)
+
+    # Un residente solo puede ver SU propia foto. El personal administrativo
+    # y los guardias ven las de su residencial: el guardia la necesita para
+    # verificar identidad en el portón.
+    if usuario_actual.rol == "residente" and existe.id != usuario_actual.id:
+        return _err("sin_permiso", "No podés ver la foto de otra persona", 403)
+    if usuario_actual.rol not in ("super_admin", "desarrollador"):
+        if (usuario_actual.residencial_id and existe.residencial_id
+                and usuario_actual.residencial_id != existe.residencial_id):
+            return _err("sin_permiso", "Esa persona no pertenece a tu residencial", 403)
+
+    from app.services import storage
+    clave = (nombre_archivo if nombre_archivo.startswith("residentes/")
+             else f"residentes/{nombre_archivo}")
+    return storage.servir_archivo(clave)
+
+
 @cuentas_bp.delete("/cuentas/<cuenta_uuid>/residentes/<residente_uuid>")
 @roles_required("admin", "super_admin")
 def quitar_miembro(usuario_actual, cuenta_uuid, residente_uuid):
