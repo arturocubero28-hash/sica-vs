@@ -242,8 +242,15 @@ class EventoAcceso(db.Model):
     id = db.Column(db.BigInteger, primary_key=True)
     uuid_publico = _uuid()
     # ENUMs reales de PostgreSQL — fix Día 36.
+    # Día 69 — 'proveedor' tiene que estar en ESTA lista, no solo en el tipo
+    # de PostgreSQL. SQLAlchemy valida el valor del lado de Python antes de
+    # mandar el INSERT: si no está acá, lanza LookupError ("is not among the
+    # defined enum values") y el endpoint responde 500 aunque la base acepte
+    # el valor sin problema. El ALTER TYPE de app/__init__.py arregla la
+    # mitad de la base; esta línea es la otra mitad.
     origen = db.Column(
-        db.Enum("residente", "visita", name="origen_evento", create_type=False),
+        db.Enum("residente", "visita", "proveedor",
+                name="origen_evento", create_type=False),
         nullable=False)
     direccion = db.Column(
         db.Enum("entrada", "salida", name="direccion_acceso", create_type=False),

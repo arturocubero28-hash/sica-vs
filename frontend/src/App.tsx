@@ -3,7 +3,8 @@ import {
   LayoutDashboard, Video, Building2, Users, ScrollText, CreditCard, Receipt,
   Handshake, TrendingUp, Ticket, Megaphone, User, Settings, Monitor, Home,
   QrCode, ClipboardList, Shield, Building, Sun, Moon, Menu as MenuIcon,
-  Fingerprint, ArrowRight, ArrowLeft, Check, Smartphone, Download, type LucideIcon,
+  Fingerprint, ArrowRight, ArrowLeft, Check, Smartphone, Download, Truck,
+  type LucideIcon,
 } from "lucide-react";
 import {
   login, getMe, logout, getToken, setToken,
@@ -15,6 +16,7 @@ import {
 import { aplicarColoresResidencial, restablecerColoresFabrica } from "./utils/colores";
 import { UnidadesPanel } from "./modules/unidades/UnidadesPanel";
 import { CensoPanel } from "./modules/censo/CensoPanel";
+import { ProveedoresPanel } from "./modules/proveedores/ProveedoresPanel";
 import { ResidentePortal } from "./modules/residente/ResidentePortal";
 import { GuardiaPanel } from "./modules/guardia/GuardiaPanel";
 import { DashboardAdmin } from "./modules/dashboard/DashboardAdmin";
@@ -691,6 +693,7 @@ function ResetPassword({ token, onOk }: { token: string; onOk: () => void }) {
 function AdminView({ seccion, usuario }: { seccion: string; usuario: Usuario }) {
   if (seccion === "casas") return <UnidadesPanel embedded />;
   if (seccion === "censo") return <CensoPanel />;
+  if (seccion === "proveedores") return <ProveedoresPanel />;
   if (seccion === "pagos") return <PagosAdmin />;
   if (seccion === "monitoreo") return <MonitoreoCamaras />;
   if (seccion === "comunicados") return <ComunicadosAdmin />;
@@ -722,6 +725,11 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "censo", label: "Padrón", icon: ClipboardList },
       { id: "usuarios", label: "Usuarios", icon: Users },
       { id: "historial", label: "Historial", icon: ScrollText },
+      // Día 69 — los proveedores van junto al historial y no junto a casas:
+      // un camión de agua no vive acá, es un acceso que hay que poder
+      // auditar. Y tiene su propia sección porque sus entradas no tienen
+      // visita, así que nunca aparecen en el historial de visitas.
+      { id: "proveedores", label: "Proveedores", icon: Truck },
       { id: "pagos", label: "Revisión de pagos", icon: CreditCard },
       { id: "caja", label: "Supervisión de caja", icon: Receipt },
       { id: "arreglos", label: "Arreglos de pago", icon: Handshake },

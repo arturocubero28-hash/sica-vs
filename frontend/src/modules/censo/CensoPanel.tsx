@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   listarCenso, crearCasaCenso, agregarPersonaCenso, convertirCasaCenso,
   darAccesoPersona, subirFotoResidente, urlFotoResidente, listarTarifas,
-  type Cuenta, type ResidenteDTO, type Tarifa,
+  type Cuenta, type ResidenteDTO, type Tarifa, type ResumenPadron,
 } from "../../api/client";
 import {
   UserPlus, Camera, ArrowUpRight, ChevronDown, ChevronRight, Home,
@@ -34,6 +34,7 @@ function MsgBanner({ msg, onClose }: { msg: { tipo: "ok" | "err"; texto: string 
 
 export function CensoPanel() {
   const [casas, setCasas] = useState<Cuenta[]>([]);
+  const [resumen, setResumen] = useState<ResumenPadron | null>(null);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [abierta, setAbierta] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export function CensoPanel() {
   function recargar() {
     setCargando(true);
     listarCenso()
-      .then(r => setCasas(r.casas))
+      .then(r => { setCasas(r.casas); setResumen(r.resumen ?? null); })
       .catch(e => setMsg({ tipo: "err", texto: (e as Error).message }))
       .finally(() => setCargando(false));
   }
@@ -78,6 +79,32 @@ export function CensoPanel() {
       {msg && (
         <div style={{ position: "sticky", top: 8, zIndex: 20, marginBottom: 12 }}>
           <MsgBanner msg={msg} onClose={() => setMsg(null)} />
+        </div>
+      )}
+
+      {/* Métrica de adopción. Es el número que el patronato pide en cada
+          reunión, y conviene que sea visible acá y no en un reporte aparte:
+          "cuánta gente está dentro del sistema" y "cuánta además paga" son
+          dos cosas distintas, y la primera ya tiene valor sin la segunda —
+          una casa del censo tiene sus accesos registrados igual. */}
+      {resumen && resumen.total > 0 && (
+        <div className="metric-grid small" style={{ marginBottom: 14 }}>
+          <div className="mini-metric">
+            <div className="mini-valor">{resumen.total}</div>
+            <div className="mini-label">Casas en el sistema</div>
+          </div>
+          <div className="mini-metric">
+            <div className="mini-valor">{resumen.completas}</div>
+            <div className="mini-label">Participan con cuota ({resumen.pct_completas}%)</div>
+          </div>
+          <div className="mini-metric">
+            <div className="mini-valor">{resumen.censo}</div>
+            <div className="mini-label">Solo padrón</div>
+          </div>
+          <div className="mini-metric">
+            <div className="mini-valor">{resumen.convertidas}</div>
+            <div className="mini-label">Se sumaron desde el padrón</div>
+          </div>
         </div>
       )}
 

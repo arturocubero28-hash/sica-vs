@@ -136,9 +136,39 @@ def listar_censo(usuario_actual):
     if rid is not None:
         q = q.filter(Unidad.residencial_id == rid)
     cuentas = q.all()
+
+    # Día 69 — métrica de adopción. El sentido del padrón es poder decirle al
+    # patronato, con un número y no con una impresión, cuánta gente de la
+    # colonia está dentro del sistema y cuánta además participa pagando.
+    # Son dos cosas distintas y conviene no confundirlas: una casa del censo
+    # YA está trazada (sus accesos quedan registrados) aunque no aporte un
+    # lempira.
+    base = Cuenta.query.join(Unidad, Cuenta.unidad_id == Unidad.id).filter(
+        Cuenta.activa.is_(True))
+    if rid is not None:
+        base = base.filter(Unidad.residencial_id == rid)
+    total_censo = base.filter(Cuenta.modo_participacion == "censo").count()
+    # 'completa' por defecto: las cuentas creadas antes del Día 69 no tienen
+    # el campo seteado explícitamente, y son todas de participación completa.
+    total_completas = base.filter(
+        db.or_(Cuenta.modo_participacion == "completa",
+               Cuenta.modo_participacion.is_(None))).count()
+    # Cuántas pasaron de censo a cuenta completa (tienen fecha de conversión).
+    # Es el número que dice si el padrón sirve como puerta de entrada.
+    total_convertidas = base.filter(Cuenta.fecha_conversion.isnot(None)).count()
+    total_casas = total_censo + total_completas
+
     return jsonify({"data": {
         "casas": [c.to_dict(detalle=True) for c in cuentas],
         "total": len(cuentas),
+        "resumen": {
+            "censo": total_censo,
+            "completas": total_completas,
+            "total": total_casas,
+            "convertidas": total_convertidas,
+            "pct_completas": (round(total_completas * 100 / total_casas)
+                              if total_casas else 0),
+        },
     }})
 
 

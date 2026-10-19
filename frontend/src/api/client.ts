@@ -192,8 +192,15 @@ export const detalleCuenta = (id: string) => request<Cuenta>(`/unidades/cuentas/
 // necesita saber quién entra y sale. Por eso se carga el censo completo de
 // la colonia: esas casas existen para el guardia, pero no generan cuotas,
 // no entran en mora y no reciben avisos de cobro.
+/** Día 69 — `resumen` responde la pregunta que el patronato hace en cada
+ *  reunión: cuántas casas están dentro del sistema y cuántas además pagan.
+ *  `convertidas` es la que dice si el padrón sirve de puerta de entrada. */
+export interface ResumenPadron {
+  censo: number; completas: number; total: number;
+  convertidas: number; pct_completas: number;
+}
 export const listarCenso = () =>
-  request<{ casas: Cuenta[]; total: number }>("/censo");
+  request<{ casas: Cuenta[]; total: number; resumen?: ResumenPadron }>("/censo");
 
 export const crearCasaCenso = (body: {
   identificador?: string; unidad_id?: string;
@@ -416,6 +423,60 @@ export function urlFotoGuardia(nombreArchivo: string): string {
   const token = getToken();
   return `${API_URL}/dashboard/fotos/${nombreArchivo}?_auth=${token}`;
 }
+
+// =====================================================================
+// PROVEEDORES — Día 69
+// =====================================================================
+// Camión de agua, de gas, de refrescos. Antes esto era una apertura manual
+// anónima: quedaba que el guardia abrió la tranca, pero no quién entró ni
+// con autorización de quién.
+
+/** Quién puede autorizar la entrada de un proveedor por parte del patronato.
+ *  Es una lista cerrada que configura administración; el guardia elige de
+ *  ahí y no puede escribir texto libre, porque si no el dato no serviría
+ *  para auditar nada. */
+export interface AutorizadorDTO {
+  id: string; nombre: string; cargo?: string | null; activo: boolean;
+}
+export const listarAutorizadores = () =>
+  request<AutorizadorDTO[]>("/guardias/autorizadores");
+export const crearAutorizador = (body: { nombre: string; cargo?: string }) =>
+  request<AutorizadorDTO>("/guardias/autorizadores", {
+    method: "POST", body: JSON.stringify(body),
+  });
+/** Se DESACTIVA, no se borra: los accesos ya registrados tienen que seguir
+ *  mostrando quién los autorizó. */
+export const desactivarAutorizador = (id: string) =>
+  request<{ message: string }>(`/guardias/autorizadores/${id}`, { method: "DELETE" });
+
+export interface AccesoProveedorDTO {
+  id: string;
+  direccion: "entrada" | "salida";
+  empresa: string;
+  conductor: string;
+  placa?: string | null;
+  guardia: string;
+  autorizado_por?: string | null;
+  autorizado_por_cargo?: string | null;
+  punto_acceso?: string | null;
+  tranca?: string | null;
+  foto_identidad?: string | null;
+  ocurrido_en?: string | null;
+}
+export const historialProveedores = (params: {
+  desde?: string; hasta?: string; buscar?: string; pagina?: number;
+} = {}) => {
+  const qs = new URLSearchParams();
+  if (params.desde) qs.set("desde", params.desde);
+  if (params.hasta) qs.set("hasta", params.hasta);
+  if (params.buscar) qs.set("buscar", params.buscar);
+  if (params.pagina) qs.set("pagina", String(params.pagina));
+  const cola = qs.toString();
+  return request<{
+    eventos: AccesoProveedorDTO[];
+    pagina: number; por_pagina: number; total: number; total_paginas: number;
+  }>(`/dashboard/proveedores${cola ? `?${cola}` : ""}`);
+};
 
 // ── CUOTAS Y PAGOS ────────────────────────────────────────────────────────────
 export interface CuotaDTO {

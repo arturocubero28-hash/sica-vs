@@ -15,11 +15,20 @@ modelo.
 
 Uso:  python3 prueba_censo_dia69.py
 """
+import os
 import sys
 import logging
 
 sys.path.insert(0, ".")
 logging.disable(logging.WARNING)
+
+# La base en memoria se fija ACÁ y no en la línea de comandos: el docstring
+# de arriba dice "python3 prueba_censo_dia69.py" a secas, y sin esto el
+# create_app() de abajo toma el PostgreSQL de desarrollo por defecto y la
+# prueba revienta en el import de psycopg antes de verificar nada.
+# setdefault y no asignación directa, para poder apuntarla a otra base
+# desde afuera si alguna vez hace falta.
+os.environ.setdefault("DATABASE_URL", "sqlite://")
 
 from app import create_app                       # noqa: E402
 from app.extensions import db                    # noqa: E402
@@ -169,6 +178,42 @@ with app.app_context():
               persona.check_codigo_emergencia("ClaveSegura1!") is False)
     verificar("el hash del código es distinto al de la contraseña",
               persona.codigo_emergencia_hash != persona.password_hash)
+
+    print("\n12. El enum origen_evento acepta 'proveedor'")
+    # ESTA VERIFICACIÓN EXISTE POR UN BUG REAL de este mismo día.
+    #
+    # La migración de app/__init__.py hacía el ALTER TYPE para agregar
+    # 'proveedor' al tipo de PostgreSQL, pero el modelo seguía declarando
+    # db.Enum("residente", "visita"). SQLAlchemy valida el valor del lado de
+    # Python ANTES de mandar el INSERT, así que registrar un proveedor
+    # lanzaba LookupError y el endpoint respondía 500 — con la base
+    # perfectamente capaz de aceptar el valor.
+    #
+    # Es un error que no se ve leyendo ninguno de los dos archivos por
+    # separado: hay que mirar los dos a la vez. Por eso se prueba.
+    from app.models.visita import EventoAcceso, AccesoFisico  # noqa: E402
+
+    valores = set(EventoAcceso.__table__.c.origen.type.enums)
+    for esperado in ("residente", "visita", "proveedor"):
+        verificar(f"el modelo declara origen='{esperado}'", esperado in valores)
+
+    # Y que de verdad deje insertar el valor, no solo que esté en la lista.
+    acceso = AccesoFisico(id=1, nombre="Tranca de prueba",
+                          punto_acceso="Portón Principal", tipo="vehicular",
+                          direccion="entrada", activo=True)
+    db.session.add(acceso)
+    db.session.flush()
+    ev = EventoAcceso(id=1, origen="proveedor", direccion="entrada",
+                      acceso_id=acceso.id, metodo="proveedor",
+                      proveedor_empresa="Agua Azul",
+                      proveedor_conductor="Juan Pérez")
+    db.session.add(ev)
+    db.session.commit()
+    verificar("un evento de proveedor se guarda sin reventar", ev.id is not None)
+    d = ev.to_dict()
+    verificar("el evento reporta la empresa", d["proveedor_empresa"] == "Agua Azul")
+    verificar("el evento reporta el método", d["metodo"] == "proveedor")
+    verificar("sin autorizador, autorizado_por es None", d["autorizado_por"] is None)
 
 print("\n" + "=" * 58)
 if fallos:

@@ -500,10 +500,128 @@ def historial_accesos_tarjeta(usuario_actual):
             "tarjeta": tarjeta.card_uid if tarjeta else "—",
             "tipo_acceso": tarjeta.tipo_acceso if tarjeta else None,
             "acceso": acceso.nombre if acceso else "—",
+            # Día 69 — CÓMO entró. Este historial ya no es solo de tarjetas:
+            # desde hoy también recibe los accesos que el guardia registra
+            # con el código de emergencia (metodo='codigo_emergencia'),
+            # cuando el residente llega sin teléfono. Sin este campo los dos
+            # casos se ven idénticos en pantalla, y son muy distintos: uno
+            # lo validó una máquina, al otro lo autorizó una persona.
+            "metodo": e.metodo or ("tarjeta" if e.tarjeta_id else None),
+            "guardia": (f"{e.guardia.nombre} {e.guardia.apellido}"
+                        if e.guardia else None),
+            "foto_identidad": e.foto_identidad,
             "ocurrido_en": e.ocurrido_en.isoformat() if e.ocurrido_en else None,
         }
         if buscar:
             blob = f"{nombre} {unidad} {fila['tarjeta']}".lower()
+            if buscar not in blob:
+                continue
+        filas.append(fila)
+
+    return jsonify({"data": {
+        "eventos": filas,
+        "pagina": pagina,
+        "por_pagina": por_pagina,
+        "total": total,
+        "total_paginas": (total + por_pagina - 1) // por_pagina,
+    }})
+
+
+# =====================================================================
+# HISTORIAL DE ACCESOS DE PROVEEDORES (Día 69)
+# =====================================================================
+@dashboard_bp.get("/proveedores")
+@roles_required("admin", "super_admin")
+def historial_proveedores(usuario_actual):
+    """
+    Accesos de proveedores: camión de agua, de gas, de refrescos.
+
+    Va en su propio historial y no en el de visitas, por una razón que no
+    es cosmética: un acceso de proveedor NO tiene visita asociada. Antes
+    de hoy, dejar entrar un camión era una apertura manual anónima -- se
+    sabía que el guardia abrió la tranca, no quién entró ni con permiso de
+    quién. Al no haber visita, estos eventos no aparecen en el reporte de
+    /reportes/accesos (que parte de la tabla de visitas), y si se metieran
+    a la fuerza en el historial de visitas la mitad de las columnas
+    saldrían vacías.
+
+    Filtros: ?desde=YYYY-MM-DD &hasta=YYYY-MM-DD &buscar=texto &pagina=N
+    """
+    from app.models.visita import AutorizadorProveedor
+    from app.utils.residencial import scope_eventos
+
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+    direccion = request.args.get("direccion")
+    buscar = (request.args.get("buscar") or "").strip().lower()
+    try:
+        pagina = max(1, int(request.args.get("pagina", 1)))
+    except (TypeError, ValueError):
+        pagina = 1
+    # Mismo criterio que los otros dos historiales (Día 59): ?todos=1 para
+    # exportar todo lo filtrado, con tope.
+    exportar_todos = request.args.get("todos") == "1"
+    por_pagina = 3000 if exportar_todos else 30
+    if exportar_todos:
+        pagina = 1
+
+    q = scope_eventos(EventoAcceso.query, usuario_actual).filter(
+        EventoAcceso.origen == "proveedor")
+
+    if desde:
+        try:
+            q = q.filter(EventoAcceso.ocurrido_en >= dt.datetime.fromisoformat(desde))
+        except ValueError:
+            pass
+    if hasta:
+        try:
+            fin = dt.datetime.fromisoformat(hasta) + dt.timedelta(days=1)
+            q = q.filter(EventoAcceso.ocurrido_en < fin)
+        except ValueError:
+            pass
+    if direccion in ("entrada", "salida"):
+        q = q.filter(EventoAcceso.direccion == direccion)
+
+    q = q.order_by(EventoAcceso.ocurrido_en.desc())
+    total = q.count()
+    eventos = q.offset((pagina - 1) * por_pagina).limit(por_pagina).all()
+
+    # Precargar trancas y autorizadores de una sola vez (evitar N+1)
+    acc_ids = {e.acceso_id for e in eventos if e.acceso_id}
+    accesos = ({a.id: a for a in AccesoFisico.query
+                .filter(AccesoFisico.id.in_(acc_ids)).all()} if acc_ids else {})
+    aut_ids = {e.autorizado_por_id for e in eventos if e.autorizado_por_id}
+    autorizadores = ({a.id: a for a in AutorizadorProveedor.query
+                      .filter(AutorizadorProveedor.id.in_(aut_ids)).all()}
+                     if aut_ids else {})
+
+    filas = []
+    for e in eventos:
+        acceso = accesos.get(e.acceso_id)
+        autorizador = autorizadores.get(e.autorizado_por_id)
+        empresa = e.proveedor_empresa or "—"
+        conductor = e.proveedor_conductor or "—"
+        fila = {
+            "id": str(e.uuid_publico),
+            "direccion": e.direccion,
+            "empresa": empresa,
+            "conductor": conductor,
+            "placa": e.placa_observada or e.placa_vehiculo,
+            "guardia": (f"{e.guardia.nombre} {e.guardia.apellido}"
+                        if e.guardia else "—"),
+            # Quién autorizó por parte del patronato. Se lee del registro
+            # histórico aunque hoy esa persona ya esté desactivada: por eso
+            # los autorizadores se desactivan y no se borran.
+            "autorizado_por": autorizador.nombre if autorizador else None,
+            "autorizado_por_cargo": autorizador.cargo if autorizador else None,
+            "punto_acceso": acceso.punto_acceso if acceso else None,
+            "tranca": acceso.nombre if acceso else None,
+            "foto_identidad": e.foto_identidad,
+            "ocurrido_en": e.ocurrido_en.isoformat() if e.ocurrido_en else None,
+        }
+        if buscar:
+            blob = (f"{empresa} {conductor} {fila['placa'] or ''} "
+                    f"{fila['autorizado_por'] or ''}").lower()
             if buscar not in blob:
                 continue
         filas.append(fila)
