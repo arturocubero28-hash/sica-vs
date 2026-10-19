@@ -265,6 +265,12 @@ class Cuenta(db.Model):
             "acceso_pausado": self.acceso_pausado,
             "qr_recurrente_habilitado": self.qr_recurrente_habilitado,
             "tipo_acceso_virtual": self.tipo_acceso_virtual,
+            # Día 69 — padrón: 'censo' o 'completa'. El panel lo usa para
+            # mostrar la casa en su listado correcto y para ofrecer (o no)
+            # la conversión.
+            "modo_participacion": self.modo_participacion,
+            "es_censo": self.es_censo,
+            "fecha_conversion": self.fecha_conversion.isoformat() if self.fecha_conversion else None,
             "tarifa_id": self.tarifa_id,
             "tarifa": self.tarifa.nombre if self.tarifa else None,
             "monto": float(self.tarifa.monto) if self.tarifa else None,
@@ -384,8 +390,21 @@ class Residente(db.Model):
             "profesion": u.profesion if u else None,
             "contacto_emergencia_nombre": u.contacto_emergencia_nombre if u else None,
             "contacto_emergencia_telefono": u.contacto_emergencia_telefono if u else None,
-            # estado de activación de la cuenta de acceso del residente
-            "estado_acceso": "activo" if (u and u.activo and u.password_hash) else "pendiente",
+            # Día 69 — persona del padrón: existe para que el guardia la
+            # identifique, pero no usa la app.
+            "es_censo": bool(u.es_censo) if u else False,
+            # Día 69 — foto del miembro, capturada por administración.
+            "foto_url": u.foto_url if u else None,
+            # estado de activación de la cuenta de acceso del residente.
+            # Día 69 — 'censo' es un tercer estado, distinto de 'pendiente':
+            # una persona del padrón no está esperando activar nada, es que
+            # directamente no tiene acceso al sistema. Mostrarla como
+            # "pendiente" haría creer que falta mandarle un correo.
+            "estado_acceso": (
+                "censo" if (u and u.es_censo)
+                else "activo" if (u and u.activo and u.password_hash)
+                else "pendiente"
+            ),
         }
 
 

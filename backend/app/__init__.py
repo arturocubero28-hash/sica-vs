@@ -146,6 +146,12 @@ def create_app(config_class=Config):
     from app.api.dispositivos import dispositivos_bp
     app.register_blueprint(dispositivos_bp, url_prefix="/api/v1/dispositivos")
 
+    # Día 69 — padrón (censo): casas y personas que NO participan del
+    # sistema pero sí deben quedar registradas para la trazabilidad de
+    # accesos. Ver app/api/censo.py para el porqué del diseño.
+    from app.api.censo import censo_bp
+    app.register_blueprint(censo_bp, url_prefix="/api/v1/censo")
+
     from app.api.tarjeta_virtual import tv_bp
     app.register_blueprint(tv_bp, url_prefix="/api/v1/acceso")
 
