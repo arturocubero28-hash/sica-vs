@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import {
   listarCenso, crearCasaCenso, agregarPersonaCenso, convertirCasaCenso,
   darAccesoPersona, subirFotoResidente, urlFotoResidente, listarTarifas,
-  type Cuenta, type ResidenteDTO, type Tarifa, type ResumenPadron,
+  listarUnidades,
+  type Cuenta, type ResidenteDTO, type Tarifa, type ResumenPadron, type Unidad,
 } from "../../api/client";
 import {
   UserPlus, Camera, ArrowUpRight, ChevronDown, ChevronRight, Home,
@@ -58,7 +59,7 @@ export function CensoPanel() {
   const filtradas = casas.filter(c => {
     if (!q) return true;
     const gente = (c.residentes || []).map(r => r.nombre).join(" ");
-    return `${c.identificador || ""} ${gente}`.toLowerCase().includes(q);
+    return `${c.nombre_completo || c.identificador || ""} ${c.apartamento || ""} ${gente}`.toLowerCase().includes(q);
   });
 
   const totalPersonas = casas.reduce((n, c) => n + (c.residentes?.length || 0), 0);
@@ -147,7 +148,7 @@ export function CensoPanel() {
                               {expandida ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </button>
                             <div className="casa-cell-txt">
-                              <span className="casa-id">{casa.identificador || "—"}</span>
+                              <span className="casa-id">{casa.nombre_completo || casa.identificador || "—"}</span>
                               {/* Se dice cuántas personas hay y que se toca
                                   para verlas. La fila se expandía con un
                                   chevron sin explicación, así que las fotos
@@ -335,28 +336,64 @@ function FilaPersonas({ casa, onMsg, onCambio, onDarAcceso }: {
 function ModalCasaCenso({ onCerrar, onListo, onError }: {
   onCerrar: () => void; onListo: (nombre: string) => void; onError: (t: string) => void;
 }) {
+  // Día 69 — un edificio se censa apartamento POR apartamento, no entero.
+  // No es un capricho del modelo: el guardia que busca a alguien tiene que
+  // ver las tres personas de un apto, no las cuarenta del edificio, y la
+  // foto que debe comparar se le perdería en esa lista.
+  const [tipo, setTipo] = useState<"casa" | "apartamento">("casa");
   const [identificador, setIdentificador] = useState("");
+  const [edificioId, setEdificioId] = useState("");   // "" = escribir uno nuevo
+  const [apartamento, setApartamento] = useState("");
+  const [edificios, setEdificios] = useState<Unidad[]>([]);
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
   const [dni, setDni] = useState("");
   const [telefono, setTelefono] = useState("");
   const [guardando, setGuardando] = useState(false);
 
+  // Los edificios ya cargados se ofrecen en una lista para no volver a
+  // escribir el nombre en cada apartamento — es la forma más fácil de
+  // terminar con "Edificio Las Palmas" y "Edif. Las Palmas" conviviendo.
+  useEffect(() => {
+    listarUnidades()
+      .then(us => setEdificios(us.filter(u => u.tipo === "edificio")))
+      .catch(() => { /* si falla, siempre queda escribirlo a mano */ });
+  }, []);
+
+  const esApto = tipo === "apartamento";
+
   async function guardar() {
-    if (!identificador.trim() || !nombre.trim()) {
-      onError("Indicá la casa y el nombre del titular");
+    if (!nombre.trim()) { onError("Indicá el nombre del titular"); return; }
+    if (esApto) {
+      if (!edificioId && !identificador.trim()) {
+        onError("Elegí un edificio o escribí el nombre de uno nuevo");
+        return;
+      }
+      if (!apartamento.trim()) { onError("Indicá el número de apartamento"); return; }
+    } else if (!identificador.trim()) {
+      onError("Indicá el identificador de la casa");
       return;
     }
+
     setGuardando(true);
     try {
       await crearCasaCenso({
-        identificador: identificador.trim(),
+        tipo,
+        // Para un apartamento va el edificio elegido, o su nombre si es nuevo.
+        unidad_id: esApto && edificioId ? edificioId : undefined,
+        identificador: (esApto && edificioId) ? undefined : identificador.trim(),
+        apartamento: esApto ? apartamento.trim() : undefined,
         titular: {
           nombre: nombre.trim(), apellido: apellido.trim(),
           dni: dni.trim() || undefined, telefono: telefono.trim() || undefined,
         },
       });
-      onListo(identificador.trim());
+      const etiqueta = esApto
+        ? `${edificioId
+              ? (edificios.find(e => e.id === edificioId)?.identificador ?? "El edificio")
+              : identificador.trim()} · Apto ${apartamento.trim()}`
+        : identificador.trim();
+      onListo(etiqueta);
     } catch (e) {
       onError((e as Error).message);
     } finally {
@@ -372,14 +409,56 @@ function ModalCasaCenso({ onCerrar, onListo, onError }: {
           <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
         <p className="muted small">
-          No se pide tarifa ni día de pago: esta casa no paga nada. Solo queda
+          No se pide tarifa ni día de pago: no paga nada. Solo queda
           registrada para que sus accesos tengan nombre.
         </p>
+
         <div className="form-field">
-          <label>Casa</label>
-          <input value={identificador} onChange={e => setIdentificador(e.target.value)}
-            placeholder="Casa 24" />
+          <label>¿Qué estás registrando?</label>
+          <div className="tabs" style={{ marginBottom: 0 }}>
+            <button type="button" className={tipo === "casa" ? "tab on" : "tab"}
+              onClick={() => setTipo("casa")}>Una casa</button>
+            <button type="button" className={tipo === "apartamento" ? "tab on" : "tab"}
+              onClick={() => setTipo("apartamento")}>Un apartamento</button>
+          </div>
         </div>
+
+        {!esApto ? (
+          <div className="form-field">
+            <label>Casa</label>
+            <input value={identificador} onChange={e => setIdentificador(e.target.value)}
+              placeholder="Casa 24" />
+          </div>
+        ) : (
+          <>
+            <p className="muted small" style={{ marginTop: 0 }}>
+              Cada apartamento se registra por separado, con su propio titular.
+              Así el guardia que busca a alguien ve a su familia y no a todo
+              el edificio.
+            </p>
+            <div className="form-field">
+              <label>Edificio</label>
+              {edificios.length > 0 && (
+                <select value={edificioId} onChange={e => setEdificioId(e.target.value)}>
+                  <option value="">— Escribir un edificio nuevo —</option>
+                  {edificios.map(ed => (
+                    <option key={ed.id} value={ed.id}>{ed.identificador}</option>
+                  ))}
+                </select>
+              )}
+              {!edificioId && (
+                <input value={identificador} onChange={e => setIdentificador(e.target.value)}
+                  placeholder="Edificio Las Palmas"
+                  style={{ marginTop: edificios.length > 0 ? 8 : 0 }} />
+              )}
+            </div>
+            <div className="form-field">
+              <label>Apartamento</label>
+              <input value={apartamento} onChange={e => setApartamento(e.target.value)}
+                placeholder="1A" />
+            </div>
+          </>
+        )}
         <div className="form-field">
           <label>Nombre del titular</label>
           <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Juan" />
@@ -434,7 +513,7 @@ function ModalPersonaCenso({ casa, onCerrar, onListo, onError }: {
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>Agregar persona a {casa.identificador}</h3>
+          <h3>Agregar persona a {casa.nombre_completo || casa.identificador}</h3>
           <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
         <div className="form-field">
@@ -487,7 +566,7 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
         tarifa_id: tarifaId === "" ? undefined : Number(tarifaId),
         dia_pago: diaPago,
       });
-      onListo(`${casa.identificador} ya participa del sistema. ${r.nota}`);
+      onListo(`${casa.nombre_completo || casa.identificador} ya participa del sistema. ${r.nota}`);
     } catch (e) {
       onError((e as Error).message);
     } finally {
@@ -499,7 +578,7 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>{casa.identificador} se suma al sistema</h3>
+          <h3>{casa.nombre_completo || casa.identificador} se suma al sistema</h3>
           <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
         <div className="ok-box">

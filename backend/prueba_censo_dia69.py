@@ -222,3 +222,64 @@ if fallos:
         print("  -", f)
     sys.exit(1)
 print("RESULTADO: todas las verificaciones pasaron")
+
+# ─────────────────────────────────────────────────────────────────────────
+# 13. Padrón de APARTAMENTOS (Día 69, segunda pasada)
+# ─────────────────────────────────────────────────────────────────────────
+# El padrón solo daba de alta casas: censo.py forzaba Unidad(tipo="casa").
+# Un edificio se censa apartamento POR apartamento, para que el guardia que
+# busca a alguien vea a su familia y no a las cuarenta personas del edificio.
+with app.app_context():
+    print("\n13. Padrón de apartamentos")
+
+    edif = Unidad(id=90, tipo="edificio", identificador="Edificio Las Palmas",
+                  activa=True)
+    db.session.add(edif)
+    db.session.flush()
+
+    def _apto(cid, numero):
+        c = Cuenta(id=cid, unidad_id=edif.id, apartamento=numero,
+                   tarifa_id=None, dia_pago=None, modo_participacion="censo")
+        db.session.add(c)
+        db.session.flush()
+        return c
+
+    a1 = _apto(90, "1A")
+    a2 = _apto(91, "2B")
+    db.session.commit()
+
+    verificar("dos apartamentos conviven en el mismo edificio",
+              a1.unidad_id == a2.unidad_id and a1.apartamento != a2.apartamento)
+    verificar("un apartamento del padrón no cobra cuota", a1.cobra_cuotas() is False)
+    verificar("un apartamento del padrón es censo", a1.es_censo is True)
+
+    # nombre_completo es lo que ve el guardia y lo que distingue un apto de
+    # otro: sin esto, los dos se leen "Edificio Las Palmas" y son iguales.
+    d1, d2 = a1.to_dict(), a2.to_dict()
+    verificar("el apto 1A se identifica aparte", "1A" in (d1["nombre_completo"] or ""))
+    verificar("el apto 2B se identifica aparte", "2B" in (d2["nombre_completo"] or ""))
+    verificar("los dos apartamentos NO se ven iguales",
+              d1["nombre_completo"] != d2["nombre_completo"])
+    verificar("el apartamento se reporta por separado", d1["apartamento"] == "1A")
+
+    # La detección de duplicados del endpoint busca por (unidad, apartamento,
+    # activa). Se verifica que esa consulta encuentre el que ya existe.
+    choque = Cuenta.query.filter_by(unidad_id=edif.id, apartamento="1A",
+                                    activa=True).first()
+    verificar("un apartamento repetido se detecta antes de crearlo",
+              choque is not None and choque.id == a1.id)
+    libre = Cuenta.query.filter_by(unidad_id=edif.id, apartamento="3C",
+                                   activa=True).first()
+    verificar("un apartamento libre no da falso positivo", libre is None)
+
+    # Una casa del padrón sigue sin número de apartamento.
+    verificar("una casa del padrón no lleva apartamento",
+              db.session.get(Cuenta, 1).apartamento is None)
+
+print("\n" + "=" * 58)
+if fallos:
+    print(f"RESULTADO FINAL: {len(fallos)} verificación(es) fallaron")
+    for f in fallos:
+        print("  -", f)
+    sys.exit(1)
+print("RESULTADO FINAL: todas las verificaciones pasaron")

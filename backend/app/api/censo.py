@@ -197,26 +197,78 @@ def crear_casa_censo(usuario_actual):
     data = request.get_json(silent=True) or {}
     rid = residencial_id_heredado(usuario_actual)
 
+    # Día 69 — el padrón admite casas Y apartamentos.
+    #
+    # Al principio solo daba de alta casas. Un edificio se censa apartamento
+    # POR apartamento, igual que en el alta normal: cada apto es su propia
+    # entrada, con su titular y su gente.
+    #
+    # La razón es el portón, no el modelo de datos. Si un edificio entero
+    # fuera una sola entrada, el guardia que busca a alguien vería una lista
+    # de cuarenta personas sin saber quién vive dónde, y la foto que tiene
+    # que comparar se le pierde entre todas. Buscando "Edificio Las Palmas,
+    # Apto 3" le salen tres personas y resuelve en segundos.
+    tipo_pedido = data.get("tipo") if data.get("tipo") in ("casa", "apartamento") else "casa"
+    es_apartamento = tipo_pedido == "apartamento"
+    apartamento = (str(data.get("apartamento") or "")).strip() or None
+
+    if es_apartamento and not apartamento:
+        return _err("apartamento_requerido",
+                    "Indicá el número de apartamento (ej. 1A)", 400)
+
     unidad = None
     if data.get("unidad_id"):
         unidad = Unidad.query.filter_by(uuid_publico=data.get("unidad_id")).first()
-        if unidad and rid is not None and unidad.residencial_id != rid:
+        if not unidad:
+            return _err("unidad_invalida", "Esa unidad no existe", 400)
+        if rid is not None and unidad.residencial_id != rid:
             return _err("unidad_ajena", "Esa unidad no pertenece a tu residencial", 403)
+        # Coherencia: no se puede colgar un apartamento de una casa, ni
+        # registrar una casa apuntando a un edificio.
+        if es_apartamento and unidad.tipo != "edificio":
+            return _err("unidad_no_es_edificio",
+                        f"\"{unidad.identificador}\" es una casa, no un edificio", 400)
+        if not es_apartamento and unidad.tipo == "edificio":
+            return _err("unidad_es_edificio",
+                        f"\"{unidad.identificador}\" es un edificio: indicá el apartamento", 400)
 
     if not unidad:
         ident = (data.get("identificador") or "").strip()
         if not ident:
             return _err("datos_incompletos",
-                        "Indicá el identificador de la casa (ej. \"Casa 24\")", 400)
+                        "Indicá el identificador de la casa (ej. \"Casa 24\")"
+                        if not es_apartamento
+                        else "Indicá el nombre del edificio (ej. \"Edificio Las Palmas\")",
+                        400)
         existente = Unidad.query.filter(
             db.func.lower(Unidad.identificador) == ident.lower()).first()
         if existente:
-            return _err("duplicado",
-                        f"Ya existe una unidad llamada \"{existente.identificador}\".", 409)
-        unidad = Unidad(tipo="casa", identificador=ident, activa=True,
-                        residencial_id=rid)
-        db.session.add(unidad)
-        db.session.flush()
+            # Un EDIFICIO existente se REUTILIZA: censar el apto 2 de un
+            # edificio ya cargado no debe obligar a crearlo de nuevo. Mismo
+            # criterio que el alta normal.
+            if es_apartamento and existente.tipo == "edificio":
+                if rid is not None and existente.residencial_id != rid:
+                    return _err("unidad_ajena",
+                                "Ese edificio no pertenece a tu residencial", 403)
+                unidad = existente
+            else:
+                return _err("duplicado",
+                            f"Ya existe una unidad llamada \"{existente.identificador}\".", 409)
+        else:
+            unidad = Unidad(tipo="edificio" if es_apartamento else "casa",
+                            identificador=ident, activa=True,
+                            residencial_id=rid)
+            db.session.add(unidad)
+            db.session.flush()
+
+    # No repetir el mismo apartamento dentro del edificio. Se miran TODAS
+    # las cuentas activas, de censo y completas: el apto 3 es el apto 3
+    # participe o no esa familia.
+    if apartamento and Cuenta.query.filter_by(
+            unidad_id=unidad.id, apartamento=apartamento, activa=True).first():
+        return _err("duplicado",
+                    f"El apartamento {apartamento} ya está registrado en "
+                    f"{unidad.identificador}", 409)
 
     titular_data = data.get("titular") or {}
     persona, error = _crear_persona_censo(titular_data, usuario_actual)
@@ -225,7 +277,7 @@ def crear_casa_censo(usuario_actual):
 
     cuenta = Cuenta(
         unidad_id=unidad.id,
-        apartamento=None,
+        apartamento=apartamento,
         tarifa_id=None,          # no paga cuota
         dia_pago=None,
         modo_participacion="censo",

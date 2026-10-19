@@ -202,8 +202,16 @@ export interface ResumenPadron {
 export const listarCenso = () =>
   request<{ casas: Cuenta[]; total: number; resumen?: ResumenPadron }>("/censo");
 
+/** Da de alta una casa O un apartamento en el padrón.
+ *
+ *  Un edificio se censa apartamento por apartamento, no entero: el guardia
+ *  que busca a alguien necesita ver tres personas de un apto, no cuarenta
+ *  de todo el edificio. Para un apartamento se manda `unidad_id` (edificio
+ *  ya cargado) o `identificador` (nombre del edificio, que se crea o se
+ *  reutiliza), más `apartamento`. */
 export const crearCasaCenso = (body: {
-  identificador?: string; unidad_id?: string;
+  tipo?: "casa" | "apartamento";
+  identificador?: string; unidad_id?: string; apartamento?: string;
   titular: { nombre: string; apellido?: string; dni?: string; telefono?: string; relacion?: string };
 }) => request<{ casa: Cuenta }>("/censo/casas", {
   method: "POST", body: JSON.stringify(body),
