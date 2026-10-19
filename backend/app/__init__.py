@@ -498,6 +498,45 @@ def create_app(config_class=Config):
             # Día 29 (fix) — edificios contenedor sin cuota: tarifa/dia_pago opcionales
             "ALTER TABLE cuentas ALTER COLUMN tarifa_id DROP NOT NULL",
             "ALTER TABLE cuentas ALTER COLUMN dia_pago DROP NOT NULL",
+
+            # ── Día 69 · Padrón (censo) ──────────────────────────────────────
+            # El patronato no puede obligar a nadie a enrolarse ni a pagar,
+            # pero igual necesita trazabilidad de quién entra y sale. Por eso
+            # se carga el censo completo de la colonia, participe o no.
+            #
+            # Eso exige separar DOS cosas que hasta hoy estaban pegadas:
+            #   - estar en el padrón  → la persona existe y el guardia la
+            #     puede identificar;
+            #   - tener cuenta        → además usa la app y se le generan
+            #     cuotas.
+            #
+            # Una casa en modo 'censo' NO genera cuotas, NO entra en mora, NO
+            # recibe avisos de cobro y NO cuenta en los reportes financieros.
+            # Al convertirla a 'completa', las cuotas arrancan desde el mes en
+            # curso hacia adelante -- nunca retroactivas, porque la generación
+            # solo crea el período actual y jamás rellena meses pasados.
+            "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS modo_participacion VARCHAR(20) NOT NULL DEFAULT 'completa'",
+            "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS fecha_conversion DATE",
+
+            # Una persona del censo es un Usuario SIN credenciales: tiene
+            # nombre, identidad y foto, pero no correo ni contraseña. No son
+            # credenciales falsas, simplemente no existen -- así no hay forma
+            # de que entre al sistema. Convertirla en usuario real es llenarle
+            # el correo y generarle la contraseña: un UPDATE, sin mover datos
+            # de lugar ni duplicar su identidad en otra tabla.
+            #
+            # PostgreSQL admite múltiples NULL en un índice único, así que
+            # varias personas sin correo no chocan entre sí.
+            "ALTER TABLE usuarios ALTER COLUMN email DROP NOT NULL",
+            "ALTER TABLE usuarios ALTER COLUMN password_hash DROP NOT NULL",
+            # Marca explícita en vez de deducir "es del censo" de la ausencia
+            # de contraseña: así los listados y conteos de usuarios pueden
+            # filtrarlos sin depender de un valor nulo que mañana cambie.
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS es_censo BOOLEAN NOT NULL DEFAULT FALSE",
+            # Foto del miembro, capturada por administración (Día 68, pedido
+            # del patronato). Vive en usuarios porque ahí vive la persona,
+            # sea del censo o usuario pleno: un solo lugar, sin duplicados.
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_url VARCHAR(255)",
         ]
         for sql in columnas:
             try:

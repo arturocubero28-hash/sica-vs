@@ -45,6 +45,11 @@ def _avisar_cuotas_logica(Cuota, _notif):
         cuenta = cuota.cuenta
         if not cuenta:
             continue
+        # Día 69 — a una casa del padrón no se le manda ningún aviso de
+        # cobro. Nunca aceptó pagar nada; un recordatorio de vencimiento
+        # sería, para esa familia, un reclamo por una deuda inexistente.
+        if cuenta.es_censo:
+            continue
         # Día 51 — niveles de plan: si la residencial de esta cuenta tiene
         # un plan que no incluye cuotas, no se manda el aviso. En rigor no
         # debería ni haber cuotas generadas para residenciales así, pero
@@ -161,7 +166,16 @@ def generar_cuotas_mensuales():
         for cuenta in cuentas:
             if cuenta.id in ya_tienen:
                 continue
-            if not cuenta.tarifa:
+            # Día 69 — una sola pregunta decide si a esta cuenta le toca
+            # cobro: cobra_cuotas() cubre activa + no-censo + con tarifa.
+            # Las casas del padrón quedan fuera sin excepción.
+            #
+            # La conversión de censo a completa NO es retroactiva y no hace
+            # falta ninguna lógica extra para lograrlo: esta función solo
+            # crea el período del mes EN CURSO y nunca rellena meses
+            # anteriores, así que una casa convertida empieza a deber desde
+            # el mes en que se convirtió, no desde que se cargó al censo.
+            if not cuenta.cobra_cuotas():
                 continue
 
             cfg = _config_de(cuenta)
@@ -316,6 +330,14 @@ def revisar_mora():
             dias = (hoy - cuota.fecha_vencimiento).days
             cuenta = cuota.cuenta
             if not cuenta:
+                continue
+
+            # Día 69 — una casa del padrón nunca debería tener cuotas (no se
+            # le generan), pero si quedara alguna de antes de volverla censo,
+            # acá se ignora: no se bloquea el acceso ni se le manda aviso de
+            # cobro a quien nunca se comprometió a pagar. Defensa en
+            # profundidad, no se confía solo en la generación.
+            if cuenta.es_censo:
                 continue
 
             # Día 51 — niveles de plan: si la residencial de esta cuenta

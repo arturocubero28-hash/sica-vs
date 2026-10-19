@@ -103,6 +103,17 @@ def login():
                                   "message": "Email y contraseña son obligatorios"}}), 400
 
     usuario = Usuario.query.filter_by(email=email).first()
+    # Día 69 — una persona del padrón (censo) no tiene credenciales. Se
+    # rechaza con el MISMO mensaje genérico que una credencial inválida, para
+    # no revelar que ese correo existe en el sistema pero sin acceso: sería
+    # enumeración de usuarios, justo lo que el pentest del Día 14 confirmó
+    # que el login no permite.
+    if usuario and not usuario.puede_iniciar_sesion:
+        from flask import g
+        g.email_intento = email[:120] if email else None
+        return jsonify({"error": {"code": "credenciales_invalidas",
+                                  "message": "Email o contraseña incorrectos"}}), 401
+
     if not usuario or not usuario.check_password(password):
         from flask import g
         g.email_intento = email[:120] if email else None
@@ -252,6 +263,14 @@ def solicitar_recuperacion():
     # no la recuperación por correo. Se responde igual que si no existiera
     # el email, para no revelar el rol del usuario a quien hace la consulta.
     if usuario and usuario.rol in ROLES_CREDENCIAL_LOCAL:
+        return jsonify({"data": {"message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."}})
+
+    # Día 69 — una persona del padrón (censo) no puede "recuperar" una
+    # contraseña que nunca tuvo. Sin esta guarda, alguien del censo al que se
+    # le hubiera cargado un correo podría fijarse una contraseña por acá y
+    # entrar al sistema SIN pasar por la conversión formal que hace el
+    # administrador. La respuesta es la misma de siempre, para no revelar nada.
+    if usuario and not usuario.puede_iniciar_sesion:
         return jsonify({"data": {"message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."}})
 
     # Siempre respondemos OK para no revelar si el email existe

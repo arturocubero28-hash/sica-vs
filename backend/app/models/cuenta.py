@@ -112,6 +112,20 @@ class Cuenta(db.Model):
     # TarjetaVirtual/CredencialBLE al activarlas, así la Pi filtra igual
     # que ya filtra las tarjetas físicas por tipo_acceso.
     tipo_acceso_virtual = db.Column(db.String(20), nullable=False, default="peatonal")
+    # Día 69 — modo de participación en el sistema. Separa "estar en el
+    # padrón" de "tener cuenta":
+    #   'censo'    → la casa existe y sus habitantes son identificables por el
+    #                guardia, pero NO genera cuotas, NO entra en mora, NO
+    #                recibe avisos de cobro y NO figura en reportes
+    #                financieros. Nadie está obligado a enrolarse ni a pagar.
+    #   'completa' → lo de siempre: app, cuotas, QR, tarjetas.
+    # La estructura de la casa es la misma en ambos modos: un titular y sus
+    # dependientes.
+    modo_participacion = db.Column(db.String(20), nullable=False, default="completa")
+    # Fecha en que una casa del censo pasó a 'completa'. Se guarda como
+    # constancia de desde cuándo se le empezó a cobrar: las cuotas arrancan
+    # en el mes en curso y nunca hacia atrás.
+    fecha_conversion = db.Column(db.Date)
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -125,6 +139,27 @@ class Cuenta(db.Model):
             if r.rol_cuenta == "titular" and r.activo:
                 return r
         return None
+
+    @property
+    def es_censo(self) -> bool:
+        """
+        True si la casa está solo en el padrón: se le registran accesos para
+        trazabilidad, pero no se le cobra nada.
+
+        Es la ÚNICA forma de preguntar esto en todo el sistema. No deducirlo
+        de "no tiene tarifa": una casa puede quedar sin tarifa por error de
+        carga y eso no la convierte en censo.
+        """
+        return self.modo_participacion == "censo"
+
+    def cobra_cuotas(self) -> bool:
+        """
+        True si a esta cuenta le corresponde generar cuotas y entrar en el
+        ciclo de mora. Un solo lugar donde se decide, usado por el cron, por
+        la generación manual y por la revisión de mora, para que las tres no
+        se desincronicen.
+        """
+        return self.activa and not self.es_censo and self.tarifa is not None
 
     def tiene_deuda_vencida(self):
         """

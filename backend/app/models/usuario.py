@@ -24,7 +24,11 @@ class Usuario(db.Model):
                              default=uuid.uuid4)
     nombre = db.Column(db.String(120), nullable=False)
     apellido = db.Column(db.String(120), nullable=False)
-    email = db.Column(db.String(160), unique=True, nullable=False)
+    # Día 69 — opcional: una persona del padrón (censo) existe en el sistema
+    # para que el guardia pueda identificarla, pero no tiene correo ni usa la
+    # app. PostgreSQL admite varios NULL en un índice único, así que muchas
+    # personas sin correo conviven sin chocar entre sí.
+    email = db.Column(db.String(160), unique=True, nullable=True)
     telefono = db.Column(db.String(30))
     # Información extendida del residente (titular y dependientes)
     dni = db.Column(db.String(20))                        # número de identidad
@@ -37,7 +41,19 @@ class Usuario(db.Model):
     lugar_trabajo = db.Column(db.String(160))   # si es profesional
     contacto_emergencia_nombre = db.Column(db.String(120))
     contacto_emergencia_telefono = db.Column(db.String(30))
-    password_hash = db.Column(db.String(255), nullable=False)
+    # Día 69 — opcional por la misma razón que el correo. Sin hash NO hay
+    # forma de autenticarse: check_password() devuelve False siempre (ver
+    # abajo) y el login rechaza antes de llegar ahí.
+    password_hash = db.Column(db.String(255), nullable=True)
+    # Marca explícita de persona del padrón sin acceso al sistema. Se prefiere
+    # esta bandera a deducirlo de password_hash IS NULL, para que los listados
+    # y conteos de usuarios puedan excluirlos sin depender de un nulo.
+    es_censo = db.Column(db.Boolean, nullable=False, default=False)
+    # Foto del miembro, capturada SOLO por administración (Día 68, pedido del
+    # patronato). Es la que ve el guardia para verificar identidad, y la que
+    # el residente ve en su perfil — en modo lectura: si el propio residente
+    # pudiera cambiarla, la verificación del guardia dejaría de servir.
+    foto_url = db.Column(db.String(255))
     # rol global: super_admin | admin | guardia | residente
     # ENUM real de PostgreSQL (rol_global) — fix Día 36.
     rol = db.Column(
@@ -73,9 +89,24 @@ class Usuario(db.Model):
         ).decode("utf-8")
 
     def check_password(self, password: str) -> bool:
+        # Día 69 — guarda obligatoria: una persona del padrón no tiene hash.
+        # Sin este chequeo, password_hash en nulo reventaba acá con un
+        # AttributeError (None.encode) y el login devolvía un 500 en vez de
+        # un rechazo limpio. Sin credenciales no hay autenticación posible.
+        if not self.password_hash:
+            return False
         return bcrypt.checkpw(
             password.encode("utf-8"), self.password_hash.encode("utf-8")
         )
+
+    @property
+    def puede_iniciar_sesion(self) -> bool:
+        """
+        True solo si esta persona tiene con qué autenticarse. Las personas
+        del censo existen para que el guardia las identifique, no para entrar
+        al sistema.
+        """
+        return bool(self.email) and bool(self.password_hash) and not self.es_censo
 
     # ---- Serialización para la API (nunca expone el hash ni el id interno) ----
     def to_dict(self):

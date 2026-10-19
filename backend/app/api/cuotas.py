@@ -583,7 +583,11 @@ def generar_cuotas_manual(usuario_actual):
     for cuenta in cuentas:
         if cuenta.id in ya_tienen:
             continue
-        if not cuenta.tarifa:
+        # Día 69 — mismo criterio exacto que el cron (generar_cuotas_mensuales
+        # en tasks/mora.py): activa, no del padrón y con tarifa. Se usa el
+        # mismo método del modelo a propósito, para que las dos vías no se
+        # desincronicen como ya pasó el Día 62 con el cálculo del vencimiento.
+        if not cuenta.cobra_cuotas():
             continue
         # Día 62 — vencimiento en el MES SIGUIENTE, mismo criterio que el
         # cron automático (generar_cuotas_mensuales en tasks/mora.py).
