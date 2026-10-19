@@ -6,12 +6,13 @@ import {
   crearTarifa, editarTarifa, desactivarTarifa,
   validarCodigoEnrolamiento, toggleQrRecurrente, editarTipoAccesoVirtual, editarUnidad, editarInfoCasa,
   listarSolicitudesBaja, resolverSolicitudBaja, nivelarSaldo, getMiResidencial,
+  subirFotoResidente, urlFotoResidente,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO, type SolicitudBajaDTO,
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
 import { InfoTip } from "../../components/InfoTip";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
-import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause } from "lucide-react";
+import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera } from "lucide-react";
 
 /** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
  *  Solo acepta números y coloca los guiones automáticamente. */
@@ -1510,6 +1511,65 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
   );
 }
 
+/**
+ * Día 69 — foto del miembro, con captura y reemplazo.
+ *
+ * El patronato la pidió para la ficha del residente, y terminó siendo la
+ * pieza del flujo del guardia: cuando alguien llega sin teléfono y da su
+ * código de emergencia, esta es la cara contra la que el guardia compara
+ * la identificación. Si falta, el guardia no tiene con qué verificar.
+ *
+ * Por eso el hueco vacío es un botón grande y visible con un "+" y no un
+ * ícono discreto: que se note a quién le falta, sin tener que abrir nada.
+ *
+ * La captura es SOLO de administración. El residente la ve en su perfil
+ * pero no la puede cambiar -- si pudiera, pondría la cara de cualquiera y
+ * la verificación del guardia dejaría de servir.
+ */
+function FotoResidente({ residente, cuentaId, onActualizado }: {
+  residente: ResidenteDTO; cuentaId: string; onActualizado: () => void;
+}) {
+  const [subiendo, setSubiendo] = useState(false);
+  const [error, setError] = useState("");
+
+  async function subir(archivo: File) {
+    setSubiendo(true); setError("");
+    try {
+      await subirFotoResidente(cuentaId, residente.id, archivo);
+      onActualizado();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSubiendo(false);
+    }
+  }
+
+  const tiene = !!residente.foto_url;
+  return (
+    <label
+      className={`foto-residente ${tiene ? "con-foto" : "sin-foto"}`}
+      title={subiendo ? "Subiendo…"
+        : tiene ? `Reemplazar la foto de ${residente.nombre}`
+        : `Tomar la foto de ${residente.nombre}`}
+      style={{ cursor: subiendo ? "wait" : "pointer" }}
+    >
+      {tiene
+        ? <img src={urlFotoResidente(residente.foto_url!)} alt={residente.nombre} />
+        : <Camera size={15} />}
+      {!tiene && !subiendo && <span className="foto-residente-mas">+</span>}
+      {subiendo && <span className="foto-residente-cargando">…</span>}
+      <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+        disabled={subiendo}
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) subir(f);
+          e.target.value = ""; // permite volver a elegir el mismo archivo
+        }} />
+      {error && <span className="foto-residente-error" title={error}>!</span>}
+    </label>
+  );
+}
+
 function FilaResidente({ residente, cuentaId, onActualizado }: {
   residente: ResidenteDTO; cuentaId: string; onActualizado: () => void;
 }) {
@@ -1582,6 +1642,11 @@ function FilaResidente({ residente, cuentaId, onActualizado }: {
   return (
     <div className={`residente-fila ${esPendiente ? "residente-pendiente" : ""}`}>
       <div className="residente-cabecera">
+        {/* Día 69 — la foto del miembro, pedido del patronato. Va en la
+            CABECERA y no escondida en el detalle: es lo que el guardia ve
+            en el portón para verificar identidad, así que administración
+            tiene que notar de un vistazo a quién le falta. */}
+        <FotoResidente residente={residente} cuentaId={cuentaId} onActualizado={onActualizado} />
         <span className="residente-nombre">{residente.nombre}</span>
         <span className="pill">{residente.rol_cuenta}</span>
         <span className="muted small">{residente.relacion}</span>

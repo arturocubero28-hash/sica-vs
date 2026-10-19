@@ -4200,3 +4200,37 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
   .censo-persona { flex-wrap: wrap; }
   .censo-persona .casa-acciones { width: 100%; justify-content: flex-end; }
 }
+
+/* ── Foto del miembro en la ficha del residente (Día 69) ─────────────────
+   Va en la cabecera de cada residente, no escondida en el detalle: es la
+   cara que el guardia compara contra la identificación cuando alguien
+   llega sin teléfono, así que administración tiene que ver de un vistazo
+   a quién le falta. El hueco vacío se marca con borde punteado y un "+"
+   justamente para que se note. */
+.foto-residente {
+  position: relative; flex-shrink: 0;
+  width: 38px; height: 38px; border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center;
+  overflow: hidden; transition: border-color .12s, background .12s;
+}
+.foto-residente.con-foto { border: 1.5px solid #d6deea; }
+.foto-residente.sin-foto {
+  border: 1.5px dashed #c3cedd; background: #f4f7fb; color: var(--gris);
+}
+.foto-residente.sin-foto:hover { border-color: var(--marca-naranja); color: var(--marca-naranja); }
+.foto-residente.con-foto:hover { border-color: var(--marca-azul-2); }
+.foto-residente img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.foto-residente-mas {
+  position: absolute; right: -1px; bottom: -2px;
+  font-size: 13px; font-weight: 800; line-height: 1;
+  color: #fff; background: var(--marca-naranja);
+  width: 15px; height: 15px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.foto-residente-cargando { font-size: 16px; font-weight: 800; color: var(--marca-azul-2); }
+.foto-residente-error {
+  position: absolute; right: -1px; top: -2px;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: #c81e1e; color: #fff; font-size: 11px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}

@@ -148,21 +148,38 @@ export function CensoPanel() {
                             </button>
                             <div className="casa-cell-txt">
                               <span className="casa-id">{casa.identificador || "—"}</span>
-                              <span className="casa-titular">Solo padrón</span>
+                              {/* Se dice cuántas personas hay y que se toca
+                                  para verlas. La fila se expandía con un
+                                  chevron sin explicación, así que las fotos
+                                  y los miembros quedaban escondidos ahí. */}
+                              <span className="casa-titular">
+                                Solo padrón · {gente.length === 0
+                                  ? "sin personas"
+                                  : `tocá para ver ${gente.length === 1
+                                      ? "la persona y su foto"
+                                      : `las ${gente.length} personas y sus fotos`}`}
+                              </span>
                             </div>
                           </div>
                         </td>
                         <td><span className="pill">{gente.length}</span></td>
                         <td className="small">{casa.titular?.nombre || "—"}</td>
                         <td>
+                          {/* Botones CON TEXTO a propósito. Antes eran dos
+                              íconos pelados, uno al lado del otro, que solo
+                              se distinguían pasando el mouse por encima --
+                              en la práctica, invisibles: nadie encontraba
+                              dónde agregar a los familiares. */}
                           <div className="casa-acciones">
-                            <button className="icono-accion" title="Agregar una persona a esta casa"
+                            <button className="btn-tabla btn-tabla-neutro"
+                              title="Agregar un familiar o miembro a esta casa"
                               onClick={() => setModalPersona(casa)}>
-                              <UserPlus size={16} />
+                              <UserPlus size={14} /> Agregar persona
                             </button>
-                            <button className="icono-accion" title="Esta familia decidió sumarse al sistema"
+                            <button className="btn-tabla btn-tabla-ok"
+                              title="Esta familia decidió sumarse al sistema y pagar cuota"
                               onClick={() => setModalConvertir(casa)}>
-                              <ArrowUpRight size={16} />
+                              <ArrowUpRight size={14} /> Sumar al sistema
                             </button>
                           </div>
                         </td>
@@ -348,12 +365,12 @@ function ModalCasaCenso({ onCerrar, onListo, onError }: {
   }
 
   return (
-    <div className="modal">
-      <div className="modal-head">
-        <h3>Agregar casa al padrón</h3>
-        <button className="ghost mini" onClick={onCerrar}>✕</button>
-      </div>
-      <div className="modal-body">
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>Agregar casa al padrón</h3>
+          <button className="ghost mini" onClick={onCerrar}>✕</button>
+        </div>
         <p className="muted small">
           No se pide tarifa ni día de pago: esta casa no paga nada. Solo queda
           registrada para que sus accesos tengan nombre.
@@ -414,12 +431,12 @@ function ModalPersonaCenso({ casa, onCerrar, onListo, onError }: {
   }
 
   return (
-    <div className="modal">
-      <div className="modal-head">
-        <h3>Agregar persona a {casa.identificador}</h3>
-        <button className="ghost mini" onClick={onCerrar}>✕</button>
-      </div>
-      <div className="modal-body">
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>Agregar persona a {casa.identificador}</h3>
+          <button className="ghost mini" onClick={onCerrar}>✕</button>
+        </div>
         <div className="form-field">
           <label>Nombre</label>
           <input value={nombre} onChange={e => setNombre(e.target.value)} />
@@ -479,12 +496,12 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
   }
 
   return (
-    <div className="modal">
-      <div className="modal-head">
-        <h3>{casa.identificador} se suma al sistema</h3>
-        <button className="ghost mini" onClick={onCerrar}>✕</button>
-      </div>
-      <div className="modal-body">
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>{casa.identificador} se suma al sistema</h3>
+          <button className="ghost mini" onClick={onCerrar}>✕</button>
+        </div>
         <div className="ok-box">
           Las cuotas empiezan a generarse <strong>desde el mes en curso</strong>.
           No se le cobran los meses en que la casa estuvo solo en el padrón.
@@ -536,12 +553,12 @@ function ModalDarAcceso({ persona, onCerrar, onListo, onError }: {
   }
 
   return (
-    <div className="modal">
-      <div className="modal-head">
-        <h3>Dar acceso a {persona.nombre}</h3>
-        <button className="ghost mini" onClick={onCerrar}>✕</button>
-      </div>
-      <div className="modal-body">
+    <div className="modal" onClick={onCerrar}>
+      <div className="modal-body" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3>Dar acceso a {persona.nombre}</h3>
+          <button className="ghost mini" onClick={onCerrar}>✕</button>
+        </div>
         <p className="muted small">
           Se le crea el acceso sobre su misma ficha, así que conserva todo su
           historial de entradas y salidas. Va a recibir un correo para definir
