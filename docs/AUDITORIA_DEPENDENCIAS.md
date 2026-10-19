@@ -36,8 +36,17 @@ grep -rn "react-router\|BrowserRouter\|useNavigate\|<Link" src/
 La navegación del panel es estado de React (`seccion` en `App.tsx`), no
 rutas. La dependencia era un resto de un andamiaje temprano.
 
-**Acción: se eliminó.** No se actualizó — se borró. Cuatro avisos menos,
-y el bundle principal bajó de 1084 kB a 1061 kB.
+**Acción: se eliminó.** No se actualizó — se borró. Cuatro avisos menos.
+
+El bundle **no cambió ni un byte**, y eso es lo esperado: Vite solo empaqueta
+lo que se importa, y esto no se importaba desde ningún lado. El chunk
+principal quedó con el mismo hash (`index-CxdvomHn.js`, 1 086 645 bytes)
+antes y después de borrarla.
+
+Lo que sí se reduce es otra cosa, y es la que importa acá: tres paquetes
+menos en `node_modules`, cuatro avisos menos en cada auditoría, y una
+dependencia menos de la cual depender si mañana alguien la compromete. La
+superficie de cadena de suministro no se mide en el bundle.
 
 ### browserslist, nanoid, postcss, source-map-js, baseline-browser-mapping
 
