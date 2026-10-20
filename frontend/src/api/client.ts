@@ -210,8 +210,14 @@ export const listarCenso = () =>
  *  ya cargado) o `identificador` (nombre del edificio, que se crea o se
  *  reutiliza), más `apartamento`. */
 export const crearCasaCenso = (body: {
-  tipo?: "casa" | "apartamento";
+  /** Día 70 — misma forma que el alta normal: el edificio se registra
+   *  primero con su dueño ("edificio"), y después sus apartamentos. */
+  tipo?: "casa" | "edificio" | "apartamento";
   identificador?: string; unidad_id?: string; apartamento?: string;
+  /** Solo edificio: true = el dueño vive en `apartamento` (paga como ese
+   *  apartamento); false = solo administra (cuenta contenedora, sin cuota). */
+  dueno_vive?: boolean;
+  max_apartamentos?: number;
   titular: { nombre: string; apellido?: string; dni?: string; telefono?: string; relacion?: string };
 }) => request<{ casa: Cuenta }>("/censo/casas", {
   method: "POST", body: JSON.stringify(body),

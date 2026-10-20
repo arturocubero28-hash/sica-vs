@@ -62,24 +62,38 @@ export function CensoPanel() {
     return `${c.nombre_completo || c.identificador || ""} ${c.apartamento || ""} ${gente}`.toLowerCase().includes(q);
   });
 
-  // Un edificio del padrón son DOS cosas: su cuenta contenedora (que
-  // representa al edificio) y los apartamentos que cuelgan de ella. Sin
-  // agrupar, los apartamentos se ven como filas sueltas y el edificio como
-  // una fila vacía más — que es justamente la estructura que después rompe
-  // al convertirlos a cuenta completa.
-  const contenedoras = filtradas.filter(c => c.tipo_cuenta === "edificio_contenedor");
-  const sueltas = filtradas.filter(c => c.tipo_cuenta !== "edificio_contenedor"
-    && c.tipo_cuenta !== "apartamento");
-  const aptosPorEdificio = new Map<string, Cuenta[]>();
+  // Día 70 — un edificio del padrón tiene la MISMA forma que en el alta
+  // normal, porque convertirlo es un cambio de modo y no una migración:
+  //   - dueño que solo administra -> cuenta contenedora ("edificio_contenedor"),
+  //     que nunca paga cuota;
+  //   - dueño que vive ahí        -> su apartamento es la administración
+  //     ("edificio_admin"), y no hay contenedora;
+  //   - inquilinos                -> apartamentos ("apartamento").
+  // Se agrupan bajo una cabecera por edificio, con la administración
+  // primero, igual que en "Casas y residentes".
+  const esDeEdificio = (c: Cuenta) => c.tipo_cuenta === "edificio_contenedor"
+    || c.tipo_cuenta === "edificio_admin" || c.tipo_cuenta === "apartamento";
+  const sueltas = filtradas.filter(c => !esDeEdificio(c));
+  const porEdificio = new Map<string, Cuenta[]>();
   for (const c of filtradas) {
-    if (c.tipo_cuenta !== "apartamento") continue;
+    if (!esDeEdificio(c)) continue;
     const clave = c.identificador || "—";
-    aptosPorEdificio.set(clave, [...(aptosPorEdificio.get(clave) || []), c]);
+    porEdificio.set(clave, [...(porEdificio.get(clave) || []), c]);
   }
-  // Un apartamento cuyo edificio no quedó en el filtro igual tiene que
-  // mostrarse: si no, buscar el nombre de un inquilino no devolvería nada.
-  const edificiosHuerfanos = [...aptosPorEdificio.keys()].filter(
-    k => !contenedoras.some(c => (c.identificador || "—") === k));
+  const orden = (c: Cuenta) =>
+    c.tipo_cuenta === "edificio_contenedor" ? 0 : c.tipo_cuenta === "edificio_admin" ? 1 : 2;
+  for (const lista of porEdificio.values()) {
+    lista.sort((a, b) => orden(a) - orden(b)
+      || (a.apartamento || "").localeCompare(b.apartamento || "", "es", { numeric: true }));
+  }
+  /** Quién es el dueño y si vive ahí, para la cabecera del edificio. */
+  function dueno(lista: Cuenta[]): string {
+    const cont = lista.find(c => c.tipo_cuenta === "edificio_contenedor");
+    if (cont?.titular) return `Dueño: ${cont.titular.nombre} · solo administra`;
+    const adm = lista.find(c => c.tipo_cuenta === "edificio_admin");
+    if (adm?.titular) return `Dueño: ${adm.titular.nombre} · vive en el apto ${adm.apartamento}`;
+    return "Sin dueño registrado";
+  }
 
   const totalPersonas = casas.reduce((n, c) => n + (c.residentes?.length || 0), 0);
 
@@ -87,7 +101,7 @@ export function CensoPanel() {
     <div className="censo-panel">
       <div className="lista-head">
         <h2>Padrón de la residencial</h2>
-        <button className="btn-accion" onClick={() => setModalCasa(true)}>+ Agregar casa al padrón</button>
+        <button className="btn-accion" onClick={() => setModalCasa(true)}>+ Agregar al padrón</button>
       </div>
 
       <p className="muted small" style={{ marginTop: -4, marginBottom: 12, maxWidth: 680 }}>
@@ -153,27 +167,19 @@ export function CensoPanel() {
                 <tr><th>Casa</th><th>Personas</th><th>Titular</th><th></th></tr>
               </thead>
               <tbody>
-                {/* Primero las casas sueltas; después cada edificio con sus
-                    apartamentos colgando. */}
+                {/* Primero las casas sueltas; después cada edificio con su
+                    administración y sus apartamentos colgando. */}
                 {[
-                  ...sueltas.map(c => ({ tipo: "casa" as const, casa: c })),
-                  ...contenedoras.map(c => ({ tipo: "edificio" as const, casa: c })),
-                  ...edificiosHuerfanos.map(k => ({ tipo: "edificio-suelto" as const, nombre: k })),
-                ].flatMap(item => {
-                  if (item.tipo === "casa") return [{ casa: item.casa, sangria: false }];
-                  const nombre = item.tipo === "edificio"
-                    ? (item.casa.identificador || "—") : item.nombre;
-                  const aptos = aptosPorEdificio.get(nombre) || [];
-                  return [
-                    { encabezado: nombre, aptos: aptos.length,
-                      casa: item.tipo === "edificio" ? item.casa : undefined },
-                    ...aptos.map(a => ({ casa: a, sangria: true })),
-                  ];
-                }).map((fila, i) => {
+                  ...sueltas.map(c => ({ casa: c, sangria: false })),
+                  ...[...porEdificio.entries()].flatMap(([nombre, lista]) => [
+                    { encabezado: nombre,
+                      aptos: lista.filter(c => c.tipo_cuenta !== "edificio_contenedor").length,
+                      dueno: dueno(lista) },
+                    ...lista.map(c => ({ casa: c, sangria: true })),
+                  ]),
+                ].map((fila, i) => {
                   // Cabecera de edificio: no es una familia, es el edificio.
-                  // Se muestra para que los apartamentos tengan de dónde
-                  // colgar visualmente, igual que en "Casas y residentes".
-                  if ("encabezado" in fila && fila.encabezado) {
+                  if ("encabezado" in fila) {
                     return (
                       <tr key={`ed-${fila.encabezado}-${i}`} className="censo-fila-edificio">
                         <td colSpan={4}>
@@ -182,9 +188,9 @@ export function CensoPanel() {
                             <div className="casa-cell-txt">
                               <span className="casa-id">{fila.encabezado}</span>
                               <span className="casa-titular">
-                                Edificio · {fila.aptos === 0
+                                Edificio · {fila.dueno} · {fila.aptos === 0
                                   ? "sin apartamentos en el padrón"
-                                  : `${fila.aptos} apartamento${fila.aptos === 1 ? "" : "s"} en el padrón`}
+                                  : `${fila.aptos} apartamento${fila.aptos === 1 ? "" : "s"}`}
                               </span>
                             </div>
                           </div>
@@ -192,8 +198,9 @@ export function CensoPanel() {
                       </tr>
                     );
                   }
-                  const casa = fila.casa!;
-                  const sangria = "sangria" in fila && fila.sangria;
+                  const casa = fila.casa;
+                  const sangria = fila.sangria;
+                  const esContenedora = casa.tipo_cuenta === "edificio_contenedor";
                   const expandida = abierta === casa.id;
                   const gente = casa.residentes || [];
                   return (
@@ -207,7 +214,15 @@ export function CensoPanel() {
                               {expandida ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </button>
                             <div className="casa-cell-txt">
-                              <span className="casa-id">{casa.nombre_completo || casa.identificador || "—"}</span>
+                              <span className="casa-id">
+                                {esContenedora
+                                  ? "Administración del edificio"
+                                  : casa.tipo_cuenta === "edificio_admin"
+                                    ? `Apto ${casa.apartamento} · vive el dueño`
+                                    : casa.tipo_cuenta === "apartamento"
+                                      ? `Apto ${casa.apartamento}`
+                                      : (casa.nombre_completo || casa.identificador || "—")}
+                              </span>
                               {/* Se dice cuántas personas hay y que se toca
                                   para verlas. La fila se expandía con un
                                   chevron sin explicación, así que las fotos
@@ -231,13 +246,20 @@ export function CensoPanel() {
                               en la práctica, invisibles: nadie encontraba
                               dónde agregar a los familiares. */}
                           <div className="casa-acciones">
-                            <button className="btn-tabla btn-tabla-neutro"
-                              title="Agregar un familiar o miembro a esta casa"
-                              onClick={() => setModalPersona(casa)}>
-                              <UserPlus size={14} /> Agregar persona
-                            </button>
+                            {/* La administración de un edificio cuyo dueño
+                                no vive ahí no tiene familia que agregar: es
+                                solo el dueño, igual que en el alta normal. */}
+                            {!esContenedora && (
+                              <button className="btn-tabla btn-tabla-neutro"
+                                title="Agregar un familiar o miembro"
+                                onClick={() => setModalPersona(casa)}>
+                                <UserPlus size={14} /> Agregar persona
+                              </button>
+                            )}
                             <button className="btn-tabla btn-tabla-ok"
-                              title="Esta familia decidió sumarse al sistema y pagar cuota"
+                              title={esContenedora
+                                ? "El dueño se suma al sistema; no paga cuota"
+                                : "Esta familia decidió sumarse al sistema y pagar cuota"}
                               onClick={() => setModalConvertir(casa)}>
                               <ArrowUpRight size={14} /> Sumar al sistema
                             </button>
@@ -395,13 +417,16 @@ function FilaPersonas({ casa, onMsg, onCambio, onDarAcceso }: {
 function ModalCasaCenso({ onCerrar, onListo, onError }: {
   onCerrar: () => void; onListo: (nombre: string) => void; onError: (t: string) => void;
 }) {
-  // Día 69 — un edificio se censa apartamento POR apartamento, no entero.
-  // No es un capricho del modelo: el guardia que busca a alguien tiene que
-  // ver las tres personas de un apto, no las cuarenta del edificio, y la
-  // foto que debe comparar se le perdería en esa lista.
-  const [tipo, setTipo] = useState<"casa" | "apartamento">("casa");
+  // Día 70 — mismas tres formas que el alta normal. Un edificio se registra
+  // PRIMERO, con su dueño, y después sus apartamentos: si el padrón armara
+  // los edificios de otra manera, al convertirlos a cuenta completa
+  // aterrizarían en "Casas y residentes" con una forma que el resto del
+  // sistema no sabe mostrar.
+  const [tipo, setTipo] = useState<"casa" | "edificio" | "apartamento">("casa");
   const [identificador, setIdentificador] = useState("");
-  const [edificioId, setEdificioId] = useState("");   // "" = escribir uno nuevo
+  const [maxAptos, setMaxAptos] = useState("");
+  const [duenoVive, setDuenoVive] = useState<boolean | null>(null);
+  const [edificioId, setEdificioId] = useState("");
   const [apartamento, setApartamento] = useState("");
   const [edificios, setEdificios] = useState<Unidad[]>([]);
   const [nombre, setNombre] = useState("");
@@ -410,49 +435,44 @@ function ModalCasaCenso({ onCerrar, onListo, onError }: {
   const [telefono, setTelefono] = useState("");
   const [guardando, setGuardando] = useState(false);
 
-  // Los edificios ya cargados se ofrecen en una lista para no volver a
-  // escribir el nombre en cada apartamento — es la forma más fácil de
-  // terminar con "Edificio Las Palmas" y "Edif. Las Palmas" conviviendo.
   useEffect(() => {
     listarUnidades()
       .then(us => setEdificios(us.filter(u => u.tipo === "edificio")))
-      .catch(() => { /* si falla, siempre queda escribirlo a mano */ });
+      .catch(() => { /* sin lista, el formulario de apartamento lo avisa */ });
   }, []);
-
-  const esApto = tipo === "apartamento";
 
   async function guardar() {
     if (!nombre.trim()) { onError("Indicá el nombre del titular"); return; }
-    if (esApto) {
-      if (!edificioId && !identificador.trim()) {
-        onError("Elegí un edificio o escribí el nombre de uno nuevo");
-        return;
-      }
+    if (tipo === "casa" && !identificador.trim()) {
+      onError("Indicá el identificador de la casa"); return;
+    }
+    if (tipo === "edificio") {
+      if (!identificador.trim()) { onError("Indicá el nombre del edificio"); return; }
+      if (duenoVive === null) { onError("Indicá si el dueño vive en el edificio o solo lo administra"); return; }
+      if (duenoVive && !apartamento.trim()) { onError("Indicá en qué apartamento vive el dueño"); return; }
+    }
+    if (tipo === "apartamento") {
+      if (!edificioId) { onError("Elegí el edificio"); return; }
       if (!apartamento.trim()) { onError("Indicá el número de apartamento"); return; }
-    } else if (!identificador.trim()) {
-      onError("Indicá el identificador de la casa");
-      return;
     }
 
     setGuardando(true);
     try {
       await crearCasaCenso({
         tipo,
-        // Para un apartamento va el edificio elegido, o su nombre si es nuevo.
-        unidad_id: esApto && edificioId ? edificioId : undefined,
-        identificador: (esApto && edificioId) ? undefined : identificador.trim(),
-        apartamento: esApto ? apartamento.trim() : undefined,
+        identificador: tipo === "apartamento" ? undefined : identificador.trim(),
+        unidad_id: tipo === "apartamento" ? edificioId : undefined,
+        apartamento: (tipo === "apartamento" || (tipo === "edificio" && duenoVive))
+          ? apartamento.trim() : undefined,
+        dueno_vive: tipo === "edificio" ? !!duenoVive : undefined,
+        max_apartamentos: tipo === "edificio" && maxAptos ? Number(maxAptos) : undefined,
         titular: {
           nombre: nombre.trim(), apellido: apellido.trim(),
           dni: dni.trim() || undefined, telefono: telefono.trim() || undefined,
         },
       });
-      const etiqueta = esApto
-        ? `${edificioId
-              ? (edificios.find(e => e.id === edificioId)?.identificador ?? "El edificio")
-              : identificador.trim()} · Apto ${apartamento.trim()}`
-        : identificador.trim();
-      onListo(etiqueta);
+      const nombreEd = edificios.find(e => e.id === edificioId)?.identificador ?? "El edificio";
+      onListo(tipo === "apartamento" ? `${nombreEd} · Apto ${apartamento.trim()}` : identificador.trim());
     } catch (e) {
       onError((e as Error).message);
     } finally {
@@ -460,83 +480,134 @@ function ModalCasaCenso({ onCerrar, onListo, onError }: {
     }
   }
 
+  const etiquetaTitular = tipo === "edificio" ? "Nombre del dueño del edificio" : "Nombre del titular";
+
   return (
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>Agregar casa al padrón</h3>
+          <h3>Agregar al padrón</h3>
           <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
         <p className="muted small">
-          No se pide tarifa ni día de pago: no paga nada. Solo queda
-          registrada para que sus accesos tengan nombre.
+          No se pide tarifa ni día de pago: en el padrón nadie paga. Solo queda
+          registrado para que sus accesos tengan nombre.
         </p>
 
         <div className="form-field">
           <label>¿Qué estás registrando?</label>
           <div className="tabs" style={{ marginBottom: 0 }}>
             <button type="button" className={tipo === "casa" ? "tab on" : "tab"}
-              onClick={() => setTipo("casa")}>Una casa</button>
+              onClick={() => setTipo("casa")}>Casa</button>
+            <button type="button" className={tipo === "edificio" ? "tab on" : "tab"}
+              onClick={() => setTipo("edificio")}>Edificio</button>
             <button type="button" className={tipo === "apartamento" ? "tab on" : "tab"}
-              onClick={() => setTipo("apartamento")}>Un apartamento</button>
+              onClick={() => setTipo("apartamento")}>Apartamento</button>
           </div>
         </div>
 
-        {!esApto ? (
+        {tipo === "casa" && (
           <div className="form-field">
             <label>Casa</label>
             <input value={identificador} onChange={e => setIdentificador(e.target.value)}
               placeholder="Casa 24" />
           </div>
-        ) : (
+        )}
+
+        {tipo === "edificio" && (
           <>
             <p className="muted small" style={{ marginTop: 0 }}>
-              Cada apartamento se registra por separado, con su propio titular.
-              Así el guardia que busca a alguien ve a su familia y no a todo
-              el edificio.
+              Primero se registra el edificio con su dueño. Los inquilinos se
+              agregan después, cada uno como "Apartamento".
             </p>
             <div className="form-field">
-              <label>Edificio</label>
-              {edificios.length > 0 && (
+              <label>Nombre del edificio</label>
+              <input value={identificador} onChange={e => setIdentificador(e.target.value)}
+                placeholder="Edificio Las Palmas" />
+            </div>
+            <div className="form-field">
+              <label>Cantidad de apartamentos (opcional)</label>
+              <input type="number" min={1} value={maxAptos}
+                onChange={e => setMaxAptos(e.target.value)} placeholder="12" />
+            </div>
+            <div className="form-field">
+              {/* La misma pregunta que el alta normal. Define la forma del
+                  edificio: si el dueño solo administra, su cuenta nunca
+                  paga cuota; si vive ahí, paga como su apartamento. */}
+              <label>¿El dueño vive en el edificio?</label>
+              <div className="tabs" style={{ marginBottom: 0 }}>
+                <button type="button" className={duenoVive === false ? "tab on" : "tab"}
+                  onClick={() => setDuenoVive(false)}>No, solo lo administra</button>
+                <button type="button" className={duenoVive === true ? "tab on" : "tab"}
+                  onClick={() => setDuenoVive(true)}>Sí, vive en un apartamento</button>
+              </div>
+              {duenoVive === false && (
+                <p className="muted small" style={{ marginTop: 6 }}>
+                  Cuando se sume al sistema no se le va a generar cuota.
+                </p>
+              )}
+            </div>
+            {duenoVive === true && (
+              <div className="form-field">
+                <label>Apartamento donde vive el dueño</label>
+                <input value={apartamento} onChange={e => setApartamento(e.target.value)}
+                  placeholder="1A" />
+              </div>
+            )}
+          </>
+        )}
+
+        {tipo === "apartamento" && (
+          edificios.length === 0 ? (
+            <p className="muted small">
+              Todavía no hay edificios registrados. Registrá primero el edificio
+              con su dueño (opción "Edificio") y después sus apartamentos.
+            </p>
+          ) : (
+            <>
+              <div className="form-field">
+                <label>Edificio</label>
                 <select value={edificioId} onChange={e => setEdificioId(e.target.value)}>
-                  <option value="">— Escribir un edificio nuevo —</option>
+                  <option value="">— Elegí el edificio —</option>
                   {edificios.map(ed => (
                     <option key={ed.id} value={ed.id}>{ed.identificador}</option>
                   ))}
                 </select>
-              )}
-              {!edificioId && (
-                <input value={identificador} onChange={e => setIdentificador(e.target.value)}
-                  placeholder="Edificio Las Palmas"
-                  style={{ marginTop: edificios.length > 0 ? 8 : 0 }} />
-              )}
+              </div>
+              <div className="form-field">
+                <label>Apartamento</label>
+                <input value={apartamento} onChange={e => setApartamento(e.target.value)}
+                  placeholder="2B" />
+              </div>
+            </>
+          )
+        )}
+
+        {!(tipo === "apartamento" && edificios.length === 0) && (
+          <>
+            <div className="form-field">
+              <label>{etiquetaTitular}</label>
+              <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Juan" />
             </div>
             <div className="form-field">
-              <label>Apartamento</label>
-              <input value={apartamento} onChange={e => setApartamento(e.target.value)}
-                placeholder="1A" />
+              <label>Apellido</label>
+              <input value={apellido} onChange={e => setApellido(e.target.value)} placeholder="Pérez" />
             </div>
+            <div className="form-field">
+              {/* Muy recomendada: es con lo que el guardia compara cuando la
+                  persona llega sin código a pedir que le abran. */}
+              <label>Identidad (la usa el guardia para verificar en el portón)</label>
+              <input value={dni} onChange={e => setDni(e.target.value)} placeholder="0000-0000-00000" />
+            </div>
+            <div className="form-field">
+              <label>Teléfono (opcional)</label>
+              <input value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="9999-9999" />
+            </div>
+            <button onClick={guardar} disabled={guardando}>
+              {guardando ? "Guardando…" : "Agregar al padrón"}
+            </button>
           </>
         )}
-        <div className="form-field">
-          <label>Nombre del titular</label>
-          <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Juan" />
-        </div>
-        <div className="form-field">
-          <label>Apellido</label>
-          <input value={apellido} onChange={e => setApellido(e.target.value)} placeholder="Pérez" />
-        </div>
-        <div className="form-field">
-          <label>Identidad (opcional)</label>
-          <input value={dni} onChange={e => setDni(e.target.value)} placeholder="0000-0000-00000" />
-        </div>
-        <div className="form-field">
-          <label>Teléfono (opcional)</label>
-          <input value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="9999-9999" />
-        </div>
-        <button onClick={guardar} disabled={guardando}>
-          {guardando ? "Guardando…" : "Agregar al padrón"}
-        </button>
       </div>
     </div>
   );
@@ -613,19 +684,25 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
   const [tarifaId, setTarifaId] = useState<number | "">("");
   const [diaPago, setDiaPago] = useState(1);
   const [guardando, setGuardando] = useState(false);
+  // Día 70 — la administración de un edificio cuyo dueño no vive ahí no
+  // paga cuota nunca (igual que en el alta normal): no se le pide tarifa.
+  const esContenedora = casa.tipo_cuenta === "edificio_contenedor";
+  const titulo = esContenedora
+    ? `${casa.identificador} · administración`
+    : (casa.nombre_completo || casa.identificador);
 
   useEffect(() => {
-    listarTarifas().then(setTarifas).catch(() => setTarifas([]));
-  }, []);
+    if (!esContenedora) listarTarifas().then(setTarifas).catch(() => setTarifas([]));
+  }, [esContenedora]);
 
   async function convertir() {
     setGuardando(true);
     try {
-      const r = await convertirCasaCenso(casa.id, {
+      const r = await convertirCasaCenso(casa.id, esContenedora ? {} : {
         tarifa_id: tarifaId === "" ? undefined : Number(tarifaId),
         dia_pago: diaPago,
       });
-      onListo(`${casa.nombre_completo || casa.identificador} ya participa del sistema. ${r.nota}`);
+      onListo(`${titulo} ya participa del sistema. ${r.nota}`);
     } catch (e) {
       onError((e as Error).message);
     } finally {
@@ -637,12 +714,19 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
     <div className="modal" onClick={onCerrar}>
       <div className="modal-body" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>{casa.nombre_completo || casa.identificador} se suma al sistema</h3>
+          <h3>{titulo} se suma al sistema</h3>
           <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
+        {esContenedora ? (
+          <div className="ok-box">
+            El dueño solo administra el edificio, así que <strong>no se le genera
+            cuota</strong>. Las cuotas las pagan los apartamentos.
+          </div>
+        ) : (
+        <>
         <div className="ok-box">
           Las cuotas empiezan a generarse <strong>desde el mes en curso</strong>.
-          No se le cobran los meses en que la casa estuvo solo en el padrón.
+          No se le cobran los meses en que estuvo solo en el padrón.
         </div>
         <div className="form-field">
           <label>Tarifa</label>
@@ -658,12 +742,14 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
           <input type="number" min={1} max={30} value={diaPago}
             onChange={e => setDiaPago(Number(e.target.value))} />
         </div>
+        </>
+        )}
         <p className="muted small">
           Después de convertirla, dale acceso a la app a cada persona que lo necesite
           desde la lista de la casa.
         </p>
         <button onClick={convertir} disabled={guardando}>
-          {guardando ? "Convirtiendo…" : "Convertir a casa completa"}
+          {guardando ? "Convirtiendo…" : "Sumar al sistema"}
         </button>
       </div>
     </div>

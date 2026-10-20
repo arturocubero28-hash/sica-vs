@@ -185,158 +185,184 @@ def listar_censo(usuario_actual):
 @roles_required("admin", "super_admin")
 def crear_casa_censo(usuario_actual):
     """
-    Da de alta una casa en el padrón, con su titular.
+    Da de alta en el padrón una casa, un edificio o un apartamento, con su
+    titular. Sigue EXACTAMENTE la misma estructura que el alta normal
+    (cuentas.crear_cuenta), porque convertir del padrón a cuenta completa es
+    un cambio de modo, no una migración: si la estructura no coincide, la
+    conversión produce datos que el resto del sistema no sabe mostrar.
 
     Body:
-      {
-        "identificador": "Casa 24",          (o "unidad_id" si ya existe)
-        "titular": { "nombre", "apellido", "dni", "telefono" }
-      }
+      { "tipo": "casa", "identificador": "Casa 24", "titular": {...} }
 
-    NO se piden tarifa ni día de pago: esta casa no paga nada. Tampoco se
-    aplica la regla anti-mora que sí corre en el alta normal — esa regla
-    impide que alguien con deuda en otra casa se dé de alta en una nueva, y
-    acá no se está contrayendo ninguna obligación. Bloquear el censo por una
-    deuda dejaría a esa familia fuera de la trazabilidad, que es
-    exactamente lo contrario de lo que se busca.
+      { "tipo": "edificio", "identificador": "Edificio Las Palmas",
+        "dueno_vive": false, "max_apartamentos": 12, "titular": {...} }
+          -> el dueño SOLO ADMINISTRA: cuenta contenedora a su nombre, sin
+             apartamento y sin cuota (igual que es_solo_contenedor).
+
+      { "tipo": "edificio", "identificador": "Edificio Las Palmas",
+        "dueno_vive": true, "apartamento": "1A", "titular": {...} }
+          -> el dueño VIVE en el 1A: ese apartamento queda a su nombre como
+             administrador del edificio. No hay contenedora (igual que el
+             alta normal con "el dueño vive en el edificio").
+
+      { "tipo": "apartamento", "unidad_id": "<edificio>",
+        "apartamento": "2B", "titular": {...} }
+          -> un inquilino. El edificio tiene que estar registrado antes, con
+             su dueño -- igual que en el alta normal.
+
+    En todos los casos el dueño queda en Unidad.propietario_id, que es de
+    donde cuelgan "Mi Edificio" y los códigos de enrolamiento cuando la
+    cuenta pase a participar.
+
+    NO se piden tarifa ni día de pago: en el padrón nadie paga. Tampoco se
+    aplica la regla anti-mora del alta normal: acá no se contrae ninguna
+    obligación, y bloquear el censo por una deuda dejaría a esa familia
+    fuera de la trazabilidad, que es lo contrario de lo que se busca.
     """
     data = request.get_json(silent=True) or {}
     rid = residencial_id_heredado(usuario_actual)
 
-    # Día 69 — el padrón admite casas Y apartamentos.
-    #
-    # Al principio solo daba de alta casas. Un edificio se censa apartamento
-    # POR apartamento, igual que en el alta normal: cada apto es su propia
-    # entrada, con su titular y su gente.
-    #
-    # La razón es el portón, no el modelo de datos. Si un edificio entero
-    # fuera una sola entrada, el guardia que busca a alguien vería una lista
-    # de cuarenta personas sin saber quién vive dónde, y la foto que tiene
-    # que comparar se le pierde entre todas. Buscando "Edificio Las Palmas,
-    # Apto 3" le salen tres personas y resuelve en segundos.
-    tipo_pedido = data.get("tipo") if data.get("tipo") in ("casa", "apartamento") else "casa"
-    es_apartamento = tipo_pedido == "apartamento"
+    tipo = data.get("tipo") if data.get("tipo") in ("casa", "edificio", "apartamento") else "casa"
     apartamento = (str(data.get("apartamento") or "")).strip() or None
+    dueno_vive = bool(data.get("dueno_vive"))
+    ident = (data.get("identificador") or "").strip()
 
-    if es_apartamento and not apartamento:
-        return _err("apartamento_requerido",
-                    "Indicá el número de apartamento (ej. 1A)", 400)
+    def _buscar_por_nombre(nombre):
+        q = Unidad.query.filter(db.func.lower(Unidad.identificador) == nombre.lower())
+        if rid is not None:
+            q = q.filter(Unidad.residencial_id == rid)
+        return q.first()
 
+    # ── Validaciones, todas ANTES de crear a la persona ──────────────────
     unidad = None
-    if data.get("unidad_id"):
-        unidad = Unidad.query.filter_by(uuid_publico=data.get("unidad_id")).first()
-        if not unidad:
-            return _err("unidad_invalida", "Esa unidad no existe", 400)
-        if rid is not None and unidad.residencial_id != rid:
-            return _err("unidad_ajena", "Esa unidad no pertenece a tu residencial", 403)
-        # Coherencia: no se puede colgar un apartamento de una casa, ni
-        # registrar una casa apuntando a un edificio.
-        if es_apartamento and unidad.tipo != "edificio":
-            return _err("unidad_no_es_edificio",
-                        f"\"{unidad.identificador}\" es una casa, no un edificio", 400)
-        if not es_apartamento and unidad.tipo == "edificio":
-            return _err("unidad_es_edificio",
-                        f"\"{unidad.identificador}\" es un edificio: indicá el apartamento", 400)
+    contenedora_vacia = None
 
-    if not unidad:
-        ident = (data.get("identificador") or "").strip()
+    if tipo == "apartamento":
+        if not apartamento:
+            return _err("apartamento_requerido", "Indicá el número de apartamento (ej. 2B)", 400)
+        if data.get("unidad_id"):
+            unidad = Unidad.query.filter_by(uuid_publico=data.get("unidad_id")).first()
+        elif ident:
+            unidad = _buscar_por_nombre(ident)
+        if not unidad or unidad.tipo != "edificio":
+            # Igual que en el alta normal: el apartamento cuelga de un
+            # edificio que ya existe con su dueño. Crear el edificio desde
+            # acá lo dejaría sin dueño, y ese edificio no sabría a quién
+            # pertenece cuando pase a participar.
+            return _err("edificio_no_registrado",
+                        "Ese edificio no está registrado. Registralo primero con "
+                        "su dueño (opción \"Edificio\") y después sus apartamentos.", 400)
+        if rid is not None and unidad.residencial_id != rid:
+            return _err("unidad_ajena", "Ese edificio no pertenece a tu residencial", 403)
+
+    elif tipo == "edificio":
         if not ident:
             return _err("datos_incompletos",
-                        "Indicá el identificador de la casa (ej. \"Casa 24\")"
-                        if not es_apartamento
-                        else "Indicá el nombre del edificio (ej. \"Edificio Las Palmas\")",
-                        400)
-        existente = Unidad.query.filter(
-            db.func.lower(Unidad.identificador) == ident.lower()).first()
+                        "Indicá el nombre del edificio (ej. \"Edificio Las Palmas\")", 400)
+        if dueno_vive and not apartamento:
+            return _err("apartamento_requerido",
+                        "Si el dueño vive en el edificio, indicá en qué apartamento", 400)
+        existente = _buscar_por_nombre(ident)
         if existente:
-            # Un EDIFICIO existente se REUTILIZA: censar el apto 2 de un
-            # edificio ya cargado no debe obligar a crearlo de nuevo. Mismo
-            # criterio que el alta normal.
-            if es_apartamento and existente.tipo == "edificio":
-                if rid is not None and existente.residencial_id != rid:
-                    return _err("unidad_ajena",
-                                "Ese edificio no pertenece a tu residencial", 403)
-                unidad = existente
-            else:
+            if existente.tipo != "edificio":
                 return _err("duplicado",
-                            f"Ya existe una unidad llamada \"{existente.identificador}\".", 409)
-        else:
-            unidad = Unidad(tipo="edificio" if es_apartamento else "casa",
-                            identificador=ident, activa=True,
-                            residencial_id=rid)
-            db.session.add(unidad)
-            db.session.flush()
+                            f"Ya existe una casa llamada \"{existente.identificador}\".", 409)
+            if existente.propietario_id:
+                return _err("duplicado",
+                            f"\"{existente.identificador}\" ya está registrado con su dueño. "
+                            "Agregá los apartamentos con la opción \"Apartamento\".", 409)
+            # Edificio sin dueño: lo dejó el padrón del Día 69, que creaba el
+            # edificio desde el primer apartamento. Se adopta en vez de
+            # rechazarlo, para no obligar a borrar nada.
+            unidad = existente
+        cont = (Cuenta.query.filter_by(unidad_id=unidad.id, apartamento=None, activa=True).first()
+                if unidad else None)
+        if cont is not None:
+            if any(r.activo for r in cont.residentes):
+                return _err("duplicado", "Ese edificio ya tiene administrador registrado", 409)
+            contenedora_vacia = cont
 
-    # No repetir el mismo apartamento dentro del edificio. Se miran TODAS
-    # las cuentas activas, de censo y completas: el apto 3 es el apto 3
+    else:  # casa
+        if not ident:
+            return _err("datos_incompletos", "Indicá el identificador de la casa (ej. \"Casa 24\")", 400)
+        if _buscar_por_nombre(ident):
+            return _err("duplicado", f"Ya existe una unidad llamada \"{ident}\".", 409)
+
+    # No repetir el apartamento dentro del edificio. Se miran TODAS las
+    # cuentas activas, de censo y completas: el apto 3 es el apto 3,
     # participe o no esa familia.
-    if apartamento and Cuenta.query.filter_by(
-            unidad_id=unidad.id, apartamento=apartamento, activa=True).first():
+    # Sin distinguir mayúsculas: "1a" y "1A" son el mismo apartamento, y
+    # el guardia también los busca así en el portón.
+    if apartamento and unidad is not None and Cuenta.query.filter(
+            Cuenta.unidad_id == unidad.id, Cuenta.activa.is_(True),
+            db.func.lower(Cuenta.apartamento) == apartamento.lower()).first():
         return _err("duplicado",
-                    f"El apartamento {apartamento} ya está registrado en "
-                    f"{unidad.identificador}", 409)
+                    f"El apartamento {apartamento} ya está registrado en {unidad.identificador}", 409)
 
-    # ── El edificio necesita su cuenta contenedora ───────────────────────
-    #
-    # ESTE PASO NO ES OPCIONAL, aunque lo parezca.
-    #
-    # En el resto del sistema un edificio NO es solo una fila en unidades:
-    # es una Unidad MÁS una cuenta contenedora (sin apartamento y sin
-    # tarifa) que representa al edificio en sí y cuelga de ella su
-    # administrador. Es lo que distingue tipo_cuenta()='edificio_contenedor'
-    # de un apartamento cualquiera, y de ahí salen cosas que no son
-    # cosméticas: el panel lista los apartamentos ANIDADOS bajo esa cuenta,
-    # el filtro "solo edificios" usa ese tipo, y "Mi Edificio" --los códigos
-    # de enrolamiento para los inquilinos-- cuelga del propietario del
-    # edificio.
-    #
-    # Sin ella, el padrón creaba apartamentos huérfanos: se veían como filas
-    # sueltas, y al convertirlos a cuenta completa aterrizaban en "Casas y
-    # residentes" sin ningún edificio del cual colgar. El padrón tiene que
-    # dejar la MISMA estructura que el alta normal, porque convertir es un
-    # cambio de modo, no una migración -- si la estructura no coincide, la
-    # conversión produce datos que el resto del sistema no sabe mostrar.
-    #
-    # La contenedora nace en modo censo y sin tarifa. No cobra nunca: una
-    # cuenta contenedora no paga cuota ni participando del sistema.
-    if es_apartamento:
-        contenedora = Cuenta.query.filter_by(
-            unidad_id=unidad.id, apartamento=None, activa=True).first()
-        if not contenedora:
-            contenedora = Cuenta(
-                unidad_id=unidad.id,
-                apartamento=None,
-                tarifa_id=None,
-                dia_pago=None,
-                modo_participacion="censo",
-            )
-            db.session.add(contenedora)
-            db.session.flush()
-            # Sin titular a propósito: censando un edificio desde afuera no
-            # siempre se sabe quién es el dueño, y bloquear el censo por ese
-            # dato dejaría al edificio entero fuera de la trazabilidad.
-            # Administración puede agregarlo después desde "Casas y
-            # residentes", que ya permite sumar miembros a una cuenta.
+    # Límite de apartamentos del edificio, si se definió (igual que el alta
+    # normal, Día 29). Cuenta solo apartamentos, no la contenedora.
+    if apartamento and unidad is not None and unidad.max_apartamentos:
+        aptos = Cuenta.query.filter(Cuenta.unidad_id == unidad.id, Cuenta.activa.is_(True),
+                                    Cuenta.apartamento.isnot(None)).count()
+        if aptos >= unidad.max_apartamentos:
+            return _err("limite_apartamentos",
+                        f"{unidad.identificador} ya tiene {aptos} apartamento(s) de un "
+                        f"máximo de {unidad.max_apartamentos}.", 400)
 
+    # ── Crear ────────────────────────────────────────────────────────────
     titular_data = data.get("titular") or {}
     persona, error = _crear_persona_censo(titular_data, usuario_actual)
     if persona is None:
         return _err("titular_invalido", error, 400)
 
-    cuenta = Cuenta(
-        unidad_id=unidad.id,
-        apartamento=apartamento,
-        tarifa_id=None,          # no paga cuota
-        dia_pago=None,
-        modo_participacion="censo",
-    )
-    db.session.add(cuenta)
-    db.session.flush()
+    if unidad is None:
+        max_aptos = data.get("max_apartamentos")
+        unidad = Unidad(
+            tipo="edificio" if tipo == "edificio" else "casa",
+            identificador=ident, activa=True, residencial_id=rid,
+            max_apartamentos=(int(max_aptos) if tipo == "edificio" and str(max_aptos or "").isdigit()
+                              else None),
+        )
+        db.session.add(unidad)
+        db.session.flush()
+
+    if tipo == "edificio" and not dueno_vive:
+        # El dueño SOLO ADMINISTRA: cuenta contenedora a su nombre. Sin
+        # apartamento y sin tarifa: no paga cuota ni en el padrón ni cuando
+        # participe (es_contenedor_edificio exige justamente eso).
+        cuenta = contenedora_vacia or Cuenta(
+            unidad_id=unidad.id, apartamento=None,
+            tarifa_id=None, dia_pago=None, modo_participacion="censo")
+        if contenedora_vacia is None:
+            db.session.add(cuenta)
+            db.session.flush()
+    else:
+        cuenta = Cuenta(
+            unidad_id=unidad.id,
+            apartamento=apartamento if tipo in ("edificio", "apartamento") else None,
+            tarifa_id=None, dia_pago=None, modo_participacion="censo",
+        )
+        db.session.add(cuenta)
+        db.session.flush()
+        if tipo == "edificio" and contenedora_vacia is not None:
+            # El dueño vive ahí: en el alta normal ese edificio NO tiene
+            # contenedora, el apartamento del dueño hace de administración.
+            # Si quedó una vacía del padrón anterior, se da de baja para no
+            # tener las dos cosas a la vez.
+            contenedora_vacia.activa = False
+
+    if tipo == "edificio":
+        # Queda como dueño/responsable del edificio, igual que
+        # es_dueno_edificio en el alta normal. Si vive ahí, esto además hace
+        # que su apartamento se reconozca como administración
+        # (tipo_cuenta() = 'edificio_admin').
+        unidad.propietario_id = persona.id
 
     residente = Residente(
         usuario_id=persona.id, cuenta_id=cuenta.id,
         rol_cuenta="titular",
-        relacion=titular_data.get("relacion", "propietario"),
+        relacion=titular_data.get("relacion",
+                                  "propietario" if tipo != "apartamento" else "inquilino"),
     )
     db.session.add(residente)
     db.session.commit()
@@ -430,9 +456,16 @@ def convertir_casa(usuario_actual, cuenta_uuid):
     from app.utils.residencial import plan_permite
     sin_cuotas = not plan_permite(usuario_actual.residencial_id, "cuotas")
 
+    # Día 70 — la cuenta contenedora de un edificio (dueño que solo
+    # administra) NUNCA paga cuota: ni en el padrón ni participando. Es la
+    # misma regla que el alta normal con es_solo_contenedor. Pedirle tarifa
+    # acá la convertiría en algo que el resto del sistema ya no reconoce
+    # como contenedora (es_contenedor_edificio exige tarifa_id vacía).
+    es_contenedora = cuenta.es_contenedor_edificio()
+
     tarifa = None
     dia_pago = None
-    if not sin_cuotas:
+    if not sin_cuotas and not es_contenedora:
         tarifa = Tarifa.query.get(data.get("tarifa_id"))
         if not tarifa or not pertenece_a_mi_residencial(tarifa, usuario_actual):
             return _err("tarifa_invalida", "La tarifa indicada no existe", 400)
@@ -466,8 +499,11 @@ def convertir_casa(usuario_actual, cuenta_uuid):
 
     return jsonify({"data": {
         "casa": cuenta.to_dict(detalle=True),
-        "nota": "Las cuotas empiezan a generarse desde el mes en curso. "
-                "No se generan cuotas de meses anteriores.",
+        "nota": ("El edificio ya participa del sistema. Como el dueño solo "
+                 "administra, no se le genera cuota."
+                 if es_contenedora else
+                 "Las cuotas empiezan a generarse desde el mes en curso. "
+                 "No se generan cuotas de meses anteriores."),
     }})
 
 

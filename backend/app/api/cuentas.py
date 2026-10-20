@@ -317,8 +317,11 @@ def crear_cuenta(usuario_actual):
                         f"registrado(s) de un máximo de {unidad.max_apartamentos}.", 400)
 
     # evitar duplicado de apartamento en el mismo edificio (solo cuentas activas)
-    if apartamento and Cuenta.query.filter_by(
-            unidad_id=unidad.id, apartamento=apartamento, activa=True).first():
+    # Día 70 — sin distinguir mayúsculas: "1a" y "1A" son el mismo
+    # apartamento. Antes se podían registrar los dos.
+    if apartamento and Cuenta.query.filter(
+            Cuenta.unidad_id == unidad.id, Cuenta.activa.is_(True),
+            db.func.lower(Cuenta.apartamento) == str(apartamento).lower()).first():
         return _err("duplicado", f"El apartamento {apartamento} ya existe en esta unidad", 409)
 
     titular_data = data.get("titular") or {}
