@@ -12,7 +12,7 @@ import datetime as dt
 import jwt
 from flask import Blueprint, request, jsonify, current_app
 
-from app.extensions import db, limiter
+from app.extensions import db, limiter, key_login
 from app.config import Config
 from app.models.usuario import Usuario
 from app.auth.security import generar_token, token_required, revocar_token
@@ -92,7 +92,15 @@ def _huella_de_token(token_str):
 
 # ── Login ──────────────────────────────────────────────────────
 @auth_bp.post("/login")
-@limiter.limit(lambda: Config.LOGIN_RATE_LIMIT)
+# Día 70 — DOS límites, y cada uno mide una cosa distinta:
+#   por CUENTA  -> fuerza bruta contra un correo concreto (lo que de verdad
+#                  importa frenar);
+#   por IP      -> alguien barriendo muchas cuentas desde un mismo lugar.
+# Antes solo existía el de IP, con el mismo valor estricto, y eso dejaba
+# sin entrar a toda la caseta cuando un guardia se equivocaba: ahí varias
+# personas comparten la salida a internet. Ver extensions.key_login.
+@limiter.limit(lambda: Config.LOGIN_RATE_LIMIT, key_func=key_login)
+@limiter.limit(lambda: Config.LOGIN_RATE_LIMIT_IP)
 def login():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()

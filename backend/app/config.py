@@ -96,6 +96,24 @@ class Config:
     LOGIN_RATE_LIMIT = (os.environ.get("LOGIN_RATE_LIMIT_OVERRIDE") or
                         ("5 per 15 minutes" if ENV == "production" else "100 per minute"))
 
+    # Día 70 — límite por IP, SEPARADO del de arriba.
+    #
+    # LOGIN_RATE_LIMIT ahora cuenta por CUENTA (ver extensions.key_login):
+    # 5 intentos fallidos sobre un mismo correo es lo que mide de verdad un
+    # ataque de fuerza bruta.
+    #
+    # Este otro sigue contando por IP, pero mucho más alto, porque en esta
+    # residencial una IP NO es una persona: la caseta, con guardias que
+    # rotan de turno, y los residentes en el wifi comparten salida. Con 5
+    # por IP, un guardia que se equivoca dejaba sin entrar a todos los
+    # demás -- incluido el del turno siguiente con su contraseña correcta.
+    #
+    # 40 cada 15 minutos sigue frenando a quien barre muchas cuentas
+    # distintas desde un mismo lugar, sin castigar a una red compartida.
+    LOGIN_RATE_LIMIT_IP = (os.environ.get("LOGIN_RATE_LIMIT_IP_OVERRIDE") or
+                           ("40 per 15 minutes" if ENV == "production"
+                            else "500 per minute"))
+
     # OBSOLETO (DEVICE-06, Auditoría Día 35): este token global compartido
     # ya no se usa en ningún endpoint. Cada Raspberry Pi tiene su propio
     # token individual, hasheado en la base (ver Dispositivo.token_hash,

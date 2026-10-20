@@ -42,6 +42,32 @@ def _key_func():
     return get_remote_address()
 
 
+def key_login():
+    """
+    Día 70 — identifica el intento de login por CUENTA, no por IP.
+
+    POR QUÉ: el límite de login estaba solo por IP, y en esta residencial
+    eso es el criterio equivocado. En la caseta, los guardias que rotan de
+    turno salen todos por la misma IP: si uno se equivoca al escribir su
+    contraseña unas pocas veces, deja sin poder entrar a TODOS los que
+    vengan después, incluido el guardia del turno siguiente con su
+    contraseña correcta. Lo mismo para los residentes conectados al wifi
+    de la residencial.
+
+    Un ataque de fuerza bruta va contra UNA cuenta, así que contar por
+    cuenta es además lo que de verdad mide el riesgo. El límite por IP se
+    conserva aparte (ver routes.py), pero mucho más alto: sirve para
+    frenar a quien barre muchas cuentas distintas desde un mismo lugar.
+
+    Si no viene correo (petición malformada) se cae a la IP, para que un
+    atacante no pueda esquivar el límite mandando el campo vacío.
+    """
+    from flask import request
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    return f"login:{email}" if email else f"login-sin-correo:{_key_func()}"
+
+
 # Límite global suave + límites estrictos por endpoint (definidos con decoradores)
 #
 # Día 50: se agregó RATE_LIMIT_DEFAULT como variable de entorno opcional,
