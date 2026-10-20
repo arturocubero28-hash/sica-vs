@@ -276,6 +276,70 @@ with app.app_context():
     verificar("una casa del padrón no lleva apartamento",
               db.session.get(Cuenta, 1).apartamento is None)
 
+
+# ─────────────────────────────────────────────────────────────────────────
+# 14. El edificio necesita su cuenta CONTENEDORA (Día 70)
+# ─────────────────────────────────────────────────────────────────────────
+# En el resto del sistema un edificio no es solo una fila en unidades: es
+# una Unidad MAS una cuenta contenedora (sin apartamento y sin tarifa) que
+# lo representa. De ahi sale tipo_cuenta()='edificio_contenedor', y de ese
+# tipo dependen el anidado de apartamentos en el panel, el filtro "solo
+# edificios" y "Mi Edificio".
+#
+# El padron creaba apartamentos SIN esa cuenta: al convertirlos a cuenta
+# completa aterrizaban en "Casas y residentes" sin ningun edificio del
+# cual colgar. Convertir es un cambio de modo, no una migracion -- si la
+# estructura no coincide con la del alta normal, la conversion produce
+# datos que el resto del sistema no sabe mostrar.
+with app.app_context():
+    print("\n14. Cuenta contenedora del edificio")
+
+    edif2 = Unidad(id=95, tipo="edificio", identificador="Edificio Girasol",
+                   activa=True)
+    db.session.add(edif2)
+    db.session.flush()
+
+    cont = Cuenta(id=95, unidad_id=edif2.id, apartamento=None,
+                  tarifa_id=None, dia_pago=None, modo_participacion="censo")
+    apto = Cuenta(id=96, unidad_id=edif2.id, apartamento="4D",
+                  tarifa_id=None, dia_pago=None, modo_participacion="censo")
+    db.session.add_all([cont, apto])
+    db.session.commit()
+
+    verificar("la contenedora se reconoce como edificio_contenedor",
+              cont.tipo_cuenta() == "edificio_contenedor")
+    verificar("el apartamento NO se confunde con la contenedora",
+              apto.tipo_cuenta() == "apartamento")
+    verificar("la contenedora no cobra cuota ni participando",
+              cont.cobra_cuotas() is False)
+
+    # La consulta que usa el endpoint para no duplicar la contenedora.
+    hallada = Cuenta.query.filter_by(unidad_id=edif2.id, apartamento=None,
+                                     activa=True).first()
+    verificar("una contenedora existente se encuentra y no se duplica",
+              hallada is not None and hallada.id == cont.id)
+
+    # Al convertir el apartamento, el edificio tiene que salir del padron
+    # con el: si no, los apartamentos convertidos quedan colgando de un
+    # edificio que para el sistema sigue sin participar.
+    import datetime as _dt
+    apto.modo_participacion = "completa"
+    apto.fecha_conversion = _dt.date.today()
+    if apto.apartamento and apto.unidad and apto.unidad.tipo == "edificio":
+        c2 = Cuenta.query.filter_by(unidad_id=apto.unidad_id, apartamento=None,
+                                    activa=True).first()
+        if c2 is not None and c2.es_censo:
+            c2.modo_participacion = "completa"
+            c2.fecha_conversion = _dt.date.today()
+    db.session.commit()
+
+    verificar("al convertir el apartamento, el edificio sale del padrón",
+              cont.es_censo is False)
+    verificar("el edificio convertido SIGUE sin cobrar cuota",
+              cont.cobra_cuotas() is False)
+    verificar("la contenedora sigue siendo contenedora tras convertirse",
+              cont.tipo_cuenta() == "edificio_contenedor")
+
 print("\n" + "=" * 58)
 if fallos:
     print(f"RESULTADO FINAL: {len(fallos)} verificación(es) fallaron")

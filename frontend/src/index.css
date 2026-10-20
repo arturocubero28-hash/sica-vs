@@ -4234,3 +4234,22 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
   background: #c81e1e; color: #fff; font-size: 11px; font-weight: 800;
   display: flex; align-items: center; justify-content: center;
 }
+
+/* ── Edificios en el padrón (Día 70) ─────────────────────────────────────
+   Un edificio son dos cosas: su cuenta contenedora (que lo representa) y
+   los apartamentos que cuelgan de ella. Sin esta jerarquía visual los
+   apartamentos se leen como casas sueltas, que es justo la estructura que
+   después rompe al convertirlos a cuenta completa. */
+.censo-fila-edificio td {
+  background: #eef3f9;
+  border-top: 1.5px solid #d6deea;
+  font-weight: 600;
+}
+.censo-fila-edificio .casa-cell { gap: 9px; color: var(--marca-azul); }
+.censo-fila-edificio .casa-titular { font-weight: 400; }
+/* La sangría es lo que dice "esto vive adentro de lo de arriba". */
+.censo-fila-apto td:first-child { padding-left: 26px; position: relative; }
+.censo-fila-apto td:first-child::before {
+  content: ""; position: absolute; left: 12px; top: 0; bottom: 0;
+  border-left: 2px solid #d6deea;
+}

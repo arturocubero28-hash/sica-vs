@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import {
   listarCenso, crearCasaCenso, agregarPersonaCenso, convertirCasaCenso,
   darAccesoPersona, subirFotoResidente, urlFotoResidente, listarTarifas,
@@ -6,7 +6,7 @@ import {
   type Cuenta, type ResidenteDTO, type Tarifa, type ResumenPadron, type Unidad,
 } from "../../api/client";
 import {
-  UserPlus, Camera, ArrowUpRight, ChevronDown, ChevronRight, Home,
+  UserPlus, Camera, ArrowUpRight, ChevronDown, ChevronRight, Home, Building2,
 } from "lucide-react";
 
 /**
@@ -61,6 +61,25 @@ export function CensoPanel() {
     const gente = (c.residentes || []).map(r => r.nombre).join(" ");
     return `${c.nombre_completo || c.identificador || ""} ${c.apartamento || ""} ${gente}`.toLowerCase().includes(q);
   });
+
+  // Un edificio del padrón son DOS cosas: su cuenta contenedora (que
+  // representa al edificio) y los apartamentos que cuelgan de ella. Sin
+  // agrupar, los apartamentos se ven como filas sueltas y el edificio como
+  // una fila vacía más — que es justamente la estructura que después rompe
+  // al convertirlos a cuenta completa.
+  const contenedoras = filtradas.filter(c => c.tipo_cuenta === "edificio_contenedor");
+  const sueltas = filtradas.filter(c => c.tipo_cuenta !== "edificio_contenedor"
+    && c.tipo_cuenta !== "apartamento");
+  const aptosPorEdificio = new Map<string, Cuenta[]>();
+  for (const c of filtradas) {
+    if (c.tipo_cuenta !== "apartamento") continue;
+    const clave = c.identificador || "—";
+    aptosPorEdificio.set(clave, [...(aptosPorEdificio.get(clave) || []), c]);
+  }
+  // Un apartamento cuyo edificio no quedó en el filtro igual tiene que
+  // mostrarse: si no, buscar el nombre de un inquilino no devolvería nada.
+  const edificiosHuerfanos = [...aptosPorEdificio.keys()].filter(
+    k => !contenedoras.some(c => (c.identificador || "—") === k));
 
   const totalPersonas = casas.reduce((n, c) => n + (c.residentes?.length || 0), 0);
 
@@ -134,12 +153,52 @@ export function CensoPanel() {
                 <tr><th>Casa</th><th>Personas</th><th>Titular</th><th></th></tr>
               </thead>
               <tbody>
-                {filtradas.map(casa => {
+                {/* Primero las casas sueltas; después cada edificio con sus
+                    apartamentos colgando. */}
+                {[
+                  ...sueltas.map(c => ({ tipo: "casa" as const, casa: c })),
+                  ...contenedoras.map(c => ({ tipo: "edificio" as const, casa: c })),
+                  ...edificiosHuerfanos.map(k => ({ tipo: "edificio-suelto" as const, nombre: k })),
+                ].flatMap(item => {
+                  if (item.tipo === "casa") return [{ casa: item.casa, sangria: false }];
+                  const nombre = item.tipo === "edificio"
+                    ? (item.casa.identificador || "—") : item.nombre;
+                  const aptos = aptosPorEdificio.get(nombre) || [];
+                  return [
+                    { encabezado: nombre, aptos: aptos.length,
+                      casa: item.tipo === "edificio" ? item.casa : undefined },
+                    ...aptos.map(a => ({ casa: a, sangria: true })),
+                  ];
+                }).map((fila, i) => {
+                  // Cabecera de edificio: no es una familia, es el edificio.
+                  // Se muestra para que los apartamentos tengan de dónde
+                  // colgar visualmente, igual que en "Casas y residentes".
+                  if ("encabezado" in fila && fila.encabezado) {
+                    return (
+                      <tr key={`ed-${fila.encabezado}-${i}`} className="censo-fila-edificio">
+                        <td colSpan={4}>
+                          <div className="casa-cell">
+                            <Building2 size={15} />
+                            <div className="casa-cell-txt">
+                              <span className="casa-id">{fila.encabezado}</span>
+                              <span className="casa-titular">
+                                Edificio · {fila.aptos === 0
+                                  ? "sin apartamentos en el padrón"
+                                  : `${fila.aptos} apartamento${fila.aptos === 1 ? "" : "s"} en el padrón`}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const casa = fila.casa!;
+                  const sangria = "sangria" in fila && fila.sangria;
                   const expandida = abierta === casa.id;
                   const gente = casa.residentes || [];
                   return (
-                    <>
-                      <tr key={casa.id}>
+                    <Fragment key={casa.id}>
+                      <tr className={sangria ? "censo-fila-apto" : undefined}>
                         <td>
                           <div className="casa-cell">
                             <button className="icono-accion"
@@ -186,7 +245,7 @@ export function CensoPanel() {
                         </td>
                       </tr>
                       {expandida && (
-                        <tr key={`${casa.id}-detalle`}>
+                        <tr>
                           <td colSpan={4} style={{ background: "var(--fondo-suave, #f8f9fa)" }}>
                             <FilaPersonas
                               casa={casa}
@@ -197,7 +256,7 @@ export function CensoPanel() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </tbody>

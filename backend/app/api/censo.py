@@ -147,6 +147,12 @@ def listar_censo(usuario_actual):
         Cuenta.activa.is_(True))
     if rid is not None:
         base = base.filter(Unidad.residencial_id == rid)
+    # Las cuentas CONTENEDORAS de edificio quedan fuera de los conteos: son
+    # estructura, no hogares. Un edificio de ocho apartamentos son ocho
+    # familias, no nueve, y contarlo de más desinflaría el porcentaje de
+    # participación que se le reporta al patronato.
+    base = base.filter(db.not_(
+        db.and_(Unidad.tipo == "edificio", Cuenta.apartamento.is_(None))))
     total_censo = base.filter(Cuenta.modo_participacion == "censo").count()
     # 'completa' por defecto: las cuentas creadas antes del Día 69 no tienen
     # el campo seteado explícitamente, y son todas de participación completa.
@@ -269,6 +275,48 @@ def crear_casa_censo(usuario_actual):
         return _err("duplicado",
                     f"El apartamento {apartamento} ya está registrado en "
                     f"{unidad.identificador}", 409)
+
+    # ── El edificio necesita su cuenta contenedora ───────────────────────
+    #
+    # ESTE PASO NO ES OPCIONAL, aunque lo parezca.
+    #
+    # En el resto del sistema un edificio NO es solo una fila en unidades:
+    # es una Unidad MÁS una cuenta contenedora (sin apartamento y sin
+    # tarifa) que representa al edificio en sí y cuelga de ella su
+    # administrador. Es lo que distingue tipo_cuenta()='edificio_contenedor'
+    # de un apartamento cualquiera, y de ahí salen cosas que no son
+    # cosméticas: el panel lista los apartamentos ANIDADOS bajo esa cuenta,
+    # el filtro "solo edificios" usa ese tipo, y "Mi Edificio" --los códigos
+    # de enrolamiento para los inquilinos-- cuelga del propietario del
+    # edificio.
+    #
+    # Sin ella, el padrón creaba apartamentos huérfanos: se veían como filas
+    # sueltas, y al convertirlos a cuenta completa aterrizaban en "Casas y
+    # residentes" sin ningún edificio del cual colgar. El padrón tiene que
+    # dejar la MISMA estructura que el alta normal, porque convertir es un
+    # cambio de modo, no una migración -- si la estructura no coincide, la
+    # conversión produce datos que el resto del sistema no sabe mostrar.
+    #
+    # La contenedora nace en modo censo y sin tarifa. No cobra nunca: una
+    # cuenta contenedora no paga cuota ni participando del sistema.
+    if es_apartamento:
+        contenedora = Cuenta.query.filter_by(
+            unidad_id=unidad.id, apartamento=None, activa=True).first()
+        if not contenedora:
+            contenedora = Cuenta(
+                unidad_id=unidad.id,
+                apartamento=None,
+                tarifa_id=None,
+                dia_pago=None,
+                modo_participacion="censo",
+            )
+            db.session.add(contenedora)
+            db.session.flush()
+            # Sin titular a propósito: censando un edificio desde afuera no
+            # siempre se sabe quién es el dueño, y bloquear el censo por ese
+            # dato dejaría al edificio entero fuera de la trazabilidad.
+            # Administración puede agregarlo después desde "Casas y
+            # residentes", que ya permite sumar miembros a una cuenta.
 
     titular_data = data.get("titular") or {}
     persona, error = _crear_persona_censo(titular_data, usuario_actual)
@@ -396,6 +444,24 @@ def convertir_casa(usuario_actual, cuenta_uuid):
     cuenta.tarifa_id = tarifa.id if tarifa else None
     cuenta.dia_pago = dia_pago
     cuenta.fecha_conversion = dt.date.today()
+
+    # Si es un apartamento, su edificio tiene que salir del padrón con él.
+    #
+    # La cuenta contenedora representa al edificio, y mientras siga en modo
+    # censo el edificio se sigue listando en el padrón aunque ya tenga
+    # apartamentos participando -- y, peor, los apartamentos convertidos
+    # quedan colgando de un edificio que para el sistema "no participa".
+    #
+    # No se le pone tarifa ni día de pago: una cuenta contenedora no cobra
+    # cuota nunca, ni en el padrón ni participando. Lo único que cambia es
+    # que deja de estar en el censo.
+    if cuenta.apartamento and cuenta.unidad and cuenta.unidad.tipo == "edificio":
+        contenedora = Cuenta.query.filter_by(
+            unidad_id=cuenta.unidad_id, apartamento=None, activa=True).first()
+        if contenedora is not None and contenedora.es_censo:
+            contenedora.modo_participacion = "completa"
+            contenedora.fecha_conversion = dt.date.today()
+
     db.session.commit()
 
     return jsonify({"data": {
