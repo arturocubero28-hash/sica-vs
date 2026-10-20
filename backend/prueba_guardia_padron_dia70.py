@@ -49,7 +49,11 @@ def ok(desc, cond):
     if not cond: fallos.append(desc)
 
 app = create_app()
-app.config["RATELIMIT_ENABLED"] = False
+# Los limites de tasa se guardan en Redis y sobreviven entre corridas: sin
+# esto, la segunda ejecucion seguida choca con el limite de 20 busquedas
+# por minuto del propio endpoint y falla sin que el codigo tenga nada mal.
+from app.extensions import limiter
+limiter.enabled = False
 with app.app_context():
     db.drop_all(); db.create_all()
     admin = Usuario(id=1, nombre="Ad", apellido="Min", email="a@x.com", rol="admin")
