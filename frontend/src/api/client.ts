@@ -779,7 +779,17 @@ export const historialAccesos = (params: {
 
 export interface EventoTarjetaDTO {
   id: string; direccion: string; residente: string; unidad: string;
-  tarjeta: string; tipo_acceso?: "vehicular" | "peatonal"; acceso: string; ocurrido_en: string;
+  /** null cuando no se usó tarjeta física (QR, código, padrón). */
+  tarjeta: string | null;
+  /** Tipo de la TRANCA por la que se pasó, no el que permite la tarjeta. */
+  tipo_acceso?: "vehicular" | "peatonal" | null;
+  acceso: string; punto_acceso?: string | null; ocurrido_en: string;
+  /** Día 70 — cómo entró: tarjeta | tarjeta_virtual | qr |
+   *  codigo_emergencia | padron_identidad. */
+  metodo?: string | null;
+  /** Solo cuando lo registró un guardia (código o padrón). */
+  guardia?: string | null;
+  foto_identidad?: string | null;
 }
 export interface HistorialTarjetasDTO {
   eventos: EventoTarjetaDTO[];

@@ -299,6 +299,21 @@ function ModalDetalleEvento({ evento, onCerrar }: { evento: EventoHistorialDTO; 
   );
 }
 
+/** Día 70 — cómo entró el residente. "Código" y "Padrón" los registra un
+ *  guardia y llevan foto de la identificación; no son equivalentes: con
+ *  código la persona demostró algo que solo ella sabe, del padrón la única
+ *  prueba es que el guardia comparó la identificación con la ficha. */
+const METODO_ACCESO: Record<string, { texto: string; clase: string }> = {
+  tarjeta:           { texto: "Tarjeta",               clase: "" },
+  tarjeta_virtual:   { texto: "QR de la app",          clase: "green" },
+  qr:                { texto: "QR de la app",          clase: "green" },
+  codigo_emergencia: { texto: "Código de emergencia",  clase: "amber" },
+  padron_identidad:  { texto: "Padrón (identidad)",    clase: "amber" },
+};
+function metodoTexto(m?: string | null) {
+  return m ? (METODO_ACCESO[m]?.texto ?? m) : "—";
+}
+
 const METODO_LABEL: Record<string, string> = {
   efectivo: "Efectivo", tarjeta_pos: "Tarjeta POS", transferencia: "Transferencia", linea: "En línea",
 };
@@ -501,12 +516,14 @@ function TabTarjetas() {
       doc.text(`${completo.eventos.length} evento(s)${desde || hasta ? ` · ${desde || "…"} a ${hasta || "…"}` : ""}`, 14, yInicio);
       autoTable(doc, {
         startY: yInicio + 6,
-        head: [["Fecha / Hora", "Residente", "Casa", "Tarjeta", "Tipo", "Acceso", "Dirección"]],
+        head: [["Fecha / Hora", "Residente", "Casa", "Método", "Tipo", "Acceso", "Dirección", "Registró"]],
         body: completo.eventos.map(e => [
           new Date(e.ocurrido_en).toLocaleString("es-HN"),
-          e.residente, e.unidad, e.tarjeta,
-          e.tipo_acceso === "peatonal" ? "Peatonal" : "Vehicular",
+          e.residente, e.unidad,
+          metodoTexto(e.metodo) + (e.tarjeta ? ` (${e.tarjeta})` : ""),
+          e.tipo_acceso === "peatonal" ? "Peatonal" : e.tipo_acceso === "vehicular" ? "Vehicular" : "—",
           e.acceso, e.direccion === "entrada" ? "Entrada" : "Salida",
+          e.guardia || "—",
         ]),
         headStyles: { fillColor: colorTablaPDF(residencial) },
         styles: { fontSize: 8 },
@@ -521,12 +538,14 @@ function TabTarjetas() {
       const completo = await historialTarjetas({ desde, hasta, direccion, buscar, todos: true });
       const XLSX = await import("xlsx");
       const filas = [
-        ["Fecha / Hora", "Residente", "Casa", "Tarjeta", "Tipo", "Acceso", "Dirección"],
+        ["Fecha / Hora", "Residente", "Casa", "Método", "Tipo", "Acceso", "Dirección", "Registró"],
         ...completo.eventos.map(e => [
           new Date(e.ocurrido_en).toLocaleString("es-HN"),
-          e.residente, e.unidad, e.tarjeta,
-          e.tipo_acceso === "peatonal" ? "Peatonal" : "Vehicular",
+          e.residente, e.unidad,
+          metodoTexto(e.metodo) + (e.tarjeta ? ` (${e.tarjeta})` : ""),
+          e.tipo_acceso === "peatonal" ? "Peatonal" : e.tipo_acceso === "vehicular" ? "Vehicular" : "—",
           e.acceso, e.direccion === "entrada" ? "Entrada" : "Salida",
+          e.guardia || "—",
         ]),
       ];
       const wb = XLSX.utils.book_new();
@@ -545,7 +564,7 @@ function TabTarjetas() {
           <option value="entrada">Solo entradas</option>
           <option value="salida">Solo salidas</option>
         </select>
-        <input placeholder="Buscar residente, casa o tarjeta…" value={buscar}
+        <input placeholder="Buscar residente, casa, tarjeta o guardia…" value={buscar}
           onChange={e => { setBuscar(e.target.value); setPagina(1); }} />
         <button className="ghost mini" onClick={exportarPDF} disabled={!!exportando}>
           <Download size={14} /> {exportando === "pdf" ? "…" : "PDF"}
@@ -557,10 +576,11 @@ function TabTarjetas() {
 
       {cargando ? <p className="muted">Cargando…</p> : !data || data.eventos.length === 0 ? (
         <div className="empty-state">
-          <p className="muted">No hay accesos por tarjeta registrados todavía.</p>
+          <p className="muted">No hay accesos de residentes registrados todavía.</p>
           <p className="muted small">
-            Acá aparecerán las entradas y salidas de residentes cuando el sistema
-            de acceso por tarjeta esté en operación.
+            Acá aparecen las entradas y salidas de residentes: con tarjeta, con
+            el QR de la app, o registradas por el guardia con código de
+            emergencia o desde el padrón.
           </p>
         </div>
       ) : (
@@ -568,7 +588,7 @@ function TabTarjetas() {
           <div className="scroll-x">
             <table className="data">
               <thead>
-                <tr><th>Fecha / Hora</th><th>Residente</th><th>Casa</th><th>Tarjeta</th><th>Tipo</th><th>Acceso</th><th>Dirección</th></tr>
+                <tr><th>Fecha / Hora</th><th>Residente</th><th>Casa</th><th>Método</th><th>Tipo</th><th>Acceso</th><th>Dirección</th><th>Registró</th><th>ID</th></tr>
               </thead>
               <tbody>
                 {data.eventos.map(e => (
@@ -576,17 +596,46 @@ function TabTarjetas() {
                     <td className="small">{new Date(e.ocurrido_en).toLocaleString("es-HN")}</td>
                     <td>{e.residente}</td>
                     <td>{e.unidad}</td>
-                    <td><code>{e.tarjeta}</code></td>
                     <td>
-                      <span className={`pill ${e.tipo_acceso === "peatonal" ? "" : "green"}`}>
-                        {e.tipo_acceso === "peatonal" ? "<Footprints size={16} /> Peatonal" : "<Car size={16} /> Vehicular"}
+                      {/* Día 70 — cómo entró. Antes esta columna era
+                          "Tarjeta" y para un acceso con QR, código o del
+                          padrón solo mostraba un guion. */}
+                      <span className={`pill ${METODO_ACCESO[e.metodo || ""]?.clase ?? ""}`}>
+                        {metodoTexto(e.metodo)}
                       </span>
+                      {e.tarjeta && <div className="muted small"><code>{e.tarjeta}</code></div>}
+                    </td>
+                    <td>
+                      {/* BUG Día 70: el ícono estaba escrito DENTRO de un
+                          texto ("<Car size={16} /> Vehicular"), así que se
+                          mostraba literal en pantalla. Además el tipo salía
+                          de la tarjeta y no de la tranca: sin tarjeta,
+                          siempre decía "Vehicular". */}
+                      {e.tipo_acceso ? (
+                        <span className="pill" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                          {e.tipo_acceso === "peatonal"
+                            ? <><Footprints size={14} /> Peatonal</>
+                            : <><Car size={14} /> Vehicular</>}
+                        </span>
+                      ) : <span className="muted">—</span>}
                     </td>
                     <td className="small">{e.acceso}</td>
                     <td>
                       <span className={`pill ${e.direccion === "entrada" ? "green" : ""}`}>
                         {e.direccion === "entrada" ? "↓ Entrada" : "↑ Salida"}
                       </span>
+                    </td>
+                    <td className="small">{e.guardia || <span className="muted">—</span>}</td>
+                    <td>
+                      {/* Foto de la identificación que tomó el guardia. Es
+                          la evidencia de los accesos con código y del
+                          padrón: sin ella, serían aperturas sin respaldo. */}
+                      {e.foto_identidad ? (
+                        <button className="btn-tabla btn-tabla-ver"
+                          onClick={() => window.open(urlFotoGuardia(e.foto_identidad!), "_blank")}>
+                          <IdCard size={14} /> Ver
+                        </button>
+                      ) : <span className="muted small">—</span>}
                     </td>
                   </tr>
                 ))}

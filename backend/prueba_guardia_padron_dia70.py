@@ -162,5 +162,28 @@ with app.app_context():
                  headers=H, content_type="multipart/form-data")
     ok("entrada sin foto sigue rechazandose", r.status_code == 400)
 
+    print("\nHistorial de accesos de residentes (lo que ve el admin)")
+    from app.utils import residencial as _ur
+    import app.auth.security as _s2
+    # El plan de la residencial de prueba no existe: se deja pasar la
+    # verificacion de plan solo en esta prueba.
+    _s2_orig = getattr(_ur, "plan_permite", None)
+    _ur.plan_permite = lambda *a, **k: True
+    tok_admin = generar_token(admin)
+    r = cli.get("/api/v1/dashboard/historial-tarjetas",
+                headers={"Authorization": f"Bearer {tok_admin}"})
+    j = r.get_json() or {}
+    ok(f"el historial responde (status {r.status_code})", r.status_code == 200)
+    evs = (j.get("data") or {}).get("eventos", [])
+    pea = [x for x in evs if x["acceso"] == "T3"]
+    veh = [x for x in evs if x["acceso"] == "T2"]
+    ok("trae los eventos registrados por el guardia", len(evs) >= 2)
+    ok("la casa sale aunque no haya tarjeta", bool(pea) and pea[0]["unidad"] == "Casa 10")
+    ok("el tipo es el de la TRANCA (peatonal)", bool(pea) and pea[0]["tipo_acceso"] == "peatonal")
+    ok("el tipo es el de la TRANCA (vehicular)", bool(veh) and veh[0]["tipo_acceso"] == "vehicular")
+    ok("el metodo sale como padron_identidad", bool(pea) and pea[0]["metodo"] == "padron_identidad")
+    ok("dice que guardia lo registro", bool(pea) and pea[0]["guardia"] == "Gu Ardia")
+    ok("trae la foto de la identificacion", bool(pea) and bool(pea[0]["foto_identidad"]))
+
 print("\n" + ("TODO OK" if not fallos else f"{len(fallos)} FALLAS: {fallos}"))
 sys.exit(1 if fallos else 0)

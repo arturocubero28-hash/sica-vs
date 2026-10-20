@@ -471,8 +471,11 @@ def historial_accesos_tarjeta(usuario_actual):
     tarjeta_ids = {e.tarjeta_id for e in eventos if e.tarjeta_id}
     tarjetas = {t.id: t for t in Tarjeta.query.filter(Tarjeta.id.in_(tarjeta_ids)).all()} if tarjeta_ids else {}
     res_ids = {e.residente_id for e in eventos if e.residente_id}
+    # La cuenta y su unidad se precargan junto con el usuario: ahora la casa
+    # se toma de ahí en cada fila, y sin esto serían dos consultas por evento.
     residentes = ({r.id: r for r in Residente.query
-                   .options(joinedload(Residente.usuario))
+                   .options(joinedload(Residente.usuario),
+                            joinedload(Residente.cuenta).joinedload(Cuenta.unidad))
                    .filter(Residente.id.in_(res_ids)).all()} if res_ids else {})
     acc_ids = {e.acceso_id for e in eventos if e.acceso_id}
     accesos = {a.id: a for a in AccesoFisico.query.filter(AccesoFisico.id.in_(acc_ids)).all()} if acc_ids else {}
@@ -486,34 +489,52 @@ def historial_accesos_tarjeta(usuario_actual):
         unidad = "—"
         if residente and residente.usuario:
             nombre = f"{residente.usuario.nombre} {residente.usuario.apellido}"
-        if tarjeta:
+        # Día 70 — la casa se sacaba SOLO de la tarjeta. Un acceso con QR,
+        # con código de emergencia o del padrón no tiene tarjeta, y la
+        # columna salía vacía. Ahora se toma de la cuenta del residente, que
+        # siempre existe, y la tarjeta queda como respaldo.
+        cuenta = None
+        if residente is not None and getattr(residente, "cuenta", None):
+            cuenta = residente.cuenta
+        elif tarjeta:
             cuenta = Cuenta.query.get(tarjeta.cuenta_id)
-            if cuenta:
-                unidad = cuenta.nombre_completo if hasattr(cuenta, "nombre_completo") else "—"
-                if not unidad or unidad == "—":
-                    unidad = cuenta.unidad.identificador if cuenta.unidad else "—"
+        if cuenta and cuenta.unidad:
+            unidad = cuenta.unidad.identificador
+            if cuenta.apartamento:
+                unidad = f"{unidad} · Apto {cuenta.apartamento}"
+
+        # Cómo entró. Los eventos de la Raspberry Pi anteriores al Día 69 no
+        # traen 'metodo': si hay tarjeta física fue con ella, y si vino de
+        # una Pi sin tarjeta fue con el QR de la tarjeta virtual.
+        metodo = e.metodo or ("tarjeta" if e.tarjeta_id
+                              else ("tarjeta_virtual" if e.dispositivo_id else None))
+
         fila = {
             "id": str(e.uuid_publico),
             "direccion": e.direccion,
             "residente": nombre,
             "unidad": unidad,
-            "tarjeta": tarjeta.card_uid if tarjeta else "—",
-            "tipo_acceso": tarjeta.tipo_acceso if tarjeta else None,
+            "tarjeta": tarjeta.card_uid if tarjeta else None,
+            # Día 70 — el tipo es el de la TRANCA por la que se pasó, no el
+            # que permite la tarjeta. Antes se tomaba de la tarjeta, así que
+            # un acceso sin tarjeta salía siempre "vehicular", aunque hubiera
+            # sido por el portón peatonal.
+            "tipo_acceso": (acceso.tipo if acceso
+                            else (tarjeta.tipo_acceso if tarjeta else None)),
             "acceso": acceso.nombre if acceso else "—",
-            # Día 69 — CÓMO entró. Este historial ya no es solo de tarjetas:
-            # desde hoy también recibe los accesos que el guardia registra
-            # con el código de emergencia (metodo='codigo_emergencia'),
-            # cuando el residente llega sin teléfono. Sin este campo los dos
-            # casos se ven idénticos en pantalla, y son muy distintos: uno
-            # lo validó una máquina, al otro lo autorizó una persona.
-            "metodo": e.metodo or ("tarjeta" if e.tarjeta_id else None),
+            "punto_acceso": acceso.punto_acceso if acceso else None,
+            "metodo": metodo,
+            # Quién registró el acceso y la foto de la identificación. Solo
+            # existen cuando lo registró un guardia (código o padrón); la Pi
+            # no tiene guardia ni toma foto.
             "guardia": (f"{e.guardia.nombre} {e.guardia.apellido}"
                         if e.guardia else None),
             "foto_identidad": e.foto_identidad,
             "ocurrido_en": e.ocurrido_en.isoformat() if e.ocurrido_en else None,
         }
         if buscar:
-            blob = f"{nombre} {unidad} {fila['tarjeta']}".lower()
+            blob = (f"{nombre} {unidad} {fila['tarjeta'] or ''} "
+                    f"{fila['guardia'] or ''} {metodo or ''}").lower()
             if buscar not in blob:
                 continue
         filas.append(fila)

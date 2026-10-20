@@ -58,8 +58,13 @@ export function InventarioTarjetas() {
                 <tr key={t.id} className={!t.activo ? "fila-baja" : ""}>
                   <td>{t.nombre}</td>
                   <td>
-                    <span className={`pill ${t.tipo_acceso === "peatonal" ? "" : "green"}`}>
-                      {t.tipo_acceso === "peatonal" ? "<Footprints size={16} /> Corto alcance" : "<Car size={16} /> Largo alcance"}
+                    {/* Día 70 — mismo error que en el historial: el ícono estaba
+                        escrito dentro de un texto y se veía literal. */}
+                    <span className={`pill ${t.tipo_acceso === "peatonal" ? "" : "green"}`}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      {t.tipo_acceso === "peatonal"
+                        ? <><Footprints size={14} /> Corto alcance</>
+                        : <><Car size={14} /> Largo alcance</>}
                     </span>
                   </td>
                   <td>{L(t.precio)}</td>
