@@ -56,6 +56,30 @@ def _tranca_del_guardia(usuario_actual, acceso_id_raw):
     return tranca, None
 
 
+def _tranca_por_tipo(usuario_actual, tipo_acceso, direccion):
+    """
+    Día 70 — encuentra la tranca del punto del guardia por tipo y dirección
+    (los tres botones de "Dar acceso": entrada vehicular, salida vehicular,
+    entrada peatonal). Mismas verificaciones que _tranca_del_guardia: solo
+    trancas activas, de SU punto y de SU residencial.
+    """
+    from app.models.visita import AccesoFisico
+
+    if tipo_acceso not in ("vehicular", "peatonal"):
+        return None, _err("tipo_invalido", "El tipo de acceso debe ser vehicular o peatonal", 400)
+
+    tranca = AccesoFisico.query.filter_by(
+        punto_acceso=usuario_actual.punto_acceso_actual,
+        residencial_id=usuario_actual.residencial_id,
+        tipo=tipo_acceso, direccion=direccion, activo=True,
+    ).order_by(AccesoFisico.id).first()
+    if not tranca:
+        return None, _err(
+            "sin_tranca",
+            f"Tu punto de acceso no tiene tranca de {direccion} {tipo_acceso}", 400)
+    return tranca, None
+
+
 @guardias_bp.post("")
 @roles_required("admin", "super_admin")
 def crear_guardia(usuario_actual):
@@ -241,15 +265,40 @@ def abrir_tranca_manual(usuario_actual):
 @roles_required("guardia")
 @limiter.limit("20 per minute")
 def buscar_residente_por_codigo(usuario_actual):
-    """Busca a la persona por casa + código. No abre nada todavía."""
+    """
+    Busca a la persona que pide entrar sin teléfono. No abre nada todavía.
+
+    DOS MODOS, según si el guardia escribió código o no:
+
+      con código   -> residente que usa la app. Casa + código de 6 dígitos
+                      devuelven a UNA persona.
+
+      sin código   -> persona del PADRÓN (Día 70). Esa gente no tiene app,
+                      así que tampoco puede tener código de emergencia: se
+                      configura desde la app. Sin este modo, el guardia no
+                      tenía forma de encontrarlas, y el padrón --hecho para
+                      dar trazabilidad en el portón-- no servía en el portón.
+                      Se devuelve la lista de personas del padrón de esa
+                      casa, con nombre, identidad y foto, para que el
+                      guardia compare contra la identificación que tiene en
+                      la mano y elija.
+
+    El modo sin código SOLO lista personas del padrón, nunca a quien usa la
+    app: esa gente tiene código, y sin él no se la muestra. Así la pantalla
+    del guardia no se convierte en un directorio de la residencial.
+
+    En un edificio se exige el apartamento: listar a todo el edificio sería
+    justo el directorio que se quiere evitar.
+    """
     from app.models.cuenta import Cuenta, Residente, Unidad
 
     data = request.get_json(silent=True) or {}
     casa = (data.get("casa") or "").strip()
     codigo = (data.get("codigo") or "").strip()
+    apartamento = (data.get("apartamento") or "").strip()
 
-    if not casa or not codigo:
-        return _err("datos_incompletos", "Indicá la casa y el código", 400)
+    if not casa:
+        return _err("datos_incompletos", "Indicá la casa", 400)
 
     unidad = Unidad.query.filter(
         db.func.lower(Unidad.identificador) == casa.lower(),
@@ -262,19 +311,59 @@ def buscar_residente_por_codigo(usuario_actual):
         from flask import g
         g.email_intento = f"casa={casa[:40]}"
         current_app.logger.warning(
-            "Codigo de emergencia fallido — guardia=%s casa=%s", usuario_actual.id, casa[:40])
+            "Busqueda de residente fallida — guardia=%s casa=%s apto=%s con_codigo=%s",
+            usuario_actual.id, casa[:40], apartamento[:10], bool(codigo))
         return _err("no_encontrado", mensaje, 404)
 
     if not unidad:
-        return _fallo("No encontramos esa casa ni ese código")
+        return _fallo("No encontramos esa casa")
 
     cuentas = Cuenta.query.filter_by(unidad_id=unidad.id, activa=True).all()
+
+    # ── Modo padrón: sin código ──────────────────────────────────────────
+    if not codigo:
+        if unidad.tipo == "edificio":
+            if not apartamento:
+                return _err("apartamento_requerido",
+                            "Es un edificio: indicá también el apartamento", 400)
+            cuentas = [c for c in cuentas
+                       if (c.apartamento or "").lower() == apartamento.lower()]
+
+        personas = []
+        cuenta_de = {}
+        for cuenta in cuentas:
+            for residente in cuenta.residentes:
+                if (residente.activo and residente.usuario
+                        and residente.usuario.es_censo):
+                    personas.append(residente)
+                    cuenta_de[residente.id] = cuenta
+
+        if not personas:
+            return _fallo("Esa casa no tiene personas del padrón. Si la "
+                          "persona usa la app, pedile su código de emergencia.")
+
+        # Cada consulta del padrón queda registrada aunque no termine en un
+        # acceso: muestra nombres e identidades, y tiene que poder
+        # auditarse quién miró qué casa y cuándo.
+        current_app.logger.info(
+            "Consulta de padron — guardia=%s casa=%s apto=%s personas=%s",
+            usuario_actual.id, unidad.identificador, apartamento[:10], len(personas))
+
+        return jsonify({"data": {
+            "modo": "padron",
+            "casa": unidad.identificador,
+            "apartamento": apartamento or None,
+            "personas": [r.to_dict() for r in personas],
+        }})
+
+    # ── Modo código: residente con app ───────────────────────────────────
     for cuenta in cuentas:
         for residente in cuenta.residentes:
             if not residente.activo or not residente.usuario:
                 continue
             if residente.usuario.check_codigo_emergencia(codigo):
                 return jsonify({"data": {
+                    "modo": "codigo",
                     "residente": residente.to_dict(),
                     "casa": unidad.identificador,
                     # Se avisa de la mora como INFORMACIÓN, nunca como
@@ -316,7 +405,16 @@ def registrar_acceso_residente(usuario_actual):
     if not unidad or unidad.residencial_id != usuario_actual.residencial_id:
         return _err("residente_ajeno", "Ese residente no pertenece a tu residencial", 403)
 
-    tranca, error = _tranca_del_guardia(usuario_actual, request.form.get("acceso_id"))
+    # Día 70 — la app ya no elige la tranca de un desplegable: el guardia
+    # toca "Entrada vehicular", "Salida vehicular" o "Entrada peatonal", y
+    # acá se busca la tranca de SU punto que corresponde a ese tipo y esa
+    # dirección. Se sigue aceptando acceso_id para no romper versiones de
+    # la app que ya estén instaladas.
+    tipo_acceso = (request.form.get("tipo_acceso") or "").strip()
+    if tipo_acceso:
+        tranca, error = _tranca_por_tipo(usuario_actual, tipo_acceso, direccion)
+    else:
+        tranca, error = _tranca_del_guardia(usuario_actual, request.form.get("acceso_id"))
     if error:
         return error
 
@@ -330,6 +428,11 @@ def registrar_acceso_residente(usuario_actual):
         return _err("foto_requerida",
                     "La foto de la identificación es obligatoria para registrar la entrada", 400)
 
+    # El historial tiene que distinguir los dos caminos: con código, la
+    # persona demostró algo que solo ella sabe; del padrón, la única prueba
+    # es que el guardia comparó la identificación contra la ficha.
+    metodo = "padron_identidad" if residente.usuario.es_censo else "codigo_emergencia"
+
     evento = EventoAcceso(
         origen="residente",
         direccion=direccion,
@@ -339,7 +442,7 @@ def registrar_acceso_residente(usuario_actual):
         foto_identidad=foto_nombre,
         # Así el historial distingue este acceso de uno hecho con tarjeta,
         # con QR o por la Raspberry Pi.
-        metodo="codigo_emergencia",
+        metodo=metodo,
     )
     db.session.add(evento)
     db.session.commit()
