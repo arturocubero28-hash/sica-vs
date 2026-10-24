@@ -568,6 +568,12 @@ def create_app(config_class=Config):
             # usen como si fueran credenciales.
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS codigo_emergencia_hash VARCHAR(255)",
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS codigo_emergencia_actualizado TIMESTAMPTZ",
+            # Día 71 — a pedido del patronato, el residente puede VER su
+            # código en la app si lo olvida. Se agrega una copia cifrada; el
+            # hash de arriba se mantiene y es lo único que usa el portón.
+            # Los códigos creados antes no tienen copia: hay que redefinirlos
+            # para poder verlos.
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS codigo_emergencia_cifrado TEXT",
 
             # ── Día 69 · Cómo se autorizó cada acceso ────────────────────────
             # Un acceso de residente puede venir de la tarjeta, del QR, de la

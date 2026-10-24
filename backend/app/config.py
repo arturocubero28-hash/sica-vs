@@ -51,6 +51,14 @@ class Config:
     # seguridad, bajar este valor o implementar refresh tokens a futuro.
     JWT_EXPIRES_HOURS = int(os.environ.get("JWT_EXPIRES_HOURS", "12"))
 
+    # Día 71 — llave para guardar CIFRADO el código de emergencia (además de
+    # su hash), de modo que el residente pueda verlo en su app si lo olvida.
+    # Si no se define, se deriva de JWT_SECRET. Ojo: si cualquiera de las dos
+    # cambia, los códigos ya guardados dejan de poder mostrarse (siguen
+    # funcionando en el portón, porque eso usa el hash) y el residente tiene
+    # que definir uno nuevo para volver a verlo.
+    CODIGO_EMERGENCIA_KEY = os.environ.get("CODIGO_EMERGENCIA_KEY", "")
+
     # CORS
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
 

@@ -309,6 +309,7 @@ const METODO_ACCESO: Record<string, { texto: string; clase: string }> = {
   qr:                { texto: "QR de la app",          clase: "green" },
   codigo_emergencia: { texto: "Código de emergencia",  clase: "amber" },
   padron_identidad:  { texto: "Padrón (identidad)",    clase: "amber" },
+  identidad_sin_codigo: { texto: "Identidad (sin código)", clase: "amber" },
 };
 function metodoTexto(m?: string | null) {
   return m ? (METODO_ACCESO[m]?.texto ?? m) : "—";

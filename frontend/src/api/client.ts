@@ -791,7 +791,7 @@ export interface EventoTarjetaDTO {
   tipo_acceso?: "vehicular" | "peatonal" | null;
   acceso: string; punto_acceso?: string | null; ocurrido_en: string;
   /** Día 70 — cómo entró: tarjeta | tarjeta_virtual | qr |
-   *  codigo_emergencia | padron_identidad. */
+   *  codigo_emergencia | padron_identidad | identidad_sin_codigo. */
   metodo?: string | null;
   /** Solo cuando lo registró un guardia (código o padrón). */
   guardia?: string | null;

@@ -329,18 +329,33 @@ def buscar_residente_por_codigo(usuario_actual):
             cuentas = [c for c in cuentas
                        if (c.apartamento or "").lower() == apartamento.lower()]
 
+        # Día 71 — se lista a TODA persona de la casa que no tiene cómo
+        # usar el camino del código: la gente del padrón y también quien ya
+        # tiene cuenta pero todavía no definió su código (o ni activó la
+        # cuenta). Antes solo salía la gente del padrón, y un miembro al que
+        # la administración le acababa de dar acceso -- deja de ser del
+        # padrón pero aún no tiene código -- no aparecía por ningún lado:
+        # el guardia no podía identificarlo.
+        #
+        # Quien SÍ tiene código sigue sin listarse: para esa persona existe
+        # el código, y mostrarla haría de esta pantalla un directorio.
         personas = []
-        cuenta_de = {}
         for cuenta in cuentas:
             for residente in cuenta.residentes:
-                if (residente.activo and residente.usuario
-                        and residente.usuario.es_censo):
-                    personas.append(residente)
-                    cuenta_de[residente.id] = cuenta
+                u = residente.usuario
+                if not (residente.activo and u):
+                    continue
+                if u.es_censo or not u.tiene_codigo_emergencia:
+                    personas.append((cuenta, residente))
 
         if not personas:
-            return _fallo("Esa casa no tiene personas del padrón. Si la "
-                          "persona usa la app, pedile su código de emergencia.")
+            return _fallo("No hay nadie en esa casa para identificar sin código. "
+                          "Si la persona usa la app, pedile su código de emergencia.")
+
+        # El titular primero: suele ser a quien el guardia conoce, y ayuda
+        # a ubicar al resto de la familia.
+        personas.sort(key=lambda par: (par[1].rol_cuenta != "titular",
+                                       (par[1].usuario.nombre or "").lower()))
 
         # Cada consulta del padrón queda registrada aunque no termine en un
         # acceso: muestra nombres e identidades, y tiene que poder
@@ -353,7 +368,7 @@ def buscar_residente_por_codigo(usuario_actual):
             "modo": "padron",
             "casa": unidad.identificador,
             "apartamento": apartamento or None,
-            "personas": [r.to_dict() for r in personas],
+            "personas": [_persona_para_guardia(c, r) for c, r in personas],
         }})
 
     # ── Modo código: residente con app ───────────────────────────────────
@@ -375,6 +390,24 @@ def buscar_residente_por_codigo(usuario_actual):
                 }})
 
     return _fallo("No encontramos esa casa ni ese código")
+
+
+def _persona_para_guardia(cuenta, residente):
+    """Lo que el guardia necesita para identificar a alguien en el portón:
+    nombre, identidad, foto y qué es de la casa. Nada más: ni correo, ni
+    teléfono, ni RTN, ni dirección, ni contacto de emergencia."""
+    u = residente.usuario
+    return {
+        "id": str(residente.uuid_publico),
+        "nombre": f"{u.nombre} {u.apellido}".strip(),
+        "dni": u.dni,
+        "foto_url": u.foto_url,
+        "rol_cuenta": residente.rol_cuenta,
+        "relacion": residente.relacion,
+        "apartamento": cuenta.apartamento,
+        "es_censo": bool(u.es_censo),
+        "origen": "padron" if u.es_censo else "sin_codigo",
+    }
 
 
 @guardias_bp.post("/residente/registrar")
@@ -431,7 +464,15 @@ def registrar_acceso_residente(usuario_actual):
     # El historial tiene que distinguir los dos caminos: con código, la
     # persona demostró algo que solo ella sabe; del padrón, la única prueba
     # es que el guardia comparó la identificación contra la ficha.
-    metodo = "padron_identidad" if residente.usuario.es_censo else "codigo_emergencia"
+    u = residente.usuario
+    if u.es_censo:
+        metodo = "padron_identidad"
+    elif u.tiene_codigo_emergencia:
+        metodo = "codigo_emergencia"
+    else:
+        # Día 71 — tiene cuenta pero no código: el guardia la identificó
+        # igual que a la gente del padrón, solo con la identificación.
+        metodo = "identidad_sin_codigo"
 
     evento = EventoAcceso(
         origen="residente",

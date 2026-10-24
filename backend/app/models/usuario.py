@@ -16,6 +16,19 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.extensions import db
 
 
+
+def _fernet_codigos():
+    """Cifrador de los códigos de emergencia (Día 71).
+
+    cryptography ya viene instalada como dependencia de webauthn."""
+    import base64
+    import hashlib
+    from cryptography.fernet import Fernet
+    from app.config import Config
+    semilla = Config.CODIGO_EMERGENCIA_KEY or ("codigo-emergencia:" + Config.JWT_SECRET)
+    llave = base64.urlsafe_b64encode(hashlib.sha256(semilla.encode("utf-8")).digest())
+    return Fernet(llave)
+
 class Usuario(db.Model):
     __tablename__ = "usuarios"
 
@@ -59,6 +72,10 @@ class Usuario(db.Model):
     # Ver la nota larga en app/__init__.py sobre por qué existe.
     codigo_emergencia_hash = db.Column(db.String(255))
     codigo_emergencia_actualizado = db.Column(db.DateTime(timezone=True))
+    # Día 71 — copia CIFRADA del código, para que su dueño pueda verlo en la
+    # app. El portón sigue verificando contra el hash; esta columna solo la
+    # lee GET /auth/codigo-emergencia del propio usuario.
+    codigo_emergencia_cifrado = db.Column(db.Text)
     # rol global: super_admin | admin | guardia | residente
     # ENUM real de PostgreSQL (rol_global) — fix Día 36.
     rol = db.Column(
@@ -112,6 +129,23 @@ class Usuario(db.Model):
             codigo.encode("utf-8"), bcrypt.gensalt()
         ).decode("utf-8")
         self.codigo_emergencia_actualizado = _dt.datetime.now(_dt.timezone.utc)
+        self.codigo_emergencia_cifrado = _fernet_codigos().encrypt(
+            codigo.encode("utf-8")).decode("ascii")
+
+    def codigo_emergencia_visible(self):
+        """El código en claro, solo para mostrárselo a su dueño.
+
+        None si no tiene código, si se creó antes de que existiera la copia
+        cifrada (Día 71) o si cambió la llave: en esos casos el residente
+        define uno nuevo para poder verlo."""
+        if not self.codigo_emergencia_cifrado:
+            return None
+        from cryptography.fernet import InvalidToken
+        try:
+            return _fernet_codigos().decrypt(
+                self.codigo_emergencia_cifrado.encode("ascii")).decode("utf-8")
+        except (InvalidToken, ValueError):
+            return None
 
     def check_codigo_emergencia(self, codigo: str) -> bool:
         """

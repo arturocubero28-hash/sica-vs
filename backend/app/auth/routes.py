@@ -200,11 +200,18 @@ def cambiar_password(usuario_actual):
 # datos biométricos de 500 familias.
 @auth_bp.get("/codigo-emergencia")
 @token_required
+@limiter.limit("30 per minute")
 def estado_codigo_emergencia(usuario_actual):
-    """Dice si ya tiene código configurado. NUNCA devuelve el código:
-    está hasheado y no se puede recuperar, solo reemplazar."""
+    """Estado del código y, desde el Día 71, el código mismo para que su
+    dueño pueda verlo en la app si lo olvidó (la app lo muestra oculto
+    hasta que toca el ojo). Solo devuelve el código del usuario de la
+    sesión, nunca el de otra persona.
+
+    "codigo" viene en null si el código se creó antes de que se guardara
+    la copia cifrada: la app le pide al residente que defina uno nuevo."""
     return jsonify({"data": {
         "configurado": usuario_actual.tiene_codigo_emergencia,
+        "codigo": usuario_actual.codigo_emergencia_visible(),
         "actualizado_en": (usuario_actual.codigo_emergencia_actualizado.isoformat()
                            if usuario_actual.codigo_emergencia_actualizado else None),
     }})
