@@ -1,7 +1,8 @@
 """
 Endpoints de autenticación.
 
-  POST /api/v1/auth/login        { email, password }      -> { token, usuario }
+  POST /api/v1/auth/login        { email, password, recordar? } -> { token, usuario, refresh_token? }
+  POST /api/v1/auth/renovar      { refresh_token }        -> { token, refresh_token, usuario }
   GET  /api/v1/auth/me           (con token)              -> { usuario }
   POST /api/v1/auth/activar      { token, password }      -> activa cuenta y define contraseña
   POST /api/v1/auth/recuperar    { email }                -> envía token de recuperación
@@ -146,14 +147,91 @@ def login():
     ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
     if ip:
         ip = ip.split(",")[0].strip()[:45]
-    db.session.add(SesionActiva(
+    sesion = SesionActiva(
         usuario_id=usuario.id, jti=jti,
         dispositivo=describir_dispositivo(ua), user_agent=ua, ip=ip,
         expira_en=expira,
-    ))
+    )
+    # Día 72 — la app pide "recordar": la sesión queda abierta hasta que la
+    # persona la cierre (ver app/auth/sesiones.py). El panel web no lo pide
+    # y sigue igual que antes.
+    refresh = None
+    if (data.get("recordar") is True and usuario.rol not in
+            current_app.config["ROLES_SIN_SESION_PERSISTENTE"]):
+        from app.auth.sesiones import emitir_refresh, vencimiento_sesion_app
+        refresh = emitir_refresh(sesion)
+        sesion.expira_en = vencimiento_sesion_app()
+    db.session.add(sesion)
     db.session.commit()
 
-    return jsonify({"data": {"token": token, "usuario": usuario.to_dict()}})
+    respuesta = {"token": token, "usuario": usuario.to_dict()}
+    if refresh:
+        respuesta["refresh_token"] = refresh
+    return jsonify({"data": respuesta})
+
+
+# ── Renovar la sesión de la app (Día 72) ───────────────────────
+@auth_bp.post("/renovar")
+@limiter.limit("30 per minute")
+def renovar():
+    """
+    Cambia un token de renovación válido por un JWT nuevo y un token de
+    renovación nuevo. No pide contraseña: es lo que permite que la app
+    mantenga la sesión abierta como WhatsApp.
+
+    Rotación: el token presentado deja de servir. Si la app vuelve a
+    presentarlo dentro de REFRESH_GRACIA_SEGUNDOS (la respuesta anterior se
+    perdió por la red) se le acepta. Si lo presenta DESPUÉS, alguien más lo
+    tiene: se cierra la sesión entera.
+    """
+    from flask import g
+    from app.auth import sesiones as S
+
+    data = request.get_json(silent=True) or {}
+    presentado = data.get("refresh_token") or ""
+    if not isinstance(presentado, str):
+        presentado = ""
+
+    def _rechazo(code="sesion_invalida",
+                 msg="Tu sesión se cerró. Iniciá sesión de nuevo."):
+        return jsonify({"error": {"code": code, "message": msg}}), 401
+
+    sesion, es_anterior = S.buscar_por_refresh(presentado)
+    if not sesion or not sesion.persistente:
+        return _rechazo()
+
+    if es_anterior and not S.dentro_de_gracia(sesion):
+        # Reuso de un token ya rotado fuera del margen: posible robo.
+        S.cerrar_sesion_registro(sesion)
+        db.session.commit()
+        return _rechazo("sesion_revocada",
+                        "Por seguridad se cerró tu sesión. Iniciá sesión de nuevo.")
+
+    if S.con_zona(sesion.expira_en) < S.ahora_utc():
+        S.cerrar_sesion_registro(sesion)
+        db.session.commit()
+        return _rechazo("sesion_vencida",
+                        "Pasó mucho tiempo sin usar la app. Iniciá sesión de nuevo.")
+
+    usuario = db.session.get(Usuario, sesion.usuario_id)
+    if not usuario or not usuario.activo or not usuario.puede_iniciar_sesion:
+        S.cerrar_sesion_registro(sesion)
+        db.session.commit()
+        return _rechazo()
+
+    g.usuario_actual = usuario  # para el hook de auditoría
+
+    token, jti, _exp = generar_token(usuario, devolver_jti=True)
+    S.revocar_jti_anterior(sesion.jti, usuario.id)
+    sesion.jti = jti
+    nuevo_refresh = S.emitir_refresh(sesion)
+    sesion.ultimo_uso = S.ahora_utc()
+    sesion.expira_en = S.vencimiento_sesion_app()
+    usuario.ultimo_acceso = dt.datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({"data": {"token": token, "refresh_token": nuevo_refresh,
+                             "usuario": usuario.to_dict()}})
 
 
 # ── Me ─────────────────────────────────────────────────────────
@@ -183,6 +261,12 @@ def cambiar_password(usuario_actual):
 
     usuario_actual.set_password(nueva)
     usuario_actual.debe_cambiar_password = False
+    # Día 72 — con sesiones que duran meses, cambiar la contraseña tiene que
+    # sacar a los demás dispositivos (si alguien se quedó con un teléfono,
+    # pierde el acceso). Este dispositivo sigue con su sesión.
+    from flask import g
+    from app.auth.sesiones import cerrar_sesiones_de
+    cerrar_sesiones_de(usuario_actual, excepto_jti=getattr(g, "jti_actual", None))
     db.session.commit()
 
     return jsonify({"data": {"message": "Contraseña actualizada correctamente",
@@ -414,6 +498,9 @@ def restablecer_password():
     usuario.set_password(password)
     if not usuario.activo:
         usuario.activo = True
+    # Día 72 — restablecer la contraseña cierra TODAS las sesiones abiertas.
+    from app.auth.sesiones import cerrar_sesiones_de
+    cerrar_sesiones_de(usuario)
     db.session.commit()
 
     return jsonify({"data": {"message": "Contraseña restablecida correctamente. Ya puedes iniciar sesión."}})
@@ -421,24 +508,43 @@ def restablecer_password():
 
 # ── Cerrar sesión (revoca el token actual) ─────────────────────
 @auth_bp.post("/logout")
-@token_required
-def logout(usuario_actual):
+@limiter.limit("30 per minute")
+def logout():
     """
-    Revoca el token con el que se hizo la petición, añadiéndolo a la
-    blacklist. A partir de aquí ese token deja de ser válido aunque
-    no haya expirado.
+    Cierra la sesión de este dispositivo.
+
+    Día 72 — ya no exige un JWT vigente. La app puede tener el JWT vencido
+    (lo renueva sola) y aun así tiene que poder cerrar sesión de verdad: si
+    solo se borrara el token del teléfono, el token de renovación seguiría
+    vivo en el servidor. Por eso acepta cualquiera de los dos:
+      - Authorization: Bearer <jwt>   (panel web y app)
+      - { "refresh_token": "..." }     (app)
+    Siempre responde 200: cerrar algo que ya estaba cerrado no es un error.
     """
-    auth = request.headers.get("Authorization", "")
-    token = auth.split(" ", 1)[1] if auth.startswith("Bearer ") else ""
-    if token:
-        revocar_token(token, usuario_id=usuario_actual.id)
-        # Eliminar el registro de sesión activa de este token
-        from flask import g
-        from app.models.sesion_activa import SesionActiva
+    from flask import g
+    from app.auth.sesiones import buscar_por_refresh, cerrar_sesion_registro
+    from app.auth.security import _usuario_desde_request
+    from app.models.sesion_activa import SesionActiva
+
+    usuario = _usuario_desde_request()
+    if usuario:
+        g.usuario_actual = usuario
+        auth = request.headers.get("Authorization", "")
+        token = auth.split(" ", 1)[1] if auth.startswith("Bearer ") else ""
+        if token:
+            revocar_token(token, usuario_id=usuario.id)
         jti = getattr(g, "jti_actual", None)
         if jti:
             SesionActiva.query.filter_by(jti=jti).delete()
-            db.session.commit()
+
+    data = request.get_json(silent=True) or {}
+    refresh = data.get("refresh_token")
+    if isinstance(refresh, str) and refresh:
+        sesion, _ = buscar_por_refresh(refresh)
+        if sesion:
+            cerrar_sesion_registro(sesion)
+
+    db.session.commit()
     return jsonify({"data": {"message": "Sesión cerrada"}})
 
 

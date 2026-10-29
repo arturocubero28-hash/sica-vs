@@ -47,9 +47,28 @@ class Config:
     JWT_SECRET = os.environ.get("JWT_SECRET", "dev_secret_cambiar")
     # Duración del token de sesión. 12h es un balance entre comodidad (no
     # reloguear seguido) y exposición si un token se filtra. Hay blacklist por
-    # jti (logout) y registro de sesiones activas como mitigación. Para mayor
-    # seguridad, bajar este valor o implementar refresh tokens a futuro.
+    # jti (logout) y registro de sesiones activas como mitigación. Desde el
+    # Día 72 la app móvil además tiene token de renovación (ver abajo).
     JWT_EXPIRES_HOURS = int(os.environ.get("JWT_EXPIRES_HOURS", "12"))
+
+    # Día 72 — sesión persistente de la app. El JWT sigue durando
+    # JWT_EXPIRES_HOURS; la app lo renueva sola con un token de renovación.
+    # La sesión se cierra si pasan SESION_APP_DIAS sin abrir la app (cada
+    # renovación vuelve a contar desde cero).
+    SESION_APP_DIAS = int(os.environ.get("SESION_APP_DIAS", "180"))
+    # Si la respuesta de una renovación se pierde (corte de red), la app
+    # reintenta con el token que ya fue rotado. Se le acepta durante este
+    # margen; pasado el margen, usar un token viejo se toma como robo y se
+    # cierra la sesión.
+    REFRESH_GRACIA_SEGUNDOS = int(os.environ.get("REFRESH_GRACIA_SEGUNDOS", "300"))
+    # Roles que NO reciben sesión permanente aunque la app la pida. El
+    # teléfono de la caseta suele ser compartido entre turnos: para el
+    # guardia, que la sesión venza a las JWT_EXPIRES_HOURS funciona como
+    # "fin de turno". Lista separada por comas; vacía = todos permanentes.
+    ROLES_SIN_SESION_PERSISTENTE = {
+        r.strip() for r in os.environ.get("ROLES_SIN_SESION_PERSISTENTE", "guardia").split(",")
+        if r.strip()
+    }
 
     # Día 71 — llave para guardar CIFRADO el código de emergencia (además de
     # su hash), de modo que el residente pueda verlo en su app si lo olvida.

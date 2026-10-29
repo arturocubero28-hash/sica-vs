@@ -575,6 +575,16 @@ def create_app(config_class=Config):
             # para poder verlos.
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS codigo_emergencia_cifrado TEXT",
 
+            # ── Día 72 · Sesión persistente de la app ────────────────────────
+            # Token de renovación (solo su hash) para que la app no vuelva a
+            # pedir la contraseña cada 12 horas. Ver models/sesion_activa.py.
+            "ALTER TABLE sesiones_activas ADD COLUMN IF NOT EXISTS persistente BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE sesiones_activas ADD COLUMN IF NOT EXISTS refresh_hash VARCHAR(64)",
+            "ALTER TABLE sesiones_activas ADD COLUMN IF NOT EXISTS refresh_anterior_hash VARCHAR(64)",
+            "ALTER TABLE sesiones_activas ADD COLUMN IF NOT EXISTS refresh_rotado_en TIMESTAMPTZ",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_sesiones_activas_refresh_hash ON sesiones_activas (refresh_hash)",
+            "CREATE INDEX IF NOT EXISTS ix_sesiones_activas_refresh_anterior_hash ON sesiones_activas (refresh_anterior_hash)",
+
             # ── Día 69 · Cómo se autorizó cada acceso ────────────────────────
             # Un acceso de residente puede venir de la tarjeta, del QR, de la
             # Pi o del guardia con el código de emergencia. Antes no había

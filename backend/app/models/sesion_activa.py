@@ -29,6 +29,20 @@ class SesionActiva(db.Model):
     ultimo_uso    = db.Column(db.DateTime(timezone=True), default=_now)
     expira_en     = db.Column(db.DateTime(timezone=True), nullable=False)
 
+    # Día 72 — sesión persistente de la app ("estilo WhatsApp").
+    #
+    # Si la app pidió "recordar" al iniciar sesión, además del JWT de corta
+    # vida se le entrega un token de renovación. Del token solo se guarda su
+    # SHA-256: si alguien lee la base de datos, no obtiene tokens usables.
+    # Cada renovación lo rota (el anterior deja de servir) y extiende la
+    # sesión. La sesión dura mientras se siga usando; muere al cerrarla
+    # (desde la app, desde "dispositivos conectados" o al cambiar la
+    # contraseña) o tras SESION_APP_DIAS sin abrir la app.
+    persistente           = db.Column(db.Boolean, nullable=False, default=False)
+    refresh_hash          = db.Column(db.String(64), unique=True, index=True)
+    refresh_anterior_hash = db.Column(db.String(64), index=True)
+    refresh_rotado_en     = db.Column(db.DateTime(timezone=True))
+
     def to_dict(self, jti_actual=None):
         return {
             "id": self.id,

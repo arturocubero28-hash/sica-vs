@@ -154,6 +154,10 @@ def reset_password(usuario_actual, uuid_usuario):
     password_temporal = generar_password_temporal()
     u.set_password(password_temporal)
     u.debe_cambiar_password = True
+    # Día 72 — las sesiones de la app duran meses: si el admin resetea la
+    # clave (p. ej. se perdió el teléfono de la caseta), se cierran todas.
+    from app.auth.sesiones import cerrar_sesiones_de
+    cerrar_sesiones_de(u)
     db.session.commit()
     return jsonify({"data": {"message": "Contraseña restablecida",
                              "password_generica": password_temporal}})
