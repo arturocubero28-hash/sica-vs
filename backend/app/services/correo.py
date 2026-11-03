@@ -40,7 +40,8 @@ def _enviar(destinatario, asunto, html):
         from flask import current_app
         resend.api_key = current_app.config["RESEND_API_KEY"]
         remitente = current_app.config.get(
-            "RESEND_FROM", "SICA-VS <notificaciones@patronatovillasdelsol.com>")
+            "RESEND_FROM",
+            "Residencial Villas del Sol <notificaciones@patronatovillasdelsol.com>")
         resend.Emails.send({
             "from": remitente,
             "to": destinatario,
@@ -57,7 +58,12 @@ def _plantilla_base(titulo, cuerpo_html, nombre_residencial, boton_texto=None, b
     """
     Plantilla HTML simple y compatible con la mayoría de clientes de
     correo (sin CSS externo ni JS -- Gmail/Outlook/etc. los descartan).
-    Usa el naranja/azul de marca de SICA-VS como base; no usa el color
+    Día 72 — el encabezado muestra el nombre de la residencial, no "SICA-VS".
+    Ese era el nombre interno del proyecto y ya no se usa de cara a nadie:
+    la app se llama "Residencial Villas del Sol App". Poner acá el nombre de
+    la residencial además sirve para cualquier otra que use el sistema.
+
+    Usa el naranja/azul de marca como base; no usa el color
     dinámico de cada residencial acá a propósito -- a diferencia de los
     PDFs (que se abren DESPUÉS de haber iniciado sesión, con la
     residencial ya identificada), este correo es lo PRIMERO que ve un
@@ -78,8 +84,7 @@ def _plantilla_base(titulo, cuerpo_html, nombre_residencial, boton_texto=None, b
         <table role="presentation" width="480" cellpadding="0" cellspacing="0"
                style="background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;">
           <tr><td style="background:#022E45;padding:24px 32px;">
-            <span style="color:#ffffff;font-size:20px;font-weight:700;">SICA-VS</span><br/>
-            <span style="color:#F5C518;font-size:13px;">{nombre_residencial}</span>
+            <span style="color:#ffffff;font-size:20px;font-weight:700;">{nombre_residencial}</span>
           </td></tr>
           <tr><td style="padding:32px;">
             <h2 style="color:#022E45;margin:0 0 16px;font-size:19px;">{titulo}</h2>
@@ -128,7 +133,7 @@ def enviar_correo_activacion(email, nombre, token, nombre_residencial, es_reenvi
     url = f"{url_frontend}/?activar={token}"
 
     # Día 62 — reescrito a pedido del usuario: el texto anterior era
-    # genérico ("Ya tenés una cuenta en SICA-VS"), sin mencionar el nombre
+    # genérico, sin mencionar el nombre
     # de la residencial ni personalizar con el nombre del residente. Ahora
     # el correo es explícitamente multi-residencial: usa el nombre real de
     # la persona y el nombre real de SU residencial (ambos ya llegaban como
@@ -156,11 +161,11 @@ def enviar_correo_reset(email, token, nombre_residencial):
     from flask import current_app
     url_frontend = current_app.config.get("FRONTEND_URL", "https://patronatovillasdelsol.com")
     url = f"{url_frontend}/?reset={token}"
-    cuerpo = """
-      <p>Pediste restablecer tu contraseña en SICA-VS.</p>
+    cuerpo = f"""
+      <p>Pediste restablecer tu contraseña de <b>{nombre_residencial}</b>.</p>
       <p>Hacé clic en el botón de abajo para elegir una nueva. Si vos no pediste esto,
       podés ignorar este correo con tranquilidad -- tu contraseña actual sigue funcionando.</p>
       <p style="color:#93a0ad;font-size:13px;">Este enlace vence en 2 horas.</p>"""
     html = _plantilla_base("Restablecer contraseña", cuerpo, nombre_residencial,
                            "Restablecer contraseña", url)
-    return _enviar(email, "Restablecer tu contraseña — SICA-VS", html)
+    return _enviar(email, f"Restablecer tu contraseña — {nombre_residencial}", html)

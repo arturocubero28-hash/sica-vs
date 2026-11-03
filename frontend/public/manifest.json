@@ -1,6 +1,6 @@
 {
-  "name": "SICA-VS Villas del Sol",
-  "short_name": "SICA-VS",
+  "name": "Residencial Villas del Sol",
+  "short_name": "Villas del Sol",
   "description": "Sistema de Control de Accesos - Residencial Villas del Sol",
   "start_url": "/",
   "display": "standalone",

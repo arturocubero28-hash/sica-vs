@@ -193,7 +193,7 @@ def wallet_pass(usuario_actual):
                 "hexBackgroundColor": "#022E45",
                 "logo": {
                     "sourceUri": {"uri": current_app.config.get("LOGO_URL", "")},
-                    "contentDescription": {"defaultValue": {"language": "es", "value": "SICA-VS"}},
+                    "contentDescription": {"defaultValue": {"language": "es", "value": "Residencial Villas del Sol"}},
                 },
                 "cardTitle": {
                     "defaultValue": {"language": "es", "value": "Residencial Villas del Sol"}
@@ -288,7 +288,7 @@ def wallet_pass(usuario_actual):
         if logo_url:
             generic_object["logo"] = {
                 "sourceUri": {"uri": logo_url},
-                "contentDescription": {"defaultValue": {"language": "es", "value": "SICA-VS"}},
+                "contentDescription": {"defaultValue": {"language": "es", "value": "Residencial Villas del Sol"}},
             }
 
         # Verificar que la clase exista; si no, crearla vía API

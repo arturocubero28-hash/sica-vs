@@ -4253,3 +4253,23 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
   content: ""; position: absolute; left: 12px; top: 0; bottom: 0;
   border-left: 2px solid #d6deea;
 }
+
+/* ===== Campo de contraseña con ojito (Día 72) ===== */
+/* El input va a ancho completo y le dejamos lugar al botón a la derecha.
+   Las reglas de `button` son globales (fondo azul, sombra, padding), así
+   que acá se anulan una por una: el ojo no es un botón de acción. */
+.campo-password { position: relative; display: flex; }
+.campo-password input {
+  width: 100%; padding-right: 44px; box-sizing: border-box;
+}
+.campo-password-ojo,
+.campo-password-ojo:hover,
+.campo-password-ojo:active,
+.campo-password-ojo:focus {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  background: transparent; border: none; box-shadow: none;
+  padding: 7px; margin: 0; min-width: 0; width: auto;
+  display: flex; align-items: center; justify-content: center;
+  color: #93a0ad; cursor: pointer; border-radius: 8px;
+}
+.campo-password-ojo:hover { background: #f1f5f9; color: var(--azul2); }

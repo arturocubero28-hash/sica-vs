@@ -89,7 +89,8 @@ class Config:
     # configurados vía DNS) -- si no está verificado, Resend rechaza el
     # envío o lo manda a spam.
     RESEND_FROM = os.environ.get(
-        "RESEND_FROM", "SICA-VS <notificaciones@patronatovillasdelsol.com>")
+        "RESEND_FROM",
+        "Residencial Villas del Sol <notificaciones@patronatovillasdelsol.com>")
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://patronatovillasdelsol.com")
 
     # ---- Acceso BLE (Bluetooth) ----
@@ -104,7 +105,7 @@ class Config:
 
     # WebAuthn (biometría)
     WEBAUTHN_RP_ID = os.environ.get("WEBAUTHN_RP_ID", "localhost")
-    WEBAUTHN_RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "SICA-VS Villas del Sol")
+    WEBAUTHN_RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "Residencial Villas del Sol")
     WEBAUTHN_ORIGIN = os.environ.get("WEBAUTHN_ORIGIN", "http://localhost:5173")
 
     # Subida de archivos (comprobantes, fotos de visitas)

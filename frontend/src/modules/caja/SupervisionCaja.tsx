@@ -427,7 +427,7 @@ function ModalSaldoInicial({ saldoActual, residencialId, onCerrar, onGuardado }:
         </div>
         <p className="muted small">
           <b>Solo para la implementación inicial.</b> Es el dinero que había en caja el día que
-          se empezó a usar SICA-VS. En operación normal no se modifica — para corregir el saldo
+          se empezó a usar el sistema. En operación normal no se modifica — para corregir el saldo
           por un conteo físico usá "Ajustar saldo de caja". Requiere clave del desarrollador.
         </p>
         <div className="form-field">

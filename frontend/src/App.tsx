@@ -33,6 +33,7 @@ import { ArreglosPanel } from "./modules/arreglos/ArreglosPanel";
 import { UsuariosAdmin } from "./modules/usuarios/UsuariosAdmin";
 import { PanelDesarrollador } from "./modules/dev/PanelDesarrollador";
 import { passwordValida, RequisitosPassword } from "./utils/password";
+import { CampoPassword } from "./components/CampoPassword";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -129,11 +130,11 @@ function Login({ onLogin, onRecuperar, onVolver }: { onLogin: (u: Usuario) => vo
     <div className="center">
       <div className="card login-card">
         <img src="/logo-vs.png" alt="Villas del Sol" className="login-logo" />
-        <h1>SICA-VS</h1>
-        <p className="muted">Residencial Villas del Sol</p>
+        <h1>Villas del Sol</h1>
+        <p className="muted">Portal del residencial</p>
         <input placeholder="Correo electrónico" value={email} onChange={e => setEmail(e.target.value)} />
-        <input type="password" placeholder="Contraseña" value={password}
-          onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && entrar()} />
+        <CampoPassword placeholder="Contraseña" value={password} autoComplete="current-password"
+          onChange={setPassword} onEnter={entrar} />
         {error && <div className="error">{error}</div>}
         <button onClick={entrar} disabled={enviando}>{enviando ? "Entrando…" : "Iniciar sesión"}</button>
         {soportaHuella() && (
@@ -569,11 +570,11 @@ function CambioObligatorio({ usuario, onListo }: { usuario: Usuario; onListo: (u
         <img src="/logo-vs.png" alt="Villas del Sol" className="login-logo" />
         <h1>Bienvenido, {usuario.nombre}</h1>
         <p className="muted">Por seguridad, definí una nueva contraseña antes de continuar.</p>
-        <input type="password" placeholder="Nueva contraseña" value={pass}
-          onChange={e => setPass(e.target.value)} />
+        <CampoPassword placeholder="Nueva contraseña" value={pass} autoComplete="new-password"
+          onChange={setPass} />
         {pass && <RequisitosPassword password={pass} />}
-        <input type="password" placeholder="Repetir contraseña" value={pass2}
-          onChange={e => setPass2(e.target.value)} onKeyDown={e => e.key === "Enter" && guardar()} />
+        <CampoPassword placeholder="Repetir contraseña" value={pass2} autoComplete="new-password"
+          onChange={setPass2} onEnter={guardar} />
         {error && <div className="error">{error}</div>}
         <button onClick={guardar} disabled={enviando}>{enviando ? "Guardando…" : "Guardar y continuar"}</button>
       </div>
@@ -606,10 +607,11 @@ function ActivarCuenta({ token, onActivado }: { token: string; onActivado: (u: U
       <div className="card">
         <h1>Activar tu cuenta</h1>
         <p className="muted">Define tu contraseña para acceder al sistema</p>
-        <input type="password" placeholder="Nueva contraseña" value={password} onChange={e => setPassword(e.target.value)} />
+        <CampoPassword placeholder="Nueva contraseña" value={password} autoComplete="new-password"
+          onChange={setPassword} />
         {password && <RequisitosPassword password={password} />}
-        <input type="password" placeholder="Confirmar contraseña" value={password2}
-          onChange={e => setPassword2(e.target.value)} onKeyDown={e => e.key === "Enter" && activar()} />
+        <CampoPassword placeholder="Confirmar contraseña" value={password2} autoComplete="new-password"
+          onChange={setPassword2} onEnter={activar} />
         {error && <div className="error">{error}</div>}
         <button onClick={activar} disabled={enviando}>{enviando ? "Activando…" : "Activar cuenta"}</button>
       </div>
@@ -677,10 +679,11 @@ function ResetPassword({ token, onOk }: { token: string; onOk: () => void }) {
     <div className="center">
       <div className="card">
         <h2>Nueva contraseña</h2>
-        <input type="password" placeholder="Nueva contraseña" value={password} onChange={e => setPassword(e.target.value)} />
+        <CampoPassword placeholder="Nueva contraseña" value={password} autoComplete="new-password"
+          onChange={setPassword} />
         {password && <RequisitosPassword password={password} />}
-        <input type="password" placeholder="Confirmar" value={password2}
-          onChange={e => setPassword2(e.target.value)} onKeyDown={e => e.key === "Enter" && reset()} />
+        <CampoPassword placeholder="Confirmar" value={password2} autoComplete="new-password"
+          onChange={setPassword2} onEnter={reset} />
         {error && <div className="error">{error}</div>}
         {msg && <div className="ok-box">{msg}</div>}
         <button onClick={reset}>Restablecer contraseña</button>
@@ -826,8 +829,8 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
         <div className="sidebar-brand">
           <div className="brand-logo">VS</div>
           <div className="brand-text">
-            <b>SICA-VS</b>
-            <span>Villas del Sol</span>
+            <b>Villas del Sol</b>
+            <span>Portal del residencial</span>
           </div>
         </div>
 

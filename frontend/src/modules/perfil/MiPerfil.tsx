@@ -10,6 +10,7 @@ import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesion
   type ResidencialDTO, type PuntoAccesoDTO, type SuscripcionEstadoDTO, type PlanDTO,
   type SuscripcionPagoDTO } from "../../api/client";
 import { passwordValida, RequisitosPassword } from "../../utils/password";
+import { CampoPassword } from "../../components/CampoPassword";
 import { aplicarColoresResidencial } from "../../utils/colores";
 import { Fingerprint, Home, Users, HardDrive, CreditCard, TrendingUp, AlertOctagon, AlertTriangle, Lock, Check, CheckCircle2, ArrowRight, Sparkles, User, Settings, DoorOpen, Calendar, Info, Building2, Palette, KeyRound, Laptop2, Mail, Phone } from "lucide-react";
 
@@ -145,12 +146,13 @@ function PasswordForm() {
       <h3><KeyRound size={16} /> Cambiar contraseña</h3>
       <div className="form-pago">
         <div className="form-field"><label>Contraseña actual</label>
-          <input type="password" value={actual} onChange={e => setActual(e.target.value)} /></div>
+          <CampoPassword value={actual} onChange={setActual} autoComplete="current-password" /></div>
         <div className="form-field"><label>Nueva contraseña</label>
-          <input type="password" value={nueva} onChange={e => setNueva(e.target.value)} /></div>
+          <CampoPassword value={nueva} onChange={setNueva} autoComplete="new-password" /></div>
         {nueva && <RequisitosPassword password={nueva} />}
         <div className="form-field"><label>Repetir nueva contraseña</label>
-          <input type="password" value={nueva2} onChange={e => setNueva2(e.target.value)} /></div>
+          <CampoPassword value={nueva2} onChange={setNueva2} autoComplete="new-password"
+            onEnter={cambiar} /></div>
         {msg && <div className={msg.startsWith("✓") ? "cuota-ok" : "error"}>{msg}</div>}
         <button className="cuota-btn-pagar full" onClick={cambiar} disabled={guardando}>
           {guardando ? "Guardando…" : "Cambiar contraseña"}
@@ -1265,10 +1267,8 @@ function MiCuentaPanel() {
                     <Lock size={12} style={{ verticalAlign: "middle", marginRight: 4 }} />
                     Ingresá tu contraseña para confirmar
                   </span>
-                  <input type="password" value={passwordUpgrade} autoFocus
-                    onChange={(e) => setPasswordUpgrade(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && confirmarUpgrade()}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--borde)" }} />
+                  <CampoPassword value={passwordUpgrade} autoFocus autoComplete="current-password"
+                    onChange={setPasswordUpgrade} onEnter={confirmarUpgrade} />
                 </label>
 
                 {errorUpgrade && <p className="err small" style={{ marginBottom: 10 }}>{errorUpgrade}</p>}
