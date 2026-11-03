@@ -392,6 +392,53 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
     setFieldErrors(p => { const n = {...p}; delete n[campo]; return n; });
   }
 
+  // Día 72 — "Dar de alta otra cuenta" solo ocultaba el recuadro del
+  // enlace (setEnlace(null)) y dejaba el formulario con TODOS los datos de
+  // la cuenta recién creada: nombre, correo, identidad, dirección. Daba la
+  // impresión de que la cuenta no se había guardado, y peor: tocando otra
+  // vez "Dar de alta cuenta y titular" se intentaba crear a la misma
+  // persona de nuevo. Ahora el formulario vuelve a su estado inicial, y de
+  // paso se recargan las unidades, así el edificio que se acaba de crear
+  // ya aparece en la lista para darle de alta un apartamento.
+  function darDeAltaOtra() {
+    setEnlace(null);
+    setMsg(null);
+    setFieldErrors({});
+    // Unidad
+    setModoUnidad("nueva");
+    setUnidadId("");
+    setBusqueda("");
+    setMostrarSug(false);
+    setNuevaUnidadTipo("casa");
+    setNuevaUnidadId("");
+    setMaxApartamentos("");
+    setApartamento("");
+    setDuenoVive(false);
+    // Cuota y acceso
+    setTarifaId(0);
+    setDiaPago(new Date().getDate() > 28 ? 28 : new Date().getDate());
+    setTipoAccesoVirtualAlta("peatonal");
+    // Titular
+    setNombre("");
+    setApellido("");
+    setEmail("");
+    setTelefono("");
+    setDni("");
+    setRtn("");
+    setDireccionExacta("");
+    setProfesion("");
+    setOcupacion("");
+    setCentroEstudios("");
+    setLugarTrabajo("");
+    setEmergNombre("");
+    setEmergTel("");
+    setMostrarDatosAdic(false);
+    // Enrolamiento por código
+    setCodigoEnrol("");
+    setEnrolInfo(null);
+    recargarUnidades();
+  }
+
   async function guardar() {
     setMsg(null); setEnlace(null);
 
@@ -491,7 +538,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
               <div className="activacion-url">{enlace.url}</div>
               <div className="row-btns" style={{ marginTop: 8 }}>
                 <button className="mini" onClick={copiarEnlace}>Copiar enlace</button>
-                <button className="ghost mini" onClick={() => setEnlace(null)}>Dar de alta otra cuenta</button>
+                <button className="ghost mini" onClick={darDeAltaOtra}>Dar de alta otra cuenta</button>
               </div>
             </>
           ) : (
@@ -503,7 +550,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
                 (y la carpeta de spam, por si acaso).
               </p>
               <div className="row-btns" style={{ marginTop: 8 }}>
-                <button className="ghost mini" onClick={() => setEnlace(null)}>Dar de alta otra cuenta</button>
+                <button className="ghost mini" onClick={darDeAltaOtra}>Dar de alta otra cuenta</button>
               </div>
             </>
           )}
