@@ -114,6 +114,10 @@ export interface ResidenteDTO {
   // sistema. Mostrarla como pendiente haría creer que falta mandarle un
   // correo de activación que no corresponde.
   estado_acceso: "activo" | "pendiente" | "censo";
+  // Día 72 — qué pasó con el último correo que se le mandó. Lo llena el
+  // webhook de Resend; "rebotado" significa que la dirección no existe.
+  correo_estado?: "enviado" | "entregado" | "rebotado" | "queja" | "demorado" | null;
+  correo_detalle?: string | null;
   es_censo?: boolean;
   foto_url?: string | null;
 }

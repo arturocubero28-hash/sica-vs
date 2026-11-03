@@ -83,6 +83,10 @@ class Config:
 
     # Resend (correo)
     RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+    # Día 72 — secreto de firma del webhook de Resend (empieza con whsec_).
+    # Sin esto, el endpoint de webhooks rechaza todo: es lo único que impide
+    # que cualquiera marque correos como rebotados. Ver app/api/webhooks.py.
+    RESEND_WEBHOOK_SECRET = os.environ.get("RESEND_WEBHOOK_SECRET", "")
     # Día 61 — dirección remitente y URL del sitio para armar los links de
     # los correos (activación de cuenta, recuperar contraseña). El
     # remitente exige un dominio verificado en el panel de Resend (SPF/DKIM

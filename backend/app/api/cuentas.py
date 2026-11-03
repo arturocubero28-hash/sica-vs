@@ -966,13 +966,22 @@ def regenerar_enlace(usuario_actual, cuenta_uuid, residente_uuid):
     # Día 61 — no hay ninguna escritura pendiente en esta función (no
     # se hace db.session.add/commit acá), así que el correo puede
     # dispararse ya mismo, sin esperar nada.
+    # Día 72 — el correo del residente ahora se puede corregir desde el
+    # panel, así que este reenvío sale al correo que tenga AHORA. Se borra
+    # el estado anterior (por ejemplo "rebotado" del correo mal escrito)
+    # para que el panel no siga mostrando una advertencia ya resuelta.
+    usuario.correo_estado = None
+    usuario.correo_detalle = None
+    usuario.correo_resend_id = None
+    db.session.commit()
+
     try:
         from app.tasks.correo_task import enviar_correo_activacion_task
         from app.models.residencial import Residencial
         residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
         enviar_correo_activacion_task.delay(
             usuario.email, usuario.nombre, token_activacion,
-            residencial.nombre if residencial else "SICA-VS", es_reenvio=True)
+            residencial.nombre if residencial else "Residencial", es_reenvio=True)
     except Exception:
         pass
 

@@ -2581,6 +2581,8 @@ html { scroll-behavior: smooth; }
 .btn-quitar-miembro:hover:not(:disabled) { background: #fee2e2 !important; color: #991b1b !important; box-shadow: none !important; transform: none !important; }
 /* La acción y su "i" de ayuda viajan juntas. */
 .accion-con-ayuda { display: inline-flex; align-items: center; gap: 5px; }
+/* Día 72 — aviso de que el correo rebotó (lo avisa Resend por webhook). */
+.pill-estado--rebotado { background: #fee2e2; color: #991b1b; }
 /* Día 72 — la ficha del residente se veía desordenada: con columnas de
    180px entraban tres y un correo normal no cabía, así que se partía a la
    mitad de la palabra. Con 230px entran dos en el ancho del modal y el

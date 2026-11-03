@@ -13,7 +13,7 @@ import { LectorTarjeta } from "./LectorTarjeta";
 import { InfoTip } from "../../components/InfoTip";
 import { CapturaFoto } from "../../components/CapturaFoto";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
-import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera } from "lucide-react";
+import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera, AlertTriangle } from "lucide-react";
 
 /** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
  *  Solo acepta números y coloca los guiones automáticamente. */
@@ -324,6 +324,12 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
   // cara contra la que el guardia verifica a quien llega sin teléfono, y
   // si no se toma en este momento, en la práctica no se toma nunca.
   const [foto, setFoto] = useState<File | null>(null);
+  // Día 72 — después de crear la cuenta se vigila unos segundos si el
+  // correo de activación rebota. Resend avisa por webhook y los rebotes de
+  // "ese buzón no existe" llegan casi enseguida, así que el admin se entera
+  // mientras todavía tiene a la persona enfrente para preguntarle el correo
+  // bueno, en vez de descubrirlo días después.
+  const [reboteAviso, setReboteAviso] = useState<string | null>(null);
 
   // Para "agregar apto a edificio existente": solo edificios
   const sugerenciasEdificios = unidades.filter(u =>
@@ -442,11 +448,35 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
     setCodigoEnrol("");
     setEnrolInfo(null);
     setFoto(null);
+    setReboteAviso(null);
     recargarUnidades();
   }
 
+  // Consulta el estado del correo cada pocos segundos durante medio minuto.
+  // No se espera (no bloquea nada): si rebota, aparece el aviso; si no,
+  // simplemente deja de consultar y no se muestra nada.
+  async function vigilarRebote(cuentaId: string) {
+    setReboteAviso(null);
+    for (let intento = 0; intento < 8; intento++) {
+      await new Promise(r => setTimeout(r, 4000));
+      try {
+        const c = await detalleCuenta(cuentaId);
+        const t = c.titular;
+        if (t?.correo_estado === "rebotado") {
+          setReboteAviso(t.correo_detalle
+            || "El servidor del destinatario rechazó el correo.");
+          return;
+        }
+        // Entregado: ya no hay nada que vigilar.
+        if (t?.correo_estado === "entregado") return;
+      } catch {
+        return;  // sin conexión o la ventana ya se cerró: no insistir
+      }
+    }
+  }
+
   async function guardar() {
-    setMsg(null); setEnlace(null);
+    setMsg(null); setEnlace(null); setReboteAviso(null);
 
     const hayUnidad = unidadId || (modoUnidad === "nueva" && nuevaUnidadId.trim());
     const esDuenoSinVivienda = esEdificio && modoUnidad === "nueva" && !duenoVive;
@@ -532,6 +562,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
       setMsg({ tipo: avisoFoto ? "err" : "ok",
                texto: "Cuenta creada exitosamente." + avisoFoto });
       onCreada();
+      vigilarRebote(res.cuenta.id);
     } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
   }
 
@@ -554,6 +585,14 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
         <div className="modal-alta-body">
 
       {/* Resultado: enlace de activación (o aviso de correo enviado) */}
+      {enlace && reboteAviso && (
+        <div className="error" style={{ marginBottom: 10 }}>
+          ⚠ El correo no le llegó a <b>{enlace.email}</b>. {reboteAviso}
+          {" "}Revisá la dirección con la persona: corregila desde la casa, en
+          Miembros → Editar, y después tocá “Regenerar enlace”.
+        </div>
+      )}
+
       {enlace && (
         <div className="activacion-box">
           {enlace.url ? (
@@ -1665,6 +1704,10 @@ function FilaResidente({ residente, cuentaId, onActualizado }: {
   const [f, setF] = useState({
     nombre: residente.nombre_solo || "",
     apellido: residente.apellido || "",
+    // Día 72 — el correo se puede corregir. Es con el que la persona inicia
+    // sesión y al que llega el enlace de activación, así que un correo mal
+    // escrito en el alta dejaba la cuenta pendiente sin arreglo posible.
+    email: residente.email || "",
     telefono: residente.telefono || "",
     dni: residente.dni || "",
     rtn: residente.rtn || "",
@@ -1731,6 +1774,17 @@ function FilaResidente({ residente, cuentaId, onActualizado }: {
         <span className="residente-nombre">{residente.nombre}</span>
         <span className="pill">{residente.rol_cuenta}</span>
         <span className="muted small">{residente.relacion}</span>
+        {/* Día 72 — si Resend avisó que el correo rebotó, se muestra acá:
+            es la única pista de que la cuenta no se activa porque la
+            dirección está mal escrita, no porque la persona no quiera. */}
+        {residente.correo_estado === "rebotado" && (
+          <span className="accion-con-ayuda">
+            <span className="pill-estado pill-estado--rebotado">
+              <AlertTriangle size={12} /> Correo rebotado
+            </span>
+            <InfoTip texto={`El correo no le llegó a ${residente.email}. ${residente.correo_detalle || "El servidor del destinatario lo rechazó."} Corregí la dirección con Editar y después tocá Regenerar enlace.`} />
+          </span>
+        )}
         {esPendiente ? (
           <span className="pill-estado pill-estado--pendiente">
             <Clock size={12} /> Pendiente
@@ -1805,6 +1859,17 @@ function FilaResidente({ residente, cuentaId, onActualizado }: {
               <div className="row">
                 <input placeholder="Nombre" value={f.nombre} onChange={e => set("nombre", e.target.value)} />
                 <input placeholder="Apellido" value={f.apellido} onChange={e => set("apellido", e.target.value)} />
+              </div>
+              <div className="campo-con-error">
+                <input placeholder="Correo electrónico" type="email" value={f.email}
+                  onChange={e => set("email", e.target.value)} />
+                {f.email.trim().toLowerCase() !== (residente.email || "").toLowerCase() && (
+                  <span className="muted small" style={{ textAlign: "left", display: "block", marginTop: 4 }}>
+                    {esPendiente
+                      ? "Al guardar, tocá “Regenerar enlace” para que el correo de activación salga a esta dirección nueva."
+                      : "Esta persona va a iniciar sesión con el correo nuevo."}
+                  </span>
+                )}
               </div>
               <div className="row">
                 <input placeholder="Teléfono" value={f.telefono} onChange={e => set("telefono", e.target.value)} />

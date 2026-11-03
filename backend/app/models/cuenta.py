@@ -395,6 +395,10 @@ class Residente(db.Model):
             "es_censo": bool(u.es_censo) if u else False,
             # Día 69 — foto del miembro, capturada por administración.
             "foto_url": u.foto_url if u else None,
+            # Día 72 — qué pasó con el último correo que le mandamos. El
+            # panel lo usa para avisar que la dirección rebotó.
+            "correo_estado": (u.correo_estado if u else None),
+            "correo_detalle": (u.correo_detalle if u else None),
             # estado de activación de la cuenta de acceso del residente.
             # Día 69 — 'censo' es un tercer estado, distinto de 'pendiente':
             # una persona del padrón no está esperando activar nada, es que

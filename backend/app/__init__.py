@@ -158,6 +158,11 @@ def create_app(config_class=Config):
     from app.api.credencial_ble import ble_bp
     app.register_blueprint(ble_bp, url_prefix="/api/v1/acceso")
 
+    # Día 72 — avisos de Resend (correo rebotado). Público pero firmado:
+    # ver app/api/webhooks.py.
+    from app.api.webhooks import webhooks_bp
+    app.register_blueprint(webhooks_bp, url_prefix="/api/v1/webhooks")
+
     # Inicializar Firebase Cloud Messaging (notificaciones push).
     # Si no está configurado (falta el archivo de credenciales), no rompe:
     # el servicio simplemente omite el envío de notificaciones.
@@ -574,6 +579,15 @@ def create_app(config_class=Config):
             # Los códigos creados antes no tienen copia: hay que redefinirlos
             # para poder verlos.
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS codigo_emergencia_cifrado TEXT",
+
+            # ── Día 72 · Estado del último correo enviado ────────────────────
+            # Lo llena el webhook de Resend (app/api/webhooks.py) para que el
+            # admin vea cuándo un correo rebotó por estar mal escrito.
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo_estado VARCHAR(20)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo_detalle TEXT",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo_resend_id VARCHAR(64)",
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo_actualizado TIMESTAMPTZ",
+            "CREATE INDEX IF NOT EXISTS ix_usuarios_correo_resend_id ON usuarios (correo_resend_id)",
 
             # ── Día 72 · Sesión persistente de la app ────────────────────────
             # Token de renovación (solo su hash) para que la app no vuelva a

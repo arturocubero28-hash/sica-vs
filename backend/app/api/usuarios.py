@@ -184,6 +184,36 @@ def editar_usuario(usuario_actual, uuid_usuario):
 
     data = request.get_json(silent=True) or {}
 
+    # Día 72 — el correo pasa a ser editable. Antes no lo era, y un correo
+    # mal escrito en el alta no tenía arreglo desde el panel: la persona
+    # quedaba pendiente para siempre y había que borrarla y volver a
+    # crearla. Es el campo con el que esa persona inicia sesión, así que se
+    # valida formato y que no lo tenga ya otro usuario.
+    #
+    # Ojo con los enlaces de activación viejos: llevan el correo adentro,
+    # así que al cambiarlo dejan de servir solos (el token apunta a una
+    # dirección que ya no existe en la base). Por eso se limpia el estado
+    # del correo: la dirección nueva todavía no se probó, y el admin tiene
+    # que tocar "Regenerar enlace" para que salga el correo al destino nuevo.
+    if "email" in data:
+        import re
+        nuevo = (data.get("email") or "").strip().lower()
+        if not nuevo:
+            return jsonify({"error": {"code": "email_requerido",
+                                      "message": "El correo electrónico es obligatorio"}}), 400
+        if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", nuevo):
+            return jsonify({"error": {"code": "email_invalido",
+                                      "message": "El correo no tiene un formato válido"}}), 400
+        if nuevo != (u.email or "").lower():
+            if Usuario.query.filter(Usuario.email == nuevo, Usuario.id != u.id).first():
+                return jsonify({"error": {"code": "email_duplicado",
+                                          "message": "Ya existe un usuario con ese correo"}}), 400
+            u.email = nuevo
+            u.correo_estado = None
+            u.correo_detalle = None
+            u.correo_resend_id = None
+            u.correo_actualizado = None
+
     # Datos de información extendida (la administración los gestiona)
     campos_texto = ["nombre", "apellido", "telefono", "dni", "rtn",
                     "direccion_exacta", "profesion",

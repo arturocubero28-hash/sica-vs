@@ -27,6 +27,37 @@ def _resend_configurado():
     return bool(current_app.config.get("RESEND_API_KEY"))
 
 
+def _registrar_envio(destinatario, resend_id):
+    """
+    Día 72 — deja anotado en el usuario que se le mandó un correo y con qué
+    id lo identifica Resend.
+
+    El id es la pieza que después permite casar el webhook ("el correo
+    tal rebotó") con la persona correcta, incluso si mientras tanto le
+    cambiaron la dirección. Es best-effort como todo este módulo: si algo
+    falla, el correo ya salió y eso es lo que importa.
+    """
+    try:
+        from app.extensions import db
+        from app.models.usuario import Usuario
+        import datetime as dt
+        u = Usuario.query.filter_by(email=(destinatario or "").strip().lower()).first()
+        if not u:
+            return
+        u.correo_estado = "enviado"
+        u.correo_detalle = None
+        u.correo_resend_id = resend_id
+        u.correo_actualizado = dt.datetime.now(dt.timezone.utc)
+        db.session.commit()
+    except Exception:
+        logger.exception("No se pudo registrar el envío de correo a %s", destinatario)
+        try:
+            from app.extensions import db
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 def _enviar(destinatario, asunto, html):
     """Envío de bajo nivel. Devuelve True/False, nunca lanza excepción."""
     if not _resend_configurado():
@@ -42,12 +73,20 @@ def _enviar(destinatario, asunto, html):
         remitente = current_app.config.get(
             "RESEND_FROM",
             "Residencial Villas del Sol <notificaciones@patronatovillasdelsol.com>")
-        resend.Emails.send({
+        respuesta = resend.Emails.send({
             "from": remitente,
             "to": destinatario,
             "subject": asunto,
             "html": html,
         })
+        # Resend responde con el id del envío. Se guarda para poder casar
+        # después el webhook de rebote con esta persona.
+        resend_id = None
+        if isinstance(respuesta, dict):
+            resend_id = respuesta.get("id")
+        elif respuesta is not None:
+            resend_id = getattr(respuesta, "id", None)
+        _registrar_envio(destinatario, resend_id)
         return True
     except Exception:
         logger.exception("Error enviando correo a %s (asunto: %s)", destinatario, asunto)

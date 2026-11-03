@@ -67,6 +67,18 @@ class Usuario(db.Model):
     # el residente ve en su perfil — en modo lectura: si el propio residente
     # pudiera cambiarla, la verificación del guardia dejaría de servir.
     foto_url = db.Column(db.String(255))
+    # Día 72 — qué pasó con el último correo que le mandamos (activación o
+    # recuperación). Resend avisa por webhook si el buzón no existe, y sin
+    # esto el admin daba de alta a alguien con el correo mal escrito y no se
+    # enteraba nunca: la cuenta quedaba pendiente para siempre.
+    #   enviado   — Resend lo aceptó, todavía no sabemos si llegó
+    #   entregado — el servidor del destinatario lo recibió
+    #   rebotado  — rechazado de forma permanente (buzón inexistente, etc.)
+    #   queja     — llegó, pero lo marcaron como spam
+    correo_estado = db.Column(db.String(20))
+    correo_detalle = db.Column(db.Text)        # el motivo que da Resend
+    correo_resend_id = db.Column(db.String(64))  # id del envío, para casar el webhook
+    correo_actualizado = db.Column(db.DateTime(timezone=True))
     # Día 69 — código de emergencia de 6 dígitos para entrar sin teléfono.
     # Hasheado como una contraseña: no se puede consultar, solo reemplazar.
     # Ver la nota larga en app/__init__.py sobre por qué existe.
