@@ -2571,17 +2571,33 @@ html { scroll-behavior: smooth; }
 
 /* Acciones del residente */
 .residente-acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.btn-regenerar { color: #1e40af !important; border-color: #bfdbfe !important; }
+/* Día 72 — estos dos botones traían color de texto y de borde, pero NO de
+   fondo, así que heredaban el azul oscuro de `button`: texto azul sobre
+   fondo azul y texto rojo sobre fondo azul. "Regenerar enlace" era
+   prácticamente ilegible. Ahora llevan su propio fondo claro. */
+.btn-regenerar { background: #eff6ff !important; color: #1e40af !important; border: 1px solid #bfdbfe !important; }
 .btn-regenerar:hover:not(:disabled) { background: #dbeafe !important; color: #1e40af !important; box-shadow: none !important; transform: none !important; }
-.btn-quitar-miembro { color: #991b1b !important; border-color: #fecaca !important; }
+.btn-quitar-miembro { background: #fef2f2 !important; color: #991b1b !important; border: 1px solid #fecaca !important; }
 .btn-quitar-miembro:hover:not(:disabled) { background: #fee2e2 !important; color: #991b1b !important; box-shadow: none !important; transform: none !important; }
-.datos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+/* La acción y su "i" de ayuda viajan juntas. */
+.accion-con-ayuda { display: inline-flex; align-items: center; gap: 5px; }
+/* Día 72 — la ficha del residente se veía desordenada: con columnas de
+   180px entraban tres y un correo normal no cabía, así que se partía a la
+   mitad de la palabra. Con 230px entran dos en el ancho del modal y el
+   correo cabe entero. */
+.datos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px 20px; margin-bottom: 14px; }
 /* UX Día 43 — fix: un correo largo sin espacios se desbordaba de su celda y
    se montaba sobre el campo de al lado (teléfono). min-width:0 permite que el
    item de grid se encoja por debajo del ancho de su contenido, y
    overflow-wrap parte el texto largo en vez de desbordarlo. */
-.dato-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.dato-item span { overflow-wrap: anywhere; word-break: break-word; }
+.dato-item { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+/* Día 72 — la etiqueta usa la clase global `.small`, que centra el texto:
+   quedaba el rótulo centrado sobre un valor alineado a la izquierda, y de
+   ahí la sensación de desorden. Acá se fuerza todo a la izquierda. */
+.dato-item span { text-align: left; overflow-wrap: break-word; }
+.dato-item > span:first-child { font-size: 11.5px; color: #8696a7; letter-spacing: .2px; }
+.dato-item > span:last-child { font-size: 14px; color: #1f2d3a; line-height: 1.35; }
 .datos-editar { display: flex; flex-direction: column; gap: 8px; }
 .datos-editar .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .datos-editar .row input { flex: 1; min-width: 140px; }
@@ -4273,3 +4289,17 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
   color: #93a0ad; cursor: pointer; border-radius: 8px;
 }
 .campo-password-ojo:hover { background: #f1f5f9; color: var(--azul2); }
+
+/* ===== Captura de la foto del residente (Día 72) ===== */
+.captura-foto { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap;
+  padding: 12px; border: 1px solid #e3e9f2; border-radius: 12px; background: #f9fbfd; }
+.captura-foto--error { border-color: #e5484d; background: #fff6f6; }
+.captura-foto-marco { width: 112px; height: 140px; border-radius: 10px; overflow: hidden;
+  background: #eef2f7; border: 1px solid #dce4ef; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; }
+.captura-foto-marco img, .captura-foto-marco video {
+  width: 100%; height: 100%; object-fit: cover; display: block; }
+.captura-foto-vacia { color: #9aa9ba; display: flex; align-items: center; justify-content: center; }
+.captura-foto-acciones { display: flex; flex-direction: column; gap: 8px;
+  align-items: flex-start; padding-top: 4px; }
+.captura-foto-acciones button { white-space: nowrap; }

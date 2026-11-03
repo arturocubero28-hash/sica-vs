@@ -11,6 +11,7 @@ import {
 } from "../../api/client";
 import { LectorTarjeta } from "./LectorTarjeta";
 import { InfoTip } from "../../components/InfoTip";
+import { CapturaFoto } from "../../components/CapturaFoto";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera } from "lucide-react";
 
@@ -319,6 +320,10 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
   // formulario. El backend los trata como opcionales, así que ocultarlos no
   // afecta la creación. Se despliegan solo si el admin los necesita.
   const [mostrarDatosAdic, setMostrarDatosAdic] = useState(false);
+  // Día 72 — la foto del titular ahora es obligatoria en el alta: es la
+  // cara contra la que el guardia verifica a quien llega sin teléfono, y
+  // si no se toma en este momento, en la práctica no se toma nunca.
+  const [foto, setFoto] = useState<File | null>(null);
 
   // Para "agregar apto a edificio existente": solo edificios
   const sugerenciasEdificios = unidades.filter(u =>
@@ -436,6 +441,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
     // Enrolamiento por código
     setCodigoEnrol("");
     setEnrolInfo(null);
+    setFoto(null);
     recargarUnidades();
   }
 
@@ -463,6 +469,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
     if (!profesion.trim())     errs.profesion = "La profesión es obligatoria.";
     if (!emergNombre.trim())   errs.emergNombre = "El contacto de emergencia es obligatorio.";
     if (!emergTel.trim())      errs.emergTel  = "El teléfono de emergencia es obligatorio.";
+    if (!foto)                 errs.foto      = "La foto del titular es obligatoria.";
     if (esEdificio && !esDuenoSinVivienda && duenoVive && !apartamento.trim())
                                errs.apartamento = "Indicá el número del apartamento que ocupa.";
 
@@ -504,8 +511,26 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
       // "se envió el correo" en vez de un link que nunca iba a funcionar.
       const token = res.activacion.token_activacion;
       const url = token ? `${window.location.origin}/?activar=${token}` : null;
+
+      // Día 72 — la foto se sube DESPUÉS de crear la cuenta, porque el
+      // endpoint necesita el id del residente, que recién existe ahora. Si
+      // esta subida falla, la cuenta YA quedó creada: se avisa que falta la
+      // foto y se explica dónde completarla, en vez de dar por fallida un
+      // alta que sí se hizo.
+      let avisoFoto = "";
+      const residenteId = res.cuenta.titular?.id;
+      if (foto && residenteId) {
+        try {
+          await subirFotoResidente(res.cuenta.id, residenteId, foto);
+        } catch (e) {
+          avisoFoto = ` La cuenta se creó, pero la foto no se pudo subir (${(e as Error).message}). `
+            + "Agregala desde la casa, en la pestaña Miembros.";
+        }
+      }
+
       setEnlace({ email: res.activacion.usuario_email, url });
-      setMsg({ tipo: "ok", texto: "Cuenta creada exitosamente." });
+      setMsg({ tipo: avisoFoto ? "err" : "ok",
+               texto: "Cuenta creada exitosamente." + avisoFoto });
       onCreada();
     } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
   }
@@ -782,6 +807,15 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
               <b>Titular de la cuenta</b>
               <InfoTip texto="Es la persona responsable de la cuenta (quien paga). Se le creará un acceso en estado pendiente y recibirá un enlace para definir su propia contraseña. Nombre, apellido, correo y teléfono son obligatorios." />
             </div>
+          <div className="campo-con-error" style={{ marginBottom: 10 }}>
+            <div className="label-con-info" style={{ marginBottom: 6 }}>
+              <span className="muted" style={{ fontSize: 13 }}>Foto del titular *</span>
+              <InfoTip texto="Es la foto que ve el guardia para verificar la identidad de quien llega sin teléfono. Tomala con la cámara del equipo o elegí una imagen del archivo." />
+            </div>
+            <CapturaFoto valor={foto} error={!!fieldErrors.foto}
+              onCambio={(f) => { setFoto(f); if (f) clearFieldError("foto"); }} />
+            {fieldErrors.foto && <span className="campo-error">{fieldErrors.foto}</span>}
+          </div>
           <div className="row">
             <div className="campo-con-error">
               <input placeholder="Nombre *" value={nombre} className={fieldErrors.nombre ? "input-error" : ""}
@@ -1732,9 +1766,12 @@ function FilaResidente({ residente, cuentaId, onActualizado }: {
                 </button>
 
                 {esPendiente && (
-                  <button className="mini btn-regenerar" onClick={handleRegenerar} disabled={procesando}>
-                    <RefreshCw size={14} /> {procesando ? "Generando…" : "Regenerar enlace"}
-                  </button>
+                  <span className="accion-con-ayuda">
+                    <button className="mini btn-regenerar" onClick={handleRegenerar} disabled={procesando}>
+                      <RefreshCw size={14} /> {procesando ? "Generando…" : "Regenerar enlace"}
+                    </button>
+                    <InfoTip texto={`${residente.nombre} todavía no activó su cuenta. Esto crea un enlace de activación nuevo y le vuelve a enviar el correo; el enlace anterior deja de servir. Útil si el correo no llegó o si ya venció (dura 48 horas).`} />
+                  </span>
                 )}
 
                 {residente.rol_cuenta === "miembro" && (
