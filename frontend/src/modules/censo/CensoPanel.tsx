@@ -1,14 +1,16 @@
 import { useState, useEffect, Fragment } from "react";
 import {
   listarCenso, crearCasaCenso, agregarPersonaCenso, convertirCasaCenso,
-  darAccesoPersona, urlFotoResidente, listarTarifas,
+  darAccesoPersona, urlFotoResidente, listarTarifas, subirFotoResidente,
   listarUnidades,
   type Cuenta, type ResidenteDTO, type Tarifa, type ResumenPadron, type Unidad,
 } from "../../api/client";
 import {
-  UserPlus, Camera, ArrowUpRight, ChevronDown, ChevronRight, Home, Building2,
+  UserPlus, Camera, ArrowUpRight, ChevronDown, ChevronRight, Home, Building2, Info,
 } from "lucide-react";
 import { ModalFotoResidente } from "../../components/ModalFotoResidente";
+import { CapturaFoto } from "../../components/CapturaFoto";
+import { formatearDNI } from "../../utils/dni";
 
 /**
  * Panel del Padrón (Censo) — Día 69.
@@ -39,6 +41,8 @@ export function CensoPanel() {
   const [resumen, setResumen] = useState<ResumenPadron | null>(null);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
+  const [filtro, setFiltro] = useState<"todas" | "casas" | "edificios" | "incompletas">("todas");
+  const [pagina, setPagina] = useState(1);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
 
@@ -55,9 +59,27 @@ export function CensoPanel() {
       .finally(() => setCargando(false));
   }
   useEffect(() => { recargar(); }, []);
+  // Al cambiar la búsqueda o el filtro, volver a la primera página: si no,
+  // una búsqueda hecha desde la página 4 parece no encontrar nada.
+  useEffect(() => { setPagina(1); }, [busqueda, filtro]);
+
+  const esDeEdificio = (c: Cuenta) => c.tipo_cuenta === "edificio_contenedor"
+    || c.tipo_cuenta === "edificio_admin" || c.tipo_cuenta === "apartamento";
 
   const q = busqueda.trim().toLowerCase();
+
+  // Día 73 — además de buscar por texto, filtrar por lo que se necesita
+  // hacer. "Falta información" es el filtro que de verdad se usa: desde
+  // hoy, darle acceso a alguien exige identidad, teléfono, dirección,
+  // profesión, contacto de emergencia y foto, así que esta lista es la de
+  // las casas que todavía no se pueden convertir.
+  const falta = (c: Cuenta) => (c.residentes || []).some(r =>
+    !r.dni || !r.telefono || !r.foto_url);
+
   const filtradas = casas.filter(c => {
+    if (filtro === "casas" && esDeEdificio(c)) return false;
+    if (filtro === "edificios" && !esDeEdificio(c)) return false;
+    if (filtro === "incompletas" && !falta(c)) return false;
     if (!q) return true;
     const gente = (c.residentes || []).map(r => r.nombre).join(" ");
     return `${c.nombre_completo || c.identificador || ""} ${c.apartamento || ""} ${gente}`.toLowerCase().includes(q);
@@ -72,8 +94,6 @@ export function CensoPanel() {
   //   - inquilinos                -> apartamentos ("apartamento").
   // Se agrupan bajo una cabecera por edificio, con la administración
   // primero, igual que en "Casas y residentes".
-  const esDeEdificio = (c: Cuenta) => c.tipo_cuenta === "edificio_contenedor"
-    || c.tipo_cuenta === "edificio_admin" || c.tipo_cuenta === "apartamento";
   const sueltas = filtradas.filter(c => !esDeEdificio(c));
   const porEdificio = new Map<string, Cuenta[]>();
   for (const c of filtradas) {
@@ -97,6 +117,45 @@ export function CensoPanel() {
   }
 
   const totalPersonas = casas.reduce((n, c) => n + (c.residentes?.length || 0), 0);
+
+  // ─── Día 73 — paginación del padrón ──────────────────────────────────
+  //
+  // El padrón es la lista que más crece: la idea es que termine teniendo
+  // TODA la colonia, participe o no. Con cientos de casas, cada una con su
+  // gente, la tabla entera en pantalla se vuelve pesada de dibujar y, peor,
+  // imposible de leer.
+  //
+  // Se pagina por BLOQUES y no por filas sueltas: una casa suelta es un
+  // bloque, y un edificio es un bloque con su cabecera y todos sus
+  // apartamentos juntos. Paginar por filas partiría un edificio al medio y
+  // dejaría apartamentos huérfanos al principio de la página siguiente, sin
+  // la cabecera que dice de qué edificio son.
+  type Bloque =
+    | { tipo: "casa"; casa: Cuenta }
+    | { tipo: "edificio"; nombre: string; lista: Cuenta[] };
+  const bloques: Bloque[] = [
+    ...sueltas.map(c => ({ tipo: "casa" as const, casa: c })),
+    ...[...porEdificio.entries()].map(([nombre, lista]) => ({
+      tipo: "edificio" as const, nombre, lista,
+    })),
+  ];
+
+  const POR_PAGINA = 25;
+  const totalPaginas = Math.max(1, Math.ceil(bloques.length / POR_PAGINA));
+  // Si el filtro achicó la lista, la página en la que estaba puede ya no
+  // existir: se queda en la última en vez de mostrar una tabla vacía.
+  const paginaActual = Math.min(pagina, totalPaginas);
+  const visibles = bloques.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA);
+
+  const filas = visibles.flatMap(b =>
+    b.tipo === "casa"
+      ? [{ casa: b.casa, sangria: false }]
+      : [
+          { encabezado: b.nombre,
+            aptos: b.lista.filter(c => c.tipo_cuenta !== "edificio_contenedor").length,
+            dueno: dueno(b.lista) },
+          ...b.lista.map(c => ({ casa: c, sangria: true })),
+        ]);
 
   return (
     <div className="censo-panel">
@@ -147,10 +206,24 @@ export function CensoPanel() {
         <div className="casas-filtros">
           <input className="casas-buscar" placeholder="Buscar por casa o por nombre…"
             value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+          <select value={filtro} onChange={e => setFiltro(e.target.value as typeof filtro)}
+            style={{ maxWidth: 230 }}>
+            <option value="todas">Todas</option>
+            <option value="casas">Solo casas</option>
+            <option value="edificios">Solo edificios</option>
+            <option value="incompletas">Les falta información</option>
+          </select>
         </div>
         <div className="casas-contador muted small">
           {filtradas.length} de {casas.length} casas · {totalPersonas} persona(s) en el padrón
+          {totalPaginas > 1 && ` · página ${paginaActual} de ${totalPaginas}`}
         </div>
+        {filtro === "incompletas" && (
+          <p className="muted small" style={{ textAlign: "left", marginTop: -4, marginBottom: 10 }}>
+            Casas donde a alguien le falta identidad, teléfono o foto. Son las
+            que todavía no se les puede dar acceso a la app.
+          </p>
+        )}
 
         {cargando ? <p className="muted">Cargando…</p> : filtradas.length === 0 ? (
           <div className="cuota-vacia">
@@ -170,15 +243,7 @@ export function CensoPanel() {
               <tbody>
                 {/* Primero las casas sueltas; después cada edificio con su
                     administración y sus apartamentos colgando. */}
-                {[
-                  ...sueltas.map(c => ({ casa: c, sangria: false })),
-                  ...[...porEdificio.entries()].flatMap(([nombre, lista]) => [
-                    { encabezado: nombre,
-                      aptos: lista.filter(c => c.tipo_cuenta !== "edificio_contenedor").length,
-                      dueno: dueno(lista) },
-                    ...lista.map(c => ({ casa: c, sangria: true })),
-                  ]),
-                ].map((fila, i) => {
+                {filas.map((fila, i) => {
                   // Cabecera de edificio: no es una familia, es el edificio.
                   if ("encabezado" in fila) {
                     return (
@@ -286,6 +351,18 @@ export function CensoPanel() {
             </table>
           </div>
         )}
+
+        {/* Día 73 — paginador. Solo aparece cuando hay más de una página:
+            en una residencial chica no tiene por qué verse. */}
+        {totalPaginas > 1 && (
+          <div className="paginador">
+            <button className="ghost mini" disabled={paginaActual <= 1}
+              onClick={() => setPagina(p => Math.max(1, p - 1))}>← Anterior</button>
+            <span className="muted small">Página {paginaActual} de {totalPaginas}</span>
+            <button className="ghost mini" disabled={paginaActual >= totalPaginas}
+              onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}>Siguiente →</button>
+          </div>
+        )}
       </div>
 
       {modalCasa && (
@@ -326,6 +403,7 @@ export function CensoPanel() {
       {modalAcceso && (
         <ModalDarAcceso
           persona={modalAcceso.persona}
+          casaId={modalAcceso.casa.id}
           onCerrar={() => setModalAcceso(null)}
           onListo={(texto) => {
             setModalAcceso(null); recargar();
@@ -754,18 +832,98 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
 }
 
 // ─── Modal: dar acceso a la app a una persona del padrón ─────────────────
-function ModalDarAcceso({ persona, onCerrar, onListo, onError }: {
-  persona: ResidenteDTO; onCerrar: () => void; onListo: (t: string) => void; onError: (t: string) => void;
+/**
+ * Día 73 — dar acceso dejó de ser "poné el correo y listo".
+ *
+ * El padrón se llena con lo mínimo a propósito: al guardia le alcanza con
+ * saber quién entra, y pedirle la ficha entera a una familia que no
+ * participa es la forma más rápida de que no se registre.
+ *
+ * Pero quien pasa a tener app y cuota deja de ser "alguien anotado" y se
+ * vuelve residente con todas las de la ley: se le cobran cuotas, se le
+ * mandan avisos y avala visitas. Su ficha tiene que valer lo mismo que la
+ * de quien entró por el alta normal, que sí exige todo esto. Si no, el
+ * padrón termina siendo la puerta de atrás para tener residentes a medio
+ * registrar — y eso se descubre cuando hay que cobrarle a alguien de quien
+ * solo se tiene el nombre.
+ *
+ * Los campos vienen precargados con lo que la persona ya traía del padrón,
+ * así que en la práctica se completa lo que falta y no se vuelve a escribir
+ * lo que ya estaba.
+ */
+function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
+  persona: ResidenteDTO; casaId: string;
+  onCerrar: () => void; onListo: (t: string) => void; onError: (t: string) => void;
 }) {
-  const [email, setEmail] = useState("");
+  const [f, setF] = useState({
+    email: persona.email || "",
+    apellido: persona.apellido || "",
+    telefono: persona.telefono || "",
+    dni: persona.dni || "",
+    direccion_exacta: persona.direccion_exacta || "",
+    profesion: persona.profesion || "",
+    contacto_emergencia_nombre: persona.contacto_emergencia_nombre || "",
+    contacto_emergencia_telefono: persona.contacto_emergencia_telefono || "",
+  });
+  const [foto, setFoto] = useState<File | null>(null);
+  const [errs, setErrs] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
 
+  function set(campo: keyof typeof f, valor: string) {
+    setF(p => ({ ...p, [campo]: valor }));
+    setErrs(p => { const n = { ...p }; delete n[campo]; return n; });
+  }
+
+  const faltaFoto = !persona.foto_url && !foto;
+
   async function dar() {
-    if (!email.trim()) { onError("El correo es obligatorio"); return; }
+    const e: Record<string, string> = {};
+    if (!f.email.trim()) e.email = "El correo es obligatorio.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
+      e.email = "El correo no tiene un formato válido.";
+    if (!f.apellido.trim()) e.apellido = "El apellido es obligatorio.";
+    if (!f.telefono.trim()) e.telefono = "El teléfono es obligatorio.";
+    if (!f.dni.trim()) e.dni = "La identidad es obligatoria.";
+    else if (f.dni.replace(/\D/g, "").length !== 13)
+      e.dni = "El DNI debe tener 13 dígitos (0000-0000-00000).";
+    if (!f.direccion_exacta.trim()) e.direccion_exacta = "La dirección exacta es obligatoria.";
+    if (!f.profesion.trim()) e.profesion = "La profesión es obligatoria.";
+    if (!f.contacto_emergencia_nombre.trim())
+      e.contacto_emergencia_nombre = "El contacto de emergencia es obligatorio.";
+    if (!f.contacto_emergencia_telefono.trim())
+      e.contacto_emergencia_telefono = "El teléfono del contacto es obligatorio.";
+    if (faltaFoto) e.foto = "La foto es obligatoria para darle acceso.";
+
+    setErrs(e);
+    if (Object.keys(e).length > 0) return;
+
     setGuardando(true);
     try {
-      await darAccesoPersona(persona.id, email.trim());
-      onListo(`${persona.nombre} ya puede usar la app. Se le envió el enlace para que defina su contraseña.`);
+      await darAccesoPersona(persona.id, {
+        email: f.email.trim().toLowerCase(),
+        apellido: f.apellido.trim(),
+        telefono: f.telefono.trim(),
+        dni: f.dni.trim(),
+        direccion_exacta: f.direccion_exacta.trim(),
+        profesion: f.profesion.trim(),
+        contacto_emergencia_nombre: f.contacto_emergencia_nombre.trim(),
+        contacto_emergencia_telefono: f.contacto_emergencia_telefono.trim(),
+      });
+
+      // La foto va después y aparte: si falla, el acceso YA quedó dado y no
+      // tiene sentido darlo por fallido.
+      let avisoFoto = "";
+      if (foto) {
+        try {
+          await subirFotoResidente(casaId, persona.id, foto);
+        } catch (err) {
+          avisoFoto = ` La foto no se pudo subir (${(err as Error).message}); `
+            + "tomala desde el padrón, en el ícono de la cámara.";
+        }
+      }
+
+      onListo(`${persona.nombre} ya puede usar la app. Se le envió el enlace `
+        + `para que defina su contraseña.${avisoFoto}`);
     } catch (e) {
       onError((e as Error).message);
     } finally {
@@ -773,26 +931,69 @@ function ModalDarAcceso({ persona, onCerrar, onListo, onError }: {
     }
   }
 
+  const campo = (clave: keyof typeof f, etiqueta: string, tipo = "text") => (
+    <div className="campo-con-error">
+      <label className="campo-label">{etiqueta} *</label>
+      <input type={tipo} value={f[clave]} className={errs[clave] ? "input-error" : ""}
+        onChange={e => set(clave, clave === "dni" ? formatearDNI(e.target.value) : e.target.value)}
+        maxLength={clave === "dni" ? 15 : undefined}
+        inputMode={clave === "dni" ? "numeric" : undefined} />
+      {errs[clave] && <span className="campo-error">{errs[clave]}</span>}
+    </div>
+  );
+
   return (
     <div className="modal" onClick={onCerrar}>
-      <div className="modal-body" onClick={e => e.stopPropagation()}>
-        <div className="modal-head">
-          <h3>Dar acceso a {persona.nombre}</h3>
-          <button className="ghost mini" onClick={onCerrar}>✕</button>
+      <div className="modal-body modal-alta" onClick={e => e.stopPropagation()}>
+        <div className="modal-alta-head">
+          <div>
+            <h3>Dar acceso a {persona.nombre}</h3>
+            <p className="muted small" style={{ margin: 0, textAlign: "left" }}>
+              Conserva su misma ficha y todo su historial de entradas y salidas.
+            </p>
+          </div>
+          <button className="modal-x" onClick={onCerrar} aria-label="Cerrar">✕</button>
         </div>
-        <p className="muted small">
-          Se le crea el acceso sobre su misma ficha, así que conserva todo su
-          historial de entradas y salidas. Va a recibir un correo para definir
-          su contraseña.
-        </p>
-        <div className="form-field">
-          <label>Correo</label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="persona@correo.com" />
+
+        <div className="modal-alta-body">
+          <div className="info-box" style={{ marginBottom: 14 }}>
+            <Info size={15} />
+            <span>
+              En el padrón alcanza con el nombre, pero al darle acceso pasa a ser
+              residente con cuota y app: necesita la ficha completa, igual que
+              quien se da de alta directo.
+            </span>
+          </div>
+
+          <div className="campo-grupo">
+            <label className="campo-label">Foto *</label>
+            <div className="campo-con-error">
+              <CapturaFoto valor={foto} error={!!errs.foto}
+                onCambio={ff => { setFoto(ff); if (ff) setErrs(p => { const n = { ...p }; delete n.foto; return n; }); }} />
+              {persona.foto_url && !foto && (
+                <span className="muted small" style={{ display: "block", textAlign: "left", marginTop: 6 }}>
+                  Ya tiene una foto del padrón. Tomá una nueva solo si hace falta.
+                </span>
+              )}
+              {errs.foto && <span className="campo-error">{errs.foto}</span>}
+            </div>
+          </div>
+
+          <div className="row">{campo("email", "Correo", "email")}{campo("apellido", "Apellido")}</div>
+          <div className="row">{campo("telefono", "Teléfono")}{campo("dni", "Identidad")}</div>
+          <div className="row">{campo("direccion_exacta", "Dirección exacta")}{campo("profesion", "Profesión")}</div>
+          <div className="row">
+            {campo("contacto_emergencia_nombre", "Contacto de emergencia")}
+            {campo("contacto_emergencia_telefono", "Teléfono del contacto")}
+          </div>
         </div>
-        <button onClick={dar} disabled={guardando}>
-          {guardando ? "Creando acceso…" : "Dar acceso a la app"}
-        </button>
+
+        <div className="modal-alta-footer">
+          <button className="ghost" onClick={onCerrar} disabled={guardando}>Cancelar</button>
+          <button onClick={dar} disabled={guardando}>
+            {guardando ? "Creando acceso…" : "Dar acceso a la app"}
+          </button>
+        </div>
       </div>
     </div>
   );

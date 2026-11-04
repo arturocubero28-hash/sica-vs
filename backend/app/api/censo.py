@@ -129,12 +129,25 @@ def _crear_persona_censo(data, usuario_actual):
 def listar_censo(usuario_actual):
     """Casas del padrón de esta residencial, con su gente."""
     rid = residencial_id_heredado(usuario_actual)
+    # Día 73 — joinedload de residentes y de la unidad.
+    #
+    # to_dict(detalle=True) recorre los residentes de cada casa, y la
+    # relación es lazy="select": sin esto, una consulta por casa para traer
+    # su gente (y el usuario de cada residente sale por su propio
+    # lazy="joined"). Con veinte casas no se nota; con las cientos que el
+    # padrón está pensado para tener, son cientos de viajes a la base para
+    # armar una sola pantalla.
+    from sqlalchemy.orm import joinedload
     q = (Cuenta.query
          .join(Unidad, Cuenta.unidad_id == Unidad.id)
+         .options(joinedload(Cuenta.residentes), joinedload(Cuenta.unidad))
          .filter(Cuenta.modo_participacion == "censo",
                  Cuenta.activa.is_(True)))
     if rid is not None:
         q = q.filter(Unidad.residencial_id == rid)
+    # .all() a secas: Query (el estilo legacy que usa el proyecto) ya
+    # deduplica las entidades al traer una colección con joinedload. El
+    # .unique() del estilo 2.0 no existe acá.
     cuentas = q.all()
 
     # Día 69 — métrica de adopción. El sentido del padrón es poder decirle al
@@ -497,13 +510,61 @@ def convertir_casa(usuario_actual, cuenta_uuid):
 
     db.session.commit()
 
+    # ── Día 73 — PRIMERA CUOTA PRORRATEADA ────────────────────────────────
+    #
+    # BUG REAL encontrado en producción: una casa que nacía del padrón
+    # quedaba SIN DEUDA. El alta normal (crear_cuenta) sí genera la primera
+    # cuota prorrateada por los días que quedan del mes; esta conversión se
+    # quedó sin esa parte, así que una familia que se sumaba el 4 no debía
+    # nada hasta el 1 del mes siguiente, cuando el cron genera la cuota
+    # completa. Es decir: el mes en que se sumó le salía gratis, y además
+    # las dos puertas de entrada al sistema cobraban distinto.
+    #
+    # El docstring de arriba explica por qué NO se cobra hacia atrás, y eso
+    # no cambia: el prorrateo es del mes EN CURSO, desde hoy hasta fin de
+    # mes. No es retroactividad, es el pedazo de mes que sí va a usar.
+    #
+    # Mismo cálculo y mismo día de vencimiento (cfg.dia_pago) que el alta
+    # normal y que el cron mensual: una sola regla para los tres caminos.
+    nota_cuota = ""
+    if tarifa:
+        try:
+            from app.models.cuenta import Cuota, ConfigResidencial
+            from app.utils.cuotas import calcular_cuota_prorrateada
+            cfg = ConfigResidencial.get(usuario_actual.residencial_id)
+            datos = calcular_cuota_prorrateada(tarifa.monto, cfg.dia_pago)
+            # Si ya existe la cuota de este período no se duplica: puede
+            # haberse generado por otro camino (el cron corrió entremedio).
+            ya_existe = datos is not None and Cuota.query.filter_by(
+                cuenta_id=cuenta.id, periodo=datos["periodo"]).first() is not None
+            if datos is not None and not ya_existe:
+                db.session.add(Cuota(
+                    cuenta_id=cuenta.id, periodo=datos["periodo"],
+                    monto=datos["monto"], fecha_vencimiento=datos["fecha_vencimiento"],
+                    estado="pendiente",
+                ))
+                db.session.commit()
+                nota_cuota = (f" Se le generó la cuota de este mes prorrateada: "
+                              f"L {datos['monto']} por {datos['dias_restantes']} días, "
+                              f"con vencimiento el {datos['fecha_vencimiento'].strftime('%d/%m/%Y')}.")
+            elif datos is None:
+                # Último día del mes comercial: no queda fracción que cobrar.
+                nota_cuota = (" No se generó cuota de este mes porque ya no quedan "
+                              "días por cobrar; la primera será la del mes que viene.")
+        except Exception:
+            current_app.logger.exception(
+                "No se pudo generar la cuota prorrateada al convertir la casa %s",
+                cuenta.uuid_publico)
+            nota_cuota = (" Ojo: no se pudo generar la cuota de este mes. "
+                          "Revisala desde la casa antes del cierre.")
+
     return jsonify({"data": {
         "casa": cuenta.to_dict(detalle=True),
         "nota": ("El edificio ya participa del sistema. Como el dueño solo "
                  "administra, no se le genera cuota."
                  if es_contenedora else
                  "Las cuotas empiezan a generarse desde el mes en curso. "
-                 "No se generan cuotas de meses anteriores."),
+                 "No se generan cuotas de meses anteriores." + nota_cuota),
     }})
 
 
@@ -544,6 +605,43 @@ def dar_acceso_persona(usuario_actual, residente_uuid):
     if Usuario.query.filter_by(email=email).first():
         return _err("email_duplicado", f"Ya existe un usuario con el email {email}", 409)
 
+    # ── Día 73 — la ficha tiene que estar completa para dar acceso ────────
+    #
+    # El padrón se llena con lo mínimo a propósito: el guardia necesita
+    # saber quién entra, y pedirle la ficha entera a una familia que no
+    # participa del sistema es la forma más rápida de que no se registre.
+    #
+    # Pero quien pasa a tener app y cuota deja de ser "alguien anotado" y
+    # se convierte en residente con todas las de la ley: es la misma
+    # persona a la que se le van a cobrar cuotas, mandar avisos y avalar
+    # visitas. Esa ficha tiene que valer lo mismo que la de quien entró por
+    # el alta normal, que sí exige todo esto. Si no, el padrón se vuelve la
+    # puerta de atrás para tener residentes a medio registrar.
+    #
+    # Los datos vienen en el mismo body porque es el momento en que el
+    # admin tiene a la persona enfrente: es ahora o nunca.
+    obligatorios = [
+        ("apellido", "El apellido es obligatorio"),
+        ("telefono", "El teléfono es obligatorio"),
+        ("dni", "El número de identidad es obligatorio"),
+        ("direccion_exacta", "La dirección exacta es obligatoria"),
+        ("profesion", "La profesión es obligatoria"),
+        ("contacto_emergencia_nombre", "El contacto de emergencia es obligatorio"),
+        ("contacto_emergencia_telefono", "El teléfono del contacto de emergencia es obligatorio"),
+    ]
+    # El valor que YA tiene la persona del padrón cuenta como válido: si el
+    # admin no lo manda, no hay por qué volver a pedirlo.
+    valores = {}
+    for campo, mensaje in obligatorios:
+        valor = (data.get(campo) or "").strip() or (getattr(persona, campo, None) or "")
+        if not valor:
+            return _err("datos_incompletos", mensaje, 400)
+        valores[campo] = valor
+
+    err = _validar_dni(valores["dni"])
+    if err:
+        return _err("dni_invalido", err, 400)
+
     # El límite de usuarios del plan se evalúa ACÁ y no al cargar el censo:
     # la gente del padrón no consume licencias porque no usa el sistema. Es
     # al darle acceso cuando pasa a ser un usuario de verdad.
@@ -556,6 +654,15 @@ def dar_acceso_persona(usuario_actual, residente_uuid):
     import secrets
     persona.email = email
     persona.es_censo = False
+    # Se guardan los datos completos: los que el admin acaba de llenar y los
+    # que la persona ya traía del padrón (valores ya resolvió cuál es cuál).
+    for campo, valor in valores.items():
+        setattr(persona, campo, valor)
+    # Opcionales, igual que en el alta normal: si vienen se guardan.
+    for campo in ("rtn", "ocupacion", "centro_estudios", "lugar_trabajo"):
+        valor = (data.get(campo) or "").strip()
+        if valor:
+            setattr(persona, campo, valor)
     # Contraseña temporal inutilizable: se reemplaza en la activación, igual
     # que en el alta normal de un residente.
     persona.set_password(secrets.token_urlsafe(32))

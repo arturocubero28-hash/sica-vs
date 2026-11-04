@@ -2091,6 +2091,11 @@ html { scroll-behavior: smooth; }
 }
 .casas-buscar:focus { border-color: var(--marca-naranja); outline: none; }
 .casas-contador { margin-bottom: 10px; }
+/* Día 73 — paginador de listas largas (padrón). */
+.paginador {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid #eef2f7;
+}
 .fila-baja { opacity: 0.55; }
 .fila-baja td { background: #fafafa; }
 /* Día 53 — Sprint 1: pausa liviana, tono ámbar tenue, distinto de "baja"

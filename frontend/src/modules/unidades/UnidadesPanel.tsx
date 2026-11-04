@@ -13,25 +13,10 @@ import { LectorTarjeta } from "./LectorTarjeta";
 import { InfoTip } from "../../components/InfoTip";
 import { CapturaFoto } from "../../components/CapturaFoto";
 import { ModalFotoResidente } from "../../components/ModalFotoResidente";
+import { formatearDNI, dniCompleto } from "../../utils/dni";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera, AlertTriangle } from "lucide-react";
 
-/** Formatea un DNI hondureño mientras se escribe: 0000-0000-00000 (13 dígitos).
- *  Solo acepta números y coloca los guiones automáticamente. */
-function formatearDNI(valor: string): string {
-  const soloNums = valor.replace(/\D/g, "").slice(0, 13);
-  const p1 = soloNums.slice(0, 4);
-  const p2 = soloNums.slice(4, 8);
-  const p3 = soloNums.slice(8, 13);
-  let out = p1;
-  if (p2) out += "-" + p2;
-  if (p3) out += "-" + p3;
-  return out;
-}
-/** ¿El DNI está completo (13 dígitos)? */
-function dniCompleto(valor: string): boolean {
-  return valor.replace(/\D/g, "").length === 13;
-}
 
 export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
   const [tab, setTab] = useState<"cuentas" | "tarifas" | "solicitudes">("cuentas");

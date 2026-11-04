@@ -241,10 +241,28 @@ export const convertirCasaCenso = (cuentaId: string, body: { tarifa_id?: number;
 
 /** Le da acceso a la app a una persona que ya estaba en el padrón.
  *  Es un UPDATE sobre la misma ficha: conserva su historial de accesos. */
-export const darAccesoPersona = (residenteId: string, email: string) =>
+/**
+ * Día 73 — dar acceso ahora manda la ficha completa, no solo el correo.
+ *
+ * El padrón se llena con lo mínimo a propósito, pero quien pasa a tener
+ * app y cuota tiene que quedar con la misma ficha que quien entró por el
+ * alta normal. El backend valida lo mismo que se valida acá.
+ */
+export interface DatosAcceso {
+  email: string;
+  apellido: string;
+  telefono: string;
+  dni: string;
+  direccion_exacta: string;
+  profesion: string;
+  contacto_emergencia_nombre: string;
+  contacto_emergencia_telefono: string;
+  rtn?: string;
+}
+export const darAccesoPersona = (residenteId: string, datos: DatosAcceso) =>
   request<{ residente: ResidenteDTO; token_activacion?: string }>(
     `/censo/personas/${residenteId}/dar-acceso`,
-    { method: "POST", body: JSON.stringify({ email }) });
+    { method: "POST", body: JSON.stringify(datos) });
 
 // ── Foto del miembro (Día 69) ─────────────────────────────────────────
 // La sube SOLO administración. El residente la ve pero no puede cambiarla:
