@@ -4305,3 +4305,15 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
 .captura-foto-acciones { display: flex; flex-direction: column; gap: 8px;
   align-items: flex-start; padding-top: 4px; }
 .captura-foto-acciones button { white-space: nowrap; }
+/* Día 73 — el motivo por el que no abrió la cámara tiene que verse, no ser
+   una línea chica al pie: es lo único que le dice a la persona qué hacer. */
+.captura-foto-problema { flex-basis: 100%; display: flex; gap: 8px; align-items: flex-start;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 9px;
+  padding: 9px 11px; color: #991b1b; font-size: 12.5px; line-height: 1.4; }
+.captura-foto-problema svg { flex-shrink: 0; margin-top: 1px; }
+
+/* Día 73 — aviso tras cambiar el correo de alguien que no activó su cuenta:
+   el enlace viejo ya no sirve y hay que ofrecer mandar uno nuevo. */
+.pregunta-enlace { margin-top: 10px; padding: 12px 14px; border-radius: 10px;
+  background: #fffbeb; border: 1px solid #fde68a; }
+.pregunta-enlace-texto { font-size: 13px; color: #78350f; line-height: 1.45; margin-bottom: 10px; }

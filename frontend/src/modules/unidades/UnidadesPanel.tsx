@@ -1719,15 +1719,45 @@ function FilaResidente({ residente, cuentaId, onActualizado }: {
 
   function set(campo: string, valor: string) { setF(prev => ({ ...prev, [campo]: valor })); }
 
+  // Día 73 — al guardar un cambio de correo hay que hacer algo más, y
+  // depende de si la persona ya activó su cuenta:
+  //
+  //   Pendiente → el enlace de activación viejo lleva el correo anterior
+  //     adentro, así que al cambiarlo deja de servir solo. Si no se manda
+  //     uno nuevo, esa persona queda sin forma de entrar y nadie se entera.
+  //     Por eso se ofrece mandarlo en el momento, y no se da por hecho:
+  //     puede ser que el admin esté corrigiendo un dato y prefiera avisarle
+  //     por su cuenta.
+  //
+  //   Activa → no hay enlace que mandar; simplemente a partir de ahora
+  //     inicia sesión con el correo nuevo. Se avisa para que el admin se lo
+  //     diga, porque si no, la persona va a seguir intentando con el viejo.
+  const [preguntaEnlace, setPreguntaEnlace] = useState<string | null>(null);
+
   async function guardar() {
     if (!residente.usuario_id) { setMsg("No se puede editar este residente"); return; }
+    const correoNuevo = f.email.trim().toLowerCase();
+    const cambioCorreo = correoNuevo !== (residente.email || "").toLowerCase();
     setGuardando(true); setMsg("");
     try {
       await editarUsuario(residente.usuario_id, f);
       setEditando(false);
       onActualizado();
+      if (cambioCorreo) {
+        if (esPendiente) {
+          setPreguntaEnlace(correoNuevo);
+        } else {
+          setMsg(`Correo actualizado. ${residente.nombre} ahora inicia sesión `
+            + `con ${correoNuevo}: avisale del cambio.`);
+        }
+      }
     } catch (e) { setMsg((e as Error).message); }
     finally { setGuardando(false); }
+  }
+
+  async function enviarEnlaceAlCorreoNuevo() {
+    setPreguntaEnlace(null);
+    await handleRegenerar();
   }
 
   async function handleQuitar() {
@@ -1834,6 +1864,24 @@ function FilaResidente({ residente, cuentaId, onActualizado }: {
                   </button>
                 )}
               </div>
+
+              {preguntaEnlace && (
+                <div className="pregunta-enlace">
+                  <div className="pregunta-enlace-texto">
+                    <b>Correo actualizado.</b> El enlace de activación anterior dejó de
+                    servir porque llevaba el correo viejo. ¿Le enviamos uno nuevo
+                    a <b>{preguntaEnlace}</b>?
+                  </div>
+                  <div className="row-btns">
+                    <button className="mini" onClick={enviarEnlaceAlCorreoNuevo} disabled={procesando}>
+                      <RefreshCw size={14} /> {procesando ? "Enviando…" : "Enviar enlace"}
+                    </button>
+                    <button className="ghost mini" onClick={() => setPreguntaEnlace(null)}>
+                      Ahora no
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {enlaceRegenerado && (
                 <div className="activacion-box" style={{ marginTop: 10 }}>

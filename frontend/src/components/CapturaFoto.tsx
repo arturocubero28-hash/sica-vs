@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Camera, Image as ImageIcon, X } from "lucide-react";
+import { AlertTriangle, Camera, Image as ImageIcon, X } from "lucide-react";
 
 /**
  * Día 72 — captura de la foto del residente desde el panel web.
@@ -46,9 +46,16 @@ export function CapturaFoto({ valor, onCambio, error }: Props) {
   // El <video> recién existe cuando la cámara está abierta, así que el
   // stream se engancha acá y no dentro de abrirCamara().
   useEffect(() => {
-    if (camaraAbierta && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-    }
+    if (!camaraAbierta || !videoRef.current || !streamRef.current) return;
+    const video = videoRef.current;
+    video.srcObject = streamRef.current;
+    // autoPlay basta en casi todos los navegadores, pero no en todos: si la
+    // reproducción no arranca, el recuadro queda en negro y parece que la
+    // cámara no abrió. Se pide explícitamente y se avisa si falla.
+    video.play().catch(() => {
+      setProblema("La cámara abrió pero el navegador no muestra la imagen. "
+        + "Probá recargar la página.");
+    });
   }, [camaraAbierta]);
 
   // Apagar la cámara si se cierra el formulario con la cámara encendida:
@@ -64,25 +71,70 @@ export function CapturaFoto({ valor, onCambio, error }: Props) {
     setCamaraAbierta(false);
   }
 
+  /// Día 73 — por qué cada error merece su propio mensaje.
+  ///
+  /// Antes esto tenía un solo mensaje para todo y, peor, cuando el
+  /// navegador no exponía la cámara abría el explorador de archivos en
+  /// silencio: desde afuera se veía como "le doy a tomar foto y no abre la
+  /// cámara", sin ninguna pista de la causa. Las causas son distintas y
+  /// cada una se arregla distinto, así que cada una lo dice.
+  function _motivo(e: unknown): string {
+    const nombre = (e as { name?: string })?.name || "";
+    switch (nombre) {
+      case "NotAllowedError":
+      case "SecurityError":
+        return "El navegador bloqueó la cámara. Tocá el candado en la barra de " +
+               "direcciones, permití la cámara para este sitio y volvé a intentar.";
+      case "NotFoundError":
+      case "OverconstrainedError":
+        return "No se encontró ninguna cámara conectada a este equipo.";
+      case "NotReadableError":
+        return "La cámara está siendo usada por otro programa. Cerrá la otra " +
+               "aplicación (Zoom, Teams, Meet) y volvé a intentar.";
+      default:
+        return `No se pudo abrir la cámara (${nombre || "motivo desconocido"}). ` +
+               "Podés elegir una imagen del archivo.";
+    }
+  }
+
   async function abrirCamara() {
     setProblema("");
-    if (!navigator.mediaDevices?.getUserMedia) {
-      archivoRef.current?.click();
+
+    // getUserMedia solo existe en páginas seguras. Si el panel se abre por
+    // http:// o por una IP de la red local, el navegador ni siquiera lo
+    // ofrece — y eso no es un permiso que se pueda conceder.
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      setProblema(
+        "Este navegador no permite usar la cámara en esta dirección. Abrí el " +
+        "panel por https:// (patronatovillasdelsol.com) o elegí una imagen del archivo.");
       return;
     }
-    try {
-      streamRef.current = await navigator.mediaDevices.getUserMedia({
-        // "environment" como preferencia, no como exigencia: en el teléfono
-        // elige la cámara trasera, que es con la que administración le toma
-        // la foto al residente, y en una PC con una sola webcam el ideal
-        // simplemente se ignora en vez de fallar.
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 960 } },
-        audio: false,
-      });
-      setCamaraAbierta(true);
-    } catch {
-      setProblema("No se pudo abrir la cámara. Revisá el permiso del navegador o elegí una imagen.");
+
+    // Primero se pide la cámara trasera como PREFERENCIA, que en el teléfono
+    // es la correcta para fotografiar a otra persona. Si el equipo no puede
+    // cumplir la restricción, se reintenta sin pedir nada en particular
+    // antes de darla por fallida: una webcam de escritorio no tiene "trasera".
+    const intentos: MediaStreamConstraints[] = [
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 960 } },
+        audio: false },
+      { video: true, audio: false },
+    ];
+
+    let ultimo: unknown = null;
+    for (const restricciones of intentos) {
+      try {
+        streamRef.current = await navigator.mediaDevices.getUserMedia(restricciones);
+        setCamaraAbierta(true);
+        return;
+      } catch (e) {
+        ultimo = e;
+        // Si la persona dijo que no, reintentar con otras restricciones solo
+        // vuelve a molestarla con el mismo resultado.
+        const nombre = (e as { name?: string })?.name || "";
+        if (nombre === "NotAllowedError" || nombre === "SecurityError") break;
+      }
     }
+    setProblema(_motivo(ultimo));
   }
 
   function capturar() {
@@ -145,7 +197,12 @@ export function CapturaFoto({ valor, onCambio, error }: Props) {
           }} />
       </div>
 
-      {problema && <span className="campo-error">{problema}</span>}
+      {problema && (
+        <div className="captura-foto-problema" role="alert">
+          <AlertTriangle size={15} />
+          <span>{problema}</span>
+        </div>
+      )}
     </div>
   );
 }
