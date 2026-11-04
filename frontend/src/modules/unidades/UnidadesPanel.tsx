@@ -12,6 +12,7 @@ import {
 import { LectorTarjeta } from "./LectorTarjeta";
 import { InfoTip } from "../../components/InfoTip";
 import { CapturaFoto } from "../../components/CapturaFoto";
+import { ModalFotoResidente } from "../../components/ModalFotoResidente";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera, AlertTriangle } from "lucide-react";
 
@@ -1876,44 +1877,28 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
 function FotoResidente({ residente, cuentaId, onActualizado }: {
   residente: ResidenteDTO; cuentaId: string; onActualizado: () => void;
 }) {
-  const [subiendo, setSubiendo] = useState(false);
-  const [error, setError] = useState("");
-
-  async function subir(archivo: File) {
-    setSubiendo(true); setError("");
-    try {
-      await subirFotoResidente(cuentaId, residente.id, archivo);
-      onActualizado();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSubiendo(false);
-    }
-  }
-
+  const [abierto, setAbierto] = useState(false);
   const tiene = !!residente.foto_url;
+
   return (
-    <label
-      className={`foto-residente ${tiene ? "con-foto" : "sin-foto"}`}
-      title={subiendo ? "Subiendo…"
-        : tiene ? `Reemplazar la foto de ${residente.nombre}`
-        : `Tomar la foto de ${residente.nombre}`}
-      style={{ cursor: subiendo ? "wait" : "pointer" }}
-    >
-      {tiene
-        ? <img src={urlFotoResidente(residente.foto_url!)} alt={residente.nombre} />
-        : <Camera size={15} />}
-      {!tiene && !subiendo && <span className="foto-residente-mas">+</span>}
-      {subiendo && <span className="foto-residente-cargando">…</span>}
-      <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-        disabled={subiendo}
-        onChange={e => {
-          const f = e.target.files?.[0];
-          if (f) subir(f);
-          e.target.value = ""; // permite volver a elegir el mismo archivo
-        }} />
-      {error && <span className="foto-residente-error" title={error}>!</span>}
-    </label>
+    <>
+      <button
+        type="button"
+        className={`foto-residente ${tiene ? "con-foto" : "sin-foto"}`}
+        title={tiene ? `Ver o cambiar la foto de ${residente.nombre}`
+                     : `Tomar la foto de ${residente.nombre}`}
+        onClick={() => setAbierto(true)}
+      >
+        {tiene
+          ? <img src={urlFotoResidente(residente.foto_url!)} alt={residente.nombre} />
+          : <Camera size={15} />}
+        {!tiene && <span className="foto-residente-mas">+</span>}
+      </button>
+      {abierto && (
+        <ModalFotoResidente residente={residente} cuentaId={cuentaId}
+          onCerrar={() => setAbierto(false)} onActualizado={onActualizado} />
+      )}
+    </>
   );
 }
 

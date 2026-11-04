@@ -1,13 +1,14 @@
 import { useState, useEffect, Fragment } from "react";
 import {
   listarCenso, crearCasaCenso, agregarPersonaCenso, convertirCasaCenso,
-  darAccesoPersona, subirFotoResidente, urlFotoResidente, listarTarifas,
+  darAccesoPersona, urlFotoResidente, listarTarifas,
   listarUnidades,
   type Cuenta, type ResidenteDTO, type Tarifa, type ResumenPadron, type Unidad,
 } from "../../api/client";
 import {
   UserPlus, Camera, ArrowUpRight, ChevronDown, ChevronRight, Home, Building2,
 } from "lucide-react";
+import { ModalFotoResidente } from "../../components/ModalFotoResidente";
 
 /**
  * Panel del Padrón (Censo) — Día 69.
@@ -344,21 +345,9 @@ function FilaPersonas({ casa, onMsg, onCambio, onDarAcceso }: {
   onCambio: () => void;
   onDarAcceso: (p: ResidenteDTO) => void;
 }) {
-  const [subiendo, setSubiendo] = useState<string | null>(null);
+  // Día 73 — a quién se le está viendo/cambiando la foto (null = a nadie).
+  const [fotoDe, setFotoDe] = useState<ResidenteDTO | null>(null);
   const gente = casa.residentes || [];
-
-  async function subirFoto(persona: ResidenteDTO, archivo: File) {
-    setSubiendo(persona.id);
-    try {
-      await subirFotoResidente(casa.id, persona.id, archivo);
-      onCambio();
-      onMsg({ tipo: "ok", texto: `Foto de ${persona.nombre} actualizada.` });
-    } catch (e) {
-      onMsg({ tipo: "err", texto: (e as Error).message });
-    } finally {
-      setSubiendo(null);
-    }
-  }
 
   if (gente.length === 0) return <p className="muted small">Esta casa no tiene personas registradas.</p>;
 
@@ -387,17 +376,15 @@ function FilaPersonas({ casa, onMsg, onCambio, onDarAcceso }: {
           </div>
 
           <div className="casa-acciones">
-            <label className="icono-accion" title={p.foto_url ? "Reemplazar la foto" : "Tomar o subir la foto"}
-              style={{ cursor: subiendo === p.id ? "wait" : "pointer" }}>
+            {/* Día 73 — antes era un input de archivo escondido: en la
+                laptop de administración abría el explorador y no había
+                forma de tomar la foto con la webcam. Ahora abre la misma
+                ventana de foto que Casas. */}
+            <button className="icono-accion"
+              title={p.foto_url ? "Ver o cambiar la foto" : "Tomar la foto"}
+              onClick={() => setFotoDe(p)}>
               <Camera size={16} />
-              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
-                disabled={subiendo === p.id}
-                onChange={e => {
-                  const f = e.target.files?.[0];
-                  if (f) subirFoto(p, f);
-                  e.target.value = "";
-                }} />
-            </label>
+            </button>
 
             {p.es_censo && (
               <button className="icono-accion" title="Darle acceso a la app"
@@ -409,6 +396,16 @@ function FilaPersonas({ casa, onMsg, onCambio, onDarAcceso }: {
           </div>
         </div>
       ))}
+
+      {fotoDe && (
+        <ModalFotoResidente
+          residente={fotoDe} cuentaId={casa.id}
+          onCerrar={() => setFotoDe(null)}
+          onActualizado={() => {
+            onCambio();
+            onMsg({ tipo: "ok", texto: `Foto de ${fotoDe.nombre} actualizada.` });
+          }} />
+      )}
     </div>
   );
 }
