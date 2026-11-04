@@ -83,8 +83,16 @@ export function CapturaFoto({ valor, onCambio, error }: Props) {
     switch (nombre) {
       case "NotAllowedError":
       case "SecurityError":
-        return "El navegador bloqueó la cámara. Tocá el candado en la barra de " +
-               "direcciones, permití la cámara para este sitio y volvé a intentar.";
+        // Día 73 — este error tiene DOS causas que se ven idénticas desde
+        // afuera, y una no depende de la persona: si el servidor manda la
+        // cabecera Permissions-Policy con camera=(), el navegador bloquea la
+        // cámara en todo el documento y ningún permiso que se conceda lo
+        // cambia. La consola lo dice ("camera is not allowed in this
+        // document"), pero nadie abre la consola, así que el mensaje nombra
+        // las dos para que no se pierda media hora revisando el candado.
+        return "El navegador bloqueó la cámara. Revisá que el candado de la barra " +
+               "de direcciones tenga la cámara en «Permitir». Si ya está permitida, " +
+               "el bloqueo viene del servidor: avisale a quien lo administra.";
       case "NotFoundError":
       case "OverconstrainedError":
         return "No se encontró ninguna cámara conectada a este equipo.";
