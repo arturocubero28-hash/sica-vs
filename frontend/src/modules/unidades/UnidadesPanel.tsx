@@ -1201,6 +1201,13 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
   const [mProfesion, setMProfesion] = useState("");
   const [mEmergNombre, setMEmergNombre] = useState("");
   const [mEmergTel, setMEmergTel] = useState("");
+  // Día 73 — la foto del miembro también es obligatoria.
+  //
+  // En el Día 72 se hizo obligatoria la del titular, pero la de los miembros
+  // quedó opcional sin razón: el guardia verifica igual a la esposa, al hijo
+  // o al inquilino que llega sin teléfono, y si la foto no se toma en el
+  // momento de registrarlo, en la práctica no se toma nunca.
+  const [mFoto, setMFoto] = useState<File | null>(null);
   const [msg, setMsg] = useState("");
   const [miembroEnlace, setMiembroEnlace] = useState<{ email: string; url: string | null } | null>(null);
   const [mostrarAgregar, setMostrarAgregar] = useState(false);
@@ -1303,6 +1310,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
     if (!mProfesion.trim()) errs.profesion = "La profesión es obligatoria.";
     if (!mEmergNombre.trim()) errs.emergNombre = "El contacto de emergencia es obligatorio.";
     if (!mEmergTel.trim())    errs.emergTel    = "El teléfono de emergencia es obligatorio.";
+    if (!mFoto)               errs.foto        = "La foto del miembro es obligatoria.";
 
     setMErrors(errs);
     if (Object.keys(errs).length > 0) {
@@ -1322,9 +1330,28 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
       // de que el correo se había enviado igual. Ahora siempre se guarda
       // el resultado, con o sin token, para poder avisar en cualquier caso.
       const url = token ? `${window.location.origin}/?activar=${token}` : null;
+
+      // Día 73 — igual que en el alta del titular: la foto se sube DESPUÉS,
+      // porque el endpoint necesita el id del residente, que recién existe
+      // ahora. Si esta subida falla, el miembro YA quedó creado: se avisa
+      // dónde completar la foto en vez de dar por fallido un alta que sí se
+      // hizo.
+      let avisoFoto = "";
+      const nuevoId = res.residente?.id;
+      if (mFoto && nuevoId) {
+        try {
+          await subirFotoResidente(cuenta.id, nuevoId, mFoto);
+        } catch (e) {
+          avisoFoto = `El miembro se agregó, pero la foto no se pudo subir (${(e as Error).message}). `
+            + "Agregala desde la lista de miembros, tocando su foto.";
+        }
+      }
+      if (avisoFoto) setMsgMiembro(avisoFoto);
+
       setMiembroEnlace({ email: mEmail, url });
       setMNombre(""); setMEmail(""); setMApellido(""); setMTelefono("");
       setMDni(""); setMProfesion(""); setMEmergNombre(""); setMEmergTel("");
+      setMFoto(null);
       setMErrors({}); setMsg(""); onCambio();
     } catch (e) { setMsgMiembro((e as Error).message); }
   }
@@ -1672,6 +1699,22 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
           )}
 
           <div className="agregar-miembro-campos">
+            {/* Día 73 — la foto va primero y no al final: es el campo que se
+                olvida, y mandarla al fondo del formulario era garantizar
+                que se saltara. */}
+            <div className="campo-grupo">
+              <label className="campo-label">Foto del miembro *</label>
+              <span className="muted small" style={{ display: "block", textAlign: "left", marginBottom: 8 }}>
+                Es la foto que ve el guardia para verificar a esta persona
+                cuando llega sin teléfono.
+              </span>
+              <div className="campo-con-error">
+                <CapturaFoto valor={mFoto} error={!!mErrors.foto}
+                  onCambio={(f) => { setMFoto(f); if (f) clearMError("foto"); }} />
+                {mErrors.foto && <span className="campo-error">{mErrors.foto}</span>}
+              </div>
+            </div>
+
             <div className="campo-grupo">
               <label className="campo-label">Datos básicos</label>
               <div className="row">
