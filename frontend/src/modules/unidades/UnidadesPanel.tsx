@@ -372,8 +372,9 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
     finally { setCreandoUnidad(false); }
   }
 
-  async function validarCodigo() {
-    if (!codigoEnrol.trim()) return;
+  /** Devuelve si el código sirvió, para que el asistente sepa si puede avanzar. */
+  async function validarCodigo(): Promise<boolean> {
+    if (!codigoEnrol.trim()) return false;
     setValidando(true); setMsg(null);
     try {
       const info = await validarCodigoEnrolamiento(codigoEnrol.trim());
@@ -391,9 +392,11 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
         apartamento_sugerido: info.apartamento_sugerido,
         dueno_nombre: info.dueno_nombre,
       });
+      return true;
     } catch (e) {
       setEnrolInfo(null);
       setMsg({ tipo: "err", texto: (e as Error).message });
+      return false;
     } finally { setValidando(false); }
   }
 
@@ -401,6 +404,94 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
 
   function clearFieldError(campo: string) {
     setFieldErrors(p => { const n = {...p}; delete n[campo]; return n; });
+  }
+
+  // ─── Día 73 — el alta pasó de una pantalla con scroll a un asistente ───
+  //
+  // Por qué: son cuatro secciones y más de quince campos. En una sola
+  // pantalla, quien da de alta no sabe cuánto le falta, los errores de
+  // validación salían todos juntos al final y encima arriba (fuera de la
+  // vista, de ahí el "Revisalos arriba"), y la cámara de la foto quedaba
+  // al fondo del scroll.
+  //
+  // Los pasos se identifican por nombre y NO por número fijo, porque el de
+  // la cuota desaparece cuando la cuenta es del administrador de un
+  // edificio nuevo que no vive ahí. Con índices fijos ese caso dejaba un
+  // paso vacío en el medio.
+  type PasoId = "codigo" | "unidad" | "cuota" | "titular";
+
+  const muestraCuota = !(esEdificio && modoUnidad === "nueva" && !duenoVive);
+  const pasos: { id: PasoId; titulo: string }[] = [
+    { id: "codigo", titulo: "Código" },
+    { id: "unidad", titulo: esEdificio ? "Edificio" : "Casa" },
+    ...(muestraCuota ? [{ id: "cuota" as PasoId, titulo: "Cuota" }] : []),
+    { id: "titular", titulo: "Titular" },
+  ];
+
+  const [paso, setPaso] = useState<PasoId>("codigo");
+  // Si el paso donde está deja de existir (eligió "administrador que no vive
+  // aquí" justo estando en el de la cuota), cae en el último, que es el que
+  // sigue. Así no lo devuelve al principio ni se queda en una pantalla que
+  // ya no existe.
+  const indiceCrudo = pasos.findIndex(p => p.id === paso);
+  const indicePaso = indiceCrudo >= 0 ? indiceCrudo : pasos.length - 1;
+  const pasoVigente = pasos[indicePaso].id;
+  const esUltimoPaso = indicePaso === pasos.length - 1;
+
+  // Qué error de validación pertenece a qué paso: sirve para no mostrarle
+  // errores de campos que todavía no vio, y para llevarlo al paso correcto
+  // si al final falta algo de más atrás.
+  const CAMPOS_DEL_PASO: Record<PasoId, string[]> = {
+    codigo: [],
+    unidad: ["unidad", "apartamento"],
+    cuota: ["tarifa"],
+    titular: ["nombre", "apellido", "email", "telefono", "dni", "direccion",
+              "profesion", "emergNombre", "emergTel", "foto"],
+  };
+
+  function irAlPaso(id: PasoId) {
+    setMsg(null);
+    setFieldErrors({});
+    setPaso(id);
+  }
+
+  async function siguiente() {
+    setMsg(null);
+
+    // El código es opcional, pero si escribió los seis dígitos y no los
+    // validó, validarlos ahora: el paso siguiente depende del edificio y
+    // apartamento que el código precarga.
+    if (pasoVigente === "codigo" && codigoEnrol.length === 6 && !enrolInfo) {
+      const sirvio = await validarCodigo();
+      if (!sirvio) return;
+    }
+    // Un código a medias no se puede dejar pasar: viajaría igual al backend
+    // en codigo_enrolamiento y el alta fallaría recién al final, después de
+    // haber llenado todo lo demás.
+    if (pasoVigente === "codigo" && codigoEnrol.length > 0 && codigoEnrol.length < 6) {
+      setMsg({ tipo: "err", texto: "El código tiene 6 dígitos. Completalo o borralo para saltar este paso." });
+      return;
+    }
+
+    const todos = validarCampos();
+    const propios: Record<string, string> = {};
+    for (const campo of CAMPOS_DEL_PASO[pasoVigente]) {
+      if (todos[campo]) propios[campo] = todos[campo];
+    }
+    if (Object.keys(propios).length > 0) {
+      setFieldErrors(propios);
+      setMsg({ tipo: "err", texto: "Completá lo que falta para continuar." });
+      return;
+    }
+
+    setFieldErrors({});
+    setPaso(pasos[Math.min(indicePaso + 1, pasos.length - 1)].id);
+  }
+
+  function atras() {
+    setMsg(null);
+    setFieldErrors({});
+    setPaso(pasos[Math.max(indicePaso - 1, 0)].id);
   }
 
   // Día 72 — "Dar de alta otra cuenta" solo ocultaba el recuadro del
@@ -449,6 +540,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
     setEnrolInfo(null);
     setFoto(null);
     setReboteAviso(null);
+    setPaso("codigo");   // Día 73 — la otra alta arranca desde el primer paso
     recargarUnidades();
   }
 
@@ -475,14 +567,19 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
     }
   }
 
-  async function guardar() {
-    setMsg(null); setEnlace(null); setReboteAviso(null);
-
+  /**
+   * Revisa TODOS los campos y devuelve los errores encontrados.
+   *
+   * Día 73 — se separó de guardar() porque ahora corre en dos momentos: al
+   * pasar de un paso al siguiente (donde solo se muestran los errores de
+   * ese paso) y al guardar (donde se muestran todos y se salta al paso que
+   * los tiene). La validación es la misma en ambos: una sola copia.
+   */
+  function validarCampos(): Record<string, string> {
     const hayUnidad = unidadId || (modoUnidad === "nueva" && nuevaUnidadId.trim());
     const esDuenoSinVivienda = esEdificio && modoUnidad === "nueva" && !duenoVive;
     const hayTarifa = esDuenoSinVivienda || !permiteCuotas || !!tarifaId;
 
-    // Validación campo a campo — muestra todos los errores de una vez
     const errs: Record<string, string> = {};
     if (!hayUnidad)            errs.unidad    = "Seleccioná o ingresá la casa o edificio.";
     if (!hayTarifa)            errs.tarifa    = "Seleccioná la tarifa mensual.";
@@ -503,9 +600,27 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
     if (esEdificio && !esDuenoSinVivienda && duenoVive && !apartamento.trim())
                                errs.apartamento = "Indicá el número del apartamento que ocupa.";
 
+    return errs;
+  }
+
+  async function guardar() {
+    setMsg(null); setEnlace(null); setReboteAviso(null);
+
+    const esDuenoSinVivienda = esEdificio && modoUnidad === "nueva" && !duenoVive;
+
+    const errs = validarCampos();
     setFieldErrors(errs);
     if (Object.keys(errs).length > 0) {
-      setMsg({ tipo: "err", texto: "Hay campos incompletos o con errores. Revisalos arriba." });
+      // Día 73 — con el asistente, un campo que falta puede estar en un paso
+      // anterior y fuera de la pantalla. En vez de pedirle que lo busque, se
+      // lo lleva al paso que lo tiene.
+      const conError = pasos.find(p => CAMPOS_DEL_PASO[p.id].some(c => errs[c]));
+      if (conError && conError.id !== pasoVigente) {
+        setPaso(conError.id);
+        setMsg({ tipo: "err", texto: `Falta algo en el paso "${conError.titulo}".` });
+      } else {
+        setMsg({ tipo: "err", texto: "Hay campos incompletos o con errores." });
+      }
       return;
     }
 
@@ -577,10 +692,36 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
         <div className="modal-alta-head">
           <div>
             <h3>Dar de alta una casa o apartamento</h3>
-            <p className="muted small" style={{ margin: 0 }}>Creá la unidad, asigná su cuota y registrá al titular de la cuenta.</p>
+            <p className="muted small" style={{ margin: 0 }}>
+              {enlace
+                ? "Creá la unidad, asigná su cuota y registrá al titular de la cuenta."
+                : `Paso ${indicePaso + 1} de ${pasos.length}`}
+            </p>
           </div>
           <button className="modal-x" onClick={onCerrar} aria-label="Cerrar">✕</button>
         </div>
+
+        {/* Día 73 — barra de pasos. Los pasos ya recorridos se pueden tocar
+            para volver a ellos; los que faltan no, porque cada uno valida lo
+            suyo antes de dejar avanzar. */}
+        {!enlace && (
+          <div className="alta-pasos" role="list">
+            {pasos.map((p, i) => {
+              const hecho = i < indicePaso;
+              const actual = i === indicePaso;
+              return (
+                <button key={p.id} type="button" role="listitem"
+                  className={`alta-paso ${actual ? "alta-paso--actual" : ""} ${hecho ? "alta-paso--hecho" : ""}`}
+                  onClick={() => hecho && irAlPaso(p.id)}
+                  disabled={!hecho}
+                  aria-current={actual ? "step" : undefined}>
+                  <span className="alta-paso-num">{hecho ? "✓" : i + 1}</span>
+                  <span className="alta-paso-txt">{p.titulo}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="modal-alta-body">
 
@@ -630,14 +771,19 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
               {msg.tipo === "err" ? "⚠ " : "✓ "}{msg.texto}
             </div>
           )}
-          {/* Código de enrolamiento */}
+          {/* Paso 1 — Código de enrolamiento (opcional) */}
+          {pasoVigente === "codigo" && (
           <div className="alta-seccion">
             <div className="alta-seccion-head">
-              <span className="alta-num">0</span>
+              <span className="alta-num">1</span>
               <b>¿Trae código de enrolamiento?</b>
-              <InfoTip texto="Si un inquilino recibió un código de 6 dígitos del dueño de su edificio, ingresalo aquí: el edificio y apartamento se seleccionan solos. Si es una casa normal o no hay código, salteá este paso." />
+              <InfoTip texto="Si un inquilino recibió un código de 6 dígitos del dueño de su edificio, ingresalo aquí: el edificio y apartamento se seleccionan solos. Si es una casa normal o no hay código, tocá «Saltar este paso»." />
               <span className="muted small" style={{ marginLeft: "auto" }}>Opcional</span>
             </div>
+            <p className="muted small" style={{ marginTop: 0, marginBottom: 10 }}>
+              La mayoría de las altas son casas y no traen código: en ese caso
+              tocá <b>Saltar este paso</b>.
+            </p>
             <div className="row">
               <input placeholder="Código de 6 dígitos (opcional)" value={codigoEnrol}
                 inputMode="numeric" maxLength={6}
@@ -656,10 +802,13 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
               </div>
             )}
           </div>
+          )}
 
+          {/* Paso 2 — Casa o edificio */}
+          {pasoVigente === "unidad" && (
           <div className="alta-seccion">
             <div className="alta-seccion-head">
-              <span className="alta-num">1</span>
+              <span className="alta-num">2</span>
               <b>Casa o edificio</b>
               <InfoTip texto="Elegí si es una casa independiente o un apartamento dentro de un edificio. Podés crear una unidad nueva, o si es un edificio ya registrado, sumarle un apartamento." />
             </div>
@@ -774,19 +923,28 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
                 <>
                   <div className="sub" style={{ marginTop: 14 }}>Apartamento</div>
                   <input placeholder="Ej. 1A, 2B" value={apartamento}
-                    onChange={(e) => setApartamento(e.target.value)} />
+                    className={fieldErrors.apartamento ? "input-error" : ""}
+                    onChange={(e) => { setApartamento(e.target.value); clearFieldError("apartamento"); }} />
                 </>
               )}
             </div>
           )}
-          </div>
 
-          {/* Sección de cuota: se oculta solo cuando es el administrador de un
-              edificio NUEVO que no vive ahí (el edificio no genera cuota propia) */}
-          {!(esEdificio && modoUnidad === "nueva" && !duenoVive) && (
+          {/* Día 73 — estos dos errores se calculaban desde siempre pero no se
+              dibujaban en ninguna parte: lo único que se veía era el mensaje
+              general de "revisalos arriba", sin decir cuál faltaba. */}
+          {fieldErrors.unidad && <span className="campo-error">{fieldErrors.unidad}</span>}
+          {fieldErrors.apartamento && <span className="campo-error">{fieldErrors.apartamento}</span>}
+          </div>
+          )}
+
+          {/* Paso 3 — Cuota mensual. El paso no existe cuando la cuenta es del
+              administrador de un edificio NUEVO que no vive ahí (el edificio no
+              genera cuota propia), así que acá solo se pregunta por el paso. */}
+          {pasoVigente === "cuota" && (
           <div className="alta-seccion">
             <div className="alta-seccion-head">
-              <span className="alta-num">2</span>
+              <span className="alta-num">{indicePaso + 1}</span>
               <b>Cuota mensual</b>
               <InfoTip texto="La tarifa define cuánto paga esta casa cada mes. El día de pago es la fecha límite mensual; se autollena con hoy pero podés cambiarlo (máximo 28 para evitar problemas en febrero)." />
             </div>
@@ -799,7 +957,8 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
             </div>
           ) : (
           <div className="row">
-            <select value={tarifaId} onChange={(e) => setTarifaId(Number(e.target.value))}>
+            <select value={tarifaId} className={fieldErrors.tarifa ? "input-error" : ""}
+              onChange={(e) => { setTarifaId(Number(e.target.value)); clearFieldError("tarifa"); }}>
               <option value={0}>— Selecciona tarifa —</option>
               {tarifas.map((t) => (
                 <option key={t.id} value={t.id}>{t.nombre} — L {t.monto}</option>
@@ -818,6 +977,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
             </label>
           </div>
           )}
+          {fieldErrors.tarifa && <span className="campo-error">{fieldErrors.tarifa}</span>}
           {permiteControlFisico && (
           <div className="row" style={{ alignItems: "center", marginTop: 10 }}>
             <span className="muted small" style={{ marginRight: 10 }}>
@@ -840,9 +1000,11 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
           </div>
           )}
 
+          {/* Paso final — Titular de la cuenta */}
+          {pasoVigente === "titular" && (
           <div className="alta-seccion">
             <div className="alta-seccion-head">
-              <span className="alta-num">3</span>
+              <span className="alta-num">{indicePaso + 1}</span>
               <b>Titular de la cuenta</b>
               <InfoTip texto="Es la persona responsable de la cuenta (quien paga). Se le creará un acceso en estado pendiente y recibirá un enlace para definir su propia contraseña. Nombre, apellido, correo y teléfono son obligatorios." />
             </div>
@@ -956,19 +1118,41 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
             </div>
           )}
           </div>
+          )}
 
+          {pasoVigente === "titular" && (
           <div className="info-box">
             <Info size={15} />
             <span>Se creará el acceso del titular en estado <b>pendiente</b>. Recibirá un enlace para definir su propia contraseña — la administración nunca conoce las contraseñas.</span>
           </div>
+          )}
         </>
       )}
         </div>
 
         {!enlace && (
           <div className="modal-alta-footer">
-            <button className="ghost" onClick={onCerrar}>Cancelar</button>
-            <button onClick={guardar}>Dar de alta cuenta y titular</button>
+            {/* Cancelar cierra todo; Atrás solo retrocede un paso. Nunca los
+                dos juntos en el mismo lugar: en el primer paso Atrás no
+                existe, y de ahí en adelante Cancelar pasa a ser la ✕ de
+                arriba, para que no se confundan de un golpe. */}
+            {indicePaso === 0
+              ? <button className="ghost" onClick={onCerrar}>Cancelar</button>
+              : <button className="ghost" onClick={atras}>← Atrás</button>}
+
+            {esUltimoPaso ? (
+              <button onClick={guardar}>Dar de alta cuenta y titular</button>
+            ) : (
+              <button onClick={siguiente} disabled={validando}>
+                {/* El botón del primer paso dice "Saltar" mientras no haya
+                    código escrito: es lo que va a hacer en la mayoría de las
+                    altas, y así no tiene que adivinar que puede dejarlo vacío. */}
+                {validando ? "Validando…"
+                  : pasoVigente === "codigo" && !codigoEnrol.trim()
+                    ? "Saltar este paso →"
+                    : "Siguiente →"}
+              </button>
+            )}
           </div>
         )}
       </div>

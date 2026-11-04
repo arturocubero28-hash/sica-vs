@@ -3345,8 +3345,11 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
 }
 .modal-x:hover:not(:disabled) { background: #e5eaf1 !important; color: var(--marca-azul) !important; transform: none; }
 .modal-alta-body { padding: 18px 22px; overflow-y: auto; flex: 1; }
+/* Día 73 — space-between y no flex-end: ahora el pie lleva "Atrás" a la
+   izquierda y "Siguiente" a la derecha, que es por donde los busca la
+   mano. Con los dos pegados a la derecha se toca el equivocado. */
 .modal-alta-footer {
-  display: flex; gap: 10px; justify-content: flex-end; padding: 14px 22px;
+  display: flex; gap: 10px; justify-content: space-between; padding: 14px 22px;
   border-top: 1px solid #eef2f7; background: #fafbfd; border-radius: 0 0 16px 16px;
 }
 .modal-alta-footer button { min-width: 120px; }
@@ -3361,6 +3364,58 @@ button svg.lucide, h2 svg.lucide, h3 svg.lucide, h4 svg.lucide, span svg.lucide 
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; border-radius: 50%; background: var(--marca-azul); color: #fff;
   font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+
+/* ── Día 73 — barra de pasos del alta ──────────────────────────────────
+   El alta dejó de ser una pantalla con scroll y ahora avanza por pasos.
+   Esta barra es lo que le dice en qué va y cuánto le falta.
+
+   Son cuatro pasos como máximo (tres cuando no hay cuota), así que
+   entran en una fila sin scroll horizontal. En teléfono se esconde el
+   texto y quedan los números, que con el "Paso 2 de 4" del encabezado
+   alcanzan para ubicarse.
+
+   Los botones de pasos ya recorridos son clickeables para volver; los
+   que faltan van disabled, porque cada paso valida lo suyo antes de
+   dejar pasar. Por eso hace falta apagar a mano el fondo azul y el
+   translateY del hover global de button. */
+.alta-pasos {
+  display: flex; align-items: center; gap: 4px;
+  padding: 11px 22px; background: #fafbfd; border-bottom: 1px solid #eef2f7;
+}
+.alta-paso {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px;
+  background: transparent !important; border: none; padding: 5px 2px;
+  color: #94a3b8; font-size: 12.5px; font-weight: 600; cursor: default;
+  box-shadow: none !important; transform: none !important; opacity: 1;
+}
+.alta-paso:disabled { opacity: 1; cursor: default; }
+/* Línea que une un paso con el siguiente. */
+.alta-paso:not(:last-child)::after {
+  content: ""; flex: 1; min-width: 8px; height: 2px;
+  background: #e2e8f0; border-radius: 2px;
+}
+.alta-paso-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  background: #e8edf4; color: #94a3b8; font-size: 12px; font-weight: 700;
+}
+.alta-paso-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.alta-paso--actual { color: var(--marca-azul); }
+.alta-paso--actual .alta-paso-num {
+  background: var(--marca-azul); color: #fff;
+  box-shadow: 0 0 0 3px rgba(2,46,69,.12);
+}
+
+.alta-paso--hecho { color: #15803d; cursor: pointer; }
+.alta-paso--hecho .alta-paso-num { background: #dcfce7; color: #15803d; }
+.alta-paso--hecho::after { background: #bbf7d0; }
+.alta-paso--hecho:hover .alta-paso-txt { text-decoration: underline; }
+
+@media (max-width: 560px) {
+  .alta-pasos { padding: 10px 14px; }
+  .alta-paso-txt { display: none; }
 }
 
 /* UX Día 43 — bloque plegable de datos opcionales del titular.
