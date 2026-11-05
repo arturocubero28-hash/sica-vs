@@ -29,12 +29,34 @@
 #
 # No toca la configuración de Nginx: si cambió, avisa y te deja el comando,
 # porque pisar ese archivo a ciegas puede romper los certificados.
+#
+#     bash deploy/actualizar.sh            lo normal
+#     bash deploy/actualizar.sh --forzar   reconstruir todo igual
+#
+# COMPARA CONTRA LO ÚLTIMO DESPLEGADO, NO CONTRA LO ÚLTIMO BAJADO.
+#
+# La primera versión comparaba el HEAD de antes del pull contra el de
+# después, y se rompía sola en el caso más común: hacer "git pull" a mano
+# y después correr el script. Ahí no había nada que traer, el script decía
+# "nada que desplegar" y se saltaba el build -- con el código nuevo ya en
+# el disco y sin desplegar, que es exactamente el engaño que este script
+# venía a evitar.
+#
+# Por eso se guarda el commit desplegado en .ultimo-despliegue y la
+# comparación se hace contra ese. Correr el script dos veces seguidas no
+# hace nada la segunda, que es lo que uno espera.
 
 set -euo pipefail
 
-RAIZ="/opt/sicavs"
-WEB="/var/www/sicavs"
-COMPOSE="docker compose -f docker-compose.prod.yml"
+# Las rutas se pueden sobreescribir por entorno para poder probar el
+# script fuera del servidor, sin tocar nada real.
+RAIZ="${SICAVS_RAIZ:-/opt/sicavs}"
+WEB="${SICAVS_WEB:-/var/www/sicavs}"
+SELLO="$RAIZ/.ultimo-despliegue"
+COMPOSE="${SICAVS_COMPOSE:-docker compose -f docker-compose.prod.yml}"
+
+FORZAR="no"
+[ "${1:-}" = "--forzar" ] && FORZAR="si"
 
 cd "$RAIZ"
 
@@ -50,19 +72,37 @@ echo "▶ Trayendo cambios…"
 git pull origin "$RAMA"
 DESPUES="$(git rev-parse HEAD)"
 
-if [ "$ANTES" = "$DESPUES" ]; then
-  echo
-  echo "No había nada nuevo. Nada que desplegar."
-  exit 0
+# Punto de partida: lo último que este script desplegó. Si no hay sello
+# todavía (primera vez), no se puede saber qué falta, así que se
+# reconstruye todo -- más lento, pero nunca deja algo sin desplegar.
+REFERENCIA=""
+if [ -f "$SELLO" ]; then
+  REFERENCIA="$(cat "$SELLO")"
+  git cat-file -e "$REFERENCIA^{commit}" 2>/dev/null || REFERENCIA=""
 fi
 
-# Qué cambió, para no reconstruir lo que no hace falta: el build del
-# frontend son ~20 segundos y el del backend puede ser un minuto largo.
-CAMBIOS="$(git diff --name-only "$ANTES" "$DESPUES")"
+if [ "$FORZAR" = "si" ]; then
+  echo
+  echo "▶ --forzar: se reconstruye todo sin mirar qué cambió."
+  CAMBIOS=$'backend/\nfrontend/'
+elif [ -z "$REFERENCIA" ]; then
+  echo
+  echo "▶ Primera corrida (no hay registro de despliegue previo):"
+  echo "  se reconstruye todo para no dejar nada sin desplegar."
+  CAMBIOS=$'backend/\nfrontend/'
+elif [ "$REFERENCIA" = "$DESPUES" ]; then
+  echo
+  echo "Ya está desplegado $DESPUES. Nada que hacer."
+  exit 0
+else
+  # Qué cambió, para no reconstruir lo que no hace falta: el build del
+  # frontend son ~20 segundos y el del backend puede ser un minuto largo.
+  CAMBIOS="$(git diff --name-only "$REFERENCIA" "$DESPUES")"
+fi
 toco() { echo "$CAMBIOS" | grep -q "^$1"; }
 
 echo
-echo "▶ Cambiaron $(echo "$CAMBIOS" | wc -l) archivo(s):"
+echo "▶ A desplegar:"
 echo "$CAMBIOS" | sed 's/^/    /'
 
 # ── Backend ──────────────────────────────────────────────────────────────
@@ -113,6 +153,11 @@ else
   echo "    No respondió. Mirá los logs:"
   echo "    $COMPOSE logs backend --tail 40"
 fi
+
+# El sello se escribe AL FINAL y solo si todo salió bien: con set -e,
+# cualquier paso que falle corta antes de llegar acá, y la próxima corrida
+# vuelve a intentar lo mismo en vez de darlo por desplegado.
+echo "$DESPUES" > "$SELLO"
 
 echo
 echo "──────────────────────────────────────────────────────────"

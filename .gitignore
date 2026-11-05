@@ -42,3 +42,6 @@ backend/celerybeat-schedule.db
 firebase-credentials.json
 backend/firebase-credentials.json
 **/firebase-credentials.json
+
+# Sello del script de despliegue (deploy/actualizar.sh): solo del servidor.
+.ultimo-despliegue
