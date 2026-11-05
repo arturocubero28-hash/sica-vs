@@ -229,6 +229,16 @@ def crear_cuenta(usuario_actual):
     """
     data = request.get_json(silent=True) or {}
 
+    # Día 73 — no se crea nada hasta que Resend confirme que el correo a
+    # esta dirección LLEGÓ (ver api/verificacion_correo.py). Va al
+    # principio de todo, antes de crear la unidad, la cuenta o el usuario:
+    # si el correo rebota no tiene que quedar ningún resto que después
+    # impida reintentar con la dirección corregida.
+    from app.api.verificacion_correo import exigir_verificacion, marcar_usada
+    verif, err = exigir_verificacion((data.get("titular") or {}).get("email"), data.get("verificacion_id"))
+    if err:
+        return err
+
     # Día 50 — sistema de suscripciones: el límite de CASAS se chequea acá
     # (es específico de esta operación). El límite de USUARIOS ya lo
     # verifica _crear_usuario_pendiente() más abajo, adentro de la función
@@ -410,6 +420,7 @@ def crear_cuenta(usuario_actual):
             cod.usado_por_cuenta_id = cuenta.id
             cod.usado_en = dt.datetime.now(dt.timezone.utc)
 
+    marcar_usada(verif)   # en la misma transacción que crea la cuenta
     db.session.commit()
 
     # Día 61 — se dispara DESPUÉS del commit de arriba, nunca antes: si se
@@ -771,6 +782,17 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
                         f"persona(s) adicional(es) al titular.", 400)
 
     data = request.get_json(silent=True) or {}
+
+    # Día 73 — no se crea nada hasta que Resend confirme que el correo a
+    # esta dirección LLEGÓ (ver api/verificacion_correo.py). Va al
+    # principio de todo, antes de crear la unidad, la cuenta o el usuario:
+    # si el correo rebota no tiene que quedar ningún resto que después
+    # impida reintentar con la dirección corregida.
+    from app.api.verificacion_correo import exigir_verificacion, marcar_usada
+    verif, err = exigir_verificacion(data.get("email"), data.get("verificacion_id"))
+    if err:
+        return err
+
     usuario, token_o_error = _crear_usuario_pendiente(
         data.get("nombre"), data.get("apellido"),
         data.get("email"), data.get("telefono"),
@@ -784,6 +806,7 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
         rol_cuenta="miembro", relacion=data.get("relacion", "familiar"),
     )
     db.session.add(residente)
+    marcar_usada(verif)
     db.session.commit()
 
     # Día 61 — mismo criterio que crear_cuenta: recién después del commit.

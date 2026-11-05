@@ -58,14 +58,20 @@ def _registrar_envio(destinatario, resend_id):
             pass
 
 
-def _enviar(destinatario, asunto, html):
-    """Envío de bajo nivel. Devuelve True/False, nunca lanza excepción."""
+def _enviar_crudo(destinatario, asunto, html):
+    """
+    Manda el correo y devuelve (ok, resend_id). Nunca lanza excepción.
+
+    Día 73 — separado de _enviar porque la verificación de correo necesita
+    el id del envío SIN atarlo a un usuario: todavía no existe, de eso se
+    trata. _enviar lo usa y además lo registra en el usuario.
+    """
     if not _resend_configurado():
         logger.warning(
             "RESEND_API_KEY no configurado -- correo NO enviado a %s (asunto: %s)",
             destinatario, asunto,
         )
-        return False
+        return False, None
     try:
         import resend
         from flask import current_app
@@ -79,18 +85,49 @@ def _enviar(destinatario, asunto, html):
             "subject": asunto,
             "html": html,
         })
-        # Resend responde con el id del envío. Se guarda para poder casar
-        # después el webhook de rebote con esta persona.
+        # Resend responde con el id del envío. Es lo que trae el webhook,
+        # así que es lo que permite casar el aviso con quien corresponde.
         resend_id = None
         if isinstance(respuesta, dict):
             resend_id = respuesta.get("id")
         elif respuesta is not None:
             resend_id = getattr(respuesta, "id", None)
-        _registrar_envio(destinatario, resend_id)
-        return True
+        return True, resend_id
     except Exception:
         logger.exception("Error enviando correo a %s (asunto: %s)", destinatario, asunto)
-        return False
+        return False, None
+
+
+def _enviar(destinatario, asunto, html):
+    """Envío de bajo nivel. Devuelve True/False, nunca lanza excepción."""
+    ok, resend_id = _enviar_crudo(destinatario, asunto, html)
+    if ok:
+        _registrar_envio(destinatario, resend_id)
+    return ok
+
+
+def enviar_verificacion(destinatario, nombre, nombre_residencial):
+    """
+    Día 73 — el correo que confirma que la dirección existe, ANTES de crear
+    la cuenta. Devuelve (ok, resend_id).
+
+    Corto y honesto: no lleva enlace ni token (no hay cuenta todavía), solo
+    avisa qué está pasando y que en minutos llega el correo de verdad. Así
+    la persona no se confunde al recibir dos correos seguidos: el primero
+    le dice que viene el segundo.
+    """
+    saludo = f"Hola {nombre}," if nombre else "Hola,"
+    cuerpo = (
+        f"<p>{saludo}</p>"
+        f"<p>La administración de <b>{nombre_residencial}</b> está registrando tu "
+        f"cuenta en este momento.</p>"
+        f"<p>En unos minutos vas a recibir otro correo con el enlace para crear tu "
+        f"contraseña y empezar a usar la aplicación.</p>"
+        f"<p style='color:#93a0ad;font-size:13px;'>Si no esperabas este mensaje, "
+        f"podés ignorarlo: sin ese segundo correo no se crea ningún acceso.</p>"
+    )
+    html = _plantilla_base("Estamos creando tu cuenta", cuerpo, nombre_residencial)
+    return _enviar_crudo(destinatario, f"{nombre_residencial}: estamos creando tu cuenta", html)
 
 
 def _plantilla_base(titulo, cuerpo_html, nombre_residencial, boton_texto=None, boton_url=None):
@@ -110,6 +147,7 @@ def _plantilla_base(titulo, cuerpo_html, nombre_residencial, boton_texto=None, b
     usar la marca fija de la plataforma.
     """
     boton_html = ""
+    respaldo_html = ""
     if boton_texto and boton_url:
         boton_html = f"""
         <tr><td style="padding: 24px 0;">
@@ -117,6 +155,14 @@ def _plantilla_base(titulo, cuerpo_html, nombre_residencial, boton_texto=None, b
              padding:14px 32px;border-radius:10px;font-weight:600;font-size:15px;
              display:inline-block;">{boton_texto}</a>
         </td></tr>"""
+        # Día 73 — el "si el botón no funciona" solo tiene sentido si hay
+        # botón. El correo de verificación no lleva, y ahí quedaba la frase
+        # colgando con un enlace vacío.
+        respaldo_html = f"""
+            <p style="color:#93a0ad;font-size:12px;margin-top:24px;">
+              Si el botón no funciona, copiá y pegá este enlace en tu navegador:<br/>
+              <span style="word-break:break-all;">{boton_url}</span>
+            </p>"""
     return f"""
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f7fb;padding:32px 0;">
       <tr><td align="center">
@@ -128,11 +174,7 @@ def _plantilla_base(titulo, cuerpo_html, nombre_residencial, boton_texto=None, b
           <tr><td style="padding:32px;">
             <h2 style="color:#022E45;margin:0 0 16px;font-size:19px;">{titulo}</h2>
             <div style="color:#3a4048;font-size:14.5px;line-height:1.6;">{cuerpo_html}</div>
-            {boton_html}
-            <p style="color:#93a0ad;font-size:12px;margin-top:24px;">
-              Si el botón no funciona, copiá y pegá este enlace en tu navegador:<br/>
-              <span style="word-break:break-all;">{boton_url or ''}</span>
-            </p>
+            {boton_html}{respaldo_html}
           </td></tr>
         </table>
       </td></tr>

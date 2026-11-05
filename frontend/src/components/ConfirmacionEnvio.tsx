@@ -1,119 +1,176 @@
 import { useEffect, useRef, useState } from "react";
-import { detalleCuenta } from "../api/client";
+import { consultarVerificacion, verificarCorreo } from "../api/client";
 
 /**
- * Día 73 — esperar la confirmación de que el correo llegó.
+ * Día 73 — verificar que el correo llega ANTES de crear nada.
  *
- * EL PROBLEMA: al dar de alta, el panel decía "Cuenta creada" y cerraba.
- * Pero crear la cuenta y que la persona RECIBA el enlace para entrar son
- * dos cosas distintas, y la segunda es la que importa: una cuenta cuyo
- * correo rebotó queda pendiente para siempre. Administración se iba
- * tranquila creyendo que había terminado.
+ * LA REGLA: si el correo no llega, no se crea nada. Ni la casa, ni la
+ * cuota, ni el acceso. Solo cuando Resend confirma que el correo fue
+ * ENTREGADO se ejecuta la creación.
  *
- * Ahora el alta no se da por buena hasta que Resend confirma la entrega.
+ * POR QUÉ CAMBIÓ: la primera versión de esta pantalla creaba la cuenta y
+ * DESPUÉS esperaba la confirmación. Cuando el correo rebotaba, la cuenta
+ * ya existía: al corregir la dirección y reintentar, fallaba con "esta
+ * persona ya tiene acceso al sistema". Pasó en la primera prueba real.
  *
- * UNA ACLARACIÓN QUE IMPORTA: la cuenta YA está creada cuando esta
- * pantalla aparece — el servidor la guardó al responder, y no se puede
- * "descrear" sin borrarla, que sería peor (se perdería la casa, la unidad
- * y la cuota recién generada si la persona se equivocó en una letra del
- * correo). Lo que se bloquea es el CIERRE: no se declara éxito ni se
- * libera el formulario hasta saber qué pasó, y si rebotó se ofrece
- * corregir la dirección ahí mismo.
+ * Ahora el orden es el único que no deja restos:
  *
- * El estado lo escribe el webhook de Resend (ver api/webhooks.py), así
- * que esto es consultar la ficha cada pocos segundos hasta que cambie.
+ *   1. Se manda un correo corto de verificación ("estamos creando tu
+ *      cuenta"). No lleva enlace: todavía no hay cuenta.
+ *   2. Se espera el aviso del webhook.
+ *   3a. Llegó     -> se ejecuta onConfirmado(id), que crea todo de una vez
+ *                    pasando el id; el backend rechaza crear sin él.
+ *   3b. Rebotó    -> no se creó nada. Se corrige y se vuelve a verificar.
+ *   3c. Sin respuesta en 60 s -> tampoco se creó nada. Se puede seguir
+ *                    esperando o corregir.
  *
- * Si a los 60 segundos no hay respuesta no se da por fallido: hay
- * servidores de correo que tardan. Se dice que quedó en camino y que el
- * aviso va a aparecer en la ficha. Dar un error ahí sería mentir.
+ * El backend es quien hace cumplir la regla (ver api/verificacion_correo.py):
+ * esta pantalla es la forma cómoda de cumplirla, no la única barrera.
  */
-type Estado = "esperando" | "entregado" | "rebotado" | "sin_confirmar";
+type Fase =
+  | "enviando"      // pidiendo la verificación
+  | "esperando"     // correo salió, esperando confirmación
+  | "creando"       // confirmado: ejecutando la creación
+  | "listo"         // creado
+  | "rebotado"      // no llegó: nada creado
+  | "sin_confirmar" // 60 s sin respuesta: nada creado
+  | "error";        // falló el envío o la creación
 
 type Props = {
-  cuentaId: string;
   email: string;
-  /** Qué hacer cuando la persona decide corregir el correo. */
-  onCorregir?: () => void;
-  /** Cerrar y seguir. */
+  nombre?: string;
+  /** Lo que se crea SOLO si el correo llegó. Recibe el id de la verificación. */
+  onConfirmado: (verificacionId: string) => Promise<void>;
+  /** Volver al formulario a corregir el correo. */
+  onCorregir: () => void;
+  /** Cerrar y seguir, una vez creado. */
   onListo: () => void;
-  /** Texto del botón final. */
   textoListo?: string;
+  /** Qué se creó, para el mensaje final. Ej: "La casa ya participa del sistema." */
+  textoCreado?: string;
 };
 
 const CADA_MS = 2500;
 const INTENTOS = 24;          // 60 segundos
 
-export function ConfirmacionEnvio({ cuentaId, email, onCorregir, onListo, textoListo }: Props) {
-  const [estado, setEstado] = useState<Estado>("esperando");
+export function ConfirmacionEnvio({
+  email, nombre, onConfirmado, onCorregir, onListo, textoListo, textoCreado,
+}: Props) {
+  const [fase, setFase] = useState<Fase>("enviando");
   const [detalle, setDetalle] = useState("");
+  const [verifId, setVerifId] = useState<string | null>(null);
+  const [ronda, setRonda] = useState(0);     // "seguir esperando" la reinicia
   const vivo = useRef(true);
+  // La creación corre UNA sola vez aunque el efecto se reejecute: crear
+  // dos veces la misma casa sería justo el tipo de resto que se evita acá.
+  const creada = useRef(false);
 
+  async function crear(id: string) {
+    if (creada.current) return;
+    creada.current = true;
+    setFase("creando");
+    try {
+      await onConfirmado(id);
+      if (vivo.current) setFase("listo");
+    } catch (e) {
+      creada.current = false;
+      if (vivo.current) { setDetalle((e as Error).message); setFase("error"); }
+    }
+  }
+
+  // 1. Pedir la verificación (una vez por correo).
   useEffect(() => {
     vivo.current = true;
     (async () => {
-      for (let i = 0; i < INTENTOS; i++) {
-        await new Promise(r => setTimeout(r, CADA_MS));
+      try {
+        const v = await verificarCorreo(email, nombre);
         if (!vivo.current) return;
-        try {
-          const c = await detalleCuenta(cuentaId);
-          const t = c.titular;
-          if (!vivo.current) return;
-          if (t?.correo_estado === "rebotado") {
-            setDetalle(t.correo_detalle || "El servidor del destinatario lo rechazó.");
-            setEstado("rebotado");
-            return;
-          }
-          if (t?.correo_estado === "entregado") { setEstado("entregado"); return; }
-        } catch {
-          // Sin conexión o la sesión expiró: no tiene sentido insistir, y
-          // menos mostrar un error de red donde se espera uno de correo.
-          if (vivo.current) setEstado("sin_confirmar");
+        setVerifId(v.id);
+        if (v.estado === "entregado") { await crear(v.id); return; }
+        if (v.estado === "error") {
+          setDetalle(v.detalle || "No se pudo enviar el correo.");
+          setFase("error");
           return;
         }
+        setFase("esperando");
+      } catch (e) {
+        if (vivo.current) { setDetalle((e as Error).message); setFase("error"); }
       }
-      if (vivo.current) setEstado("sin_confirmar");
     })();
     return () => { vivo.current = false; };
-  }, [cuentaId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email]);
 
-  if (estado === "esperando") {
+  // 2. Esperar el aviso del webhook.
+  useEffect(() => {
+    if (fase !== "esperando" || !verifId) return;
+    let cancelado = false;
+    (async () => {
+      for (let i = 0; i < INTENTOS; i++) {
+        await new Promise(r => setTimeout(r, CADA_MS));
+        if (cancelado || !vivo.current) return;
+        try {
+          const v = await consultarVerificacion(verifId);
+          if (cancelado || !vivo.current) return;
+          if (v.estado === "entregado") { await crear(v.id); return; }
+          if (v.estado === "rebotado" || v.estado === "queja") {
+            setDetalle(v.detalle || "El servidor del destinatario rechazó el correo.");
+            setFase("rebotado");
+            return;
+          }
+        } catch {
+          // Un tropiezo de red no decide nada: se sigue intentando.
+        }
+      }
+      if (!cancelado && vivo.current) setFase("sin_confirmar");
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fase, verifId, ronda]);
+
+  if (fase === "enviando" || fase === "esperando" || fase === "creando") {
     return (
       <div className="confirmacion" role="status" aria-live="polite">
         <div className="confirmacion-sobre">
           <svg viewBox="0 0 48 36" width="48" height="36" aria-hidden="true">
-            <rect x="1" y="1" width="46" height="34" rx="4"
-              className="confirmacion-sobre-cuerpo" />
+            <rect x="1" y="1" width="46" height="34" rx="4" className="confirmacion-sobre-cuerpo" />
             <path d="M1 5 L24 21 L47 5" className="confirmacion-sobre-solapa" />
           </svg>
         </div>
-        <h4>Confirmando que el correo llegó…</h4>
+        <h4>
+          {fase === "creando" ? "El correo llegó. Creando la cuenta…"
+            : "Verificando que el correo llega…"}
+        </h4>
         <p className="muted small">
-          Le escribimos a <b>{email}</b>. Esperamos la confirmación del
-          servidor de correo antes de dar el alta por terminada.
+          {fase === "creando"
+            ? <>Confirmado que <b>{email}</b> existe. Guardando todo.</>
+            : <>Le escribimos a <b>{email}</b>. Hasta que el servidor de correo
+               confirme la entrega, no se crea nada.</>}
         </p>
         <div className="confirmacion-barra"><span /></div>
       </div>
     );
   }
 
-  if (estado === "entregado") {
+  if (fase === "listo") {
     return (
       <div className="confirmacion confirmacion--ok" role="status" aria-live="polite">
         <svg viewBox="0 0 52 52" width="56" height="56" className="confirmacion-check" aria-hidden="true">
           <circle cx="26" cy="26" r="24" className="confirmacion-check-aro" />
           <path d="M15 27 l8 8 l15 -16" className="confirmacion-check-tilde" />
         </svg>
-        <h4>El correo le llegó</h4>
+        <h4>Listo</h4>
         <p className="muted small">
-          El servidor de <b>{email}</b> lo recibió. Ya puede definir su contraseña
-          desde el enlace. Si no lo ve, que revise spam.
+          {textoCreado ? <>{textoCreado} </> : null}
+          En unos minutos le llega a <b>{email}</b> el correo con el enlace para
+          crear su contraseña. Si no lo ve, que revise spam.
         </p>
-        <button onClick={onListo}>{textoListo || "Listo"}</button>
+        <button onClick={onListo}>{textoListo || "Terminar"}</button>
       </div>
     );
   }
 
-  if (estado === "rebotado") {
+  if (fase === "rebotado") {
     return (
       <div className="confirmacion confirmacion--error" role="alert">
         <svg viewBox="0 0 52 52" width="56" height="56" className="confirmacion-aviso" aria-hidden="true">
@@ -121,38 +178,56 @@ export function ConfirmacionEnvio({ cuentaId, email, onCorregir, onListo, textoL
           <path d="M26 14 v16" className="confirmacion-aviso-linea" />
           <circle cx="26" cy="37" r="2.4" className="confirmacion-aviso-punto" />
         </svg>
-        <h4>El correo no le llegó</h4>
+        <h4>Ese correo no existe</h4>
         <p className="muted small">
-          <b>{email}</b> rechazó el mensaje. {detalle} Revisá la dirección con la
-          persona: lo más común es una letra de más o un dominio mal escrito.
+          <b>{email}</b> rechazó el mensaje{detalle ? `: ${detalle.replace(/[.\s]+$/, "")}.` : "."} <b>No se
+          creó nada.</b> Revisá la dirección con la persona: lo más común es una
+          letra de más o un dominio mal escrito.
+        </p>
+        <button onClick={onCorregir}>Corregir el correo</button>
+      </div>
+    );
+  }
+
+  if (fase === "sin_confirmar") {
+    return (
+      <div className="confirmacion" role="status" aria-live="polite">
+        <svg viewBox="0 0 52 52" width="56" height="56" className="confirmacion-reloj" aria-hidden="true">
+          <circle cx="26" cy="26" r="24" className="confirmacion-aviso-aro" />
+          <path d="M26 13 v14 l9 6" className="confirmacion-reloj-agujas" />
+        </svg>
+        <h4>Todavía sin confirmación</h4>
+        <p className="muted small">
+          El correo salió hacia <b>{email}</b> pero el servidor no confirmó la
+          entrega en un minuto. <b>No se creó nada.</b> Algunos servidores tardan:
+          podés seguir esperando, o revisar la dirección.
         </p>
         <div className="row-btns">
-          {onCorregir && <button onClick={onCorregir}>Corregir el correo</button>}
-          {/* Sin forma de corregir acá (el alta normal: la dirección se
-              arregla desde la ficha de la casa), un botón que dijera
-              "seguir sin corregir" sonaría a que se está eligiendo mal
-              a propósito. Es simplemente cerrar. */}
-          <button className={onCorregir ? "ghost" : ""} onClick={onListo}>
-            {onCorregir ? "Seguir sin corregir" : (textoListo || "Entendido")}
+          <button onClick={() => { setFase("esperando"); setRonda(r => r + 1); }}>
+            Seguir esperando
           </button>
+          <button className="ghost" onClick={onCorregir}>Corregir el correo</button>
         </div>
       </div>
     );
   }
 
+  // error: falló el envío, o la creación después de confirmar
   return (
-    <div className="confirmacion" role="status" aria-live="polite">
-      <svg viewBox="0 0 52 52" width="56" height="56" className="confirmacion-reloj" aria-hidden="true">
+    <div className="confirmacion confirmacion--error" role="alert">
+      <svg viewBox="0 0 52 52" width="56" height="56" className="confirmacion-aviso" aria-hidden="true">
         <circle cx="26" cy="26" r="24" className="confirmacion-aviso-aro" />
-        <path d="M26 13 v14 l9 6" className="confirmacion-reloj-agujas" />
+        <path d="M26 14 v16" className="confirmacion-aviso-linea" />
+        <circle cx="26" cy="37" r="2.4" className="confirmacion-aviso-punto" />
       </svg>
-      <h4>Quedó en camino</h4>
-      <p className="muted small">
-        El correo salió hacia <b>{email}</b>, pero el servidor todavía no confirmó
-        la entrega. Algunos tardan. Si al final rebota, va a aparecer el aviso
-        junto a la persona en la ficha de la casa.
-      </p>
-      <button onClick={onListo}>{textoListo || "Entendido"}</button>
+      <h4>No se pudo terminar</h4>
+      <p className="muted small">{detalle} <b>No se creó nada.</b></p>
+      <div className="row-btns">
+        {verifId && creada.current === false && fase === "error" && (
+          <button onClick={() => verifId && crear(verifId)}>Reintentar</button>
+        )}
+        <button className="ghost" onClick={onCorregir}>Volver al formulario</button>
+      </div>
     </div>
   );
 }

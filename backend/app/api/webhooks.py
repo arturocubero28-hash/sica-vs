@@ -152,6 +152,31 @@ def resend():
         # devolviéramos error, Resend lo reintentaría para siempre.
         return jsonify({"data": {"ignorado": tipo}}), 200
 
+    # Día 73 — ¿es el correo de verificación de alguien que todavía no
+    # existe? Se mira primero porque es lo más urgente: hay un
+    # administrador esperando en pantalla esta respuesta para poder crear
+    # la cuenta. Su id de envío nunca coincide con el de un usuario (al
+    # usuario no se le registra), así que los dos caminos no se pisan.
+    from app.models.verificacion_correo import VerificacionCorreo
+    email_id = datos.get("email_id")
+    verif = (VerificacionCorreo.query.filter_by(resend_id=email_id).first()
+             if email_id else None)
+    if verif is not None:
+        # Mismo criterio que con los usuarios: un rebote no se pisa con un
+        # aviso más viejo que llegue tarde.
+        if not (verif.estado == "rebotado" and estado in ("enviado", "entregado", "demorado")):
+            verif.estado = estado
+            verif.actualizado = dt.datetime.now(dt.timezone.utc)
+            if tipo in ("email.bounced", "email.failed"):
+                rebote = datos.get("bounce") or datos.get("failed") or {}
+                verif.detalle = (rebote.get("message") or rebote.get("reason")
+                                 or rebote.get("subType")
+                                 or "El servidor del destinatario rechazó el correo.")[:1000]
+            elif tipo == "email.complained":
+                verif.detalle = "El destinatario marcó el correo como spam."
+            db.session.commit()
+        return jsonify({"data": {"ok": True, "verificacion": verif.estado}}), 200
+
     usuario = _usuario_del_evento(datos)
     if not usuario:
         return jsonify({"data": {"sin_destinatario": True}}), 200

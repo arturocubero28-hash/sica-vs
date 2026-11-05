@@ -435,33 +435,36 @@ def agregar_persona_censo(usuario_actual, cuenta_uuid):
 # ─────────────────────────────────────────────────────────────────────────
 # CONVERSIÓN: CASA DEL PADRÓN → CASA COMPLETA
 # ─────────────────────────────────────────────────────────────────────────
-@censo_bp.post("/casas/<cuenta_uuid>/convertir")
-@roles_required("admin", "super_admin")
-def convertir_casa(usuario_actual, cuenta_uuid):
+#
+# Día 73 — todo esto está partido en dos tipos de pieza:
+#
+#   _preparar_*  validan y devuelven lo que van a hacer, SIN tocar nada.
+#   _aplicar_*   hacen el cambio en la sesión, SIN guardar.
+#
+# Por qué: "sumar al sistema" desde el padrón eran DOS llamadas separadas
+# (convertir la casa, y después darle acceso al titular), cada una con su
+# propio commit. Si la segunda fallaba —el correo rebotó, la identidad
+# estaba mal—, la primera ya había quedado guardada: la casa cobrando
+# cuota y la persona marcada como "con acceso". Al corregir y reintentar,
+# fallaba con "esta persona ya tiene acceso al sistema". Pasó en producción.
+#
+# Con las piezas separadas, /sumar valida TODO primero, y recién si todo
+# pasa —incluida la confirmación de que el correo llegó— aplica todo y
+# guarda una sola vez. O se hace todo, o no se hace nada.
+
+
+def _preparar_conversion(cuenta, data, usuario_actual):
     """
-    La familia decidió sumarse: la casa pasa de 'censo' a 'completa'.
+    Valida la conversión de una casa. Devuelve (plan, None) o (None, error).
+    No modifica nada.
 
-    Body: { "tarifa_id": 1, "dia_pago": 5 }
-
-    SOBRE LA RETROACTIVIDAD — el punto más importante de este endpoint.
-    Las cuotas arrancan en el mes en curso y NUNCA hacia atrás. No hace
-    falta lógica para lograrlo: tanto el cron (generar_cuotas_mensuales)
-    como la generación manual crean solo el período del mes actual y jamás
-    rellenan meses anteriores. Cobrarle a una familia los meses en que no
-    participaba sería la forma más rápida de perderla, y de paso de perder
-    la credibilidad del sistema entero.
-
-    Se guarda fecha_conversion como constancia de desde cuándo se le cobra.
+    SOBRE LA RETROACTIVIDAD — el punto más importante de la conversión.
+    Las cuotas arrancan en el mes en curso y NUNCA hacia atrás. Cobrarle a
+    una familia los meses en que no participaba sería la forma más rápida
+    de perderla, y de paso de perder la credibilidad del sistema entero.
     """
-    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
-    if not cuenta:
-        return _err("no_encontrada", "Casa no encontrada", 404)
-    if not pertenece_a_mi_residencial(cuenta.unidad, usuario_actual):
-        return _err("casa_ajena", "Esa casa no pertenece a tu residencial", 403)
     if not cuenta.es_censo:
-        return _err("ya_completa", "Esta casa ya participa del sistema", 400)
-
-    data = request.get_json(silent=True) or {}
+        return None, _err("ya_completa", "Esta casa ya participa del sistema", 400)
 
     # Si la residencial no tiene cuotas en su plan, la casa pasa a completa
     # igual (gana app y credenciales) pero sin tarifa — mismo criterio que
@@ -471,36 +474,40 @@ def convertir_casa(usuario_actual, cuenta_uuid):
 
     # Día 70 — la cuenta contenedora de un edificio (dueño que solo
     # administra) NUNCA paga cuota: ni en el padrón ni participando. Es la
-    # misma regla que el alta normal con es_solo_contenedor. Pedirle tarifa
-    # acá la convertiría en algo que el resto del sistema ya no reconoce
-    # como contenedora (es_contenedor_edificio exige tarifa_id vacía).
+    # misma regla que el alta normal con es_solo_contenedor.
     es_contenedora = cuenta.es_contenedor_edificio()
 
     tarifa = None
     dia_pago = None
     if not sin_cuotas and not es_contenedora:
-        tarifa = Tarifa.query.get(data.get("tarifa_id"))
+        # Sin id no se consulta: Query.get(None) avisa que la búsqueda no
+        # puede encontrar nada, y el caso ya está cubierto por el "not tarifa".
+        tid = data.get("tarifa_id")
+        tarifa = Tarifa.query.get(tid) if tid else None
         if not tarifa or not pertenece_a_mi_residencial(tarifa, usuario_actual):
-            return _err("tarifa_invalida", "La tarifa indicada no existe", 400)
+            return None, _err("tarifa_invalida", "La tarifa indicada no existe", 400)
         dia_pago = data.get("dia_pago")
         if not isinstance(dia_pago, int) or not (1 <= dia_pago <= 30):
-            return _err("dia_pago_invalido", "El día de pago debe estar entre 1 y 30", 400)
+            return None, _err("dia_pago_invalido", "El día de pago debe estar entre 1 y 30", 400)
 
+    return {"tarifa": tarifa, "dia_pago": dia_pago, "es_contenedora": es_contenedora}, None
+
+
+def _aplicar_conversion(cuenta, plan, usuario_actual):
+    """
+    Pasa la casa a 'completa' y le genera la primera cuota prorrateada.
+    NO hace commit. Devuelve la nota para mostrarle al administrador.
+    """
+    tarifa = plan["tarifa"]
     cuenta.modo_participacion = "completa"
     cuenta.tarifa_id = tarifa.id if tarifa else None
-    cuenta.dia_pago = dia_pago
+    cuenta.dia_pago = plan["dia_pago"]
     cuenta.fecha_conversion = dt.date.today()
 
-    # Si es un apartamento, su edificio tiene que salir del padrón con él.
-    #
-    # La cuenta contenedora representa al edificio, y mientras siga en modo
-    # censo el edificio se sigue listando en el padrón aunque ya tenga
-    # apartamentos participando -- y, peor, los apartamentos convertidos
-    # quedan colgando de un edificio que para el sistema "no participa".
-    #
-    # No se le pone tarifa ni día de pago: una cuenta contenedora no cobra
-    # cuota nunca, ni en el padrón ni participando. Lo único que cambia es
-    # que deja de estar en el censo.
+    # Si es un apartamento, su edificio tiene que salir del padrón con él:
+    # si la contenedora siguiera en censo, el edificio se seguiría listando
+    # en el padrón aunque ya tenga apartamentos participando. No se le pone
+    # tarifa: una contenedora no cobra cuota nunca.
     if cuenta.apartamento and cuenta.unidad and cuenta.unidad.tipo == "edificio":
         contenedora = Cuenta.query.filter_by(
             unidad_id=cuenta.unidad_id, apartamento=None, activa=True).first()
@@ -508,118 +515,70 @@ def convertir_casa(usuario_actual, cuenta_uuid):
             contenedora.modo_participacion = "completa"
             contenedora.fecha_conversion = dt.date.today()
 
-    db.session.commit()
+    if plan["es_contenedora"]:
+        return ("El edificio ya participa del sistema. Como el dueño solo "
+                "administra, no se le genera cuota.")
+
+    base = ("Las cuotas empiezan a generarse desde el mes en curso. "
+            "No se generan cuotas de meses anteriores.")
+    if not tarifa:
+        return base
 
     # ── Día 73 — PRIMERA CUOTA PRORRATEADA ────────────────────────────────
     #
     # BUG REAL encontrado en producción: una casa que nacía del padrón
-    # quedaba SIN DEUDA. El alta normal (crear_cuenta) sí genera la primera
-    # cuota prorrateada por los días que quedan del mes; esta conversión se
-    # quedó sin esa parte, así que una familia que se sumaba el 4 no debía
-    # nada hasta el 1 del mes siguiente, cuando el cron genera la cuota
-    # completa. Es decir: el mes en que se sumó le salía gratis, y además
-    # las dos puertas de entrada al sistema cobraban distinto.
+    # quedaba SIN DEUDA. El alta normal sí genera la cuota prorrateada; la
+    # conversión no, así que el mes en que la familia se sumaba le salía
+    # gratis y las dos puertas de entrada cobraban distinto. No es
+    # retroactividad: es el pedazo de mes EN CURSO que sí va a usar.
     #
-    # El docstring de arriba explica por qué NO se cobra hacia atrás, y eso
-    # no cambia: el prorrateo es del mes EN CURSO, desde hoy hasta fin de
-    # mes. No es retroactividad, es el pedazo de mes que sí va a usar.
-    #
-    # Mismo cálculo y mismo día de vencimiento (cfg.dia_pago) que el alta
-    # normal y que el cron mensual: una sola regla para los tres caminos.
-    nota_cuota = ""
-    if tarifa:
-        try:
-            from app.models.cuenta import Cuota, ConfigResidencial
-            from app.utils.cuotas import calcular_cuota_prorrateada
-            cfg = ConfigResidencial.get(usuario_actual.residencial_id)
-            datos = calcular_cuota_prorrateada(tarifa.monto, cfg.dia_pago)
-            # Si ya existe la cuota de este período no se duplica: puede
-            # haberse generado por otro camino (el cron corrió entremedio).
-            ya_existe = datos is not None and Cuota.query.filter_by(
-                cuenta_id=cuenta.id, periodo=datos["periodo"]).first() is not None
-            if datos is not None and not ya_existe:
-                db.session.add(Cuota(
-                    cuenta_id=cuenta.id, periodo=datos["periodo"],
-                    monto=datos["monto"], fecha_vencimiento=datos["fecha_vencimiento"],
-                    estado="pendiente",
-                ))
-                db.session.commit()
-                nota_cuota = (f" Se le generó la cuota de este mes prorrateada: "
-                              f"L {datos['monto']} por {datos['dias_restantes']} días, "
-                              f"con vencimiento el {datos['fecha_vencimiento'].strftime('%d/%m/%Y')}.")
-            elif datos is None:
-                # Último día del mes comercial: no queda fracción que cobrar.
-                nota_cuota = (" No se generó cuota de este mes porque ya no quedan "
-                              "días por cobrar; la primera será la del mes que viene.")
-        except Exception:
-            current_app.logger.exception(
-                "No se pudo generar la cuota prorrateada al convertir la casa %s",
-                cuenta.uuid_publico)
-            nota_cuota = (" Ojo: no se pudo generar la cuota de este mes. "
-                          "Revisala desde la casa antes del cierre.")
-
-    return jsonify({"data": {
-        "casa": cuenta.to_dict(detalle=True),
-        "nota": ("El edificio ya participa del sistema. Como el dueño solo "
-                 "administra, no se le genera cuota."
-                 if es_contenedora else
-                 "Las cuotas empiezan a generarse desde el mes en curso. "
-                 "No se generan cuotas de meses anteriores." + nota_cuota),
-    }})
+    # Mismo cálculo y mismo vencimiento (cfg.dia_pago) que el alta normal y
+    # que el cron mensual: una sola regla para los tres caminos.
+    from app.models.cuenta import Cuota, ConfigResidencial
+    from app.utils.cuotas import calcular_cuota_prorrateada
+    cfg = ConfigResidencial.get(usuario_actual.residencial_id)
+    datos = calcular_cuota_prorrateada(tarifa.monto, cfg.dia_pago)
+    if datos is None:
+        # Último día del mes comercial: no queda fracción que cobrar.
+        return (base + " No se generó cuota de este mes porque ya no quedan "
+                "días por cobrar; la primera será la del mes que viene.")
+    db.session.flush()   # para que cuenta.id exista si la cuenta es nueva
+    ya_existe = Cuota.query.filter_by(cuenta_id=cuenta.id, periodo=datos["periodo"]).first()
+    if ya_existe is None:
+        db.session.add(Cuota(
+            cuenta_id=cuenta.id, periodo=datos["periodo"],
+            monto=datos["monto"], fecha_vencimiento=datos["fecha_vencimiento"],
+            estado="pendiente",
+        ))
+    return (base + f" Se le generó la cuota de este mes prorrateada: "
+            f"L {datos['monto']} por {datos['dias_restantes']} días, "
+            f"con vencimiento el {datos['fecha_vencimiento'].strftime('%d/%m/%Y')}.")
 
 
-# ─────────────────────────────────────────────────────────────────────────
-# CONVERSIÓN: PERSONA DEL PADRÓN → USUARIO DE LA APP
-# ─────────────────────────────────────────────────────────────────────────
-@censo_bp.post("/personas/<residente_uuid>/dar-acceso")
-@roles_required("admin", "super_admin")
-def dar_acceso_persona(usuario_actual, residente_uuid):
+def _preparar_acceso(residente, data, usuario_actual):
     """
-    Le da acceso al sistema a una persona que ya estaba en el padrón.
+    Valida que a esta persona del padrón se le pueda dar acceso. Devuelve
+    (datos, None) o (None, error). No modifica nada.
 
-    Body: { "email": "persona@correo.com" }
-
-    Es exactamente el UPDATE que justifica todo el diseño: no se crea una
-    persona nueva ni se migra nada. La misma fila de Usuario que el guardia
-    ya venía usando para identificarla pasa a tener correo y contraseña.
-    Su historial de accesos previo queda intacto y sigue siendo suyo.
+    LA FICHA TIENE QUE ESTAR COMPLETA (Día 73). El padrón se llena con lo
+    mínimo a propósito: al guardia le alcanza con saber quién entra. Pero
+    quien pasa a tener app y cuota se vuelve residente con todas las de la
+    ley, y su ficha tiene que valer lo mismo que la de quien entró por el
+    alta normal. Si no, el padrón es la puerta de atrás para tener
+    residentes a medio registrar.
     """
-    residente = Residente.query.filter_by(uuid_publico=residente_uuid).first()
-    if not residente:
-        return _err("no_encontrada", "Persona no encontrada", 404)
-
-    cuenta = residente.cuenta
-    if not cuenta or not pertenece_a_mi_residencial(cuenta.unidad, usuario_actual):
-        return _err("persona_ajena", "Esa persona no pertenece a tu residencial", 403)
-
     persona = residente.usuario
     if not persona:
-        return _err("sin_usuario", "Esta persona no tiene ficha de usuario", 400)
+        return None, _err("sin_usuario", "Esta persona no tiene ficha de usuario", 400)
     if not persona.es_censo:
-        return _err("ya_tiene_acceso", "Esta persona ya tiene acceso al sistema", 400)
+        return None, _err("ya_tiene_acceso", "Esta persona ya tiene acceso al sistema", 400)
 
-    data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     if not email:
-        return _err("datos_incompletos", "El correo es obligatorio para dar acceso", 400)
+        return None, _err("datos_incompletos", "El correo es obligatorio para dar acceso", 400)
     if Usuario.query.filter_by(email=email).first():
-        return _err("email_duplicado", f"Ya existe un usuario con el email {email}", 409)
+        return None, _err("email_duplicado", f"Ya existe un usuario con el email {email}", 409)
 
-    # ── Día 73 — la ficha tiene que estar completa para dar acceso ────────
-    #
-    # El padrón se llena con lo mínimo a propósito: el guardia necesita
-    # saber quién entra, y pedirle la ficha entera a una familia que no
-    # participa del sistema es la forma más rápida de que no se registre.
-    #
-    # Pero quien pasa a tener app y cuota deja de ser "alguien anotado" y
-    # se convierte en residente con todas las de la ley: es la misma
-    # persona a la que se le van a cobrar cuotas, mandar avisos y avalar
-    # visitas. Esa ficha tiene que valer lo mismo que la de quien entró por
-    # el alta normal, que sí exige todo esto. Si no, el padrón se vuelve la
-    # puerta de atrás para tener residentes a medio registrar.
-    #
-    # Los datos vienen en el mismo body porque es el momento en que el
-    # admin tiene a la persona enfrente: es ahora o nunca.
     obligatorios = [
         ("apellido", "El apellido es obligatorio"),
         ("telefono", "El teléfono es obligatorio"),
@@ -629,70 +588,205 @@ def dar_acceso_persona(usuario_actual, residente_uuid):
         ("contacto_emergencia_nombre", "El contacto de emergencia es obligatorio"),
         ("contacto_emergencia_telefono", "El teléfono del contacto de emergencia es obligatorio"),
     ]
-    # El valor que YA tiene la persona del padrón cuenta como válido: si el
-    # admin no lo manda, no hay por qué volver a pedirlo.
+    # Lo que la persona YA trae del padrón cuenta como válido.
     valores = {}
     for campo, mensaje in obligatorios:
         valor = (data.get(campo) or "").strip() or (getattr(persona, campo, None) or "")
         if not valor:
-            return _err("datos_incompletos", mensaje, 400)
+            return None, _err("datos_incompletos", mensaje, 400)
         valores[campo] = valor
 
     err = _validar_dni(valores["dni"])
     if err:
-        return _err("dni_invalido", err, 400)
+        return None, _err("dni_invalido", err, 400)
 
     # El límite de usuarios del plan se evalúa ACÁ y no al cargar el censo:
-    # la gente del padrón no consume licencias porque no usa el sistema. Es
-    # al darle acceso cuando pasa a ser un usuario de verdad.
+    # la gente del padrón no consume licencias porque no usa el sistema.
     from app.utils.residencial import limite_usuarios_alcanzado
     if limite_usuarios_alcanzado(usuario_actual.residencial_id):
-        return _err("limite_usuarios",
-                    "Tu plan actual no permite más usuarios. "
-                    "Pedile a tu proveedor que te suba de plan.", 402)
+        return None, _err("limite_usuarios",
+                          "Tu plan actual no permite más usuarios. "
+                          "Pedile a tu proveedor que te suba de plan.", 402)
 
+    opcionales = {c: (data.get(c) or "").strip()
+                  for c in ("rtn", "ocupacion", "centro_estudios", "lugar_trabajo")
+                  if (data.get(c) or "").strip()}
+    return {"persona": persona, "email": email,
+            "valores": valores, "opcionales": opcionales}, None
+
+
+def _aplicar_acceso(datos):
+    """
+    Le pone correo y ficha a la persona, y la deja pendiente de activar.
+    NO hace commit. Devuelve el token de activación.
+
+    Es el UPDATE que justifica todo el diseño del padrón: no se crea una
+    persona nueva. La misma fila de Usuario que el guardia ya venía usando
+    pasa a tener correo y contraseña, y su historial de accesos sigue
+    siendo suyo.
+    """
     import secrets
-    persona.email = email
+    persona = datos["persona"]
+    persona.email = datos["email"]
     persona.es_censo = False
-    # Se guardan los datos completos: los que el admin acaba de llenar y los
-    # que la persona ya traía del padrón (valores ya resolvió cuál es cuál).
-    for campo, valor in valores.items():
+    for campo, valor in {**datos["valores"], **datos["opcionales"]}.items():
         setattr(persona, campo, valor)
-    # Opcionales, igual que en el alta normal: si vienen se guardan.
-    for campo in ("rtn", "ocupacion", "centro_estudios", "lugar_trabajo"):
-        valor = (data.get(campo) or "").strip()
-        if valor:
-            setattr(persona, campo, valor)
-    # Contraseña temporal inutilizable: se reemplaza en la activación, igual
-    # que en el alta normal de un residente.
+    # Contraseña temporal inutilizable: se reemplaza en la activación.
     persona.set_password(secrets.token_urlsafe(32))
-    persona.activo = False       # pendiente hasta que defina su contraseña
-
-    token_activacion = jwt.encode(
-        {"sub": email, "proposito": "activacion",
+    persona.activo = False
+    return jwt.encode(
+        {"sub": datos["email"], "proposito": "activacion",
          "exp": dt.datetime.utcnow() + dt.timedelta(hours=48)},
-        current_app.config["JWT_SECRET"], algorithm="HS256"
-    )
-    db.session.commit()
+        current_app.config["JWT_SECRET"], algorithm="HS256")
 
-    # Después del commit, nunca antes: un correo de activación para un
-    # usuario que no quedó guardado es peor que no mandar nada (misma
-    # lección del Día 61).
+
+def _enviar_activacion(email, nombre, token, usuario_actual):
+    """Siempre DESPUÉS del commit: un correo para un usuario que no quedó
+    guardado es peor que no mandar nada (lección del Día 61)."""
     try:
         from app.tasks.correo_task import enviar_correo_activacion_task
         from app.models.residencial import Residencial
         residencial = (Residencial.query.get(usuario_actual.residencial_id)
                        if usuario_actual.residencial_id else None)
         enviar_correo_activacion_task.delay(
-            email, persona.nombre, token_activacion,
-            residencial.nombre if residencial else "SICA-VS")
+            email, nombre, token, residencial.nombre if residencial else "Residencial")
     except Exception:
-        pass
+        current_app.logger.exception("No se pudo encolar el correo de activación a %s", email)
+
+
+def _cuenta_mia(cuenta_uuid, usuario_actual):
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta:
+        return None, _err("no_encontrada", "Casa no encontrada", 404)
+    if not pertenece_a_mi_residencial(cuenta.unidad, usuario_actual):
+        return None, _err("casa_ajena", "Esa casa no pertenece a tu residencial", 403)
+    return cuenta, None
+
+
+@censo_bp.post("/casas/<cuenta_uuid>/convertir")
+@roles_required("admin", "super_admin")
+def convertir_casa(usuario_actual, cuenta_uuid):
+    """
+    Convierte la casa SIN tocar a su gente. Body: { tarifa_id, dia_pago }
+
+    Día 73 — solo para cuando el titular ya tiene acceso (o es la
+    contenedora de un edificio). Si el titular todavía es gente de padrón,
+    se rechaza: así es como quedaban casas cobrando cuota con un titular
+    sin correo, que nunca podía entrar a ver qué debía. Para ese caso está
+    /sumar, que hace las dos cosas juntas o ninguna.
+    """
+    cuenta, err = _cuenta_mia(cuenta_uuid, usuario_actual)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    plan, err = _preparar_conversion(cuenta, data, usuario_actual)
+    if err:
+        return err
+
+    tit = cuenta.titular()
+    if (not plan["es_contenedora"] and tit is not None and tit.usuario is not None
+            and tit.usuario.es_censo):
+        return _err("titular_sin_acceso",
+                    "El titular todavía no tiene acceso a la app. Sumá la casa con "
+                    "su ficha y su correo, así no queda cobrando cuota a alguien "
+                    "que no puede entrar.", 400)
+
+    nota = _aplicar_conversion(cuenta, plan, usuario_actual)
+    db.session.commit()
+    return jsonify({"data": {"casa": cuenta.to_dict(detalle=True), "nota": nota}})
+
+
+@censo_bp.post("/casas/<cuenta_uuid>/sumar")
+@roles_required("admin", "super_admin")
+def sumar_casa(usuario_actual, cuenta_uuid):
+    """
+    Día 73 — la casa se suma al sistema Y su titular recibe acceso, en una
+    sola operación: o se hace todo, o no se hace nada.
+
+    Body: { tarifa_id, dia_pago, verificacion_id, email, apellido, telefono,
+            dni, direccion_exacta, profesion, contacto_emergencia_nombre,
+            contacto_emergencia_telefono }
+
+    Exige que el correo esté VERIFICADO como entregado (ver
+    api/verificacion_correo.py): si rebotó, no se tocó nada y se corrige
+    la dirección sin dejar restos.
+    """
+    from app.api.verificacion_correo import exigir_verificacion, marcar_usada
+
+    cuenta, err = _cuenta_mia(cuenta_uuid, usuario_actual)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+
+    tit = cuenta.titular()
+    if tit is None:
+        return _err("sin_titular", "Esta casa no tiene titular registrado", 400)
+
+    # 1. Validar TODO, sin tocar nada.
+    plan, err = _preparar_conversion(cuenta, data, usuario_actual)
+    if err:
+        return err
+    acceso, err = _preparar_acceso(tit, data, usuario_actual)
+    if err:
+        return err
+    verif, err = exigir_verificacion(acceso["email"], data.get("verificacion_id"))
+    if err:
+        return err
+
+    # 2. Aplicar todo y guardar UNA vez.
+    nota = _aplicar_conversion(cuenta, plan, usuario_actual)
+    token = _aplicar_acceso(acceso)
+    marcar_usada(verif)
+    db.session.commit()
+
+    # 3. Recién ahora, el correo de activación.
+    _enviar_activacion(acceso["email"], acceso["persona"].nombre, token, usuario_actual)
+
+    resp = {"casa": cuenta.to_dict(detalle=True), "residente": tit.to_dict(), "nota": nota}
+    # El token solo se devuelve fuera de producción (hallazgo C1, Día 14).
+    if current_app.config.get("ENV") != "production":
+        resp["token_activacion"] = token
+    return jsonify({"data": resp}), 200
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# CONVERSIÓN: PERSONA DEL PADRÓN → USUARIO DE LA APP
+# ─────────────────────────────────────────────────────────────────────────
+@censo_bp.post("/personas/<residente_uuid>/dar-acceso")
+@roles_required("admin", "super_admin")
+def dar_acceso_persona(usuario_actual, residente_uuid):
+    """
+    Le da acceso a la app a una persona del padrón (no al titular de una
+    casa que se está sumando: para eso está /sumar).
+
+    Body: { email, verificacion_id, y la ficha completa }
+
+    Día 73 — exige el correo verificado como entregado, igual que /sumar.
+    """
+    from app.api.verificacion_correo import exigir_verificacion, marcar_usada
+
+    residente = Residente.query.filter_by(uuid_publico=residente_uuid).first()
+    if not residente:
+        return _err("no_encontrada", "Persona no encontrada", 404)
+    cuenta = residente.cuenta
+    if not cuenta or not pertenece_a_mi_residencial(cuenta.unidad, usuario_actual):
+        return _err("persona_ajena", "Esa persona no pertenece a tu residencial", 403)
+
+    data = request.get_json(silent=True) or {}
+    acceso, err = _preparar_acceso(residente, data, usuario_actual)
+    if err:
+        return err
+    verif, err = exigir_verificacion(acceso["email"], data.get("verificacion_id"))
+    if err:
+        return err
+
+    token = _aplicar_acceso(acceso)
+    marcar_usada(verif)
+    db.session.commit()
+
+    _enviar_activacion(acceso["email"], acceso["persona"].nombre, token, usuario_actual)
 
     resp = {"residente": residente.to_dict()}
-    # El token solo se devuelve fuera de producción, igual que en el resto
-    # del sistema (hallazgo C1 del pentest del Día 14: devolverlo en
-    # producción es una toma de cuenta con solo conocer el correo).
     if current_app.config.get("ENV") != "production":
-        resp["token_activacion"] = token_activacion
+        resp["token_activacion"] = token
     return jsonify({"data": resp}), 200

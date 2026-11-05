@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment } from "react";
 import {
   listarCenso, crearCasaCenso, agregarPersonaCenso, convertirCasaCenso,
-  darAccesoPersona, urlFotoResidente, listarTarifas, subirFotoResidente,
+  darAccesoPersona, urlFotoResidente, listarTarifas, subirFotoResidente, sumarCasaCenso,
   listarUnidades,
   type Cuenta, type ResidenteDTO, type Tarifa, type ResumenPadron, type Unidad,
 } from "../../api/client";
@@ -834,7 +834,7 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
   });
   const [foto, setFoto] = useState<File | null>(null);
   const [errs, setErrs] = useState<Record<string, string>>({});
-  const [convertida, setConvertida] = useState(false);
+  const [nota, setNota] = useState("");
 
   const titulo = esContenedora
     ? `${casa.identificador} · administración`
@@ -849,23 +849,30 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
     setErrs(p => { const n = { ...p }; delete n[campo]; return n; });
   }
 
-  /** Paso 1 → convierte la casa (genera la cuota prorrateada). */
-  async function convertir() {
+  /**
+   * Paso 1 — la cuota. Día 73: acá NO se guarda nada (salvo que no haga
+   * falta correo, ver abajo). Antes este botón convertía la casa en el
+   * acto, y si después el correo del titular rebotaba la casa ya estaba
+   * cobrando cuota y la persona marcada con acceso: al corregir y
+   * reintentar, fallaba con "ya tiene acceso al sistema".
+   *
+   * Si no hay correo de por medio (contenedora de edificio, o un titular
+   * que ya tiene acceso), no hay nada que verificar y se convierte directo.
+   */
+  async function siguienteDesdeCuota() {
     if (!esContenedora && tarifaId === "") {
       setError("Elegí la tarifa que va a pagar esta casa.");
       return;
     }
-    setGuardando(true); setError("");
+    setError("");
+    if (necesitaAcceso) { setPaso("titular"); return; }
+
+    setGuardando(true);
     try {
       const r = await convertirCasaCenso(casa.id, esContenedora ? {} : {
         tarifa_id: Number(tarifaId), dia_pago: diaPago,
       });
-      setConvertida(true);
-      if (!necesitaAcceso) {
-        onListo(`${titulo} ya participa del sistema. ${r.nota}`);
-        return;
-      }
-      setPaso("titular");
+      onListo(`${titulo} ya participa del sistema. ${r.nota}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -873,8 +880,8 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
     }
   }
 
-  /** Paso 2 → completa la ficha del titular y le crea el acceso. */
-  async function darAcceso() {
+  /** Paso 2 — la ficha. Solo valida: tampoco guarda nada todavía. */
+  function siguienteDesdeTitular() {
     const e: Record<string, string> = {};
     if (!f.email.trim()) e.email = "El correo es obligatorio.";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
@@ -893,24 +900,31 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
     if (!titular?.foto_url && !foto) e.foto = "La foto es obligatoria.";
     setErrs(e);
     if (Object.keys(e).length > 0) { setError("Completá lo que falta."); return; }
+    setError("");
+    setPaso("envio");
+  }
 
-    setGuardando(true); setError("");
-    try {
-      await darAccesoPersona(titular!.id, {
-        email: f.email.trim().toLowerCase(),
-        apellido: f.apellido.trim(), telefono: f.telefono.trim(), dni: f.dni.trim(),
-        direccion_exacta: f.direccion_exacta.trim(), profesion: f.profesion.trim(),
-        contacto_emergencia_nombre: f.contacto_emergencia_nombre.trim(),
-        contacto_emergencia_telefono: f.contacto_emergencia_telefono.trim(),
-      });
-      if (foto) {
-        try { await subirFotoResidente(casa.id, titular!.id, foto); } catch { /* no bloquea */ }
-      }
-      setPaso("envio");
-    } catch (e2) {
-      setError((e2 as Error).message);
-    } finally {
-      setGuardando(false);
+  /**
+   * Paso 3 — se ejecuta SOLO cuando Resend confirmó que el correo llegó.
+   * Convierte la casa, genera la cuota y le da acceso al titular, todo en
+   * una sola operación del backend (/sumar): o se hace todo o nada.
+   * Si falla, lanza: la pantalla de verificación lo muestra.
+   */
+  async function sumarDeVerdad(verificacionId: string) {
+    const r = await sumarCasaCenso(casa.id, {
+      verificacion_id: verificacionId,
+      ...(esContenedora ? {} : { tarifa_id: Number(tarifaId), dia_pago: diaPago }),
+      email: f.email.trim().toLowerCase(),
+      apellido: f.apellido.trim(), telefono: f.telefono.trim(), dni: f.dni.trim(),
+      direccion_exacta: f.direccion_exacta.trim(), profesion: f.profesion.trim(),
+      contacto_emergencia_nombre: f.contacto_emergencia_nombre.trim(),
+      contacto_emergencia_telefono: f.contacto_emergencia_telefono.trim(),
+    });
+    setNota(r.nota);
+    // La foto va aparte y no puede hacer fallar esto: la casa ya se sumó,
+    // y si se lanzara el error la pantalla diría "no se creó nada".
+    if (foto) {
+      try { await subirFotoResidente(casa.id, titular!.id, foto); } catch { /* se ve en la ficha */ }
     }
   }
 
@@ -1028,26 +1042,30 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
 
           {paso === "envio" && (
             <ConfirmacionEnvio
-              cuentaId={casa.id} email={f.email.trim().toLowerCase()}
-              onCorregir={() => { setPaso("titular"); setError(""); }}
+              email={f.email.trim().toLowerCase()} nombre={titular?.nombre}
+              onConfirmado={sumarDeVerdad}
+              onCorregir={() => {
+                setPaso("titular");
+                setErrs({ email: "Revisá este correo: el anterior no llegó." });
+                setError("");
+              }}
+              textoCreado={`${titulo} ya participa del sistema y ${titular?.nombre} tiene acceso a la app.`}
               textoListo="Terminar"
-              onListo={() => onListo(`${titulo} ya participa del sistema y ${titular?.nombre} tiene acceso a la app.`)} />
+              onListo={() => onListo(`${titulo} ya participa del sistema. ${nota}`)} />
           )}
         </div>
 
         {paso !== "envio" && (
           <div className="modal-alta-footer">
-            <button className="ghost" onClick={onCerrar} disabled={guardando}>
-              {convertida ? "Dejar para después" : "Cancelar"}
-            </button>
+            {paso === "titular"
+              ? <button className="ghost" onClick={() => { setPaso("cuota"); setError(""); }}>← Atrás</button>
+              : <button className="ghost" onClick={onCerrar} disabled={guardando}>Cancelar</button>}
             {paso === "cuota" ? (
-              <button onClick={convertir} disabled={guardando}>
+              <button onClick={siguienteDesdeCuota} disabled={guardando}>
                 {guardando ? "Sumando…" : necesitaAcceso ? "Siguiente →" : "Sumar al sistema"}
               </button>
             ) : (
-              <button onClick={darAcceso} disabled={guardando}>
-                {guardando ? "Creando acceso…" : "Crear acceso y enviar correo"}
-              </button>
+              <button onClick={siguienteDesdeTitular}>Verificar correo y sumar →</button>
             )}
           </div>
         )}
@@ -1096,6 +1114,7 @@ function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
   // Día 73 — mismo criterio que los otros modales: el error se ve acá
   // adentro, no en el panel que queda tapado por este modal.
   const [error, setError] = useState("");
+  const [verificando, setVerificando] = useState(false);
 
   function set(campo: keyof typeof f, valor: string) {
     setF(p => ({ ...p, [campo]: valor }));
@@ -1125,37 +1144,27 @@ function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
     setErrs(e);
     if (Object.keys(e).length > 0) return;
 
-    setGuardando(true); setError("");
-    try {
-      await darAccesoPersona(persona.id, {
-        email: f.email.trim().toLowerCase(),
-        apellido: f.apellido.trim(),
-        telefono: f.telefono.trim(),
-        dni: f.dni.trim(),
-        direccion_exacta: f.direccion_exacta.trim(),
-        profesion: f.profesion.trim(),
-        contacto_emergencia_nombre: f.contacto_emergencia_nombre.trim(),
-        contacto_emergencia_telefono: f.contacto_emergencia_telefono.trim(),
-      });
+    // Día 73 — todavía no se guarda nada: primero se verifica el correo.
+    setError("");
+    setVerificando(true);
+  }
 
-      // La foto va después y aparte: si falla, el acceso YA quedó dado y no
-      // tiene sentido darlo por fallido.
-      let avisoFoto = "";
-      if (foto) {
-        try {
-          await subirFotoResidente(casaId, persona.id, foto);
-        } catch (err) {
-          avisoFoto = ` La foto no se pudo subir (${(err as Error).message}); `
-            + "tomala desde el padrón, en el ícono de la cámara.";
-        }
-      }
-
-      onListo(`${persona.nombre} ya puede usar la app. Se le envió el enlace `
-        + `para que defina su contraseña.${avisoFoto}`);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setGuardando(false);
+  /** Se ejecuta SOLO si Resend confirmó que el correo llegó. */
+  async function darDeVerdad(verificacionId: string) {
+    await darAccesoPersona(persona.id, {
+      verificacion_id: verificacionId,
+      email: f.email.trim().toLowerCase(),
+      apellido: f.apellido.trim(),
+      telefono: f.telefono.trim(),
+      dni: f.dni.trim(),
+      direccion_exacta: f.direccion_exacta.trim(),
+      profesion: f.profesion.trim(),
+      contacto_emergencia_nombre: f.contacto_emergencia_nombre.trim(),
+      contacto_emergencia_telefono: f.contacto_emergencia_telefono.trim(),
+    });
+    // La foto va aparte y no puede hacer fallar esto: el acceso ya quedó.
+    if (foto) {
+      try { await subirFotoResidente(casaId, persona.id, foto); } catch { /* se ve en el padrón */ }
     }
   }
 
@@ -1188,6 +1197,18 @@ function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
         </div>
 
         <div className="modal-alta-body">
+          {verificando ? (
+            <ConfirmacionEnvio
+              email={f.email.trim().toLowerCase()} nombre={persona.nombre}
+              onConfirmado={darDeVerdad}
+              onCorregir={() => {
+                setVerificando(false);
+                setErrs({ email: "Revisá este correo: el anterior no llegó." });
+              }}
+              textoCreado={`${persona.nombre} ya tiene acceso a la app.`}
+              textoListo="Terminar"
+              onListo={() => onListo(`${persona.nombre} ya puede usar la app. Se le envió el enlace para que defina su contraseña.`)} />
+          ) : (<>
           {error && <div className="error" style={{ marginBottom: 12 }}>⚠ {error}</div>}
 
           <div className="info-box" style={{ marginBottom: 14 }}>
@@ -1220,14 +1241,15 @@ function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
             {campo("contacto_emergencia_nombre", "Contacto de emergencia")}
             {campo("contacto_emergencia_telefono", "Teléfono del contacto")}
           </div>
+          </>)}
         </div>
 
-        <div className="modal-alta-footer">
-          <button className="ghost" onClick={onCerrar} disabled={guardando}>Cancelar</button>
-          <button onClick={dar} disabled={guardando}>
-            {guardando ? "Creando acceso…" : "Dar acceso a la app"}
-          </button>
-        </div>
+        {!verificando && (
+          <div className="modal-alta-footer">
+            <button className="ghost" onClick={onCerrar}>Cancelar</button>
+            <button onClick={dar}>Verificar correo y dar acceso →</button>
+          </div>
+        )}
       </div>
     </div>
   );

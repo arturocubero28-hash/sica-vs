@@ -137,10 +137,29 @@ with app.app_context():
     ok("y no cobra cuota", c.cobra_cuotas() is False)
     r = conv(a1, {})
     ok("un apartamento SÍ exige tarifa", r.status_code == 400)
+    # Día 73 — convertir SOLO la casa, con el titular todavía en el padrón,
+    # ya no se permite: así quedaban casas cobrando cuota a alguien sin
+    # correo, que nunca podía entrar. Ahora va por /sumar, que convierte y
+    # da acceso juntos o no hace nada.
     r = conv(a1, {"tarifa_id": tarifa.id, "dia_pago": 5})
+    ok("convertir con el titular en el padrón se rechaza (Día 73)",
+       r.status_code == 400
+       and (r.get_json() or {}).get("error", {}).get("code") == "titular_sin_acceso")
     db.session.refresh(a1)
-    ok("con tarifa, el apartamento cobra cuota", r.status_code == 200 and a1.cobra_cuotas() is True)
-    r = conv(d, {"tarifa_id": tarifa.id, "dia_pago": 5})
+    ok("...y no quedó nada a medias", a1.cobra_cuotas() is False)
+
+    ficha = lambda correo: {"tarifa_id": tarifa.id, "dia_pago": 5, "email": correo,
+                            "apellido": "Prueba", "telefono": "9999-0000",
+                            "dni": "0501-1990-00123", "direccion_exacta": "Edificio, apto",
+                            "profesion": "Docente", "contacto_emergencia_nombre": "Luis",
+                            "contacto_emergencia_telefono": "8888-1111"}
+    sumar = lambda c, body: cli.post(f"/api/v1/censo/casas/{c.uuid_publico}/sumar",
+                                     json=body, headers=H)
+    r = sumar(a1, ficha("apto1@x.com"))
+    db.session.refresh(a1)
+    ok(f"con ficha completa, el apartamento se suma y cobra cuota (status {r.status_code})",
+       r.status_code == 200 and a1.cobra_cuotas() is True)
+    r = sumar(d, ficha("dueno@x.com"))
     db.session.refresh(d)
     ok("el dueño que vive paga como apartamento y sigue siendo administración",
        r.status_code == 200 and d.cobra_cuotas() is True and d.tipo_cuenta() == "edificio_admin")

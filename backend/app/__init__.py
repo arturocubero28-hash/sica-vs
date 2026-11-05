@@ -75,6 +75,7 @@ def create_app(config_class=Config):
     from app.models.auditoria import LogAuditoria  # noqa: F401  auditoría forense
     from app.models.token_revocado import TokenRevocado  # noqa: F401  blacklist JWT
     from app.models.sesion_activa import SesionActiva  # noqa: F401  sesiones/dispositivos
+    from app.models.verificacion_correo import VerificacionCorreo  # noqa: F401  verificar correo antes de crear cuentas (Día 73)
     from app.models.credencial_webauthn import CredencialWebAuthn  # noqa: F401  biometría WebAuthn
     from app.models.dispositivo import Dispositivo  # noqa: F401  Raspberry Pi de accesos
     from app.models.residencial import Residencial  # noqa: F401  bases multi-residencial (Día 37)
@@ -162,6 +163,8 @@ def create_app(config_class=Config):
     # ver app/api/webhooks.py.
     from app.api.webhooks import webhooks_bp
     app.register_blueprint(webhooks_bp, url_prefix="/api/v1/webhooks")
+    from app.api.verificacion_correo import verificacion_bp
+    app.register_blueprint(verificacion_bp, url_prefix="/api/v1/correo")
 
     # Inicializar Firebase Cloud Messaging (notificaciones push).
     # Si no está configurado (falta el archivo de credenciales), no rompe:

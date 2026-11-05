@@ -119,6 +119,18 @@ class Config:
     # Entorno: 'development' (default) o 'production'
     ENV = os.environ.get("SICAVS_ENV", "development")
 
+    # Día 73 — no se crea ninguna cuenta hasta que Resend confirme que el
+    # correo a esa dirección fue ENTREGADO (ver models/verificacion_correo.py).
+    #
+    # Siempre encendido en producción. Fuera de producción va apagado por
+    # defecto para no romper las pruebas que crean cuentas directo, pero
+    # se puede prender con la variable para probar el recorrido completo:
+    # sin RESEND_API_KEY, el envío de verificación se SIMULA como entregado,
+    # así que en desarrollo el panel sigue funcionando igual.
+    EXIGIR_VERIFICACION_CORREO = (
+        ENV == "production"
+        or os.environ.get("EXIGIR_VERIFICACION_CORREO", "").lower() == "true")
+
     # Límite de intentos de login. Estricto en producción (frena fuerza bruta);
     # relajado en desarrollo para no estorbar durante las pruebas. Día 50:
     # LOGIN_RATE_LIMIT_OVERRIDE permite subirlo más todavía SOLO para

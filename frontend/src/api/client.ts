@@ -242,6 +242,34 @@ export const convertirCasaCenso = (cuentaId: string, body: { tarifa_id?: number;
     method: "POST", body: JSON.stringify(body),
   });
 
+/**
+ * Día 73 — sumar una casa del padrón Y darle acceso a su titular, en una
+ * sola operación: o se hace todo, o no se hace nada. Exige el correo
+ * verificado como entregado (ver verificarCorreo).
+ */
+export const sumarCasaCenso = (cuentaId: string, body: DatosAcceso & {
+  tarifa_id?: number; dia_pago?: number; verificacion_id: string;
+}) =>
+  request<{ casa: Cuenta; residente: ResidenteDTO; nota: string; token_activacion?: string }>(
+    `/censo/casas/${cuentaId}/sumar`, { method: "POST", body: JSON.stringify(body) });
+
+// ── Verificación de correo (Día 73) ───────────────────────────────────────
+// No se crea ninguna cuenta hasta que Resend confirme que un correo a esa
+// dirección LLEGÓ. El panel pide la verificación, consulta su estado cada
+// pocos segundos, y recién con "entregado" manda a crear la cuenta pasando
+// el id de la verificación. Si rebota, no se creó nada.
+export type EstadoVerificacion =
+  "enviando" | "enviado" | "entregado" | "rebotado" | "queja" | "demorado" | "error";
+export interface VerificacionCorreoDTO {
+  id: string; email: string; estado: EstadoVerificacion;
+  detalle?: string | null; usada: boolean; actualizado?: string | null;
+}
+export const verificarCorreo = (email: string, nombre?: string) =>
+  request<VerificacionCorreoDTO>("/correo/verificaciones",
+    { method: "POST", body: JSON.stringify({ email, nombre }) });
+export const consultarVerificacion = (id: string) =>
+  request<VerificacionCorreoDTO>(`/correo/verificaciones/${id}`);
+
 /** Le da acceso a la app a una persona que ya estaba en el padrón.
  *  Es un UPDATE sobre la misma ficha: conserva su historial de accesos. */
 /**
@@ -253,6 +281,8 @@ export const convertirCasaCenso = (cuentaId: string, body: { tarifa_id?: number;
  */
 export interface DatosAcceso {
   email: string;
+  /** Día 73 — id de la verificación de correo en estado "entregado". */
+  verificacion_id?: string;
   apellido: string;
   telefono: string;
   dni: string;
@@ -326,6 +356,8 @@ export interface NuevaCuenta {
   apartamento?: string; tarifa_id?: number; dia_pago: number;
   codigo_enrolamiento?: string; es_dueno_edificio?: boolean; es_solo_contenedor?: boolean;
   tipo_acceso_virtual?: "peatonal" | "vehicular";
+  /** Día 73 — id de la verificación de correo en estado "entregado". */
+  verificacion_id?: string;
   titular: { nombre: string; apellido: string; email: string; telefono?: string; relacion?: string;
     dni?: string; rtn?: string; direccion_exacta?: string; profesion?: string;
     ocupacion?: string; centro_estudios?: string; lugar_trabajo?: string;

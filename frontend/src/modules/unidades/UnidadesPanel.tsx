@@ -296,6 +296,10 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
   const [duenoVive, setDuenoVive] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
   const [enlace, setEnlace] = useState<{ email: string; url: string | null; cuentaId: string } | null>(null);
+  // Día 73 — verdadero mientras se confirma que el correo llega (y, si
+  // llega, mientras se crea). El formulario se oculta pero NO se borra:
+  // si rebota, se vuelve a él con todo lo cargado para corregir el correo.
+  const [verificando, setVerificando] = useState(false);
   const [nuevaUnidadTipo, setNuevaUnidadTipo] = useState<"casa" | "edificio">("casa");
   const [nuevaUnidadId, setNuevaUnidadId] = useState("");
   const [maxApartamentos, setMaxApartamentos] = useState("");
@@ -523,6 +527,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
     setEnrolInfo(null);
     setFoto(null);
     setPaso("codigo");   // Día 73 — la otra alta arranca desde el primer paso
+    setVerificando(false);
     recargarUnidades();
   }
 
@@ -583,8 +588,22 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
       return;
     }
 
-    try {
+    // Día 73 — NO se crea todavía. Primero se verifica que el correo llega;
+    // la creación la hace crearDeVerdad(), y solo si llegó.
+    setVerificando(true);
+  }
+
+  /**
+   * Día 73 — crea la cuenta. Se ejecuta SOLO cuando Resend confirmó que el
+   * correo llegó, y recibe el id de esa confirmación: el backend rechaza
+   * crear sin él. Si algo falla acá tiene que lanzar el error, para que la
+   * pantalla de verificación lo muestre y deje reintentar.
+   */
+  async function crearDeVerdad(verificacionId: string) {
+    const esDuenoSinVivienda = esEdificio && modoUnidad === "nueva" && !duenoVive;
+    {
       const res = await crearCuenta({
+        verificacion_id: verificacionId,
         unidad_id: unidadId || undefined,
         unidad_nueva: (!unidadId && nuevaUnidadId.trim())
           ? { tipo: nuevaUnidadTipo, identificador: nuevaUnidadId.trim(),
@@ -632,11 +651,13 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
         }
       }
 
+      // La foto NO puede hacer fallar esto: la cuenta ya está creada, y si
+      // se lanzara el error la pantalla diría "no se creó nada", que sería
+      // mentira. Se avisa aparte.
       setEnlace({ email: res.activacion.usuario_email, url, cuentaId: res.cuenta.id });
-      setMsg({ tipo: avisoFoto ? "err" : "ok",
-               texto: "Cuenta creada exitosamente." + avisoFoto });
+      if (avisoFoto) setMsg({ tipo: "err", texto: avisoFoto });
       onCreada();
-    } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+    }
   }
 
   function copiarEnlace() {
@@ -651,8 +672,8 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
           <div>
             <h3>Dar de alta una casa o apartamento</h3>
             <p className="muted small" style={{ margin: 0 }}>
-              {enlace
-                ? "Creá la unidad, asigná su cuota y registrá al titular de la cuenta."
+              {verificando
+                ? "Verificando el correo antes de crear la cuenta"
                 : `Paso ${indicePaso + 1} de ${pasos.length}`}
             </p>
           </div>
@@ -662,7 +683,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
         {/* Día 73 — barra de pasos. Los pasos ya recorridos se pueden tocar
             para volver a ellos; los que faltan no, porque cada uno valida lo
             suyo antes de dejar avanzar. */}
-        {!enlace && (
+        {!verificando && (
           <div className="alta-pasos" role="list">
             {pasos.map((p, i) => {
               const hecho = i < indicePaso;
@@ -683,19 +704,29 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
 
         <div className="modal-alta-body">
 
-      {/* Día 73 — resultado del alta.
-          Antes decía "Cuenta creada" y listo. Pero crear la cuenta y que
-          la persona RECIBA el enlace son dos cosas distintas, y la
-          segunda es la que importa: si el correo rebota, la cuenta queda
-          pendiente para siempre. Ahora el alta no se da por terminada
-          hasta saber qué pasó con el correo. */}
-      {enlace && (
+      {/* Día 73 — verificación del correo y, solo si llega, creación.
+          Si el correo no llega no se crea NADA, y "Corregir" vuelve al
+          formulario con todo lo cargado: solo hay que arreglar el correo. */}
+      {verificando && (
         <>
-          {/* Fuera de producción el backend devuelve el token, y tener el
-              enlace a mano ahorra abrir el correo en cada prueba. En
-              producción esto no aparece nunca (ver _bloque_activacion). */}
-          {enlace.url && (
-            <div className="activacion-box" style={{ marginBottom: 12 }}>
+          <ConfirmacionEnvio
+            email={email.trim().toLowerCase()} nombre={nombre.trim()}
+            onConfirmado={crearDeVerdad}
+            onCorregir={() => {
+              setVerificando(false);
+              setPaso("titular");
+              setFieldErrors({ email: "Revisá este correo: el anterior no llegó." });
+              setMsg(null);
+            }}
+            textoCreado="La cuenta quedó creada."
+            textoListo="Dar de alta otra cuenta"
+            onListo={darDeAltaOtra} />
+
+          {/* Fuera de producción el backend devuelve el token, y tenerlo a
+              mano ahorra abrir el correo en cada prueba. En producción esto
+              no aparece nunca (ver _bloque_activacion). */}
+          {enlace?.url && (
+            <div className="activacion-box" style={{ marginTop: 12 }}>
               <div className="activacion-titulo">Enlace de activación (solo en desarrollo)</div>
               <div className="activacion-url">{enlace.url}</div>
               <div className="row-btns" style={{ marginTop: 8 }}>
@@ -703,19 +734,13 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
               </div>
             </div>
           )}
-
-          <ConfirmacionEnvio
-            cuentaId={enlace.cuentaId} email={enlace.email}
-            textoListo="Dar de alta otra cuenta"
-            onListo={darDeAltaOtra} />
-
           {msg && msg.tipo === "err" && (
             <div className="error" style={{ marginTop: 10 }}>⚠ {msg.texto}</div>
           )}
         </>
       )}
 
-      {!enlace && (
+      {!verificando && (
         <>
           {msg && (
             <div className={msg.tipo === "ok" ? "ok-box" : "error"}
@@ -1083,7 +1108,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
       )}
         </div>
 
-        {!enlace && (
+        {!verificando && (
           <div className="modal-alta-footer">
             {/* Cancelar cierra todo; Atrás solo retrocede un paso. Nunca los
                 dos juntos en el mismo lugar: en el primer paso Atrás no
@@ -1161,6 +1186,9 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
   // o al inquilino que llega sin teléfono, y si la foto no se toma en el
   // momento de registrarlo, en la práctica no se toma nunca.
   const [mFoto, setMFoto] = useState<File | null>(null);
+  // Día 73 — mientras se verifica el correo del miembro nuevo (y, si llega,
+  // mientras se crea). El formulario queda cargado por si hay que corregir.
+  const [verificandoMiembro, setVerificandoMiembro] = useState(false);
   const [msg, setMsg] = useState("");
   const [miembroEnlace, setMiembroEnlace] = useState<{ email: string; url: string | null } | null>(null);
   const [mostrarAgregar, setMostrarAgregar] = useState(false);
@@ -1271,8 +1299,15 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
       return;
     }
     setMsgMiembro("");
-    try {
+    // Día 73 — no se crea todavía: primero se verifica que el correo llega.
+    setVerificandoMiembro(true);
+  }
+
+  /** Se ejecuta SOLO si Resend confirmó que el correo llegó. */
+  async function agregarMiembroDeVerdad(verificacionId: string) {
+    {
       const res = await agregarMiembro(cuenta.id, {
+        verificacion_id: verificacionId,
         nombre: mNombre, apellido: mApellido, email: mEmail, telefono: mTelefono,
         relacion: "familiar", dni: mDni, profesion: mProfesion,
         contacto_emergencia_nombre: mEmergNombre, contacto_emergencia_telefono: mEmergTel,
@@ -1301,12 +1336,20 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
       }
       if (avisoFoto) setMsgMiembro(avisoFoto);
 
+      // El formulario se limpia recién en "Terminar" (ver terminarMiembro):
+      // si se limpiara acá, la pantalla de verificación perdería el correo
+      // que está mostrando.
       setMiembroEnlace({ email: mEmail, url });
-      setMNombre(""); setMEmail(""); setMApellido(""); setMTelefono("");
-      setMDni(""); setMProfesion(""); setMEmergNombre(""); setMEmergTel("");
-      setMFoto(null);
-      setMErrors({}); setMsg(""); onCambio();
-    } catch (e) { setMsgMiembro((e as Error).message); }
+      onCambio();
+    }
+  }
+
+  function terminarMiembro() {
+    setVerificandoMiembro(false);
+    setMNombre(""); setMEmail(""); setMApellido(""); setMTelefono("");
+    setMDni(""); setMProfesion(""); setMEmergNombre(""); setMEmergTel("");
+    setMFoto(null);
+    setMErrors({}); setMsg("");
   }
 
   return (
@@ -1651,6 +1694,19 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
             </div>
           )}
 
+          {/* Día 73 — verificación del correo antes de crear al miembro. */}
+          {verificandoMiembro ? (
+            <ConfirmacionEnvio
+              email={mEmail.trim().toLowerCase()} nombre={mNombre.trim()}
+              onConfirmado={agregarMiembroDeVerdad}
+              onCorregir={() => {
+                setVerificandoMiembro(false);
+                setMErrors({ email: "Revisá este correo: el anterior no llegó." });
+              }}
+              textoCreado={`${mNombre.trim()} quedó agregado a la casa.`}
+              textoListo="Listo"
+              onListo={terminarMiembro} />
+          ) : (<>
           <div className="agregar-miembro-campos">
             {/* Día 73 — la foto va primero y no al final: es el campo que se
                 olvida, y mandarla al fondo del formulario era garantizar
@@ -1730,7 +1786,8 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
             </div>
           </div>
 
-          <button className="agregar-miembro-btn" onClick={addMiembro}>+ Agregar miembro</button>
+          <button className="agregar-miembro-btn" onClick={addMiembro}>Verificar correo y agregar →</button>
+          </>)}
         </div>
         )}
         </>
