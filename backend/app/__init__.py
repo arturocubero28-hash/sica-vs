@@ -173,9 +173,46 @@ def create_app(config_class=Config):
     _notif.inicializar()
 
     # --- Healthcheck y manejo de errores estándar ---
+    # Día 73 — los dos chequeos de salud quedan FUERA del limitador de
+    # pedidos. El limitador guarda sus contadores en Redis: con Redis caído
+    # fallaba antes de llegar acá y devolvía un 500 genérico, justo cuando
+    # más hace falta que el chequeo diga qué está roto.
     @app.get("/api/v1/health")
+    @limiter.exempt
     def health():
         return jsonify({"data": {"status": "ok", "service": "sica-vs"}})
+
+    # Día 73 — ¿está vivo el worker? Ver app/tasks/latido.py.
+    #
+    # Separado de /health a propósito: /health dice si el backend responde,
+    # y lo usa el script de despliegue justo después de reiniciar, cuando
+    # el worker todavía no alcanzó a dejar su primer latido. Si /health
+    # fallara por eso, cada despliegue parecería roto.
+    #
+    # Público y sin datos sensibles (solo si está vivo y hace cuánto), para
+    # que lo pueda consultar el vigilante del servidor y, si algún día se
+    # agrega, un monitor externo. Responde 503 si está caído: así cualquier
+    # monitor lo detecta con solo mirar el código de estado.
+    @app.get("/api/v1/health/worker")
+    @limiter.exempt
+    def health_worker():
+        import time
+        import redis as _redis
+        from app.tasks.latido import CLAVE
+        # 5 minutos: el latido es cada 1, así que esto tolera un reinicio o
+        # un despliegue sin dar falsa alarma, y no deja pasar una caída real.
+        limite = 300
+        try:
+            valor = _redis.from_url(app.config["REDIS_URL"], socket_timeout=3).get(CLAVE)
+        except Exception:
+            return jsonify({"data": {"worker": "desconocido", "motivo": "redis_no_responde"}}), 503
+        if not valor:
+            return jsonify({"data": {"worker": "caido", "motivo": "sin_latido"}}), 503
+        hace = int(time.time()) - int(valor)
+        if hace > limite:
+            return jsonify({"data": {"worker": "caido", "motivo": "latido_viejo",
+                                     "hace_segundos": hace}}), 503
+        return jsonify({"data": {"worker": "ok", "hace_segundos": hace}})
 
     @app.errorhandler(404)
     def not_found(_):

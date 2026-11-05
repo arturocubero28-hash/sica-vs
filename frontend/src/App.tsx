@@ -34,6 +34,7 @@ import { UsuariosAdmin } from "./modules/usuarios/UsuariosAdmin";
 import { PanelDesarrollador } from "./modules/dev/PanelDesarrollador";
 import { passwordValida, RequisitosPassword } from "./utils/password";
 import { CampoPassword } from "./components/CampoPassword";
+import { AvisoWorker } from "./components/AvisoWorker";
 
 export function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
@@ -874,6 +875,9 @@ function Dashboard({ usuario, onLogout }: { usuario: Usuario; onLogout: () => vo
         </header>
 
         <main className="content">
+          {/* Día 73 — solo para quien administra: a un residente o a un
+              guardia no le sirve de nada saber que el worker está caído. */}
+          {(esAdmin || usuario.rol === "desarrollador") && <AvisoWorker />}
           {esAdmin && <AdminView seccion={seccion} usuario={usuario} />}
           {usuario.rol === "desarrollador" && (
             seccion === "perfil" ? <div className="card wide"><MiPerfil /></div>

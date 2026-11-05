@@ -18,7 +18,8 @@ celery = Celery(
     "sicavs",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["app.tasks.mora", "app.tasks.notificaciones_task", "app.tasks.correo_task"],   # <-- registra las tareas
+    include=["app.tasks.mora", "app.tasks.notificaciones_task", "app.tasks.correo_task",
+             "app.tasks.latido"],   # <-- registra las tareas
 )
 
 celery.conf.timezone = "America/Tegucigalpa"
@@ -26,6 +27,12 @@ celery.conf.enable_utc = False   # respetar el timezone configurado
 
 # Programación centralizada (única fuente de verdad)
 celery.conf.beat_schedule = {
+    # Día 73 — "estoy vivo", cada minuto. Ver app/tasks/latido.py: si esto
+    # deja de correr, el panel y el vigilante del servidor avisan.
+    "latido-worker": {
+        "task": "tasks.latido_worker",
+        "schedule": 60.0,
+    },
     "generar-cuotas-1ro-de-mes": {
         "task": "tasks.generar_cuotas_mensuales",
         "schedule": crontab(hour=0, minute=5, day_of_month=1),

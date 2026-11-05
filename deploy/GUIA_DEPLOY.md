@@ -315,3 +315,34 @@ tail -20 /var/log/sicavs-backup.log
 
 Si en algún momento deja de aparecer un backup nuevo cada día, algo se rompió (credenciales vencidas, disco lleno, etc.) — vale la pena chequear este log cada tanto, no asumir que "como lo configuré una vez, sigue andando solo para siempre".
 
+
+## Vigilante: alerta por correo si el worker o el backend se caen (Día 73)
+
+El 5 de noviembre el worker quedó en un bucle de reinicios y nada lo
+delataba: el backend respondía y el panel andaba. Pero el worker es el que
+genera las cuotas el 1ro de cada mes, revisa la mora y manda las
+notificaciones. `deploy/vigilar.sh` corre con el cron del servidor, fuera
+de Docker, y manda un correo directo por Resend: no depende de que nada del
+sistema esté en pie.
+
+Avisa a los 10 minutos de caída (dos chequeos seguidos, para no alarmar en
+cada despliegue), recuerda cada 6 horas mientras siga caído, y avisa cuando
+se recupera.
+
+### Instalar (una sola vez)
+
+```bash
+cd /opt/sicavs
+nano .env                       # agregar: ALERTA_EMAIL=tu@correo.com
+bash deploy/vigilar.sh --probar # tiene que llegarte un correo de prueba
+( crontab -l 2>/dev/null | grep -v vigilar.sh; \
+  echo "*/5 * * * * /opt/sicavs/deploy/vigilar.sh >> /var/log/sicavs-vigilar.log 2>&1" ) | crontab -
+crontab -l                      # confirmar que quedó
+```
+
+### Cómo sabe si el worker está vivo
+
+El worker deja un latido en Redis cada minuto (`app/tasks/latido.py`) y
+`GET /api/v1/health/worker` responde 200 si latió hace menos de 5 minutos,
+o 503 si no. Lo consultan el vigilante, el aviso rojo del panel para los
+administradores, y `deploy/actualizar.sh` después de cada despliegue.

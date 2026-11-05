@@ -106,9 +106,11 @@ echo "▶ A desplegar:"
 echo "$CAMBIOS" | sed 's/^/    /'
 
 # ── Backend ──────────────────────────────────────────────────────────────
+REINICIO_WORKER=""
 if toco "backend/"; then
   echo
   echo "▶ Backend: reconstruyendo la imagen (el código va adentro, no montado)…"
+  REINICIO_WORKER="$(date +%s)"
   $COMPOSE up -d --build backend worker
 else
   echo
@@ -152,6 +154,44 @@ if curl -fsS -o /dev/null -w "    /api/v1/health → %{http_code}\n" \
 else
   echo "    No respondió. Mirá los logs:"
   echo "    $COMPOSE logs backend --tail 40"
+fi
+
+# ── Día 73 — ¿el worker NUEVO quedó vivo? ────────────────────────────────
+# El 5 de noviembre un despliegue dejó el worker en un bucle de reinicios y
+# este script dijo "Listo": el backend respondía y el health daba 200. El
+# worker es el que genera las cuotas y manda las notificaciones, así que
+# ahora se verifica que esté latiendo (ver app/tasks/latido.py).
+#
+# Ojo con la trampa: el último latido del worker VIEJO queda fresco en
+# Redis unos minutos, y un worker nuevo roto pasaría por vivo. Por eso se
+# exige un latido POSTERIOR al reinicio: hace_segundos tiene que ser menor
+# que el tiempo que pasó desde que se reinició.
+if [ -n "$REINICIO_WORKER" ]; then
+  echo
+  echo "▶ Worker: esperando que el nuevo dé señales de vida…"
+  VIVO=""
+  for _ in $(seq 1 20); do
+    sleep 3
+    R="$(curl -s -m 5 "${SICAVS_WORKER_URL:-http://127.0.0.1:5000/api/v1/health/worker}" 2>/dev/null || true)"
+    # Tolerante a espacios: "hace_segundos":1 o "hace_segundos": 1.
+    HACE="$(echo "$R" | grep -oE '"hace_segundos"[[:space:]]*:[[:space:]]*[0-9]+' | grep -oE '[0-9]+$')"
+    TRANSCURRIDO=$(( $(date +%s) - REINICIO_WORKER ))
+    if [ -n "$HACE" ] && [ "$HACE" -lt "$TRANSCURRIDO" ]; then VIVO="si"; break; fi
+  done
+  if [ "$VIVO" = "si" ]; then
+    echo "    vivo — latió hace ${HACE}s"
+  else
+    echo
+    echo "⚠  EL WORKER NO DIO SEÑALES DE VIDA EN 60 SEGUNDOS."
+    echo "   Sin worker no se generan cuotas ni salen notificaciones ni correos."
+    echo "   Mirá qué le pasa:"
+    echo
+    echo "     $COMPOSE ps worker"
+    echo "     $COMPOSE logs worker --tail 40"
+    echo
+    echo "   (No se marca como desplegado: la próxima corrida lo vuelve a intentar.)"
+    exit 1
+  fi
 fi
 
 # El sello se escribe AL FINAL y solo si todo salió bien: con set -e,

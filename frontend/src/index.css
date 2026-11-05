@@ -4512,3 +4512,15 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
 .pregunta-enlace { margin-top: 10px; padding: 12px 14px; border-radius: 10px;
   background: #fffbeb; border: 1px solid #fde68a; }
 .pregunta-enlace-texto { font-size: 13px; color: #78350f; line-height: 1.45; margin-bottom: 10px; }
+
+/* ── Día 73 — aviso de worker caído ─────────────────────────────────────
+   Rojo y arriba de todo, porque lo que anuncia es grave y silencioso: el
+   panel sigue andando, pero no se generan cuotas ni sale ningún aviso. */
+.aviso-worker {
+  display: flex; gap: 10px; align-items: flex-start;
+  background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d;
+  border-radius: 12px; padding: 12px 14px; margin-bottom: 16px;
+  font-size: 13.5px; line-height: 1.45;
+}
+.aviso-worker svg { flex-shrink: 0; margin-top: 1px; color: #b91c1c; }
+.aviso-worker b { color: #991b1b; }
