@@ -48,10 +48,17 @@ webhooks_bp = Blueprint("webhooks", __name__)
 TOLERANCIA_SEGUNDOS = 300
 
 # Qué estado deja cada evento de Resend.
+#
+# Día 73 — se agrega email.failed. Es distinto de bounced: bounced es "el
+# servidor del destinatario lo rechazó" (buzón que no existe), failed es
+# "Resend no pudo ni mandarlo". Para administración significan lo mismo —
+# ese correo no llegó y hay que revisar la dirección — así que se trata
+# igual, pero el detalle guarda cuál de los dos fue.
 ESTADOS = {
     "email.sent": "enviado",
     "email.delivered": "entregado",
     "email.bounced": "rebotado",
+    "email.failed": "rebotado",
     "email.complained": "queja",
     "email.delivery_delayed": "demorado",
 }
@@ -157,12 +164,17 @@ def resend():
 
     usuario.correo_estado = estado
     usuario.correo_actualizado = dt.datetime.now(dt.timezone.utc)
-    if tipo == "email.bounced":
-        rebote = datos.get("bounce") or {}
+    if tipo in ("email.bounced", "email.failed"):
+        rebote = datos.get("bounce") or datos.get("failed") or {}
+        por_defecto = ("El servidor del destinatario rechazó el correo."
+                       if tipo == "email.bounced"
+                       else "El correo no se pudo enviar.")
         usuario.correo_detalle = (rebote.get("message")
+                                  or rebote.get("reason")
                                   or rebote.get("subType")
-                                  or "El servidor del destinatario rechazó el correo.")[:1000]
-        logger.warning("Correo rebotado para %s: %s", usuario.email, usuario.correo_detalle)
+                                  or por_defecto)[:1000]
+        logger.warning("Correo no entregado (%s) para %s: %s",
+                       tipo, usuario.email, usuario.correo_detalle)
     elif tipo == "email.complained":
         usuario.correo_detalle = "El destinatario marcó el correo como spam."
     else:
