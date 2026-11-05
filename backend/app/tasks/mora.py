@@ -48,7 +48,8 @@ def _avisar_cuotas_logica(Cuota, _notif):
         # Día 69 — a una casa del padrón no se le manda ningún aviso de
         # cobro. Nunca aceptó pagar nada; un recordatorio de vencimiento
         # sería, para esa familia, un reclamo por una deuda inexistente.
-        if cuenta.es_censo:
+        # Día 74 — ni a una cuenta dada de baja: ya no vive ahí.
+        if cuenta.es_censo or not cuenta.activa:
             continue
         # Día 51 — niveles de plan: si la residencial de esta cuenta tiene
         # un plan que no incluye cuotas, no se manda el aviso. En rigor no
@@ -339,6 +340,11 @@ def revisar_mora():
             # profundidad, no se confía solo en la generación.
             if cuenta.es_censo:
                 continue
+            # Día 74 — una cuenta dada de baja (mudanza) tampoco: la deuda
+            # sigue a nombre del titular, pero no hay servicio que cortar ni
+            # a quién mandarle avisos de mora por una casa donde ya no vive.
+            if not cuenta.activa:
+                continue
 
             # Día 51 — niveles de plan: si la residencial de esta cuenta
             # tiene un plan que no incluye cuotas, no se bloquea la cuenta
@@ -468,7 +474,11 @@ def revisar_arreglos():
         for arreglo in arreglos:
             incumplio = False
             for abono in arreglo.abonos:
-                if abono.estado != "pendiente":
+                # Día 74 — BUG: antes se saltaban todos los que no fueran
+                # "pendiente". Pero el primer día de atraso este mismo loop
+                # los pasa a "vencido", así que desde el día siguiente nunca
+                # más se miraban y ningún arreglo llegaba a "incumplido".
+                if abono.estado not in ("pendiente", "vencido"):
                     continue
                 dias_atraso = (hoy - abono.fecha_pactada).days
                 if dias_atraso > 0:

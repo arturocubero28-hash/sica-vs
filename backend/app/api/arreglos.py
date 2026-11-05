@@ -17,6 +17,7 @@ from flask import Blueprint, jsonify, request
 from app.extensions import db
 from app.models.cuenta import Cuenta, Cuota, Pago, ArregloPago, AbonoArreglo
 from app.auth.security import roles_required, requiere_funcion_plan
+from app.extensions import limiter
 
 arreglos_bp = Blueprint("arreglos", __name__)
 
@@ -45,6 +46,55 @@ def _arreglo_es_mio(arreglo, usuario_actual):
     if rid_arreglo is None:
         return True
     return rid_arreglo == rid_usuario
+
+
+PROPOSITOS = ("ponerse_al_dia", "volver_al_padron")
+
+
+def _pide_descuento():
+    """Para el limitador: solo se cuentan los pedidos que traen descuento
+    (son los que prueban una contraseña de administrador)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        return float(data.get("descuento_pct") or 0) <= 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _validar_segundo_admin(data, usuario_actual):
+    """
+    Día 74 — el descuento lo autoriza OTRA persona: un segundo administrador
+    escribe su correo y su contraseña en la misma pantalla. Así nadie puede
+    perdonarse deudas a solas, y queda constancia de quién lo aprobó.
+
+    Devuelve (usuario_autorizador, None) o (None, respuesta_de_error).
+    """
+    from app.models.usuario import Usuario
+    aut = data.get("autorizacion") or {}
+    email = (aut.get("email") or "").strip().lower()
+    password = aut.get("password") or ""
+    if not email or not password:
+        return None, _err("autorizacion_requerida",
+                          "Un descuento lo tiene que autorizar un segundo administrador "
+                          "con su correo y su contraseña.", 400)
+    u = Usuario.query.filter(db.func.lower(Usuario.email) == email).first()
+    # Mismo mensaje para "no existe" y "contraseña mala": no se le confirma a
+    # nadie qué correos son de administradores.
+    if u is None or not u.check_password(password):
+        return None, _err("autorizacion_invalida",
+                          "El correo o la contraseña del administrador que autoriza no son correctos.", 403)
+    if u.id == usuario_actual.id:
+        return None, _err("autorizacion_propia",
+                          "El descuento no lo puede autorizar la misma persona que arma el arreglo. "
+                          "Tiene que ser otro administrador.", 403)
+    if not u.activo or u.rol not in ("admin", "super_admin"):
+        return None, _err("autorizacion_sin_permiso",
+                          "Esa persona no es un administrador activo.", 403)
+    if (u.rol != "super_admin" and usuario_actual.residencial_id is not None
+            and u.residencial_id != usuario_actual.residencial_id):
+        return None, _err("autorizacion_sin_permiso",
+                          "Ese administrador no es de esta residencial.", 403)
+    return u, None
 
 
 def _money(x):
@@ -109,6 +159,7 @@ def cuotas_pendientes_cuenta(usuario_actual, cuenta_uuid):
 # Crear un arreglo de pago
 # ─────────────────────────────────────────────────────────────────────────────
 @arreglos_bp.post("")
+@limiter.limit("20 per hour", exempt_when=_pide_descuento)
 @roles_required("admin", "super_admin")
 @requiere_funcion_plan("cuotas")
 def crear_arreglo(usuario_actual):
@@ -121,13 +172,29 @@ def crear_arreglo(usuario_actual):
       num_abonos: int,
       dias_gracia: int,           # default 15
       primer_vencimiento: "YYYY-MM-DD",  # opcional, default +30 días
-      nota: str
+      nota: str,
+      proposito: "ponerse_al_dia" | "volver_al_padron",   # Día 74, obligatorio
+      descuento_pct: float,       # opcional, sobre la deuda; sin tope
+      autorizacion: {email, password}   # obligatorio si hay descuento
     }
     """
     data = request.get_json(silent=True) or {}
     cuenta = Cuenta.query.filter_by(uuid_publico=data.get("cuenta_id")).first()
     if not cuenta:
         return _err("no_encontrada", "Cuenta no encontrada", 404)
+
+    # Día 74 — para qué se firma. Se pregunta siempre: no todas las casas
+    # que firman un arreglo quieren dejar de pagar, y la diferencia decide
+    # si después pueden volver al padrón.
+    proposito = data.get("proposito")
+    if cuenta.es_censo:
+        # Una casa que ya está en el padrón no tiene mensualidad que retomar:
+        # el arreglo solo puede ser para saldar lo que dejó.
+        proposito = "volver_al_padron"
+    if proposito not in PROPOSITOS:
+        return _err("proposito_requerido",
+                    "Indicá para qué se firma el arreglo: ponerse al día y seguir pagando, "
+                    "o saldar la deuda y volver al padrón.", 400)
 
     # Regla anti-abuso: una cuenta no puede tener dos arreglos activos
     activo = ArregloPago.query.filter_by(cuenta_id=cuenta.id, estado="activo").first()
@@ -138,6 +205,13 @@ def crear_arreglo(usuario_actual):
     cuota_uuids = data.get("cuotas") or []
     if not cuota_uuids:
         return _err("sin_cuotas", "Debe incluir al menos una cuota en el arreglo", 400)
+    # Día 74 — se convierten a UUID antes de consultar: un texto que no es
+    # un UUID hacía reventar la consulta con un 500 en vez de un 400.
+    import uuid as _uuid
+    try:
+        cuota_uuids = [_uuid.UUID(str(x)) for x in cuota_uuids]
+    except ValueError:
+        return _err("cuota_invalida", "Alguna cuota no existe o no pertenece a esta cuenta", 400)
 
     cuotas = Cuota.query.filter(
         Cuota.uuid_publico.in_(cuota_uuids),
@@ -151,7 +225,25 @@ def crear_arreglo(usuario_actual):
                         f"La cuota de {c.periodo.strftime('%B %Y')} no se puede incluir (ya pagada o en otro arreglo)", 400)
 
     # ── Cálculos financieros ──────────────────────────────────────────────
-    deuda_total = _money(sum(Decimal(str(c.monto)) for c in cuotas))
+    deuda_original = _money(sum(Decimal(str(c.monto)) for c in cuotas))
+
+    # Día 74 — descuento sobre la deuda, autorizado por un segundo admin.
+    try:
+        descuento_pct = _money(data.get("descuento_pct") or 0)
+    except Exception:
+        return _err("descuento_invalido", "El porcentaje de descuento no es un número", 400)
+    if descuento_pct < 0 or descuento_pct >= 100:
+        return _err("descuento_invalido",
+                    "El descuento tiene que ser mayor que 0 y menor que 100 %. "
+                    "Perdonar toda la deuda no es un arreglo de pago.", 400)
+    autorizador = None
+    descuento_monto = Decimal("0.00")
+    if descuento_pct > 0:
+        autorizador, err = _validar_segundo_admin(data, usuario_actual)
+        if err:
+            return err
+        descuento_monto = _money(deuda_original * descuento_pct / 100)
+    deuda_total = _money(deuda_original - descuento_monto)
     abono_inicial = _money(data.get("abono_inicial") or 0)
     if abono_inicial < 0 or abono_inicial > deuda_total:
         return _err("abono_invalido", "El abono inicial debe estar entre 0 y la deuda total", 400)
@@ -196,6 +288,12 @@ def crear_arreglo(usuario_actual):
         estado="activo",
         creado_por=usuario_actual.id,
         nota=(data.get("nota") or "")[:500],
+        proposito=proposito,
+        deuda_original=deuda_original,
+        descuento_pct=descuento_pct if autorizador else None,
+        descuento_monto=descuento_monto if autorizador else None,
+        descuento_autorizado_por=autorizador.id if autorizador else None,
+        descuento_autorizado_en=dt.datetime.now(dt.timezone.utc) if autorizador else None,
     )
     db.session.add(arreglo)
     db.session.flush()
@@ -314,8 +412,10 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
     abono.pagado_en = dt.datetime.now(dt.timezone.utc)
     abono.pago_id = pago.id
 
-    # ¿Se completó el arreglo?
-    pendientes = [a for a in arreglo.abonos if a.estado == "pendiente"]
+    # ¿Se completó el arreglo? "vencido" también es impago: antes solo se
+    # miraban los "pendiente", y un arreglo con abonos atrasados se daba por
+    # completado al cobrar el último que estaba al día (Día 74).
+    pendientes = [a for a in arreglo.abonos if a.estado in ("pendiente", "vencido")]
     if not pendientes:
         arreglo.estado = "completado"
         arreglo.completado_en = dt.datetime.now(dt.timezone.utc)
@@ -323,13 +423,49 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
         # Las cuotas incluidas pasan a pagadas
         for c in arreglo.cuotas:
             c.estado = "pagada"
-        # Asegurar que la cuenta queda al día
+        # Asegurar que la cuenta queda al día. intentar_desbloquear y no un
+        # desbloqueo a secas: si debe cuotas fuera del arreglo, sigue igual.
         cuenta = arreglo.cuenta
         if cuenta:
-            cuenta.estado = "al_dia"
-            cuenta.bloqueada = False
+            cuenta.intentar_desbloquear()
 
     db.session.commit()
+    return jsonify({"data": arreglo.to_dict(con_detalle=True)})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Día 74 — cambiar el propósito de un arreglo activo
+# ─────────────────────────────────────────────────────────────────────────────
+@arreglos_bp.post("/<uuid>/proposito")
+@roles_required("admin", "super_admin")
+@requiere_funcion_plan("cuotas")
+def cambiar_proposito(usuario_actual, uuid):
+    """
+    Una familia firmó para ponerse al día y a mitad de camino decide volver
+    al padrón (o al revés). No hace falta cancelar el arreglo -- cancelarlo
+    descongela las cuotas y bloquea la casa --: se cambia el propósito y
+    queda anotado en la nota.
+    """
+    arreglo = ArregloPago.query.filter_by(uuid_publico=uuid).first()
+    if not arreglo or not _arreglo_es_mio(arreglo, usuario_actual):
+        return _err("no_encontrado", "Arreglo no encontrado", 404)
+    if arreglo.estado != "activo":
+        return _err("no_activo", "Solo se puede cambiar un arreglo activo", 400)
+    data = request.get_json(silent=True) or {}
+    nuevo = data.get("proposito")
+    if nuevo not in PROPOSITOS:
+        return _err("proposito_requerido", "Propósito inválido", 400)
+    if arreglo.cuenta and arreglo.cuenta.es_censo and nuevo != "volver_al_padron":
+        return _err("casa_en_padron",
+                    "La casa ya está en el padrón. Para seguir pagando mensualidad, "
+                    "primero tiene que volver a sumarse.", 400)
+    if nuevo != arreglo.proposito:
+        hoy = dt.date.today().strftime("%d/%m/%Y")
+        quien = f"{usuario_actual.nombre} {usuario_actual.apellido}".strip()
+        texto = {"ponerse_al_dia": "ponerse al día", "volver_al_padron": "volver al padrón"}[nuevo]
+        arreglo.nota = (f"{arreglo.nota or ''}\n[{hoy}] {quien}: propósito cambiado a «{texto}».").strip()[:500]
+        arreglo.proposito = nuevo
+        db.session.commit()
     return jsonify({"data": arreglo.to_dict(con_detalle=True)})
 
 
@@ -370,6 +506,10 @@ def _descongelar_y_bloquear(arreglo, nuevo_estado, motivo):
             # Vuelve a vencida (descongelada)
             c.estado = "vencida" if c.fecha_vencimiento < hoy else "pendiente"
     cuenta = arreglo.cuenta
-    if cuenta:
+    # Día 74 — una casa del padrón (o una que ya se mudó) NO se bloquea: no
+    # tiene servicio de cuotas que cortar, y a la gente del padrón el guardia
+    # la identifica igual. La deuda queda pendiente a su nombre y le impide
+    # volver a sumarse al sistema hasta que la pague.
+    if cuenta and cuenta.activa and not cuenta.es_censo:
         cuenta.estado = "en_mora"
         cuenta.bloqueada = True

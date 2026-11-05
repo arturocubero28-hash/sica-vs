@@ -174,11 +174,27 @@ def listar_censo(usuario_actual):
                Cuenta.modo_participacion.is_(None))).count()
     # Cuántas pasaron de censo a cuenta completa (tienen fecha de conversión).
     # Es el número que dice si el padrón sirve como puerta de entrada.
-    total_convertidas = base.filter(Cuenta.fecha_conversion.isnot(None)).count()
+    # Día 74 — solo las que SIGUEN participando: una casa que se sumó y
+    # volvió al padrón conserva su fecha de conversión como historial.
+    total_convertidas = base.filter(Cuenta.fecha_conversion.isnot(None),
+                                    Cuenta.modo_participacion == "completa").count()
     total_casas = total_censo + total_completas
 
+    # Día 74 — una casa que estuvo en el sistema puede volver al padrón con
+    # un arreglo de pago a medias, o con deuda de un arreglo incumplido. El
+    # padrón lo muestra, porque decide si la casa puede volver a sumarse.
+    # Solo se calcula para las casas con historia (fecha de conversión o de
+    # regreso): las que nunca participaron no deben nada.
+    from app.services.ciclo_casa import estado_deuda
+
+    def _casa(c):
+        d = c.to_dict(detalle=True)
+        if c.fecha_conversion or c.fecha_regreso_padron:
+            d["deuda"] = estado_deuda(c)
+        return d
+
     return jsonify({"data": {
-        "casas": [c.to_dict(detalle=True) for c in cuentas],
+        "casas": [_casa(c) for c in cuentas],
         "total": len(cuentas),
         "resumen": {
             "censo": total_censo,
@@ -298,8 +314,16 @@ def crear_casa_censo(usuario_actual):
     else:  # casa
         if not ident:
             return _err("datos_incompletos", "Indicá el identificador de la casa (ej. \"Casa 24\")", 400)
-        if _buscar_por_nombre(ident):
-            return _err("duplicado", f"Ya existe una unidad llamada \"{ident}\".", 409)
+        existente = _buscar_por_nombre(ident)
+        if existente:
+            # Día 74 — si la familia anterior se mudó (la casa no tiene
+            # ninguna cuenta activa), llega otra familia: se reutiliza la
+            # casa con una cuenta nueva. La anterior queda como historial.
+            vacia = (existente.tipo == "casa" and Cuenta.query.filter_by(
+                unidad_id=existente.id, activa=True).first() is None)
+            if not vacia:
+                return _err("duplicado", f"Ya existe una unidad llamada \"{ident}\".", 409)
+            unidad = existente
 
     # No repetir el apartamento dentro del edificio. Se miran TODAS las
     # cuentas activas, de censo y completas: el apto 3 es el apto 3,
@@ -466,6 +490,14 @@ def _preparar_conversion(cuenta, data, usuario_actual):
     if not cuenta.es_censo:
         return None, _err("ya_completa", "Esta casa ya participa del sistema", 400)
 
+    # Día 74 — una casa que volvió al padrón con un arreglo (o que se fue
+    # debiendo y lo incumplió) solo puede volver si va al día: ningún abono
+    # vencido y nada adeudado fuera del arreglo.
+    from app.services.ciclo_casa import puede_volver_a_sumarse
+    impedimento = puede_volver_a_sumarse(cuenta)
+    if impedimento:
+        return None, _err(impedimento[0], impedimento[1], 400)
+
     # Si la residencial no tiene cuotas en su plan, la casa pasa a completa
     # igual (gana app y credenciales) pero sin tarifa — mismo criterio que
     # el alta normal en crear_cuenta.
@@ -499,6 +531,10 @@ def _aplicar_conversion(cuenta, plan, usuario_actual):
     NO hace commit. Devuelve la nota para mostrarle al administrador.
     """
     tarifa = plan["tarifa"]
+    # Día 74 — si la casa ya había estado en el sistema y volvió al padrón,
+    # su gente recupera la app (solo quien se apagó por el padrón).
+    from app.services.ciclo_casa import reactivar_suspendidos
+    reactivar_suspendidos(cuenta)
     cuenta.modo_participacion = "completa"
     cuenta.tarifa_id = tarifa.id if tarifa else None
     cuenta.dia_pago = plan["dia_pago"]
@@ -763,6 +799,50 @@ def sumar_casa(usuario_actual, cuenta_uuid):
     if current_app.config.get("ENV") != "production":
         resp["token_activacion"] = token
     return jsonify({"data": resp}), 200
+
+
+@censo_bp.post("/casas/<cuenta_uuid>/mudanza")
+@roles_required("admin", "super_admin")
+def mudanza_padron(usuario_actual, cuenta_uuid):
+    """
+    Día 74 — la familia se fue de la residencial: la casa sale del padrón.
+
+    No se borra nada: la cuenta queda inactiva con su gente, sus accesos
+    registrados y, si se fue debiendo (un arreglo a medias), su deuda a nombre
+    del titular. La casa queda libre para la familia que llegue.
+
+    Body: { motivo?, confirmar_deuda? }
+    """
+    from app.services.ciclo_casa import estado_deuda, dar_de_baja
+
+    cuenta, err = _cuenta_mia(cuenta_uuid, usuario_actual)
+    if err:
+        return err
+    if not cuenta.es_censo:
+        return _err("no_es_padron",
+                    "Esta casa participa del sistema: se da de baja desde Unidades.", 400)
+    if not cuenta.activa:
+        return _err("ya_de_baja", "Esta casa ya salió del padrón.", 400)
+    if cuenta.es_contenedor_edificio():
+        activos = Cuenta.query.filter(Cuenta.unidad_id == cuenta.unidad_id,
+                                      Cuenta.activa.is_(True),
+                                      Cuenta.apartamento.isnot(None)).count()
+        if activos:
+            return _err("edificio_con_aptos",
+                        f"El edificio todavía tiene {activos} apartamento(s) registrados. "
+                        "Sacá primero a los que se fueron.", 400)
+
+    data = request.get_json(silent=True) or {}
+    deuda = estado_deuda(cuenta)
+    if deuda["total"] > 0 and not data.get("confirmar_deuda"):
+        return _err("saldo_pendiente",
+                    f"Esta casa debe L {deuda['total']:,.2f}. Si se fue igual, la deuda queda "
+                    "a nombre del titular y no va a poder darse de alta en otra casa hasta "
+                    "pagarla.", 400)
+
+    dar_de_baja(cuenta, data.get("motivo") or "Se mudó")
+    db.session.commit()
+    return jsonify({"data": {"casa": cuenta.to_dict(), "deuda_pendiente": deuda["total"]}})
 
 
 # ─────────────────────────────────────────────────────────────────────────

@@ -375,7 +375,11 @@ select:focus { border-color: var(--marca-naranja); outline: none; box-shadow: 0 
 .hamburger:hover { background: transparent; }
 .topbar .user-avatar.small { display: none; }
 
-.content { padding: 26px; display: flex; justify-content: center; }
+.content { padding: 26px; display: flex; justify-content: center;
+  /* Día 74 — wrap: si hay dos hijos (el aviso de worker caído + la
+     sección), cada uno va en su propia fila. Sin esto quedaban lado a lado
+     y el aviso aplastaba el panel en una columna angosta. */
+  flex-wrap: wrap; align-content: flex-start; }
 .content > * { width: 100%; max-width: 1400px; }
 .content .card.wide { box-shadow: 0 4px 24px rgba(2,46,69,.07); }
 
@@ -4524,3 +4528,26 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
 }
 .aviso-worker svg { flex-shrink: 0; margin-top: 1px; color: #b91c1c; }
 .aviso-worker b { color: #991b1b; }
+
+/* ── Día 74 · ciclo de vida de la casa ─────────────────────────────── */
+/* Opciones grandes, tipo tarjeta, para decisiones que cambian qué pasa con
+   una familia: para qué se firma un arreglo, o si se muda o vuelve al
+   padrón. Un radio chico al lado de un texto se pasa por alto. */
+.proposito-opciones { display: grid; gap: 8px; margin-top: 6px; }
+.proposito-op {
+  display: grid; grid-template-columns: 20px 1fr; column-gap: 10px; row-gap: 2px;
+  align-items: start; padding: 12px 14px; border: 1.5px solid #e2e8f0;
+  border-radius: 10px; cursor: pointer; background: #fff;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.proposito-op:hover { border-color: #94a3b8; }
+.proposito-op input { margin: 3px 0 0; grid-row: span 2; }
+.proposito-op b { font-size: 14px; }
+.proposito-op .muted { grid-column: 2; line-height: 1.4; }
+.proposito-op.sel { border-color: #2563eb; background: #eff6ff; }
+.padron-simulacion { margin-top: 12px; }
+.padron-simulacion ul { margin: 10px 0 12px; padding-left: 18px; font-size: 13.5px; line-height: 1.5; }
+.padron-simulacion li { margin-bottom: 4px; }
+/* Con "Se mudó" la fila del padrón tiene tres botones: que bajen de línea
+   en vez de esconderse detrás del scroll horizontal de la tabla. */
+.censo-panel .casa-acciones { flex-wrap: wrap; justify-content: flex-end; max-width: 320px; margin-left: auto; }

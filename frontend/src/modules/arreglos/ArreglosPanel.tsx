@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import {
   listarArreglos, detalleArreglo, crearArreglo, cancelarArreglo,
-  listarCuentas, cuotasPendientesCuenta,
-  type ArregloDTO, type Cuenta, type CuotaDTO,
+  listarCuentas, cuotasPendientesCuenta, cambiarPropositoArreglo,
+  type ArregloDTO, type Cuenta, type CuotaDTO, type PropositoArreglo,
 } from "../../api/client";
 import { L } from "../../utils/formato";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
@@ -13,6 +13,11 @@ const ESTADO_PILL: Record<string, string> = {
 };
 const ESTADO_LABEL: Record<string, string> = {
   activo: "Activo", completado: "Completado", incumplido: "Incumplido", cancelado: "Cancelado",
+};
+// Día 74 — para qué se firmó. Decide si la casa puede volver al padrón.
+const PROPOSITO_LABEL: Record<PropositoArreglo, string> = {
+  ponerse_al_dia: "Ponerse al día y seguir pagando",
+  volver_al_padron: "Saldar la deuda y volver al padrón",
 };
 
 export function ArreglosPanel() {
@@ -72,9 +77,14 @@ export function ArreglosPanel() {
                       <div className="mora-casa-info">
                         <span className="mora-unidad">{a.unidad}</span>
                         <span className="muted small">{a.titular}</span>
+                        <span className="muted small">
+                          {a.proposito === "volver_al_padron" ? "Para volver al padrón" : "Para ponerse al día"}
+                          {a.descuento_pct > 0 && ` · ${a.descuento_pct} % de descuento`}
+                        </span>
                       </div>
                       <div className="mora-casa-resumen">
                         <span className={`pill ${ESTADO_PILL[a.estado]}`}>{ESTADO_LABEL[a.estado]}</span>
+                        {a.atrasado && <span className="pill red">Atrasado</span>}
                         <span className="muted small">{a.abonos_pagados}/{a.num_abonos} abonos</span>
                         <span className="mora-total">{L(a.saldo_pendiente)}</span>
                         <button className="mini">Ver →</button>
@@ -111,12 +121,22 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
   const [nota, setNota] = useState("");
   const [msg, setMsg] = useState("");
   const [guardando, setGuardando] = useState(false);
+  // Día 74 — propósito (obligatorio) y descuento autorizado por otro admin.
+  const [proposito, setProposito] = useState<PropositoArreglo | "">("");
+  const [conDescuento, setConDescuento] = useState(false);
+  const [descuentoPct, setDescuentoPct] = useState(0);
+  const [autEmail, setAutEmail] = useState("");
+  const [autPass, setAutPass] = useState("");
+  const cuentaSel = cuentas.find(c => c.id === cuentaId);
+  const enPadron = !!cuentaSel?.es_censo;
 
   useEffect(() => { listarCuentas().then(setCuentas).catch(() => {}); }, []);
 
   useEffect(() => {
     if (cuentaId) {
       cuotasPendientesCuenta(cuentaId).then(c => { setCuotas(c); setSeleccionadas([]); }).catch(() => setCuotas([]));
+      // Una casa que ya está en el padrón no tiene mensualidad que retomar.
+      if (cuentas.find(c => c.id === cuentaId)?.es_censo) setProposito("volver_al_padron");
     } else { setCuotas([]); }
   }, [cuentaId]);
 
@@ -125,7 +145,10 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
   }
 
   // Cálculos en vivo
-  const deudaTotal = cuotas.filter(c => seleccionadas.includes(c.id)).reduce((s, c) => s + c.monto, 0);
+  const deudaOriginal = cuotas.filter(c => seleccionadas.includes(c.id)).reduce((s, c) => s + c.monto, 0);
+  const pct = conDescuento ? Math.min(Math.max(descuentoPct, 0), 99.99) : 0;
+  const descuentoMonto = Math.round(deudaOriginal * pct) / 100;
+  const deudaTotal = Math.round((deudaOriginal - descuentoMonto) * 100) / 100;
   const saldoFinanciado = Math.max(0, deudaTotal - abonoInicial);
   const montoPorAbono = numAbonos > 0 ? saldoFinanciado / numAbonos : 0;
 
@@ -133,16 +156,26 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
     setMsg("");
     if (!cuentaId) return setMsg("Seleccioná una cuenta");
     if (seleccionadas.length === 0) return setMsg("Seleccioná al menos una cuota");
+    if (!proposito) return setMsg("Indicá para qué se firma el arreglo.");
+    if (conDescuento) {
+      if (!(descuentoPct > 0 && descuentoPct < 100)) return setMsg("El descuento tiene que ser mayor que 0 y menor que 100 %.");
+      if (!autEmail.trim() || !autPass) return setMsg("El descuento lo autoriza otro administrador: falta su correo o su contraseña.");
+    }
     if (saldoFinanciado <= 0) return setMsg("El abono inicial no puede cubrir toda la deuda (cobrá las cuotas directamente)");
     setGuardando(true);
     try {
       await crearArreglo({
         cuenta_id: cuentaId, cuotas: seleccionadas, abono_inicial: abonoInicial,
         num_abonos: numAbonos, dias_gracia: diasGracia,
-        intervalo_dias: intervaloDias, nota,
+        intervalo_dias: intervaloDias, nota, proposito,
+        ...(conDescuento ? { descuento_pct: descuentoPct,
+                             autorizacion: { email: autEmail.trim(), password: autPass } } : {}),
       });
       onCreado();
-    } catch (e) { setMsg((e as Error).message); }
+    } catch (e) {
+      setMsg((e as Error).message);
+      setAutPass("");   // nunca dejar la contraseña de otro en pantalla
+    }
     finally { setGuardando(false); }
   }
 
@@ -186,7 +219,69 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
       {seleccionadas.length > 0 && (
         <>
           <div className="campo-grupo" style={{ marginTop: 14 }}>
-            <label className="campo-label">3. Condiciones del plan</label>
+            <label className="campo-label">3. ¿Para qué se firma?</label>
+            {enPadron ? (
+              <div className="info-box">
+                <Info size={15} />
+                <span>Esta casa ya está en el padrón: el arreglo es para saldar lo que dejó pendiente.</span>
+              </div>
+            ) : (
+              <div className="proposito-opciones" role="radiogroup">
+                {(["ponerse_al_dia", "volver_al_padron"] as PropositoArreglo[]).map(p => (
+                  <label key={p} className={`proposito-op ${proposito === p ? "sel" : ""}`}>
+                    <input type="radio" name="proposito" checked={proposito === p}
+                      onChange={() => setProposito(p)} />
+                    <b>{PROPOSITO_LABEL[p]}</b>
+                    <span className="muted small">
+                      {p === "ponerse_al_dia"
+                        ? "La casa paga lo atrasado en abonos y sigue con su cuota de cada mes."
+                        : "La casa paga lo atrasado en abonos y deja de pagar mensualidad. Ya puede volver al padrón; los abonos se siguen cobrando en caja."}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="campo-grupo" style={{ marginTop: 14 }}>
+            <label className="campo-label">4. Descuento (opcional)</label>
+            <label className="cuota-check">
+              <input type="checkbox" checked={conDescuento}
+                onChange={e => { setConDescuento(e.target.checked); if (!e.target.checked) setAutPass(""); }} />
+              <span>Aplicar un descuento sobre la deuda</span>
+            </label>
+            {conDescuento && (
+              <>
+                <div className="info-box warn">
+                  <Info size={15} />
+                  <span>Un descuento lo tiene que autorizar <b>otro administrador</b>, escribiendo acá su
+                    correo y su contraseña. Queda registrado quién lo autorizó y cuándo.</span>
+                </div>
+                <div className="row">
+                  <div style={{ flex: 1 }}>
+                    <span className="muted small">Descuento (%)</span>
+                    <input type="number" min={0.01} max={99.99} step="0.01" value={descuentoPct || ""}
+                      onChange={e => setDescuentoPct(Number(e.target.value))} />
+                  </div>
+                </div>
+                <div className="row">
+                  <div style={{ flex: 1 }}>
+                    <span className="muted small">Correo del administrador que autoriza</span>
+                    <input type="email" autoComplete="off" value={autEmail}
+                      onChange={e => setAutEmail(e.target.value)} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <span className="muted small">Su contraseña</span>
+                    <input type="password" autoComplete="new-password" value={autPass}
+                      onChange={e => setAutPass(e.target.value)} />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="campo-grupo" style={{ marginTop: 14 }}>
+            <label className="campo-label">5. Condiciones del plan</label>
 
             <div className="info-box">
               <Info size={15} />
@@ -229,11 +324,16 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
 
           <div className="info-box warn">
             <Info size={15} />
-            <span>Si el residente no paga un abono dentro de los días de gracia, el arreglo se marca <b>incumplido</b>: las cuotas vuelven a mora y la cuenta se bloquea (no podrá ingresar por los accesos). Lo ya abonado no se pierde.</span>
+            <span>Si el residente no paga un abono dentro de los días de gracia, el arreglo se marca <b>incumplido</b>: las cuotas vuelven a mora y la cuenta se bloquea (no podrá ingresar por los accesos). Lo ya abonado no se pierde.
+              {proposito === "volver_al_padron" && <> Si ya volvió al padrón, <b>no se le bloquea</b> el portón: la deuda queda pendiente a su nombre y no puede volver a sumarse al sistema hasta pagarla.</>}</span>
           </div>
 
           {/* Resumen financiero en vivo */}
           <div className="arreglo-resumen">
+            {descuentoMonto > 0 && <>
+              <div className="arreglo-resumen-row"><span>Deuda de las cuotas</span><b>{L(deudaOriginal)}</b></div>
+              <div className="arreglo-resumen-row"><span>Descuento ({pct} %)</span><b>− {L(descuentoMonto)}</b></div>
+            </>}
             <div className="arreglo-resumen-row"><span>Deuda total</span><b>{L(deudaTotal)}</b></div>
             <div className="arreglo-resumen-row"><span>Abono inicial (prima, vence hoy)</span><b>{L(abonoInicial)}</b></div>
             <div className="arreglo-resumen-row total"><span>Saldo a financiar</span><b>{L(saldoFinanciado)}</b></div>
@@ -264,6 +364,15 @@ function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
   const [confirmarCancel, setConfirmarCancel] = useState(false);
   const [motivoCancel, setMotivoCancel] = useState("");
   const [cancelando, setCancelando] = useState(false);
+  const [cambiando, setCambiando] = useState(false);
+
+  async function cambiarProposito() {
+    const nuevo: PropositoArreglo = arreglo.proposito === "volver_al_padron" ? "ponerse_al_dia" : "volver_al_padron";
+    setCambiando(true); setMsg("");
+    try { onCambio(await cambiarPropositoArreglo(arreglo.id, nuevo)); }
+    catch (e) { setMsg((e as Error).message); }
+    finally { setCambiando(false); }
+  }
 
   async function cancelar() {
     if (!motivoCancel.trim()) { setMsg("Indicá el motivo de la cancelación."); return; }
@@ -288,10 +397,22 @@ function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
           <div className="arreglo-resumen-row"><span>Titular</span><b>{arreglo.titular}</b></div>
           <div className="arreglo-resumen-row"><span>Estado</span>
             <b><span className={`pill ${ESTADO_PILL[arreglo.estado]}`}>{ESTADO_LABEL[arreglo.estado]}</span></b></div>
+          <div className="arreglo-resumen-row"><span>Para qué se firmó</span><b>{PROPOSITO_LABEL[arreglo.proposito] || "—"}</b></div>
+          {arreglo.descuento_monto > 0 && <>
+            <div className="arreglo-resumen-row"><span>Deuda de las cuotas</span><b>{L(arreglo.deuda_original)}</b></div>
+            <div className="arreglo-resumen-row"><span>Descuento ({arreglo.descuento_pct} %)</span><b>− {L(arreglo.descuento_monto)}</b></div>
+          </>}
           <div className="arreglo-resumen-row"><span>Deuda total</span><b>{L(arreglo.deuda_total)}</b></div>
           <div className="arreglo-resumen-row"><span>Abonado</span><b>{L(arreglo.total_abonado)}</b></div>
           <div className="arreglo-resumen-row total"><span>Saldo pendiente</span><b>{L(arreglo.saldo_pendiente)}</b></div>
         </div>
+
+        {arreglo.descuento_autorizado_por && (
+          <p className="muted small" style={{ marginTop: 8 }}>
+            Descuento autorizado por <b>{arreglo.descuento_autorizado_por}</b>
+            {arreglo.descuento_autorizado_en && ` el ${new Date(arreglo.descuento_autorizado_en).toLocaleString("es-HN")}`}.
+          </p>
+        )}
 
         {arreglo.meses_incluidos && arreglo.meses_incluidos.length > 0 && (
           <p className="muted small" style={{ marginTop: 8 }}>
@@ -301,7 +422,8 @@ function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
 
         {arreglo.estado === "incumplido" && (
           <div className="nota" style={{ background: "#fff0f0", borderColor: "#f5a3a3", marginTop: 8 }}>
-            <AlertTriangle size={16} /> {arreglo.motivo_cierre}. Las cuotas volvieron a mora y la cuenta fue bloqueada.
+            <AlertTriangle size={16} /> {arreglo.motivo_cierre}. Las cuotas volvieron a quedar pendientes
+            {arreglo.proposito === "volver_al_padron" ? " a nombre del titular (si la casa está en el padrón, no se bloquea)." : " y la cuenta fue bloqueada."}
             Lo abonado ({L(arreglo.total_abonado)}) quedó acreditado.
           </div>
         )}
@@ -336,6 +458,14 @@ function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
 
         {msg && <div className="error" style={{ marginTop: 8 }}>{msg}</div>}
 
+        {arreglo.estado === "activo" && (
+          <button className="ghost mini" style={{ marginTop: 12, marginRight: 8 }}
+            onClick={cambiarProposito} disabled={cambiando}>
+            {cambiando ? "Cambiando…" : arreglo.proposito === "volver_al_padron"
+              ? "Cambiar a: ponerse al día y seguir pagando"
+              : "Cambiar a: volver al padrón"}
+          </button>
+        )}
         {arreglo.estado === "activo" && (
           <button className="ghost mini" style={{ marginTop: 12, color: "#c81e1e" }}
             onClick={() => { setMotivoCancel(""); setMsg(""); setConfirmarCancel(true); }}>

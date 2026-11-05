@@ -62,6 +62,9 @@ class Usuario(db.Model):
     # esta bandera a deducirlo de password_hash IS NULL, para que los listados
     # y conteos de usuarios puedan excluirlos sin depender de un nulo.
     es_censo = db.Column(db.Boolean, nullable=False, default=False)
+    # Día 74 — True si se le apagó el acceso porque su casa volvió al padrón.
+    # Al volver a sumarse la casa se reactivan solo los que tienen esta marca.
+    suspendido_por_padron = db.Column(db.Boolean, nullable=False, default=False)
     # Foto del miembro, capturada SOLO por administración (Día 68, pedido del
     # patronato). Es la que ve el guardia para verificar identidad, y la que
     # el residente ve en su perfil — en modo lectura: si el propio residente

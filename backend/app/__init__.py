@@ -637,6 +637,24 @@ def create_app(config_class=Config):
             "ALTER TABLE verificaciones_correo ADD COLUMN IF NOT EXISTS usuario_id BIGINT",
             "ALTER TABLE verificaciones_correo ADD COLUMN IF NOT EXISTS cuenta_id BIGINT",
 
+            # ── Día 74 · Ciclo de vida de la casa ────────────────────────────
+            # Arreglo de pago: para qué se firmó, y el descuento autorizado
+            # por un SEGUNDO administrador (quién, cuándo, cuánto).
+            "ALTER TABLE arreglos_pago ADD COLUMN IF NOT EXISTS proposito VARCHAR(20) NOT NULL DEFAULT 'ponerse_al_dia'",
+            "ALTER TABLE arreglos_pago ADD COLUMN IF NOT EXISTS deuda_original NUMERIC(10,2)",
+            "ALTER TABLE arreglos_pago ADD COLUMN IF NOT EXISTS descuento_pct NUMERIC(5,2)",
+            "ALTER TABLE arreglos_pago ADD COLUMN IF NOT EXISTS descuento_monto NUMERIC(10,2)",
+            "ALTER TABLE arreglos_pago ADD COLUMN IF NOT EXISTS descuento_autorizado_por BIGINT REFERENCES usuarios(id)",
+            "ALTER TABLE arreglos_pago ADD COLUMN IF NOT EXISTS descuento_autorizado_en TIMESTAMPTZ",
+            # Casa que vuelve al padrón o se muda: constancia de cuándo y por qué.
+            "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS fecha_regreso_padron DATE",
+            "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS fecha_baja DATE",
+            "ALTER TABLE cuentas ADD COLUMN IF NOT EXISTS motivo_baja VARCHAR(255)",
+            # Usuarios apagados porque su casa volvió al padrón. Se marcan
+            # para que, si la casa se vuelve a sumar, se prendan SOLO esos y
+            # no alguien que la administración había desactivado por otra razón.
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS suspendido_por_padron BOOLEAN NOT NULL DEFAULT FALSE",
+
             # ── Día 72 · Sesión persistente de la app ────────────────────────
             # Token de renovación (solo su hash) para que la app no vuelva a
             # pedir la contraseña cada 12 horas. Ver models/sesion_activa.py.

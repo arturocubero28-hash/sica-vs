@@ -6,6 +6,7 @@ import {
   crearTarifa, editarTarifa, desactivarTarifa,
   validarCodigoEnrolamiento, toggleQrRecurrente, editarTipoAccesoVirtual, editarUnidad, editarInfoCasa,
   listarSolicitudesBaja, resolverSolicitudBaja, nivelarSaldo, getMiResidencial,
+  volverAlPadron, type ResultadoVolverPadron,
   subirFotoResidente, urlFotoResidente,
   type Cuenta, type Unidad, type Tarifa, type ResidenteDTO, type SolicitudBajaDTO,
 } from "../../api/client";
@@ -18,7 +19,7 @@ import { EstadoCorreo } from "../../components/EstadoCorreo";
 import { ConfirmacionEnvio } from "../../components/ConfirmacionEnvio";
 import { capitalizarNombre } from "../../utils/texto";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
-import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera } from "lucide-react";
+import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera, AlertTriangle } from "lucide-react";
 
 
 export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
@@ -242,7 +243,7 @@ function ListaCuentas({ cuentas, onAbrir, onRecargar }: {
                               disabled={procesando === c.id} onClick={() => alternarPausa(c)}>
                               {pausada ? <Play size={16} /> : <Pause size={16} />}
                             </button>
-                            <button className="icono-accion icono-accion--baja" title="Dar de baja" disabled={procesando === c.id} onClick={() => setCuentaBaja(c)}>
+                            <button className="icono-accion icono-accion--baja" title="Salida del sistema: se muda, o vuelve al padrón" disabled={procesando === c.id} onClick={() => setCuentaBaja(c)}>
                               <Trash2 size={16} />
                             </button>
                           </>}
@@ -2426,18 +2427,34 @@ function SolicitudesBajaPanel({ onCambio }: { onCambio: () => void }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   MODAL: DAR DE BAJA UNA CUENTA (con guía y nivelación de saldo)
+   MODAL: SALIDA DE UNA CASA DEL SISTEMA DE CUOTAS (Día 74)
+   Dos caminos distintos, que antes se confundían en uno solo:
+     · Se muda   → baja. Si debe, la deuda queda a nombre del titular.
+     · Se queda  → vuelve al padrón: deja de pagar mensualidad, el guardia
+                   la sigue identificando, pero sin app. Con deuda, solo si
+                   firmó un arreglo «para volver al padrón».
    ═══════════════════════════════════════════════════════════════════ */
 function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
   cuenta: Cuenta; onCerrar: () => void; onBajaCompletada: () => void;
 }) {
-  const [fechaDes, setFechaDes] = useState(new Date().toISOString().split("T")[0]);
+  const hoy = new Date().toISOString().split("T")[0];
+  const [camino, setCamino] = useState<"" | "mudanza" | "padron">("");
+  const [fechaDes, setFechaDes] = useState(hoy);
+  const [motivo, setMotivo] = useState("");
   const [nivelando, setNivelando] = useState(false);
-  const [dandoBaja, setDandoBaja] = useState(false);
+  const [trabajando, setTrabajando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
   const [ajustes, setAjustes] = useState<{ periodo: string; accion: string; dias_ocupados?: number; monto_original: number; monto_final: number }[] | null>(null);
+  // Mudanza con deuda: el backend avisa cuánto debe y hay que confirmar.
+  const [deudaAviso, setDeudaAviso] = useState<string | null>(null);
+  // Volver al padrón: primero se simula y se muestra qué va a pasar.
+  const [simulacion, setSimulacion] = useState<ResultadoVolverPadron | null>(null);
 
   const nombre = cuenta.identificador || (cuenta.apartamento ? `Apto ${cuenta.apartamento}` : "esta cuenta");
+
+  function elegir(c: "mudanza" | "padron") {
+    setCamino(c); setMsg(null); setDeudaAviso(null); setSimulacion(null); setAjustes(null);
+  }
 
   async function handleNivelar() {
     if (!fechaDes) { setMsg({ tipo: "err", texto: "Seleccioná la fecha de desocupación" }); return; }
@@ -2450,47 +2467,77 @@ function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
     finally { setNivelando(false); }
   }
 
-  async function handleBaja() {
-    if (!confirm(
-      `¿Confirmar la baja de ${nombre}?\n\n` +
-      `Se verificará que el saldo esté en 0. Al ejecutar:\n` +
-      `• La cuenta dejará de generar cuotas\n` +
-      `• Sus residentes perderán acceso a crear QR\n` +
-      `• Todas sus tarjetas quedarán desactivadas\n\n` +
-      `Podés reactivarla después si es necesario.`
-    )) return;
-    setDandoBaja(true); setMsg(null);
+  async function handleBaja(confirmarDeuda = false) {
+    setTrabajando(true); setMsg(null);
     try {
-      await darBajaCuenta(cuenta.id);
+      await darBajaCuenta(cuenta.id, { motivo: motivo.trim() || "Mudanza", confirmar_deuda: confirmarDeuda });
+      onBajaCompletada();
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      if (err.code === "saldo_pendiente" && !confirmarDeuda) setDeudaAviso(err.message);
+      else setMsg({ tipo: "err", texto: err.message });
+    }
+    finally { setTrabajando(false); }
+  }
+
+  async function simularPadron() {
+    setTrabajando(true); setMsg(null); setSimulacion(null);
+    try { setSimulacion(await volverAlPadron(cuenta.id, { fecha: fechaDes, simular: true })); }
+    catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+    finally { setTrabajando(false); }
+  }
+
+  async function confirmarPadron() {
+    setTrabajando(true); setMsg(null);
+    try {
+      await volverAlPadron(cuenta.id, { fecha: fechaDes });
       onBajaCompletada();
     } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
-    finally { setDandoBaja(false); }
+    finally { setTrabajando(false); }
   }
+
+  const ajustesTabla = (lista: typeof ajustes) => lista && lista.length > 0 && (
+    <div className="baja-ajustes">
+      {lista.map((a, i) => (
+        <div key={i} className="baja-ajuste-fila">
+          <span>{new Date(a.periodo + "T00:00:00").toLocaleDateString("es-HN", { month: "long", year: "numeric" })}</span>
+          <span>
+            {a.accion === "anulada"
+              ? <>Anulada (era L {a.monto_original.toFixed(2)})</>
+              : <>{a.dias_ocupados} días → <b>L {a.monto_final.toFixed(2)}</b> (era L {a.monto_original.toFixed(2)})</>}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="modal" onClick={onCerrar}>
-      <div className="modal-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+      <div className="modal-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 580 }}>
         <div className="modal-head">
           <h3 className="modal-head-titulo">
             <span className="modal-tipo-icon" style={{ background: "#fee2e2", color: "#991b1b" }}>
               <Trash2 size={20} />
             </span>
-            Dar de baja — {nombre}
+            Salida del sistema — {nombre}
           </h3>
           <button className="ghost mini" onClick={onCerrar}>Cerrar</button>
         </div>
 
-        {/* Instrucciones */}
-        <div className="baja-instrucciones">
-          <p><b>Para dar de baja una cuenta, el saldo debe estar en L 0.00.</b> Seguí estos pasos:</p>
-          <ol>
-            <li><b>Nivelar saldo</b> — si ya se generó una cuota que el residente no va a ocupar completa,
-              indicá la fecha de desocupación y el sistema prorratea la cuota a los días realmente ocupados.</li>
-            <li><b>Registrar el pago</b> — si después de nivelar queda un monto por pagar, el residente
-              debe pagarlo en Caja antes de continuar.</li>
-            <li><b>Dar de baja</b> — con el saldo en 0, la baja desactiva la cuenta, sus accesos QR y
-              todas sus tarjetas.</li>
-          </ol>
+        <p className="muted small" style={{ margin: "0 0 10px" }}>¿Qué pasa con esta familia?</p>
+        <div className="proposito-opciones" role="radiogroup">
+          <label className={`proposito-op ${camino === "padron" ? "sel" : ""}`}>
+            <input type="radio" name="camino" checked={camino === "padron"} onChange={() => elegir("padron")} />
+            <b>Sigue viviendo acá, pero deja de pagar mensualidad</b>
+            <span className="muted small">Vuelve al padrón: el guardia la sigue identificando, pero sin app.
+              Si debe, primero tiene que firmar un arreglo de pago «para volver al padrón».</span>
+          </label>
+          <label className={`proposito-op ${camino === "mudanza" ? "sel" : ""}`}>
+            <input type="radio" name="camino" checked={camino === "mudanza"} onChange={() => elegir("mudanza")} />
+            <b>Se va de la residencial</b>
+            <span className="muted small">Baja por mudanza. Si se va debiendo, la deuda queda a su nombre y no puede
+              darse de alta en otra casa hasta pagarla. La casa queda libre para la próxima familia.</span>
+          </label>
         </div>
 
         {msg && (
@@ -2500,51 +2547,100 @@ function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
           </div>
         )}
 
-        {/* Paso 1: nivelar saldo */}
-        <div className="baja-paso">
-          <div className="baja-paso-titulo">Paso 1 · Nivelar saldo (opcional si ya está en 0)</div>
-          <div className="row" style={{ alignItems: "flex-end" }}>
-            <div className="form-field" style={{ flex: 1 }}>
-              <label>Fecha de desocupación</label>
-              <input type="date" value={fechaDes} max={new Date().toISOString().split("T")[0]}
-                onChange={e => setFechaDes(e.target.value)} />
+        {camino === "padron" && (
+          <div className="baja-paso">
+            <div className="baja-paso-titulo">Desde qué fecha deja de pagar</div>
+            <p className="muted small" style={{ margin: "0 0 8px" }}>
+              La cuota de este mes se cobra solo por los días hasta esa fecha, y no se generan más.
+            </p>
+            <div className="row" style={{ alignItems: "flex-end" }}>
+              <div className="form-field" style={{ flex: 1 }}>
+                <label>Fecha</label>
+                <input type="date" value={fechaDes} max={hoy}
+                  onChange={e => { setFechaDes(e.target.value); setSimulacion(null); }} />
+              </div>
+              <button className="btn-tabla btn-tabla-editar" onClick={simularPadron} disabled={trabajando}
+                style={{ height: 38 }}>
+                {trabajando && !simulacion ? "Calculando…" : "Ver qué va a pasar"}
+              </button>
             </div>
-            <button className="btn-tabla btn-tabla-editar" onClick={handleNivelar} disabled={nivelando}
-              style={{ height: 38 }}>
-              ⚖ {nivelando ? "Nivelando…" : "Nivelar saldo"}
-            </button>
+
+            {simulacion && (
+              <div className="padron-simulacion">
+                {ajustesTabla(simulacion.ajustes)}
+                <ul>
+                  {simulacion.queda_debiendo_fuera_de_arreglo > 0 && (
+                    <li>Queda debiendo <b>L {simulacion.queda_debiendo_fuera_de_arreglo.toFixed(2)}</b> de la cuota de este mes, que se cobra en caja.</li>
+                  )}
+                  {simulacion.arreglo && (
+                    <li>Su arreglo de pago sigue: le faltan <b>L {simulacion.arreglo.saldo_pendiente.toFixed(2)}</b>
+                      {" "}({simulacion.arreglo.abonos_total - simulacion.arreglo.abonos_pagados} abonos), que se cobran en caja.</li>
+                  )}
+                  <li>{simulacion.suspendidos.usuarios} persona(s) pierden la app
+                    {simulacion.suspendidos.tarjetas > 0 && `, se desactivan ${simulacion.suspendidos.tarjetas} tarjeta(s)`}
+                    {simulacion.suspendidos.visitas > 0 && ` y se anulan ${simulacion.suspendidos.visitas} QR de visita`}.
+                    Si la casa se vuelve a sumar, recuperan la app.</li>
+                  <li>Para volver a sumarse tiene que estar al día con el arreglo y no deber nada más.</li>
+                </ul>
+                <button className="agregar-miembro-btn" onClick={confirmarPadron} disabled={trabajando}
+                  style={{ width: "100%" }}>
+                  {trabajando ? "Procesando…" : `Pasar ${nombre} al padrón`}
+                </button>
+              </div>
+            )}
           </div>
+        )}
 
-          {ajustes && ajustes.length > 0 && (
-            <div className="baja-ajustes">
-              {ajustes.map((a, i) => (
-                <div key={i} className="baja-ajuste-fila">
-                  <span>{new Date(a.periodo + "T00:00:00").toLocaleDateString("es-HN", { month: "long", year: "numeric" })}</span>
-                  <span>
-                    {a.accion === "anulada"
-                      ? <>Anulada (era L {a.monto_original.toFixed(2)})</>
-                      : <>{a.dias_ocupados} días → <b>L {a.monto_final.toFixed(2)}</b> (era L {a.monto_original.toFixed(2)})</>}
-                  </span>
-                </div>
-              ))}
-              <p className="muted small" style={{ margin: "8px 0 0" }}>
-                Si queda monto por pagar, registralo en <b>Caja</b> antes de dar de baja.
+        {camino === "mudanza" && (
+          <>
+            <div className="baja-paso">
+              <div className="baja-paso-titulo">Paso 1 · Nivelar el saldo (recomendado)</div>
+              <p className="muted small" style={{ margin: "0 0 8px" }}>
+                Si ya se generó una cuota que no va a ocupar completa, se cobra solo por los días ocupados.
               </p>
+              <div className="row" style={{ alignItems: "flex-end" }}>
+                <div className="form-field" style={{ flex: 1 }}>
+                  <label>Fecha de desocupación</label>
+                  <input type="date" value={fechaDes} max={hoy}
+                    onChange={e => setFechaDes(e.target.value)} />
+                </div>
+                <button className="btn-tabla btn-tabla-editar" onClick={handleNivelar} disabled={nivelando}
+                  style={{ height: 38 }}>
+                  ⚖ {nivelando ? "Nivelando…" : "Nivelar saldo"}
+                </button>
+              </div>
+              {ajustesTabla(ajustes)}
             </div>
-          )}
-        </div>
 
-        {/* Paso 2: dar de baja */}
-        <div className="baja-paso">
-          <div className="baja-paso-titulo">Paso 2 · Ejecutar la baja</div>
-          <p className="muted small" style={{ margin: "0 0 10px" }}>
-            El sistema verificará que el saldo esté en 0. Si hay cuotas pendientes, la baja será rechazada.
-          </p>
-          <button className="btn-tabla btn-tabla-baja" onClick={handleBaja} disabled={dandoBaja}
-            style={{ width: "100%", justifyContent: "center", padding: "10px" }}>
-            <Trash2 size={15} /> {dandoBaja ? "Procesando…" : `Dar de baja ${nombre}`}
-          </button>
-        </div>
+            <div className="baja-paso">
+              <div className="baja-paso-titulo">Paso 2 · Dar de baja</div>
+              <div className="form-field">
+                <label>Motivo (queda en el historial)</label>
+                <input value={motivo} placeholder="Ej. Se mudó a San Pedro Sula"
+                  onChange={e => setMotivo(e.target.value)} />
+              </div>
+              {deudaAviso ? (
+                <div className="info-box warn" style={{ marginTop: 10 }}>
+                  <AlertTriangle size={15} />
+                  <div>
+                    <span>{deudaAviso}</span>
+                    <div className="row-btns" style={{ marginTop: 10, gap: 8 }}>
+                      <button className="ghost" onClick={() => setDeudaAviso(null)} disabled={trabajando}>Volver</button>
+                      <button style={{ background: "#c81e1e" }} onClick={() => handleBaja(true)} disabled={trabajando}>
+                        {trabajando ? "Procesando…" : "Se va igual: dar de baja con la deuda"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button className="btn-tabla btn-tabla-baja" onClick={() => handleBaja(false)} disabled={trabajando}
+                  style={{ width: "100%", justifyContent: "center", padding: "10px", marginTop: 10 }}>
+                  <Trash2 size={15} /> {trabajando ? "Procesando…" : `Dar de baja ${nombre}`}
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

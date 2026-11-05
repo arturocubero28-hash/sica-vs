@@ -345,7 +345,9 @@ def buscar_residente_por_codigo(usuario_actual):
                 u = residente.usuario
                 if not (residente.activo and u):
                     continue
-                if u.es_censo or not u.tiene_codigo_emergencia:
+                # Día 74 — también quien tiene la app suspendida porque su
+                # casa volvió al padrón: para el guardia es gente de padrón.
+                if u.es_censo or not u.activo or not u.tiene_codigo_emergencia:
                     personas.append((cuenta, residente))
 
         if not personas:
@@ -406,7 +408,7 @@ def _persona_para_guardia(cuenta, residente):
         "relacion": residente.relacion,
         "apartamento": cuenta.apartamento,
         "es_censo": bool(u.es_censo),
-        "origen": "padron" if u.es_censo else "sin_codigo",
+        "origen": "padron" if (u.es_censo or not u.activo) else "sin_codigo",
     }
 
 
@@ -465,7 +467,7 @@ def registrar_acceso_residente(usuario_actual):
     # persona demostró algo que solo ella sabe; del padrón, la única prueba
     # es que el guardia comparó la identificación contra la ficha.
     u = residente.usuario
-    if u.es_censo:
+    if u.es_censo or not u.activo:
         metodo = "padron_identidad"
     elif u.tiene_codigo_emergencia:
         metodo = "codigo_emergencia"

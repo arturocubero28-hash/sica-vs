@@ -2,11 +2,11 @@ import { useState, useEffect, Fragment } from "react";
 import {
   listarCenso, crearCasaCenso, agregarPersonaCenso, convertirCasaCenso,
   darAccesoPersona, urlFotoResidente, listarTarifas, subirFotoResidente, sumarCasaCenso,
-  listarUnidades,
-  type Cuenta, type ResidenteDTO, type Tarifa, type ResumenPadron, type Unidad,
+  listarUnidades, mudanzaCasaCenso,
+  type Cuenta, type ResidenteDTO, type Tarifa, type ResumenPadron, type Unidad, type DeudaCasa,
 } from "../../api/client";
 import {
-  UserPlus, Camera, ArrowUpRight, ChevronDown, ChevronRight, Home, Building2, Info,
+  UserPlus, Camera, ArrowUpRight, ChevronDown, ChevronRight, Home, Building2, Info, LogOut, AlertTriangle,
 } from "lucide-react";
 import { ModalFotoResidente } from "../../components/ModalFotoResidente";
 import { CapturaFoto } from "../../components/CapturaFoto";
@@ -38,12 +38,26 @@ function MsgBanner({ msg, onClose }: { msg: { tipo: "ok" | "err"; texto: string 
   );
 }
 
+type CasaPadron = Cuenta & { deuda?: DeudaCasa };
+
+/** Día 74 — una línea con lo que debe una casa que volvió al padrón. */
+function resumenDeuda(d?: DeudaCasa): { texto: string; clase: string } | null {
+  if (!d) return null;
+  if (d.arreglo?.atrasado) return { texto: `Arreglo atrasado · debe L ${d.total.toFixed(2)}`, clase: "red" };
+  if (d.fuera_de_arreglo > 0 && !d.arreglo) return { texto: `Debe L ${d.fuera_de_arreglo.toFixed(2)}`, clase: "red" };
+  if (d.arreglo) return {
+    texto: `Arreglo al día · ${d.arreglo.abonos_pagados}/${d.arreglo.abonos_total} abonos · faltan L ${d.arreglo.saldo_pendiente.toFixed(2)}`
+      + (d.fuera_de_arreglo > 0 ? ` + L ${d.fuera_de_arreglo.toFixed(2)} aparte` : ""),
+    clase: d.fuera_de_arreglo > 0 ? "amber" : "green" };
+  return { texto: "Al día", clase: "green" };
+}
+
 export function CensoPanel() {
-  const [casas, setCasas] = useState<Cuenta[]>([]);
+  const [casas, setCasas] = useState<CasaPadron[]>([]);
   const [resumen, setResumen] = useState<ResumenPadron | null>(null);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
-  const [filtro, setFiltro] = useState<"todas" | "casas" | "edificios" | "incompletas">("todas");
+  const [filtro, setFiltro] = useState<"todas" | "casas" | "edificios" | "incompletas" | "con_deuda">("todas");
   const [pagina, setPagina] = useState(1);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
@@ -52,6 +66,7 @@ export function CensoPanel() {
   const [modalPersona, setModalPersona] = useState<Cuenta | null>(null);
   const [modalConvertir, setModalConvertir] = useState<Cuenta | null>(null);
   const [modalAcceso, setModalAcceso] = useState<{ casa: Cuenta; persona: ResidenteDTO } | null>(null);
+  const [modalMudanza, setModalMudanza] = useState<CasaPadron | null>(null);
 
   function recargar() {
     setCargando(true);
@@ -82,6 +97,7 @@ export function CensoPanel() {
     if (filtro === "casas" && esDeEdificio(c)) return false;
     if (filtro === "edificios" && !esDeEdificio(c)) return false;
     if (filtro === "incompletas" && !falta(c)) return false;
+    if (filtro === "con_deuda" && !(c.deuda && c.deuda.total > 0)) return false;
     if (!q) return true;
     const gente = (c.residentes || []).map(r => r.nombre).join(" ");
     return `${c.nombre_completo || c.identificador || ""} ${c.apartamento || ""} ${gente}`.toLowerCase().includes(q);
@@ -214,6 +230,7 @@ export function CensoPanel() {
             <option value="casas">Solo casas</option>
             <option value="edificios">Solo edificios</option>
             <option value="incompletas">Les falta información</option>
+            <option value="con_deuda">Con arreglo o deuda</option>
           </select>
         </div>
         <div className="casas-contador muted small">
@@ -266,8 +283,13 @@ export function CensoPanel() {
                       </tr>
                     );
                   }
-                  const casa = fila.casa;
+                  const casa = fila.casa as CasaPadron;
                   const sangria = fila.sangria;
+                  const deuda = resumenDeuda(casa.deuda);
+                  // Día 74 — no puede volver a sumarse si debe algo fuera del
+                  // arreglo o tiene un abono vencido. Se avisa desde la fila
+                  // en vez de dejar que lo descubra a mitad del asistente.
+                  const bloqueadaPorDeuda = !!casa.deuda && !casa.deuda.al_dia;
                   const esContenedora = casa.tipo_cuenta === "edificio_contenedor";
                   const expandida = abierta === casa.id;
                   const gente = casa.residentes || [];
@@ -295,6 +317,15 @@ export function CensoPanel() {
                                   para verlas. La fila se expandía con un
                                   chevron sin explicación, así que las fotos
                                   y los miembros quedaban escondidos ahí. */}
+                              {casa.fecha_regreso_padron && (
+                                <span className="casa-titular">
+                                  Volvió al padrón el {new Date(casa.fecha_regreso_padron + "T00:00:00").toLocaleDateString("es-HN")}
+                                  {deuda && <> · <span className={`pill ${deuda.clase}`}>{deuda.texto}</span></>}
+                                </span>
+                              )}
+                              {!casa.fecha_regreso_padron && deuda && casa.deuda!.total > 0 && (
+                                <span className="casa-titular"><span className={`pill ${deuda.clase}`}>{deuda.texto}</span></span>
+                              )}
                               <span className="casa-titular">
                                 Solo padrón · {gente.length === 0
                                   ? "sin personas"
@@ -325,11 +356,19 @@ export function CensoPanel() {
                               </button>
                             )}
                             <button className="btn-tabla btn-tabla-ok"
-                              title={esContenedora
-                                ? "El dueño se suma al sistema; no paga cuota"
-                                : "Esta familia decidió sumarse al sistema y pagar cuota"}
+                              disabled={bloqueadaPorDeuda}
+                              title={bloqueadaPorDeuda
+                                ? "Tiene que ponerse al día con su arreglo (o pagar lo que debe) antes de volver a sumarse"
+                                : esContenedora
+                                  ? "El dueño se suma al sistema; no paga cuota"
+                                  : "Esta familia decidió sumarse al sistema y pagar cuota"}
                               onClick={() => setModalConvertir(casa)}>
                               <ArrowUpRight size={14} /> Sumar al sistema
+                            </button>
+                            <button className="btn-tabla btn-tabla-neutro"
+                              title="La familia se fue de la residencial: la casa sale del padrón"
+                              onClick={() => setModalMudanza(casa)}>
+                              <LogOut size={14} /> Se mudó
                             </button>
                           </div>
                         </td>
@@ -399,6 +438,17 @@ export function CensoPanel() {
             setMsg({ tipo: "ok", texto: nota });
           }}
           onError={t => setMsg({ tipo: "err", texto: t })}
+        />
+      )}
+
+      {modalMudanza && (
+        <ModalMudanza
+          casa={modalMudanza}
+          onCerrar={() => setModalMudanza(null)}
+          onListo={(texto) => {
+            setModalMudanza(null); recargar();
+            setMsg({ tipo: "ok", texto });
+          }}
         />
       )}
 
@@ -472,7 +522,9 @@ function FilaPersonas({ casa, onMsg, onCambio, onDarAcceso }: {
                 <ArrowUpRight size={16} />
               </button>
             )}
-            {!p.es_censo && <span className="pill green">Con acceso</span>}
+            {!p.es_censo && (p.estado_acceso === "suspendido"
+              ? <span className="pill amber" title="Su casa volvió al padrón. Recupera la app si la casa se vuelve a sumar.">App suspendida</span>
+              : <span className="pill green">Con acceso</span>)}
           </div>
         </div>
       ))}
@@ -486,6 +538,74 @@ function FilaPersonas({ casa, onMsg, onCambio, onDarAcceso }: {
             onMsg({ tipo: "ok", texto: `Foto de ${fotoDe.nombre} actualizada.` });
           }} />
       )}
+    </div>
+  );
+}
+
+// ─── Día 74 — Modal: la familia se mudó ─────────────────────────────────
+function ModalMudanza({ casa, onCerrar, onListo }: {
+  casa: CasaPadron; onCerrar: () => void; onListo: (texto: string) => void;
+}) {
+  const [motivo, setMotivo] = useState("");
+  const [trabajando, setTrabajando] = useState(false);
+  const [error, setError] = useState("");
+  const [avisoDeuda, setAvisoDeuda] = useState<string | null>(null);
+  const nombre = casa.nombre_completo || casa.identificador || "la casa";
+
+  async function confirmar(conDeuda: boolean) {
+    setTrabajando(true); setError("");
+    try {
+      const r = await mudanzaCasaCenso(casa.id, { motivo: motivo.trim() || "Se mudó", confirmar_deuda: conDeuda });
+      onListo(r.deuda_pendiente > 0
+        ? `${nombre} salió del padrón. La deuda de L ${r.deuda_pendiente.toFixed(2)} queda a nombre del titular.`
+        : `${nombre} salió del padrón. Queda libre para la próxima familia.`);
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      if (err.code === "saldo_pendiente" && !conDeuda) setAvisoDeuda(err.message);
+      else setError(err.message);
+    } finally { setTrabajando(false); }
+  }
+
+  return (
+    <div className="modal" onClick={() => !trabajando && onCerrar()}>
+      <div className="modal-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <div className="modal-head">
+          <h3>Se mudó — {nombre}</h3>
+          <button className="ghost mini" onClick={onCerrar} disabled={trabajando}>✕</button>
+        </div>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          La casa sale del padrón y el guardia ya no la va a encontrar. No se borra nada:
+          quedan sus personas y sus accesos registrados como historial, y la casa queda
+          libre para registrar a la familia que llegue.
+        </p>
+        <label className="campo" style={{ display: "block" }}>
+          <span className="muted small">Motivo (queda en el historial)</span>
+          <input value={motivo} placeholder="Ej. Se fueron a Tegucigalpa"
+            onChange={e => setMotivo(e.target.value)} style={{ width: "100%", marginTop: 4 }} />
+        </label>
+        {error && <div className="error" style={{ marginTop: 10 }}>{error}</div>}
+        {avisoDeuda ? (
+          <div className="info-box warn" style={{ marginTop: 12 }}>
+            <AlertTriangle size={15} />
+            <div>
+              <span>{avisoDeuda}</span>
+              <div className="row-btns" style={{ marginTop: 10, gap: 8 }}>
+                <button className="ghost" onClick={() => setAvisoDeuda(null)} disabled={trabajando}>Volver</button>
+                <button style={{ background: "#c81e1e" }} onClick={() => confirmar(true)} disabled={trabajando}>
+                  {trabajando ? "Procesando…" : "Se fue igual: sacarla con la deuda"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="row-btns" style={{ marginTop: 14, justifyContent: "flex-end", gap: 8 }}>
+            <button className="ghost" onClick={onCerrar} disabled={trabajando}>Cancelar</button>
+            <button style={{ background: "#c81e1e" }} onClick={() => confirmar(false)} disabled={trabajando}>
+              {trabajando ? "Procesando…" : "Sacar del padrón"}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

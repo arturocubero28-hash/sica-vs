@@ -126,6 +126,14 @@ class Cuenta(db.Model):
     # constancia de desde cuándo se le empezó a cobrar: las cuotas arrancan
     # en el mes en curso y nunca hacia atrás.
     fecha_conversion = db.Column(db.Date)
+    # Día 74 — la casa dejó de pagar mensualidad y volvió al padrón (sigue
+    # viviendo ahí). Las conversiones y regresos pueden repetirse; esta es la
+    # fecha del último regreso.
+    fecha_regreso_padron = db.Column(db.Date)
+    # Día 74 — baja definitiva (mudanza). La cuenta no se borra: queda como
+    # historial, y si se fue debiendo, la deuda sigue a nombre del titular.
+    fecha_baja = db.Column(db.Date)
+    motivo_baja = db.Column(db.String(255))
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -271,6 +279,10 @@ class Cuenta(db.Model):
             "modo_participacion": self.modo_participacion,
             "es_censo": self.es_censo,
             "fecha_conversion": self.fecha_conversion.isoformat() if self.fecha_conversion else None,
+            "fecha_regreso_padron": (self.fecha_regreso_padron.isoformat()
+                                     if self.fecha_regreso_padron else None),
+            "fecha_baja": self.fecha_baja.isoformat() if self.fecha_baja else None,
+            "motivo_baja": self.motivo_baja,
             "tarifa_id": self.tarifa_id,
             "tarifa": self.tarifa.nombre if self.tarifa else None,
             "monto": float(self.tarifa.monto) if self.tarifa else None,
@@ -411,6 +423,9 @@ class Residente(db.Model):
             # "pendiente" haría creer que falta mandarle un correo.
             "estado_acceso": (
                 "censo" if (u and u.es_censo)
+                # Día 74 — la casa volvió al padrón: tiene cuenta, pero la
+                # app está apagada hasta que la casa se vuelva a sumar.
+                else "suspendido" if (u and u.suspendido_por_padron)
                 else "activo" if (u and u.activo and u.password_hash)
                 else "pendiente"
             ),
@@ -783,6 +798,21 @@ class ArregloPago(db.Model):
     num_abonos          = db.Column(db.Integer, nullable=False)
     monto_por_abono     = db.Column(db.Numeric(10, 2), nullable=False)
 
+    # Día 74 — para qué se firmó el arreglo:
+    #   'ponerse_al_dia'   → la casa salda lo atrasado y sigue pagando su cuota.
+    #   'volver_al_padron' → la casa salda lo atrasado y deja de pagar
+    #                        mensualidad: vuelve al padrón. Es el único camino
+    #                        para que una casa CON deuda vuelva al padrón.
+    proposito           = db.Column(db.String(20), nullable=False, default="ponerse_al_dia")
+    # Descuento sobre la deuda. Sin tope, pero siempre autorizado por un
+    # SEGUNDO administrador con su propia contraseña: queda quién y cuándo.
+    # deuda_total ya es la deuda CON el descuento; deuda_original, la de antes.
+    deuda_original           = db.Column(db.Numeric(10, 2))
+    descuento_pct            = db.Column(db.Numeric(5, 2))
+    descuento_monto          = db.Column(db.Numeric(10, 2))
+    descuento_autorizado_por = db.Column(db.BigInteger, db.ForeignKey("usuarios.id"))
+    descuento_autorizado_en  = db.Column(db.DateTime(timezone=True))
+
     # Política de incumplimiento
     dias_gracia         = db.Column(db.Integer, nullable=False, default=15)
     # Intervalo entre abonos, en días (configurable al crear el arreglo)
@@ -800,6 +830,7 @@ class ArregloPago(db.Model):
 
     cuenta  = db.relationship("Cuenta", backref="arreglos")
     creador = db.relationship("Usuario", foreign_keys=[creado_por])
+    autorizador_descuento = db.relationship("Usuario", foreign_keys=[descuento_autorizado_por])
     abonos  = db.relationship("AbonoArreglo", backref="arreglo",
                               lazy="select", cascade="all, delete-orphan")
     # Cuotas congeladas por este arreglo
@@ -823,15 +854,35 @@ class ArregloPago(db.Model):
 
     def proximo_abono(self):
         """El siguiente abono pendiente (por fecha), o None si no hay."""
-        pendientes = [a for a in self.abonos if a.estado == "pendiente"]
+        # "vencido" también es impago: solo es un pendiente que se pasó de fecha.
+        pendientes = [a for a in self.abonos if a.estado in ("pendiente", "vencido")]
         if not pendientes:
             return None
         return min(pendientes, key=lambda a: a.fecha_pactada)
 
+    def atrasado(self, hoy=None):
+        """True si tiene algún abono impago con la fecha pactada ya pasada.
+        Es lo que impide que una casa del padrón se vuelva a sumar."""
+        hoy = hoy or dt.date.today()
+        return any(a.estado in ("pendiente", "vencido") and a.fecha_pactada < hoy
+                   for a in self.abonos)
+
     def to_dict(self, con_detalle=False):
+        prox = self.proximo_abono()
         d = {
             "id":               str(self.uuid_publico),
             "estado":           self.estado,
+            "proposito":        self.proposito or "ponerse_al_dia",
+            "deuda_original":   float(self.deuda_original) if self.deuda_original is not None else float(self.deuda_total),
+            "descuento_pct":    float(self.descuento_pct) if self.descuento_pct is not None else 0.0,
+            "descuento_monto":  float(self.descuento_monto) if self.descuento_monto is not None else 0.0,
+            "descuento_autorizado_por": (
+                f"{self.autorizador_descuento.nombre} {self.autorizador_descuento.apellido}"
+                if self.autorizador_descuento else None),
+            "descuento_autorizado_en": (self.descuento_autorizado_en.isoformat()
+                                        if self.descuento_autorizado_en else None),
+            "atrasado":         self.atrasado() if self.estado == "activo" else False,
+            "proximo_abono":    prox.to_dict() if prox else None,
             "deuda_total":      float(self.deuda_total),
             "abono_inicial":    float(self.abono_inicial),
             "saldo_financiado": float(self.saldo_financiado),

@@ -50,7 +50,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const err = json as ApiError;
-    throw new Error(err.error?.message || "Error de servidor");
+    // Día 74 — el código viaja con el error, para que una pantalla pueda
+    // distinguir "falta confirmar" (saldo_pendiente) de un error de verdad.
+    const e = new Error(err.error?.message || "Error de servidor") as Error & { code?: string };
+    e.code = err.error?.code;
+    throw e;
   }
   return (json as { data: T }).data;
 }
@@ -113,7 +117,7 @@ export interface ResidenteDTO {
   // esa persona no está esperando activar nada, simplemente no usa el
   // sistema. Mostrarla como pendiente haría creer que falta mandarle un
   // correo de activación que no corresponde.
-  estado_acceso: "activo" | "pendiente" | "censo";
+  estado_acceso: "activo" | "pendiente" | "censo" | "suspendido";
   // Día 72 — qué pasó con el último correo que se le mandó. Lo llena el
   // webhook de Resend; "rebotado" significa que la dirección no existe.
   correo_estado?: "enviado" | "entregado" | "rebotado" | "queja" | "demorado" | null;
@@ -153,6 +157,10 @@ export interface Cuenta {
   modo_participacion?: "censo" | "completa";
   es_censo?: boolean;
   fecha_conversion?: string | null;
+  /** Día 74 */
+  fecha_regreso_padron?: string | null;
+  fecha_baja?: string | null;
+  motivo_baja?: string | null;
   residentes?: ResidenteDTO[]; tarjetas?: TarjetaDTO[];
   unidad?: UnidadDetalle; cuotas_recientes?: CuotaResumen[];
   apartamentos?: ApartamentoResumen[];
@@ -206,8 +214,27 @@ export interface ResumenPadron {
   censo: number; completas: number; total: number;
   convertidas: number; pct_completas: number;
 }
+/** Día 74 — lo que debe una casa que estuvo en el sistema: lo que está en
+ *  un arreglo (se paga en abonos) y lo que no. Decide si puede volver. */
+export interface DeudaCasa {
+  fuera_de_arreglo: number;
+  cuotas_fuera_de_arreglo: number;
+  total: number;
+  al_dia: boolean;
+  arreglo: null | {
+    id: string; proposito: string; saldo_pendiente: number;
+    abonos_pagados: number; abonos_total: number; atrasado: boolean;
+    proximo_abono: AbonoDTO | null;
+  };
+}
 export const listarCenso = () =>
-  request<{ casas: Cuenta[]; total: number; resumen?: ResumenPadron }>("/censo");
+  request<{ casas: (Cuenta & { deuda?: DeudaCasa })[]; total: number; resumen?: ResumenPadron }>("/censo");
+
+/** Día 74 — la familia se fue: la casa sale del padrón (queda el historial). */
+export const mudanzaCasaCenso = (cuentaId: string, body: { motivo?: string; confirmar_deuda?: boolean } = {}) =>
+  request<{ casa: Cuenta; deuda_pendiente: number }>(`/censo/casas/${cuentaId}/mudanza`, {
+    method: "POST", body: JSON.stringify(body),
+  });
 
 /** Da de alta una casa O un apartamento en el padrón.
  *
@@ -321,8 +348,27 @@ export function urlFotoResidente(nombreArchivo: string): string {
   const token = getToken();
   return `${API_URL}/unidades/residentes/foto/${nombreArchivo}?_auth=${token}`;
 }
-export const darBajaCuenta = (id: string) =>
-  request<Cuenta>(`/unidades/cuentas/${id}/baja`, { method: "POST" });
+/** Día 74 — baja por mudanza. Si la casa debe, el backend responde
+ *  `saldo_pendiente` y hay que volver a llamar con confirmar_deuda: la
+ *  deuda queda a nombre del titular. */
+export const darBajaCuenta = (id: string, body: { motivo?: string; confirmar_deuda?: boolean } = {}) =>
+  request<Cuenta & { deuda_pendiente: number }>(`/unidades/cuentas/${id}/baja`, {
+    method: "POST", body: JSON.stringify(body),
+  });
+
+/** Día 74 — lo que pasa (o pasaría, con simular) al volver al padrón. */
+export interface ResultadoVolverPadron {
+  simulado: boolean;
+  casa?: Cuenta;
+  ajustes: { periodo: string; accion: string; dias_ocupados?: number; monto_original: number; monto_final: number }[];
+  queda_debiendo_fuera_de_arreglo: number;
+  arreglo: DeudaCasa["arreglo"];
+  suspendidos: { usuarios: number; tarjetas: number; credenciales: number; visitas: number };
+}
+export const volverAlPadron = (id: string, body: { fecha?: string; simular?: boolean } = {}) =>
+  request<ResultadoVolverPadron>(`/unidades/cuentas/${id}/volver-al-padron`, {
+    method: "POST", body: JSON.stringify(body),
+  });
 export const reactivarCuenta = (id: string) =>
   request<Cuenta>(`/unidades/cuentas/${id}/reactivar`, { method: "POST" });
 // Día 53 — Sprint 1: pausa liviana y reversible, distinta de dar de baja.
@@ -1243,8 +1289,14 @@ export interface AbonoDTO {
   id: string; numero: number; monto: number; fecha_pactada: string;
   estado: "pendiente" | "pagado" | "vencido"; pagado_en: string | null;
 }
+export type PropositoArreglo = "ponerse_al_dia" | "volver_al_padron";
 export interface ArregloDTO {
   id: string; estado: "activo" | "completado" | "incumplido" | "cancelado";
+  /** Día 74 */
+  proposito: PropositoArreglo;
+  deuda_original: number; descuento_pct: number; descuento_monto: number;
+  descuento_autorizado_por: string | null; descuento_autorizado_en: string | null;
+  atrasado: boolean; proximo_abono: AbonoDTO | null;
   deuda_total: number; abono_inicial: number; saldo_financiado: number;
   num_abonos: number; monto_por_abono: number; dias_gracia: number;
   total_abonado: number; saldo_pendiente: number; abonos_pagados: number;
@@ -1266,7 +1318,15 @@ export const cuotasPendientesCuenta = (cuentaUuid: string) =>
 export const crearArreglo = (body: {
   cuenta_id: string; cuotas: string[]; abono_inicial: number;
   num_abonos: number; dias_gracia: number; intervalo_dias?: number; nota?: string;
+  /** Día 74 — obligatorio. */
+  proposito: PropositoArreglo;
+  /** Día 74 — opcional; si va, lo autoriza un SEGUNDO administrador. */
+  descuento_pct?: number;
+  autorizacion?: { email: string; password: string };
 }) => request<ArregloDTO>("/arreglos", { method: "POST", body: JSON.stringify(body) });
+
+export const cambiarPropositoArreglo = (uuid: string, proposito: PropositoArreglo) =>
+  request<ArregloDTO>(`/arreglos/${uuid}/proposito`, { method: "POST", body: JSON.stringify({ proposito }) });
 
 export const cobrarAbono = (arregloUuid: string, abonoUuid: string, metodo: string, referencia?: string) =>
   request<ArregloDTO>(`/arreglos/${arregloUuid}/abonos/${abonoUuid}/cobrar`,

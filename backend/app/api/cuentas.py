@@ -277,9 +277,21 @@ def crear_cuenta(usuario_actual):
         ident = (nueva.get("identificador") or "").strip()
         tipo = nueva.get("tipo") if nueva.get("tipo") in ("casa", "edificio") else "casa"
         if ident:
-            existente = Unidad.query.filter(
-                db.func.lower(Unidad.identificador) == ident.lower()).first()
-            if existente:
+            # Día 74 — acotado a la residencial: el nombre "Casa 24" puede
+            # existir en dos residenciales distintas sin ser la misma casa.
+            _q_ex = Unidad.query.filter(db.func.lower(Unidad.identificador) == ident.lower())
+            _rid_ex = residencial_id_heredado(usuario_actual)
+            if _rid_ex is not None:
+                _q_ex = _q_ex.filter(Unidad.residencial_id == _rid_ex)
+            existente = _q_ex.first()
+            # Día 74 — una casa cuya familia se mudó (sin cuenta activa) se
+            # reutiliza: llega otra familia a la misma casa, con su cuenta
+            # nueva. La cuenta vieja queda como historial con su deuda.
+            casa_vacia = (existente is not None and existente.tipo == "casa" and tipo == "casa"
+                          and Cuenta.query.filter_by(unidad_id=existente.id, activa=True).first() is None)
+            if casa_vacia:
+                unidad = existente
+            elif existente:
                 # Un EDIFICIO existente se reutiliza (se le suman apartamentos).
                 # Una CASA no: dos cuentas en la misma casa sería un duplicado.
                 if existente.tipo == "casa" or tipo == "casa":
@@ -382,8 +394,13 @@ def crear_cuenta(usuario_actual):
                 if not cuenta_prev:
                     continue
                 # ¿Cuenta bloqueada por mora, o con cuotas vencidas sin pagar?
+                # Día 74 — también si tiene un arreglo con abonos vencidos:
+                # quien se mudó debiendo abonos sigue debiéndolos.
+                from app.models.cuenta import ArregloPago
+                arr_prev = ArregloPago.query.filter_by(cuenta_id=cuenta_prev.id, estado="activo").first()
                 tiene_mora = (
-                    getattr(cuenta_prev, "bloqueada", False)
+                    (arr_prev is not None and arr_prev.atrasado())
+                    or getattr(cuenta_prev, "bloqueada", False)
                     or cuenta_prev.estado in ("moroso", "en_mora")
                     or Cuota.query.filter(
                         Cuota.cuenta_id == cuenta_prev.id,
@@ -604,45 +621,84 @@ def editar_unidad(usuario_actual, unidad_uuid):
 @cuentas_bp.post("/cuentas/<cuenta_uuid>/baja")
 @roles_required("admin", "super_admin")
 def dar_baja_cuenta(usuario_actual, cuenta_uuid):
-    """Da de baja una cuenta. Requisito universal: saldo en 0 (sin cuotas
-    pendientes). Al ejecutar: desactiva accesos (usuarios → no pueden crear QR)
-    y desactiva todas las tarjetas de proximidad."""
+    """
+    Da de baja una cuenta: la familia se muda. Desactiva usuarios, tarjetas,
+    credenciales y QR de visita. La cuenta NO se borra: queda como historial.
+
+    Día 74 — antes exigía saldo en 0, sin excepción. Pero una familia que se
+    va debiendo se va igual: con la regla vieja la casa quedaba "activa" y
+    generando cuotas que nadie iba a pagar. Ahora se puede dar de baja con
+    deuda si el administrador lo confirma (confirmar_deuda: true): la deuda
+    queda a nombre del titular, y la regla anti-mora por DNI le impide
+    darse de alta en otra casa hasta que la pague.
+
+    Body: { motivo?, confirmar_deuda? }
+    """
+    from app.utils.residencial import pertenece_a_mi_residencial
+    from app.services.ciclo_casa import estado_deuda, dar_de_baja
+
     cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
-    if not cuenta:
+    # Día 74 — también se cierra un hueco: antes no se comprobaba que la
+    # cuenta fuera de la residencial de quien la da de baja.
+    if not cuenta or not pertenece_a_mi_residencial(cuenta.unidad, usuario_actual):
         return _err("no_encontrada", "Cuenta no encontrada", 404)
+    if not cuenta.activa:
+        return _err("ya_de_baja", "Esta cuenta ya está dada de baja.", 400)
 
-    # ── REQUISITO: saldo en 0 — sin cuotas pendientes ni parciales ──
-    cuotas_pendientes = Cuota.query.filter(
-        Cuota.cuenta_id == cuenta.id,
-        Cuota.estado.in_(["pendiente", "parcial", "vencida", "en_arreglo"]),
-    ).all()
-    if cuotas_pendientes:
-        total_pendiente = sum(float(c.monto) - _monto_pagado_cuota(c) for c in cuotas_pendientes)
+    data = request.get_json(silent=True) or {}
+    deuda = estado_deuda(cuenta)
+    if deuda["total"] > 0 and not data.get("confirmar_deuda"):
         return _err("saldo_pendiente",
-                     f"No se puede dar de baja: la cuenta tiene {len(cuotas_pendientes)} cuota(s) "
-                     f"pendiente(s) por L {total_pendiente:.2f}. El saldo debe estar en 0. "
-                     f"Podés usar 'Nivelar saldo' para prorratear la última cuota.", 400)
+                    f"La casa debe L {deuda['total']:,.2f}. Si se muda igual, la deuda queda "
+                    "a nombre del titular y no va a poder darse de alta en otra casa hasta "
+                    "pagarla. Antes podés usar 'Nivelar saldo' para cobrar solo los días "
+                    "que ocupó este mes.", 400)
 
-    cuenta.activa = False
-    cuenta.estado = "baja"
-
-    # ── Suspender acceso a crear QR: desactivar usuarios ──
-    for r in cuenta.residentes:
-        if r.usuario:
-            r.usuario.activo = False
-
-    # ── Desactivar TODAS las tarjetas de la cuenta ──
-    tarjetas_desactivadas = 0
-    for t in Tarjeta.query.filter_by(cuenta_id=cuenta.id).all():
-        if t.estado == "activa":
-            t.estado = "desactivada"
-            t.fecha_baja = dt.date.today()
-            tarjetas_desactivadas += 1
-
+    tarjetas_desactivadas = dar_de_baja(cuenta, data.get("motivo") or "Mudanza")
     db.session.commit()
     d = cuenta.to_dict()
     d["tarjetas_desactivadas"] = tarjetas_desactivadas
+    d["deuda_pendiente"] = deuda["total"]
     return jsonify({"data": d})
+
+
+@cuentas_bp.post("/cuentas/<cuenta_uuid>/volver-al-padron")
+@roles_required("admin", "super_admin")
+def volver_al_padron(usuario_actual, cuenta_uuid):
+    """
+    Día 74 — la casa deja de pagar mensualidad y vuelve al padrón. Sigue
+    viviendo ahí: el guardia la sigue identificando, pero sin app.
+
+    Body: { fecha?: "YYYY-MM-DD" (hoy por defecto), simular?: bool }
+
+    Con simular: true hace todo el cálculo (nivelación incluida) y lo
+    deshace, para que el panel le muestre al administrador qué va a pasar
+    antes de confirmar. Las reglas están en services/ciclo_casa.py.
+    """
+    from app.utils.residencial import pertenece_a_mi_residencial
+    from app.services import ciclo_casa
+
+    cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
+    if not cuenta or not pertenece_a_mi_residencial(cuenta.unidad, usuario_actual):
+        return _err("no_encontrada", "Cuenta no encontrada", 404)
+    data = request.get_json(silent=True) or {}
+    try:
+        fecha = dt.date.fromisoformat(data["fecha"]) if data.get("fecha") else dt.date.today()
+    except ValueError:
+        return _err("fecha_invalida", "Formato de fecha inválido (YYYY-MM-DD).", 400)
+
+    resumen, err = ciclo_casa.volver_al_padron(cuenta, fecha, usuario_actual)
+    if err:
+        db.session.rollback()
+        code, msg, status = err
+        return _err(code, msg, status)
+
+    if data.get("simular"):
+        db.session.rollback()
+        return jsonify({"data": {"simulado": True, **resumen}})
+
+    db.session.commit()
+    return jsonify({"data": {"simulado": False, "casa": cuenta.to_dict(), **resumen}})
 
 
 @cuentas_bp.post("/cuentas/<cuenta_uuid>/nivelar-saldo")
@@ -678,47 +734,8 @@ def nivelar_saldo(usuario_actual, cuenta_uuid):
     cfg = ConfigResidencial.get(usuario_actual.residencial_id)
     dia_pago_cfg = cfg.dia_pago
 
-    ajustes = []
-    for cuota in cuotas:
-        periodo = cuota.periodo  # primer día del mes del período
-        # Inicio real del ciclo: día de pago del mes del período
-        inicio_ciclo = dt.date(periodo.year, periodo.month, min(dia_pago_cfg, 28))
-
-        # Fijar el monto original SOLO la primera vez — evita que nivelaciones
-        # repetidas sigan achicando el monto sobre un valor ya reducido.
-        if cuota.monto_original is None:
-            cuota.monto_original = cuota.monto
-        baseline = float(cuota.monto_original)
-
-        if fecha_des < inicio_ciclo:
-            # Se fue antes de que empezara este ciclo → anular la cuota
-            cuota.monto = _monto_pagado_cuota(cuota)  # dejarla en lo ya pagado
-            cuota.estado = "pagada" if cuota.monto > 0 else "anulada"
-            cuota.nivelada = True
-            ajustes.append({
-                "periodo": periodo.isoformat(),
-                "accion": "anulada",
-                "monto_original": baseline,
-                "monto_final": float(cuota.monto),
-            })
-        else:
-            # Días ocupados dentro del ciclo (mes comercial 30 días)
-            dias_ocupados = min((fecha_des - inicio_ciclo).days + 1, 30)
-            monto_diario = baseline / 30
-            monto_nivelado = round(monto_diario * dias_ocupados, 2)
-            pagado = _monto_pagado_cuota(cuota)
-
-            cuota.monto = max(monto_nivelado, pagado)  # nunca menos de lo ya pagado
-            cuota.nivelada = True
-            if pagado >= cuota.monto:
-                cuota.estado = "pagada"
-            ajustes.append({
-                "periodo": periodo.isoformat(),
-                "accion": "prorrateada",
-                "dias_ocupados": dias_ocupados,
-                "monto_original": baseline,
-                "monto_final": float(cuota.monto),
-            })
+    from app.services.ciclo_casa import nivelar_cuotas
+    ajustes = nivelar_cuotas(cuotas, fecha_des, dia_pago_cfg)
 
     db.session.commit()
     return jsonify({"data": {
