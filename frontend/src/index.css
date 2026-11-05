@@ -2588,6 +2588,19 @@ html { scroll-behavior: smooth; }
 .accion-con-ayuda { display: inline-flex; align-items: center; gap: 5px; }
 /* Día 72 — aviso de que el correo rebotó (lo avisa Resend por webhook). */
 .pill-estado--rebotado { background: #fee2e2; color: #991b1b; }
+/* ── Día 73 — estado del último correo enviado a cada residente ───────
+   Antes solo existía el rebote, en rojo. Al mostrar también los estados
+   normales hay que cuidar que no griten: "entregado" es la buena noticia
+   y tiene que leerse tranquila, no competir con la píldora de Activo que
+   está al lado. Por eso los dos estados normales (enviado, entregado) van
+   en gris y azul apagados, y el color fuerte queda para lo que pide
+   acción: rojo si no llegó, ámbar si está demorado o lo marcaron spam. */
+.pill-estado--enviado   { background: #eef2f7; color: #475569; }
+.pill-estado--entregado { background: #e8f1fb; color: #1e4e79; }
+.pill-estado--demorado  { background: #fef3c7; color: #92400e; }
+.pill-estado--queja     { background: #fef3c7; color: #92400e; }
+/* El "hace 5 min" va más tenue que el estado: es el dato de apoyo. */
+.pill-estado-cuando { opacity: .65; font-weight: 500; margin-left: 2px; }
 /* Día 72 — la ficha del residente se veía desordenada: con columnas de
    180px entraban tres y un correo normal no cabía, así que se partía a la
    mitad de la palabra. Con 230px entran dos en el ancho del modal y el

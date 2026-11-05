@@ -118,6 +118,9 @@ export interface ResidenteDTO {
   // webhook de Resend; "rebotado" significa que la dirección no existe.
   correo_estado?: "enviado" | "entregado" | "rebotado" | "queja" | "demorado" | null;
   correo_detalle?: string | null;
+  /** Día 73 — ISO del último cambio de estado: un "enviado" de hace cinco
+   *  minutos es normal, uno de hace tres días significa que se trabó. */
+  correo_actualizado?: string | null;
   es_censo?: boolean;
   foto_url?: string | null;
 }

@@ -14,8 +14,9 @@ import { InfoTip } from "../../components/InfoTip";
 import { CapturaFoto } from "../../components/CapturaFoto";
 import { ModalFotoResidente } from "../../components/ModalFotoResidente";
 import { formatearDNI, dniCompleto } from "../../utils/dni";
+import { EstadoCorreo } from "../../components/EstadoCorreo";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
-import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera, AlertTriangle } from "lucide-react";
+import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera } from "lucide-react";
 
 
 export function UnidadesPanel({ embedded }: { embedded?: boolean } = {}) {
@@ -2003,15 +2004,12 @@ function FilaResidente({ residente, cuentaId, onActualizado }: {
         <span className="muted small">{residente.relacion}</span>
         {/* Día 72 — si Resend avisó que el correo rebotó, se muestra acá:
             es la única pista de que la cuenta no se activa porque la
-            dirección está mal escrita, no porque la persona no quiera. */}
-        {residente.correo_estado === "rebotado" && (
-          <span className="accion-con-ayuda">
-            <span className="pill-estado pill-estado--rebotado">
-              <AlertTriangle size={12} /> Correo rebotado
-            </span>
-            <InfoTip texto={`El correo no le llegó a ${residente.email}. ${residente.correo_detalle || "El servidor del destinatario lo rechazó."} Corregí la dirección con Editar y después tocá Regenerar enlace.`} />
-          </span>
-        )}
+            dirección está mal escrita, no porque la persona no quiera.
+            Día 73 — ahora se muestran TODOS los estados, no solo el
+            rebote: saber que el correo se entregó contesta la pregunta de
+            "¿le llegó el enlace?" sin tener que llamar a la persona. */}
+        <EstadoCorreo estado={residente.correo_estado} detalle={residente.correo_detalle}
+          actualizado={residente.correo_actualizado} email={residente.email} />
         {esPendiente ? (
           <span className="pill-estado pill-estado--pendiente">
             <Clock size={12} /> Pendiente

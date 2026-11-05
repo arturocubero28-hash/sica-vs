@@ -397,8 +397,13 @@ class Residente(db.Model):
             "foto_url": u.foto_url if u else None,
             # Día 72 — qué pasó con el último correo que le mandamos. El
             # panel lo usa para avisar que la dirección rebotó.
+            # Día 73 — se agrega la fecha: el estado sin "cuándo" no sirve
+            # para decidir nada. Un "enviado" de hace cinco minutos es
+            # normal; uno de hace tres días significa que se quedó trabado.
             "correo_estado": (u.correo_estado if u else None),
             "correo_detalle": (u.correo_detalle if u else None),
+            "correo_actualizado": (u.correo_actualizado.isoformat()
+                                   if (u and u.correo_actualizado) else None),
             # estado de activación de la cuenta de acceso del residente.
             # Día 69 — 'censo' es un tercer estado, distinto de 'pendiente':
             # una persona del padrón no está esperando activar nada, es que
