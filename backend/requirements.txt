@@ -27,6 +27,23 @@ requests==2.31.0
 bcrypt==4.1.3
 redis==5.0.4
 celery==5.4.0
+# kombu FIJADO a propósito (Día 73) — la MISMA trampa que SQLAlchemy arriba.
+#
+# kombu es la librería con la que Celery habla con Redis. celery==5.4.0
+# está fijado, pero acepta cualquier kombu 5.x, así que cada build desde
+# cero bajaba la última. kombu 5.7.0 empezó a exigir redis-py 6.1 o más, y
+# acá redis está en 5.0.4: el worker arrancaba, fallaba con
+#   VersionMismatch: Redis transport requires redis-py versions 6.1.0 or later
+# y Docker lo reiniciaba en bucle. Sin worker no sale NINGÚN correo de
+# activación, y el resto del sistema sigue andando como si nada.
+#
+# Apareció en el primer build que no usó la caché (cambió la imagen base de
+# Python y pip reinstaló todo). Los anteriores reusaban la capa vieja.
+#
+# 5.3.7 es la que salió junto con celery 5.4.0. Probada con un worker real
+# contra Redis: conecta y ejecuta tareas. Si algún día se sube redis-py a
+# 6.x, este tope se puede levantar.
+kombu==5.3.7
 python-dotenv==1.0.1
 gunicorn==22.0.0
 # eventlet: eliminado en Día 41 (SOCKET-17). Solo existía para el modo
