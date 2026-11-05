@@ -106,30 +106,6 @@ def _enviar(destinatario, asunto, html):
     return ok
 
 
-def enviar_verificacion(destinatario, nombre, nombre_residencial):
-    """
-    Día 73 — el correo que confirma que la dirección existe, ANTES de crear
-    la cuenta. Devuelve (ok, resend_id).
-
-    Corto y honesto: no lleva enlace ni token (no hay cuenta todavía), solo
-    avisa qué está pasando y que en minutos llega el correo de verdad. Así
-    la persona no se confunde al recibir dos correos seguidos: el primero
-    le dice que viene el segundo.
-    """
-    saludo = f"Hola {nombre}," if nombre else "Hola,"
-    cuerpo = (
-        f"<p>{saludo}</p>"
-        f"<p>La administración de <b>{nombre_residencial}</b> está registrando tu "
-        f"cuenta en este momento.</p>"
-        f"<p>En unos minutos vas a recibir otro correo con el enlace para crear tu "
-        f"contraseña y empezar a usar la aplicación.</p>"
-        f"<p style='color:#93a0ad;font-size:13px;'>Si no esperabas este mensaje, "
-        f"podés ignorarlo: sin ese segundo correo no se crea ningún acceso.</p>"
-    )
-    html = _plantilla_base("Estamos creando tu cuenta", cuerpo, nombre_residencial)
-    return _enviar_crudo(destinatario, f"{nombre_residencial}: estamos creando tu cuenta", html)
-
-
 def _plantilla_base(titulo, cuerpo_html, nombre_residencial, boton_texto=None, boton_url=None):
     """
     Plantilla HTML simple y compatible con la mayoría de clientes de
@@ -207,18 +183,13 @@ def _bloque_descarga_app():
       </table>"""
 
 
-def enviar_correo_activacion(email, nombre, token, nombre_residencial, es_reenvio=False):
-    """Correo con el link para que un residente defina su contraseña."""
+def _correo_activacion(nombre, token, nombre_residencial, es_reenvio=False):
+    """Devuelve (asunto, html) del correo con el enlace para definir la contraseña."""
     from flask import current_app
     url_frontend = current_app.config.get("FRONTEND_URL", "https://patronatovillasdelsol.com")
     url = f"{url_frontend}/?activar={token}"
 
-    # Día 62 — reescrito a pedido del usuario: el texto anterior era
-    # genérico, sin mencionar el nombre
-    # de la residencial ni personalizar con el nombre del residente. Ahora
-    # el correo es explícitamente multi-residencial: usa el nombre real de
-    # la persona y el nombre real de SU residencial (ambos ya llegaban como
-    # parámetro, solo faltaba usarlos en el texto).
+    # Día 62 — usa el nombre real de la persona y el de SU residencial.
     saludo = f"Hola {nombre}," if nombre else "Hola,"
     intro = (
         f"{saludo} te reenviamos tu enlace de activación." if es_reenvio else
@@ -234,7 +205,33 @@ def enviar_correo_activacion(email, nombre, token, nombre_residencial, es_reenvi
         "Activá tu cuenta" if not es_reenvio else "Tu nuevo enlace de activación",
         cuerpo, nombre_residencial, "Confirmar mi cuenta", url,
     )
-    return _enviar(email, f"Activá tu cuenta — {nombre_residencial}", html)
+    return f"Activá tu cuenta — {nombre_residencial}", html
+
+
+def enviar_correo_activacion(email, nombre, token, nombre_residencial, es_reenvio=False):
+    """Correo con el link para que un residente defina su contraseña."""
+    asunto, html = _correo_activacion(nombre, token, nombre_residencial, es_reenvio)
+    return _enviar(email, asunto, html)
+
+
+def enviar_activacion_antes_de_crear(email, nombre, token, nombre_residencial):
+    """
+    Día 73 — el correo de activación que TAMBIÉN sirve de verificación.
+    Devuelve (ok, resend_id).
+
+    Se manda ANTES de crear la cuenta, y con el id que devuelve Resend se
+    espera la confirmación de entrega. Recién si llega se crea la cuenta.
+
+    Funciona porque el enlace no depende de que la cuenta exista cuando se
+    manda: lleva el correo adentro (un JWT firmado) y la cuenta se busca
+    recién cuando la persona hace clic. Así la persona recibe un solo
+    correo, y si la dirección no existe no se creó nada.
+
+    No se registra en el usuario (todavía no existe): lo hace el endpoint
+    que crea la cuenta, copiando el id desde la verificación.
+    """
+    asunto, html = _correo_activacion(nombre, token, nombre_residencial)
+    return _enviar_crudo(email, asunto, html)
 
 
 def enviar_correo_reset(email, token, nombre_residencial):

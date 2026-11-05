@@ -20,9 +20,17 @@ el id que Resend le asignó al envío, el webhook la actualiza al llegar el
 aviso, y el endpoint que crea la cuenta solo acepta una verificación en
 estado "entregado" y para el mismo correo.
 
-El correo de verificación es corto y honesto: avisa que la administración
-está registrando la cuenta y que en minutos llega otro correo con el
-enlace para la contraseña. No lleva token ni nada utilizable.
+UN SOLO CORREO: el que se manda para verificar ES el de activación, con
+el enlace para definir la contraseña. Funciona porque el enlace lleva el
+correo adentro y la cuenta se busca recién cuando la persona hace clic,
+no cuando se manda. Si rebota, el enlace no le llega a nadie y la cuenta
+nunca se crea.
+
+IDEMPOTENCIA: la verificación guarda qué usuario y qué cuenta creó. Si el
+pedido de crear llega dos veces con la misma verificación (doble clic, o
+una respuesta que se perdió en la red después de que el servidor ya
+guardó), la segunda vez se devuelve lo que ya se creó en vez de un error
+o de un duplicado.
 """
 import uuid
 import datetime as dt
@@ -59,6 +67,10 @@ class VerificacionCorreo(db.Model):
     # Una vez usada para crear una cuenta no sirve para otra: evita que
     # una sola verificación habilite varias altas con el mismo correo.
     usada = db.Column(db.Boolean, nullable=False, default=False)
+    # Qué se creó con esta verificación: permite responder igual a un
+    # pedido repetido en vez de fallar o duplicar.
+    usuario_id = db.Column(db.BigInteger)
+    cuenta_id = db.Column(db.BigInteger)
     created_at = db.Column(db.DateTime(timezone=True), default=_now)
     actualizado = db.Column(db.DateTime(timezone=True), default=_now)
 
@@ -67,6 +79,11 @@ class VerificacionCorreo(db.Model):
         if creada is not None and creada.tzinfo is None:
             creada = creada.replace(tzinfo=dt.timezone.utc)
         return creada is not None and (_now() - creada) <= VIGENCIA
+
+    def ya_creo_algo(self):
+        """¿Ya se usó para crear una cuenta? Entonces un pedido repetido
+        con esta verificación devuelve lo creado, no crea otra."""
+        return bool(self.usada and self.usuario_id)
 
     def sirve_para(self, email):
         """¿Esta verificación habilita crear una cuenta con este correo?"""

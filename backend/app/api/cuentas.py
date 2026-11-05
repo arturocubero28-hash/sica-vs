@@ -239,6 +239,25 @@ def crear_cuenta(usuario_actual):
     if err:
         return err
 
+    # Pedido REPETIDO con una verificación que ya creó esta cuenta (doble
+    # clic, o la respuesta se perdió en la red después de guardar): se
+    # devuelve lo que ya existe. Ni error ni duplicado.
+    if verif is not None and verif.ya_creo_algo():
+        # Import con otro nombre a propósito: más abajo en esta misma
+        # función hay un "from app.models.usuario import Usuario" local, y
+        # eso hace que Python trate "Usuario" como variable local en TODA
+        # la función. Usarlo acá, antes de esa línea, revienta con
+        # UnboundLocalError (pasó en la prueba de pedido repetido).
+        from app.models.usuario import Usuario as _UsuarioYa
+        ya = Cuenta.query.get(verif.cuenta_id) if verif.cuenta_id else None
+        u_ya = _UsuarioYa.query.get(verif.usuario_id)
+        if ya is not None and u_ya is not None:
+            return jsonify({"data": {
+                "cuenta": ya.to_dict(detalle=True),
+                "activacion": {"usuario_email": u_ya.email},
+                "repetido": True,
+            }}), 200
+
     # Día 50 — sistema de suscripciones: el límite de CASAS se chequea acá
     # (es específico de esta operación). El límite de USUARIOS ya lo
     # verifica _crear_usuario_pendiente() más abajo, adentro de la función
@@ -420,45 +439,40 @@ def crear_cuenta(usuario_actual):
             cod.usado_por_cuenta_id = cuenta.id
             cod.usado_en = dt.datetime.now(dt.timezone.utc)
 
-    marcar_usada(verif)   # en la misma transacción que crea la cuenta
+    # Día 73 — PRIMERA CUOTA PRORRATEADA, ahora DENTRO de la misma
+    # transacción. Antes se guardaba la cuenta, y la cuota aparte en un
+    # try que tragaba cualquier error: si fallaba, la casa quedaba creada
+    # sin su cuota del mes y nadie se enteraba. O se crea todo, o nada.
+    # Solo si tiene tarifa (las contenedoras de edificio no pagan).
+    if tarifa:
+        from app.models.cuenta import Cuota, ConfigResidencial
+        from app.utils.cuotas import calcular_cuota_prorrateada
+        cfg = ConfigResidencial.get(usuario_actual.residencial_id)
+        datos = calcular_cuota_prorrateada(tarifa.monto, cfg.dia_pago)
+        if datos is not None:
+            db.session.add(Cuota(
+                cuenta_id=cuenta.id, periodo=datos["periodo"],
+                monto=datos["monto"], fecha_vencimiento=datos["fecha_vencimiento"],
+                estado="pendiente",
+            ))
+
+    marcar_usada(verif, usuario, cuenta.id)   # misma transacción
     db.session.commit()
 
-    # Día 61 — se dispara DESPUÉS del commit de arriba, nunca antes: si se
-    # disparara antes y algo más adelante en esta misma función fallara,
-    # se habría mandado un correo de activación para un usuario que en
-    # realidad nunca quedó guardado (mismo tipo de problema que el bug
-    # real del hook de auditoría encontrado hoy mismo). Async vía Celery
-    # para no demorar la respuesta al admin con la llamada HTTP a Resend.
-    try:
-        from app.tasks.correo_task import enviar_correo_activacion_task
-        from app.models.residencial import Residencial
-        residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
-        enviar_correo_activacion_task.delay(
-            usuario.email, usuario.nombre, token_o_error,
-            residencial.nombre if residencial else "SICA-VS")
-    except Exception:
-        pass  # un correo que no sale no debe tumbar la creación de la cuenta
-
-    # Generar la PRIMERA CUOTA prorrateada (Día 29). Día 55 — ahora usa la
-    # función compartida calcular_cuota_prorrateada (misma lógica que el
-    # wizard de activar cuotas), en vez de una copia inline.
-    # Solo si tiene tarifa asignada (las cuentas contenedoras de edificio no pagan).
-    if tarifa:
+    # Día 61 — el correo se manda DESPUÉS del commit, nunca antes.
+    # Día 73 — y solo si no salió ya: con la verificación, el correo de
+    # activación se mandó ANTES de crear (es lo que se verificó), así que
+    # mandar otro le haría llegar dos enlaces a la persona.
+    if verif is None:
         try:
-            from app.models.cuenta import Cuota, ConfigResidencial
-            from app.utils.cuotas import calcular_cuota_prorrateada
-            cfg = ConfigResidencial.get(usuario_actual.residencial_id)
-            datos = calcular_cuota_prorrateada(tarifa.monto, cfg.dia_pago)
-            if datos is not None:
-                cuota = Cuota(
-                    cuenta_id=cuenta.id, periodo=datos["periodo"],
-                    monto=datos["monto"], fecha_vencimiento=datos["fecha_vencimiento"],
-                    estado="pendiente",
-                )
-                db.session.add(cuota)
-                db.session.commit()
+            from app.tasks.correo_task import enviar_correo_activacion_task
+            from app.models.residencial import Residencial
+            residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
+            enviar_correo_activacion_task.delay(
+                usuario.email, usuario.nombre, token_o_error,
+                residencial.nombre if residencial else "Residencial")
         except Exception:
-            pass
+            current_app.logger.exception("No se pudo encolar la activación de %s", usuario.email)
 
     return jsonify({"data": {
         "cuenta": cuenta.to_dict(detalle=True),
@@ -768,6 +782,30 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
     if not cuenta:
         return _err("no_encontrada", "Cuenta no encontrada", 404)
 
+    data = request.get_json(silent=True) or {}
+
+    # Día 73 — no se crea nada hasta que Resend confirme que el correo LLEGÓ
+    # (ver api/verificacion_correo.py).
+    #
+    # Va ANTES del límite de miembros a propósito: en un pedido repetido el
+    # miembro recién creado ya cuenta para el límite, y el reintento
+    # fallaría con "ya tiene el máximo" en vez de devolver lo que se creó.
+    from app.api.verificacion_correo import exigir_verificacion, marcar_usada
+    verif, err = exigir_verificacion(data.get("email"), data.get("verificacion_id"))
+    if err:
+        return err
+    if verif is not None and verif.ya_creo_algo():
+        r_ya = Residente.query.filter_by(cuenta_id=cuenta.id,
+                                         usuario_id=verif.usuario_id).first()
+        if r_ya is not None:
+            return jsonify({"data": {
+                "residente": r_ya.to_dict(),
+                "activacion": {"usuario_email": r_ya.usuario.email if r_ya.usuario else None},
+                "repetido": True,
+            }}), 200
+        return _err("correo_no_verificado",
+                    "Esa verificación ya se usó para otra casa.", 400)
+
     # Validar límite de residentes adicionales (Día 29)
     # Default: casa → 4 extra, apartamento → 1 extra
     unidad = cuenta.unidad
@@ -780,18 +818,6 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
             return _err("limite_residentes",
                         f"Esta {unidad.tipo} ya tiene el máximo de {max_extra} "
                         f"persona(s) adicional(es) al titular.", 400)
-
-    data = request.get_json(silent=True) or {}
-
-    # Día 73 — no se crea nada hasta que Resend confirme que el correo a
-    # esta dirección LLEGÓ (ver api/verificacion_correo.py). Va al
-    # principio de todo, antes de crear la unidad, la cuenta o el usuario:
-    # si el correo rebota no tiene que quedar ningún resto que después
-    # impida reintentar con la dirección corregida.
-    from app.api.verificacion_correo import exigir_verificacion, marcar_usada
-    verif, err = exigir_verificacion(data.get("email"), data.get("verificacion_id"))
-    if err:
-        return err
 
     usuario, token_o_error = _crear_usuario_pendiente(
         data.get("nombre"), data.get("apellido"),
@@ -806,19 +832,21 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
         rol_cuenta="miembro", relacion=data.get("relacion", "familiar"),
     )
     db.session.add(residente)
-    marcar_usada(verif)
+    marcar_usada(verif, usuario, cuenta.id)   # misma transacción
     db.session.commit()
 
-    # Día 61 — mismo criterio que crear_cuenta: recién después del commit.
-    try:
-        from app.tasks.correo_task import enviar_correo_activacion_task
-        from app.models.residencial import Residencial
-        residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
-        enviar_correo_activacion_task.delay(
-            usuario.email, usuario.nombre, token_o_error,
-            residencial.nombre if residencial else "SICA-VS")
-    except Exception:
-        pass
+    # Día 61 — después del commit. Día 73 — y solo si el correo no salió ya
+    # con la verificación (si no, le llegarían dos enlaces).
+    if verif is None:
+        try:
+            from app.tasks.correo_task import enviar_correo_activacion_task
+            from app.models.residencial import Residencial
+            residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
+            enviar_correo_activacion_task.delay(
+                usuario.email, usuario.nombre, token_o_error,
+                residencial.nombre if residencial else "Residencial")
+        except Exception:
+            current_app.logger.exception("No se pudo encolar la activación de %s", usuario.email)
 
     return jsonify({"data": {
         "residente": residente.to_dict(),

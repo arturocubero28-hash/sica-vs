@@ -1046,7 +1046,7 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
               onConfirmado={sumarDeVerdad}
               onCorregir={() => {
                 setPaso("titular");
-                setErrs({ email: "Revisá este correo: el anterior no llegó." });
+                setErrs({ email: "Revisá este correo antes de seguir." });
                 setError("");
               }}
               textoCreado={`${titulo} ya participa del sistema y ${titular?.nombre} tiene acceso a la app.`}
@@ -1203,7 +1203,7 @@ function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
               onConfirmado={darDeVerdad}
               onCorregir={() => {
                 setVerificando(false);
-                setErrs({ email: "Revisá este correo: el anterior no llegó." });
+                setErrs({ email: "Revisá este correo antes de seguir." });
               }}
               textoCreado={`${persona.nombre} ya tiene acceso a la app.`}
               textoListo="Terminar"

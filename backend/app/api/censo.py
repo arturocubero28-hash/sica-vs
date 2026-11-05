@@ -576,8 +576,11 @@ def _preparar_acceso(residente, data, usuario_actual):
     email = (data.get("email") or "").strip().lower()
     if not email:
         return None, _err("datos_incompletos", "El correo es obligatorio para dar acceso", 400)
-    if Usuario.query.filter_by(email=email).first():
-        return None, _err("email_duplicado", f"Ya existe un usuario con el email {email}", 409)
+    # Mismo mensaje que la verificación: dice a quién pertenece el correo.
+    from app.api.verificacion_correo import correo_ocupado
+    ocupado = correo_ocupado(email)
+    if ocupado:
+        return None, ocupado
 
     obligatorios = [
         ("apellido", "El apellido es obligatorio"),
@@ -722,6 +725,21 @@ def sumar_casa(usuario_actual, cuenta_uuid):
     if tit is None:
         return _err("sin_titular", "Esta casa no tiene titular registrado", 400)
 
+    # 0. ¿Pedido repetido? Se mira PRIMERO: si la casa ya se sumó con esta
+    #    misma verificación, las validaciones de abajo fallarían ("esta casa
+    #    ya participa", "esta persona ya tiene acceso") y el administrador
+    #    vería un error por algo que en realidad salió bien.
+    verif, err = exigir_verificacion(data.get("email"), data.get("verificacion_id"))
+    if err:
+        return err
+    if verif is not None and verif.ya_creo_algo():
+        if verif.cuenta_id == cuenta.id:
+            return jsonify({"data": {"casa": cuenta.to_dict(detalle=True),
+                                     "residente": tit.to_dict(),
+                                     "nota": "La casa ya se había sumado.",
+                                     "repetido": True}}), 200
+        return _err("correo_no_verificado", "Esa verificación ya se usó para otra casa.", 400)
+
     # 1. Validar TODO, sin tocar nada.
     plan, err = _preparar_conversion(cuenta, data, usuario_actual)
     if err:
@@ -729,18 +747,16 @@ def sumar_casa(usuario_actual, cuenta_uuid):
     acceso, err = _preparar_acceso(tit, data, usuario_actual)
     if err:
         return err
-    verif, err = exigir_verificacion(acceso["email"], data.get("verificacion_id"))
-    if err:
-        return err
 
     # 2. Aplicar todo y guardar UNA vez.
     nota = _aplicar_conversion(cuenta, plan, usuario_actual)
     token = _aplicar_acceso(acceso)
-    marcar_usada(verif)
+    marcar_usada(verif, acceso["persona"], cuenta.id)
     db.session.commit()
 
-    # 3. Recién ahora, el correo de activación.
-    _enviar_activacion(acceso["email"], acceso["persona"].nombre, token, usuario_actual)
+    # 3. El correo de activación, solo si no salió ya con la verificación.
+    if verif is None:
+        _enviar_activacion(acceso["email"], acceso["persona"].nombre, token, usuario_actual)
 
     resp = {"casa": cuenta.to_dict(detalle=True), "residente": tit.to_dict(), "nota": nota}
     # El token solo se devuelve fuera de producción (hallazgo C1, Día 14).
@@ -773,18 +789,27 @@ def dar_acceso_persona(usuario_actual, residente_uuid):
         return _err("persona_ajena", "Esa persona no pertenece a tu residencial", 403)
 
     data = request.get_json(silent=True) or {}
-    acceso, err = _preparar_acceso(residente, data, usuario_actual)
+
+    # Pedido repetido primero (ver /sumar): si no, fallaría con "esta
+    # persona ya tiene acceso" algo que en realidad salió bien.
+    verif, err = exigir_verificacion(data.get("email"), data.get("verificacion_id"))
     if err:
         return err
-    verif, err = exigir_verificacion(acceso["email"], data.get("verificacion_id"))
+    if verif is not None and verif.ya_creo_algo():
+        if verif.usuario_id == residente.usuario_id:
+            return jsonify({"data": {"residente": residente.to_dict(), "repetido": True}}), 200
+        return _err("correo_no_verificado", "Esa verificación ya se usó para otra persona.", 400)
+
+    acceso, err = _preparar_acceso(residente, data, usuario_actual)
     if err:
         return err
 
     token = _aplicar_acceso(acceso)
-    marcar_usada(verif)
+    marcar_usada(verif, acceso["persona"], cuenta.id)
     db.session.commit()
 
-    _enviar_activacion(acceso["email"], acceso["persona"].nombre, token, usuario_actual)
+    if verif is None:
+        _enviar_activacion(acceso["email"], acceso["persona"].nombre, token, usuario_actual)
 
     resp = {"residente": residente.to_dict()}
     if current_app.config.get("ENV") != "production":

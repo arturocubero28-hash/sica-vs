@@ -2678,6 +2678,16 @@ html { scroll-behavior: smooth; }
 .confirmacion-aviso-punto { fill: #991b1b; }
 .confirmacion--error h4 { color: #991b1b; }
 
+/* Qué decirle al residente — lista corta, alineada a la izquierda para
+   que se lea como instrucciones y no como un párrafo centrado. */
+.confirmacion-indicaciones {
+  text-align: left; max-width: 400px; width: 100%;
+  background: #f4f7fb; border-radius: 10px; padding: 12px 14px;
+  font-size: 13px; color: #334155; line-height: 1.5;
+}
+.confirmacion-indicaciones ol { margin: 6px 0 0; padding-left: 18px; }
+.confirmacion-indicaciones li { margin-bottom: 4px; }
+
 /* Sin confirmar — neutro: no es un error. */
 .confirmacion-reloj .confirmacion-aviso-aro { fill: #eef2f7; stroke: #cbd5e1; }
 .confirmacion-reloj-agujas {

@@ -175,7 +175,11 @@ def resend():
             elif tipo == "email.complained":
                 verif.detalle = "El destinatario marcó el correo como spam."
             db.session.commit()
-        return jsonify({"data": {"ok": True, "verificacion": verif.estado}}), 200
+        # Si la cuenta todavía no se creó, no hay usuario que actualizar.
+        # Si ya se creó, la persona lleva copiado este mismo id de envío
+        # (ver marcar_usada) y se sigue abajo para actualizarla también.
+        if not verif.usuario_id:
+            return jsonify({"data": {"ok": True, "verificacion": verif.estado}}), 200
 
     usuario = _usuario_del_evento(datos)
     if not usuario:

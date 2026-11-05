@@ -715,7 +715,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
             onCorregir={() => {
               setVerificando(false);
               setPaso("titular");
-              setFieldErrors({ email: "Revisá este correo: el anterior no llegó." });
+              setFieldErrors({ email: "Revisá este correo antes de seguir." });
               setMsg(null);
             }}
             textoCreado="La cuenta quedó creada."
@@ -1701,7 +1701,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
               onConfirmado={agregarMiembroDeVerdad}
               onCorregir={() => {
                 setVerificandoMiembro(false);
-                setMErrors({ email: "Revisá este correo: el anterior no llegó." });
+                setMErrors({ email: "Revisá este correo antes de seguir." });
               }}
               textoCreado={`${mNombre.trim()} quedó agregado a la casa.`}
               textoListo="Listo"

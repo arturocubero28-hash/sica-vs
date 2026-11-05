@@ -377,8 +377,17 @@ def activar_cuenta():
 
     usuario = Usuario.query.filter_by(email=email).first()
     if not usuario:
-        return jsonify({"error": {"code": "usuario_no_encontrado",
-                                  "message": "No se encontró el usuario"}}), 404
+        # Día 73 — el correo de activación ahora se manda ANTES de crear la
+        # cuenta (es lo que confirma que la dirección existe), y la cuenta
+        # se crea segundos después, cuando llega esa confirmación. Si la
+        # persona abre el enlace en ese hueco, o si la administración no
+        # terminó el registro, la cuenta todavía no está. "No se encontró
+        # el usuario" sonaba a que algo estaba roto.
+        return jsonify({"error": {"code": "cuenta_no_lista",
+                                  "message": "Tu cuenta todavía no está lista. Esperá unos "
+                                             "minutos y volvé a abrir el enlace. Si sigue "
+                                             "sin funcionar, pedile a la administración que "
+                                             "termine tu registro."}}), 404
 
     usuario.set_password(password)
     usuario.activo = True

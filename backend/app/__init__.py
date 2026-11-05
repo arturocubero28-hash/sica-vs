@@ -592,6 +592,14 @@ def create_app(config_class=Config):
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo_actualizado TIMESTAMPTZ",
             "CREATE INDEX IF NOT EXISTS ix_usuarios_correo_resend_id ON usuarios (correo_resend_id)",
 
+            # ── Día 73 · Verificación de correo: qué creó cada una ───────────
+            # La tabla la crea create_all, pero en producción ya existía de un
+            # despliegue anterior sin estas dos columnas, y create_all no
+            # agrega columnas a tablas que ya están. Sirven para que un pedido
+            # repetido devuelva lo que ya se creó en vez de duplicarlo.
+            "ALTER TABLE verificaciones_correo ADD COLUMN IF NOT EXISTS usuario_id BIGINT",
+            "ALTER TABLE verificaciones_correo ADD COLUMN IF NOT EXISTS cuenta_id BIGINT",
+
             # ── Día 72 · Sesión persistente de la app ────────────────────────
             # Token de renovación (solo su hash) para que la app no vuelva a
             # pedir la contraseña cada 12 horas. Ver models/sesion_activa.py.

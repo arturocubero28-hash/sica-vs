@@ -210,6 +210,20 @@ with app.app_context():
 # ─────────────────────────────────────────────────────────────────────────
 print("\n4. Con la regla de produccion: nada sin correo confirmado")
 app.config["EXIGIR_VERIFICACION_CORREO"] = True
+
+# Resend "configurado", pero el envio real se reemplaza: en la prueba no
+# hay red. Se registra cada correo de activacion que se manda ANTES de
+# crear, con el id que Resend le daria. Es el unico correo que debe salir.
+import app.services.correo as _correo
+app.config["RESEND_API_KEY"] = "re_prueba"
+PREVIOS = []
+def _envio_falso(email, nombre, token, residencial):
+    rid = f"re_{len(PREVIOS)+1:03d}"
+    PREVIOS.append((email, rid, token))
+    return True, rid
+_correo.enviar_activacion_antes_de_crear = _envio_falso
+ENVIADOS.clear()
+
 casa_b, _, casa_b_id, pers_b_id = CASA_B
 
 r = cli.post(f"/api/v1/censo/casas/{casa_b}/sumar", json=ficha("berta@x.com"), headers=H)
@@ -218,13 +232,16 @@ ok("sumar sin verificar el correo -> 400 correo_no_verificado",
 with app.app_context():
     ok("...y la casa sigue en el padron", Cuenta.query.get(casa_b_id).es_censo)
 
-# Un correo que REBOTA: se simula el envio y llega el aviso por webhook.
-with app.app_context():
-    v = VerificacionCorreo(email="bertha@gmial.com", resend_id="re_rebota",
-                           estado="enviado", creado_por_id=1)
-    db.session.add(v); db.session.commit()
-    v_rebota = str(v.uuid_publico)
-r = webhook("email.bounced", "re_rebota",
+# ── Un correo que REBOTA
+r = cli.post("/api/v1/correo/verificaciones",
+             json={"email": "bertha@gmial.com", "nombre": "Berta"}, headers=H)
+ok("pedir la verificacion manda el correo de activacion -> 201",
+   r.status_code == 201 and r.get_json()["data"]["estado"] == "enviado")
+v_rebota = r.get_json()["data"]["id"]
+ok("...y ese correo YA lleva el enlace de activacion (un solo correo)",
+   len(PREVIOS) == 1 and PREVIOS[0][0] == "bertha@gmial.com" and PREVIOS[0][2])
+
+r = webhook("email.bounced", PREVIOS[0][1],
             bounce={"message": "The email account does not exist"})
 ok("el webhook firmado del rebote se acepta", r.status_code == 200)
 r = cli.get(f"/api/v1/correo/verificaciones/{v_rebota}", headers=H)
@@ -241,13 +258,24 @@ with app.app_context():
     ok("...y la persona sigue sin acceso (asi se puede reintentar)",
        Usuario.query.get(pers_b_id).es_censo)
 
-# Se corrige el correo y se verifica de nuevo.
-r = cli.post("/api/v1/correo/verificaciones",
-             json={"email": "berta@x.com", "nombre": "Berta"}, headers=H)
-ok("pedir verificar el correo corregido -> 201", r.status_code == 201)
+r = cli.post("/api/v1/correo/verificaciones", json={"email": "bertha@gmial.com"}, headers=H)
+ok("reintentar el MISMO correo que reboto no manda otro: devuelve el rebote",
+   r.status_code == 200 and r.get_json()["data"]["estado"] == "rebotado" and len(PREVIOS) == 1)
+
+# ── Se corrige y LLEGA
+r = cli.post("/api/v1/correo/verificaciones", json={"email": "berta@x.com", "nombre": "Berta"},
+             headers=H)
 v_bien = r.get_json()["data"]["id"]
-# Sin RESEND_API_KEY fuera de produccion la entrega se simula.
-ok("(desarrollo sin Resend: la entrega se simula)", r.get_json()["data"]["estado"] == "entregado")
+ok("el correo corregido se verifica (sale un correo nuevo)", len(PREVIOS) == 2)
+r = cli.post("/api/v1/correo/verificaciones", json={"email": "berta@x.com"}, headers=H)
+ok("doble clic: la segunda vez devuelve la MISMA verificacion, sin otro correo",
+   r.get_json()["data"]["id"] == v_bien and len(PREVIOS) == 2)
+
+r = cli.post(f"/api/v1/censo/casas/{casa_b}/sumar",
+             json=ficha("berta@x.com", verificacion_id=v_bien), headers=H)
+ok("enviado pero sin confirmar entrega -> 400, nada creado", r.status_code == 400)
+r = webhook("email.delivered", PREVIOS[1][1])
+ok("llega el aviso de entregado", r.status_code == 200)
 
 r = cli.post(f"/api/v1/censo/casas/{casa_b}/sumar",
              json=ficha("otra@x.com", verificacion_id=v_bien), headers=H)
@@ -255,56 +283,110 @@ ok("usar la verificacion con OTRO correo -> 400", r.status_code == 400)
 
 r = cli.post(f"/api/v1/censo/casas/{casa_b}/sumar",
              json=ficha("berta@x.com", verificacion_id=v_bien), headers=H)
-ok("con el correo corregido y confirmado -> 200 (el reintento funciona)",
-   r.status_code == 200)
+ok("confirmado -> 200 (el reintento despues del rebote funciona)", r.status_code == 200)
 with app.app_context():
     ok("ahora si: la casa salio del padron", not Cuenta.query.get(casa_b_id).es_censo)
+    b = Usuario.query.get(pers_b_id)
+    ok("la persona queda con 'Correo entregado' desde el primer momento",
+       b.correo_estado == "entregado" and b.correo_resend_id == PREVIOS[1][1])
+ok("NO se mando un segundo correo de activacion", "berta@x.com" not in ENVIADOS)
+
+# ── Idempotencia: el mismo pedido otra vez (doble clic, respuesta perdida)
+r = cli.post(f"/api/v1/censo/casas/{casa_b}/sumar",
+             json=ficha("berta@x.com", verificacion_id=v_bien), headers=H)
+ok("repetir el pedido -> 200 'repetido', no 'ya tiene acceso'",
+   r.status_code == 200 and r.get_json()["data"].get("repetido") is True)
+with app.app_context():
+    ok("...y la cuota NO se duplico", Cuota.query.filter_by(cuenta_id=casa_b_id).count() == 1)
 
 casa_c, _, casa_c_id, _ = CASA_C
 r = cli.post(f"/api/v1/censo/casas/{casa_c}/sumar",
              json=ficha("berta@x.com", verificacion_id=v_bien), headers=H)
-ok("una verificacion no sirve dos veces", r.status_code in (400, 409))
-# Lo de arriba puede dar 409 solo porque el correo ya quedo ocupado. Lo que
-# de verdad impide reusarla es que quedo marcada como usada:
+ok("la misma verificacion no sirve para OTRA casa", r.status_code in (400, 409))
 with app.app_context():
-    vb = VerificacionCorreo.query.filter_by(uuid_publico=_uuid.UUID(v_bien)).first()
-    ok("...porque quedo marcada como usada al crear la cuenta", vb.usada is True)
-    vb_dup = VerificacionCorreo(email="nadie@x.com", estado="entregado",
-                                creado_por_id=1, usada=True)
-    db.session.add(vb_dup); db.session.commit()
-    v_usada = str(vb_dup.uuid_publico)
-r = cli.post(f"/api/v1/censo/casas/{casa_c}/sumar",
-             json=ficha("nadie@x.com", verificacion_id=v_usada), headers=H)
-ok("una verificacion usada se rechaza aunque el correo este libre",
-   r.status_code == 400 and codigo(r) == "correo_no_verificado")
+    ok("...y esa otra casa sigue en el padron", Cuenta.query.get(casa_c_id).es_censo)
 
-# Verificacion de un correo que todavia no confirmo entrega.
-with app.app_context():
-    v = VerificacionCorreo(email="carla@x.com", resend_id="re_lento",
-                           estado="enviado", creado_por_id=1)
-    db.session.add(v); db.session.commit()
-    v_lento = str(v.uuid_publico)
-r = cli.post(f"/api/v1/censo/casas/{casa_c}/sumar",
-             json=ficha("carla@x.com", verificacion_id=v_lento), headers=H)
-ok("enviado pero sin confirmar entrega -> 400", r.status_code == 400)
-r = webhook("email.delivered", "re_lento")
-ok("llega el aviso de entregado", r.status_code == 200)
-r = cli.post(f"/api/v1/censo/casas/{casa_c}/sumar",
-             json=ficha("carla@x.com", verificacion_id=v_lento), headers=H)
-ok("ya confirmado -> 200", r.status_code == 200)
+# ── Correo ya usado en otra casa
+r = cli.post("/api/v1/correo/verificaciones", json={"email": "berta@x.com"}, headers=H)
+cuerpo = (r.get_json() or {}).get("error", {})
+ok("verificar un correo que ya es de otra persona -> 409", r.status_code == 409)
+ok("...y dice de quien es y en que casa",
+   "Berta" in cuerpo.get("message", "") and cuerpo.get("donde") == "Casa 2")
+ok("...sin mandarle nada", len(PREVIOS) == 2)
 
-# El alta normal sigue la misma regla.
-r = cli.post("/api/v1/unidades/cuentas", headers=H, json={
-    "unidad_nueva": {"tipo": "casa", "identificador": "Casa Nueva"},
-    "tarifa_id": 1, "dia_pago": 5,
-    "titular": {"nombre": "Eva", "apellido": "Ruiz", "email": "eva@x.com",
-                "telefono": "9999-1111", "dni": "0501-1985-00999"}})
+# ── Alta normal: misma regla, atomica e idempotente
+alta = {"unidad_nueva": {"tipo": "casa", "identificador": "Casa Nueva"},
+        "tarifa_id": 1, "dia_pago": 5,
+        "titular": {"nombre": "Eva", "apellido": "Ruiz", "email": "eva@x.com",
+                    "telefono": "9999-1111", "dni": "0501-1985-00999"}}
+r = cli.post("/api/v1/unidades/cuentas", headers=H, json=alta)
 ok("alta normal sin verificar -> 400 correo_no_verificado",
    r.status_code == 400 and codigo(r) == "correo_no_verificado")
 with app.app_context():
-    ok("...y no se creo el usuario", Usuario.query.filter_by(email="eva@x.com").first() is None)
+    ok("...y no se creo ni el usuario ni la casa",
+       Usuario.query.filter_by(email="eva@x.com").first() is None
+       and Unidad.query.filter_by(identificador="Casa Nueva").first() is None)
+
+r = cli.post("/api/v1/correo/verificaciones", json={"email": "eva@x.com", "nombre": "Eva"}, headers=H)
+v_eva = r.get_json()["data"]["id"]
+webhook("email.delivered", PREVIOS[-1][1])
+r1 = cli.post("/api/v1/unidades/cuentas", headers=H, json={**alta, "verificacion_id": v_eva})
+r2 = cli.post("/api/v1/unidades/cuentas", headers=H, json={**alta, "verificacion_id": v_eva})
+ok("alta verificada -> 201", r1.status_code == 201)
+ok("el mismo alta otra vez -> 200 'repetido'",
+   r2.status_code == 200 and r2.get_json()["data"].get("repetido") is True)
+with app.app_context():
+    eva = Usuario.query.filter_by(email="eva@x.com").all()
+    casas = Unidad.query.filter_by(identificador="Casa Nueva").all()
+    ok("...una sola persona y una sola casa", len(eva) == 1 and len(casas) == 1)
+    cta = Cuenta.query.filter_by(unidad_id=casas[0].id).first()
+    n = Cuota.query.filter_by(cuenta_id=cta.id).count()
+    esperado = calcular_cuota_prorrateada(600, ConfigResidencial.get(None).dia_pago)
+    ok("...con su cuota prorrateada en la misma transaccion, una sola",
+       n == (0 if esperado is None else 1))
+ok("...y un solo correo de activacion (el de la verificacion)",
+   [e for e, _, _ in PREVIOS].count("eva@x.com") == 1 and "eva@x.com" not in ENVIADOS)
+
+# ── Agregar miembro repetido, con la casa justo en el limite
+with app.app_context():
+    u = Unidad.query.get(Cuenta.query.get(casa_b_id).unidad_id)
+    u.max_residentes_extra = 1
+    db.session.commit()
+r = cli.post("/api/v1/correo/verificaciones", json={"email": "hijo@x.com", "nombre": "Hijo"}, headers=H)
+v_hijo = r.get_json()["data"]["id"]
+webhook("email.delivered", PREVIOS[-1][1])
+miembro = {"nombre": "Hijo", "apellido": "Lopez", "email": "hijo@x.com",
+           "telefono": "9999-2222", "dni": "0501-2005-00321", "verificacion_id": v_hijo}
+r1 = cli.post(f"/api/v1/unidades/cuentas/{casa_b}/residentes", json=miembro, headers=H)
+r2 = cli.post(f"/api/v1/unidades/cuentas/{casa_b}/residentes", json=miembro, headers=H)
+ok("agregar miembro verificado -> 201", r1.status_code == 201)
+ok("repetirlo con la casa ya en el limite -> 200 'repetido', no 'ya tiene el maximo'",
+   r2.status_code == 200 and r2.get_json()["data"].get("repetido") is True)
+with app.app_context():
+    ok("...un solo miembro creado", Usuario.query.filter_by(email="hijo@x.com").count() == 1)
+
+# ── Dar acceso repetido
+_, carla_res, _, carla_id = CASA_C
+r = cli.post("/api/v1/correo/verificaciones", json={"email": "carla@x.com", "nombre": "Carla"}, headers=H)
+v_carla = r.get_json()["data"]["id"]
+webhook("email.delivered", PREVIOS[-1][1])
+r1 = cli.post(f"/api/v1/censo/personas/{carla_res}/dar-acceso",
+              json=ficha("carla@x.com", verificacion_id=v_carla), headers=H)
+r2 = cli.post(f"/api/v1/censo/personas/{carla_res}/dar-acceso",
+              json=ficha("carla@x.com", verificacion_id=v_carla), headers=H)
+ok("dar acceso verificado -> 200", r1.status_code == 200)
+ok("repetirlo -> 200 'repetido', no 'ya tiene acceso al sistema'",
+   r2.status_code == 200 and r2.get_json()["data"].get("repetido") is True)
+
+# ── El enlace antes de que exista la cuenta
+r = cli.post("/api/v1/correo/verificaciones", json={"email": "nueva@x.com"}, headers=H)
+token_sin_cuenta = PREVIOS[-1][2]
+r = cli.post("/api/v1/auth/activar", json={"token": token_sin_cuenta, "password": "Clave#2026x"})
+ok("abrir el enlace antes de que exista la cuenta -> mensaje claro, no 'no se encontro'",
+   codigo(r) == "cuenta_no_lista")
 
 app.config["EXIGIR_VERIFICACION_CORREO"] = False
+app.config["RESEND_API_KEY"] = ""
 
 # ─────────────────────────────────────────────────────────────────────────
 print("\n5. El listado del padron sigue respondiendo")
