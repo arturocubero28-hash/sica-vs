@@ -15,6 +15,8 @@ import { CapturaFoto } from "../../components/CapturaFoto";
 import { ModalFotoResidente } from "../../components/ModalFotoResidente";
 import { formatearDNI, dniCompleto } from "../../utils/dni";
 import { EstadoCorreo } from "../../components/EstadoCorreo";
+import { ConfirmacionEnvio } from "../../components/ConfirmacionEnvio";
+import { capitalizarNombre } from "../../utils/texto";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { Building, Car, DoorOpen, Footprints, Home, Pencil, User, Plus, Info, Crown, Users, RefreshCw, Trash2, Clock, CheckCircle, Eye, Play, Pause, Camera } from "lucide-react";
 
@@ -293,7 +295,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
   const [enrolInfo, setEnrolInfo] = useState<{ edificio_nombre: string; apartamento_sugerido?: string | null; dueno_nombre?: string | null } | null>(null);
   const [duenoVive, setDuenoVive] = useState(false);
   const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
-  const [enlace, setEnlace] = useState<{ email: string; url: string | null } | null>(null);
+  const [enlace, setEnlace] = useState<{ email: string; url: string | null; cuentaId: string } | null>(null);
   const [nuevaUnidadTipo, setNuevaUnidadTipo] = useState<"casa" | "edificio">("casa");
   const [nuevaUnidadId, setNuevaUnidadId] = useState("");
   const [maxApartamentos, setMaxApartamentos] = useState("");
@@ -311,12 +313,6 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
   // cara contra la que el guardia verifica a quien llega sin teléfono, y
   // si no se toma en este momento, en la práctica no se toma nunca.
   const [foto, setFoto] = useState<File | null>(null);
-  // Día 72 — después de crear la cuenta se vigila unos segundos si el
-  // correo de activación rebota. Resend avisa por webhook y los rebotes de
-  // "ese buzón no existe" llegan casi enseguida, así que el admin se entera
-  // mientras todavía tiene a la persona enfrente para preguntarle el correo
-  // bueno, en vez de descubrirlo días después.
-  const [reboteAviso, setReboteAviso] = useState<string | null>(null);
 
   // Para "agregar apto a edificio existente": solo edificios
   const sugerenciasEdificios = unidades.filter(u =>
@@ -526,32 +522,8 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
     setCodigoEnrol("");
     setEnrolInfo(null);
     setFoto(null);
-    setReboteAviso(null);
     setPaso("codigo");   // Día 73 — la otra alta arranca desde el primer paso
     recargarUnidades();
-  }
-
-  // Consulta el estado del correo cada pocos segundos durante medio minuto.
-  // No se espera (no bloquea nada): si rebota, aparece el aviso; si no,
-  // simplemente deja de consultar y no se muestra nada.
-  async function vigilarRebote(cuentaId: string) {
-    setReboteAviso(null);
-    for (let intento = 0; intento < 8; intento++) {
-      await new Promise(r => setTimeout(r, 4000));
-      try {
-        const c = await detalleCuenta(cuentaId);
-        const t = c.titular;
-        if (t?.correo_estado === "rebotado") {
-          setReboteAviso(t.correo_detalle
-            || "El servidor del destinatario rechazó el correo.");
-          return;
-        }
-        // Entregado: ya no hay nada que vigilar.
-        if (t?.correo_estado === "entregado") return;
-      } catch {
-        return;  // sin conexión o la ventana ya se cerró: no insistir
-      }
-    }
   }
 
   /**
@@ -591,7 +563,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
   }
 
   async function guardar() {
-    setMsg(null); setEnlace(null); setReboteAviso(null);
+    setMsg(null); setEnlace(null);
 
     const esDuenoSinVivienda = esEdificio && modoUnidad === "nueva" && !duenoVive;
 
@@ -660,11 +632,10 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
         }
       }
 
-      setEnlace({ email: res.activacion.usuario_email, url });
+      setEnlace({ email: res.activacion.usuario_email, url, cuentaId: res.cuenta.id });
       setMsg({ tipo: avisoFoto ? "err" : "ok",
                texto: "Cuenta creada exitosamente." + avisoFoto });
       onCreada();
-      vigilarRebote(res.cuenta.id);
     } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
   }
 
@@ -712,41 +683,36 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
 
         <div className="modal-alta-body">
 
-      {/* Resultado: enlace de activación (o aviso de correo enviado) */}
-      {enlace && reboteAviso && (
-        <div className="error" style={{ marginBottom: 10 }}>
-          ⚠ El correo no le llegó a <b>{enlace.email}</b>. {reboteAviso}
-          {" "}Revisá la dirección con la persona: corregila desde la casa, en
-          Miembros → Editar, y después tocá “Regenerar enlace”.
-        </div>
-      )}
-
+      {/* Día 73 — resultado del alta.
+          Antes decía "Cuenta creada" y listo. Pero crear la cuenta y que
+          la persona RECIBA el enlace son dos cosas distintas, y la
+          segunda es la que importa: si el correo rebota, la cuenta queda
+          pendiente para siempre. Ahora el alta no se da por terminada
+          hasta saber qué pasó con el correo. */}
       {enlace && (
-        <div className="activacion-box">
-          {enlace.url ? (
-            <>
-              <div className="activacion-titulo">✓ Cuenta creada — Enlace de activación</div>
-              <p>Compartí este enlace con <b>{enlace.email}</b> para que defina su contraseña:</p>
+        <>
+          {/* Fuera de producción el backend devuelve el token, y tener el
+              enlace a mano ahorra abrir el correo en cada prueba. En
+              producción esto no aparece nunca (ver _bloque_activacion). */}
+          {enlace.url && (
+            <div className="activacion-box" style={{ marginBottom: 12 }}>
+              <div className="activacion-titulo">Enlace de activación (solo en desarrollo)</div>
               <div className="activacion-url">{enlace.url}</div>
               <div className="row-btns" style={{ marginTop: 8 }}>
                 <button className="mini" onClick={copiarEnlace}>Copiar enlace</button>
-                <button className="ghost mini" onClick={darDeAltaOtra}>Dar de alta otra cuenta</button>
               </div>
-            </>
-          ) : (
-            <>
-              <div className="activacion-titulo">✓ Cuenta creada exitosamente</div>
-              <p>
-                Le enviamos un correo a <b>{enlace.email}</b> con instrucciones para
-                que defina su contraseña. Pedile que revise su bandeja de entrada
-                (y la carpeta de spam, por si acaso).
-              </p>
-              <div className="row-btns" style={{ marginTop: 8 }}>
-                <button className="ghost mini" onClick={darDeAltaOtra}>Dar de alta otra cuenta</button>
-              </div>
-            </>
+            </div>
           )}
-        </div>
+
+          <ConfirmacionEnvio
+            cuentaId={enlace.cuentaId} email={enlace.email}
+            textoListo="Dar de alta otra cuenta"
+            onListo={darDeAltaOtra} />
+
+          {msg && msg.tipo === "err" && (
+            <div className="error" style={{ marginTop: 10 }}>⚠ {msg.texto}</div>
+          )}
+        </>
       )}
 
       {!enlace && (
@@ -1007,12 +973,12 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
           <div className="row">
             <div className="campo-con-error">
               <input placeholder="Nombre *" value={nombre} className={fieldErrors.nombre ? "input-error" : ""}
-                onChange={(e) => { setNombre(e.target.value); clearFieldError("nombre"); }} />
+                onChange={(e) => { setNombre(capitalizarNombre(e.target.value)); clearFieldError("nombre"); }} />
               {fieldErrors.nombre && <span className="campo-error">{fieldErrors.nombre}</span>}
             </div>
             <div className="campo-con-error">
               <input placeholder="Apellido *" value={apellido} className={fieldErrors.apellido ? "input-error" : ""}
-                onChange={(e) => { setApellido(e.target.value); clearFieldError("apellido"); }} />
+                onChange={(e) => { setApellido(capitalizarNombre(e.target.value)); clearFieldError("apellido"); }} />
               {fieldErrors.apellido && <span className="campo-error">{fieldErrors.apellido}</span>}
             </div>
           </div>
@@ -1054,7 +1020,7 @@ function FormNuevaCuenta({ onCreada, onCerrar, permiteCuotas, permiteControlFisi
             <div className="campo-con-error">
               <input placeholder="Contacto de emergencia (nombre) *" value={emergNombre}
                 className={fieldErrors.emergNombre ? "input-error" : ""}
-                onChange={(e) => { setEmergNombre(e.target.value); clearFieldError("emergNombre"); }} />
+                onChange={(e) => { setEmergNombre(capitalizarNombre(e.target.value)); clearFieldError("emergNombre"); }} />
               {fieldErrors.emergNombre && <span className="campo-error">{fieldErrors.emergNombre}</span>}
             </div>
             <div className="campo-con-error">
@@ -1707,12 +1673,12 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
               <div className="row">
                 <div className="campo-con-error">
                   <input placeholder="Nombre *" value={mNombre} className={mErrors.nombre ? "input-error" : ""}
-                    onChange={(e) => { setMNombre(e.target.value); clearMError("nombre"); }} />
+                    onChange={(e) => { setMNombre(capitalizarNombre(e.target.value)); clearMError("nombre"); }} />
                   {mErrors.nombre && <span className="campo-error">{mErrors.nombre}</span>}
                 </div>
                 <div className="campo-con-error">
                   <input placeholder="Apellido *" value={mApellido} className={mErrors.apellido ? "input-error" : ""}
-                    onChange={(e) => { setMApellido(e.target.value); clearMError("apellido"); }} />
+                    onChange={(e) => { setMApellido(capitalizarNombre(e.target.value)); clearMError("apellido"); }} />
                   {mErrors.apellido && <span className="campo-error">{mErrors.apellido}</span>}
                 </div>
               </div>
@@ -1752,7 +1718,7 @@ function DetalleCuenta({ cuenta, onCerrar, onCambio, permiteCuotas, permiteContr
               <div className="row">
                 <div className="campo-con-error">
                   <input placeholder="Nombre del contacto *" value={mEmergNombre} className={mErrors.emergNombre ? "input-error" : ""}
-                    onChange={(e) => { setMEmergNombre(e.target.value); clearMError("emergNombre"); }} />
+                    onChange={(e) => { setMEmergNombre(capitalizarNombre(e.target.value)); clearMError("emergNombre"); }} />
                   {mErrors.emergNombre && <span className="campo-error">{mErrors.emergNombre}</span>}
                 </div>
                 <div className="campo-con-error">
@@ -2100,8 +2066,8 @@ function FilaResidente({ residente, cuentaId, onActualizado }: {
           ) : (
             <div className="datos-editar">
               <div className="row">
-                <input placeholder="Nombre" value={f.nombre} onChange={e => set("nombre", e.target.value)} />
-                <input placeholder="Apellido" value={f.apellido} onChange={e => set("apellido", e.target.value)} />
+                <input placeholder="Nombre" value={f.nombre} onChange={e => set("nombre", capitalizarNombre(e.target.value))} />
+                <input placeholder="Apellido" value={f.apellido} onChange={e => set("apellido", capitalizarNombre(e.target.value))} />
               </div>
               <div className="campo-con-error">
                 <input placeholder="Correo electrónico" type="email" value={f.email}

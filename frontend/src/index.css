@@ -2601,6 +2601,98 @@ html { scroll-behavior: smooth; }
 .pill-estado--queja     { background: #fef3c7; color: #92400e; }
 /* El "hace 5 min" va más tenue que el estado: es el dato de apoyo. */
 .pill-estado-cuando { opacity: .65; font-weight: 500; margin-left: 2px; }
+
+/* ── Día 73 — espera de confirmación del correo ───────────────────────
+   Tres estados en el mismo lugar: esperando, llegó, rebotó.
+
+   El movimiento tiene que ser corto y tener un motivo. La barra se mueve
+   porque algo está pasando de verdad del otro lado; el tilde se DIBUJA
+   una vez, en 400 ms, y se queda quieto. Nada late, nada rebota, nada
+   gira sin razón: eso es lo que hace que una pantalla se sienta de
+   relleno. Un solo gesto, y después silencio.
+
+   Con prefers-reduced-motion no se anima nada: el resultado se muestra
+   dibujado, que es lo único que de verdad importa. */
+.confirmacion {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 10px; padding: 26px 20px;
+}
+.confirmacion h4 { margin: 0; font-size: 16px; color: var(--marca-azul); }
+.confirmacion p { max-width: 380px; margin: 0; text-align: center; }
+.confirmacion button { margin-top: 6px; }
+.confirmacion .row-btns { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.confirmacion .row-btns button { white-space: nowrap; margin-top: 0; }
+
+/* Esperando — el sobre se dibuja solo y la barra avanza de izquierda a
+   derecha sin fingir un porcentaje que no sabemos. */
+.confirmacion-sobre svg { overflow: visible; }
+.confirmacion-sobre-cuerpo {
+  fill: #f4f7fb; stroke: #c3cedd; stroke-width: 2;
+}
+.confirmacion-sobre-solapa {
+  fill: none; stroke: var(--marca-azul); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 60; stroke-dashoffset: 60;
+  animation: trazar .5s ease-out forwards;
+}
+.confirmacion-barra {
+  width: 190px; height: 3px; border-radius: 3px; background: #e8edf4;
+  overflow: hidden; margin-top: 2px;
+}
+.confirmacion-barra span {
+  display: block; width: 40%; height: 100%; border-radius: 3px;
+  background: var(--marca-azul); animation: recorrer 1.25s ease-in-out infinite;
+}
+@keyframes recorrer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+/* Llegó — el aro aparece y el tilde se dibuja detrás de él. */
+.confirmacion-check-aro {
+  fill: #dcfce7; stroke: #86efac; stroke-width: 2;
+  transform-origin: center; animation: aparecer .28s ease-out both;
+}
+.confirmacion-check-tilde {
+  fill: none; stroke: #15803d; stroke-width: 4;
+  stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 40; stroke-dashoffset: 40;
+  animation: trazar .4s cubic-bezier(.2,.8,.3,1) .2s forwards;
+}
+@keyframes aparecer {
+  from { transform: scale(.82); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+@keyframes trazar { to { stroke-dashoffset: 0; } }
+
+/* Rebotó — misma forma, sin festejo. El aro aparece y ya. */
+.confirmacion-aviso-aro {
+  fill: #fee2e2; stroke: #fca5a5; stroke-width: 2;
+  transform-origin: center; animation: aparecer .28s ease-out both;
+}
+.confirmacion-aviso-linea {
+  stroke: #991b1b; stroke-width: 4; stroke-linecap: round;
+  stroke-dasharray: 16; stroke-dashoffset: 16;
+  animation: trazar .3s ease-out .18s forwards;
+}
+.confirmacion-aviso-punto { fill: #991b1b; }
+.confirmacion--error h4 { color: #991b1b; }
+
+/* Sin confirmar — neutro: no es un error. */
+.confirmacion-reloj .confirmacion-aviso-aro { fill: #eef2f7; stroke: #cbd5e1; }
+.confirmacion-reloj-agujas {
+  fill: none; stroke: #475569; stroke-width: 3;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirmacion-sobre-solapa,
+  .confirmacion-check-aro, .confirmacion-check-tilde,
+  .confirmacion-aviso-aro, .confirmacion-aviso-linea {
+    animation: none; stroke-dashoffset: 0; opacity: 1; transform: none;
+  }
+  .confirmacion-barra span { animation: none; width: 100%; opacity: .5; }
+}
 /* Día 72 — la ficha del residente se veía desordenada: con columnas de
    180px entraban tres y un correo normal no cabía, así que se partía a la
    mitad de la palabra. Con 230px entran dos en el ancho del modal y el

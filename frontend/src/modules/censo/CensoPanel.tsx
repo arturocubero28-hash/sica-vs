@@ -11,6 +11,8 @@ import {
 import { ModalFotoResidente } from "../../components/ModalFotoResidente";
 import { CapturaFoto } from "../../components/CapturaFoto";
 import { formatearDNI } from "../../utils/dni";
+import { capitalizarNombre } from "../../utils/texto";
+import { ConfirmacionEnvio } from "../../components/ConfirmacionEnvio";
 
 /**
  * Panel del Padrón (Censo) — Día 69.
@@ -509,6 +511,13 @@ function ModalCasaCenso({ onCerrar, onListo, onError }: {
   const [dni, setDni] = useState("");
   const [telefono, setTelefono] = useState("");
   const [guardando, setGuardando] = useState(false);
+  // Día 73 — el error se muestra DENTRO del modal.
+  //
+  // Antes se mandaba con onError al panel de atrás, que lo dibuja arriba
+  // de la lista. Con el modal abierto encima eso es invisible: la acción
+  // fallaba, el modal se quedaba igual y en pantalla no pasaba nada. El
+  // onError se sigue usando, pero solo para lo que pasa DESPUÉS de cerrar.
+  const [error, setError] = useState("");
 
   useEffect(() => {
     listarUnidades()
@@ -517,21 +526,21 @@ function ModalCasaCenso({ onCerrar, onListo, onError }: {
   }, []);
 
   async function guardar() {
-    if (!nombre.trim()) { onError("Indicá el nombre del titular"); return; }
+    if (!nombre.trim()) { setError("Indicá el nombre del titular"); return; }
     if (tipo === "casa" && !identificador.trim()) {
-      onError("Indicá el identificador de la casa"); return;
+      setError("Indicá el identificador de la casa"); return;
     }
     if (tipo === "edificio") {
-      if (!identificador.trim()) { onError("Indicá el nombre del edificio"); return; }
-      if (duenoVive === null) { onError("Indicá si el dueño vive en el edificio o solo lo administra"); return; }
-      if (duenoVive && !apartamento.trim()) { onError("Indicá en qué apartamento vive el dueño"); return; }
+      if (!identificador.trim()) { setError("Indicá el nombre del edificio"); return; }
+      if (duenoVive === null) { setError("Indicá si el dueño vive en el edificio o solo lo administra"); return; }
+      if (duenoVive && !apartamento.trim()) { setError("Indicá en qué apartamento vive el dueño"); return; }
     }
     if (tipo === "apartamento") {
-      if (!edificioId) { onError("Elegí el edificio"); return; }
-      if (!apartamento.trim()) { onError("Indicá el número de apartamento"); return; }
+      if (!edificioId) { setError("Elegí el edificio"); return; }
+      if (!apartamento.trim()) { setError("Indicá el número de apartamento"); return; }
     }
 
-    setGuardando(true);
+    setGuardando(true); setError("");
     try {
       await crearCasaCenso({
         tipo,
@@ -549,7 +558,7 @@ function ModalCasaCenso({ onCerrar, onListo, onError }: {
       const nombreEd = edificios.find(e => e.id === edificioId)?.identificador ?? "El edificio";
       onListo(tipo === "apartamento" ? `${nombreEd} · Apto ${apartamento.trim()}` : identificador.trim());
     } catch (e) {
-      onError((e as Error).message);
+      setError((e as Error).message);
     } finally {
       setGuardando(false);
     }
@@ -564,6 +573,7 @@ function ModalCasaCenso({ onCerrar, onListo, onError }: {
           <h3>Agregar al padrón</h3>
           <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
+        {error && <div className="error" style={{ marginBottom: 10 }}>⚠ {error}</div>}
         <p className="muted small">
           No se pide tarifa ni día de pago: en el padrón nadie paga. Solo queda
           registrado para que sus accesos tengan nombre.
@@ -672,7 +682,8 @@ function ModalCasaCenso({ onCerrar, onListo, onError }: {
               {/* Muy recomendada: es con lo que el guardia compara cuando la
                   persona llega sin código a pedir que le abran. */}
               <label>Identidad (la usa el guardia para verificar en el portón)</label>
-              <input value={dni} onChange={e => setDni(e.target.value)} placeholder="0000-0000-00000" />
+              <input value={dni} inputMode="numeric" maxLength={15}
+            onChange={e => setDni(formatearDNI(e.target.value))} placeholder="0000-0000-00000" />
             </div>
             <div className="form-field">
               <label>Teléfono (opcional)</label>
@@ -697,10 +708,17 @@ function ModalPersonaCenso({ casa, onCerrar, onListo, onError }: {
   const [dni, setDni] = useState("");
   const [relacion, setRelacion] = useState("familiar");
   const [guardando, setGuardando] = useState(false);
+  // Día 73 — el error se muestra DENTRO del modal.
+  //
+  // Antes se mandaba con onError al panel de atrás, que lo dibuja arriba
+  // de la lista. Con el modal abierto encima eso es invisible: la acción
+  // fallaba, el modal se quedaba igual y en pantalla no pasaba nada. El
+  // onError se sigue usando, pero solo para lo que pasa DESPUÉS de cerrar.
+  const [error, setError] = useState("");
 
   async function guardar() {
-    if (!nombre.trim()) { onError("El nombre es obligatorio"); return; }
-    setGuardando(true);
+    if (!nombre.trim()) { setError("El nombre es obligatorio"); return; }
+    setGuardando(true); setError("");
     try {
       await agregarPersonaCenso(casa.id, {
         nombre: nombre.trim(), apellido: apellido.trim(),
@@ -708,7 +726,7 @@ function ModalPersonaCenso({ casa, onCerrar, onListo, onError }: {
       });
       onListo(`${nombre.trim()} ${apellido.trim()}`.trim());
     } catch (e) {
-      onError((e as Error).message);
+      setError((e as Error).message);
     } finally {
       setGuardando(false);
     }
@@ -721,17 +739,19 @@ function ModalPersonaCenso({ casa, onCerrar, onListo, onError }: {
           <h3>Agregar persona a {casa.nombre_completo || casa.identificador}</h3>
           <button className="ghost mini" onClick={onCerrar}>✕</button>
         </div>
+        {error && <div className="error" style={{ marginBottom: 10 }}>⚠ {error}</div>}
         <div className="form-field">
           <label>Nombre</label>
-          <input value={nombre} onChange={e => setNombre(e.target.value)} />
+          <input value={nombre} onChange={e => setNombre(capitalizarNombre(e.target.value))} />
         </div>
         <div className="form-field">
           <label>Apellido</label>
-          <input value={apellido} onChange={e => setApellido(e.target.value)} />
+          <input value={apellido} onChange={e => setApellido(capitalizarNombre(e.target.value))} />
         </div>
         <div className="form-field">
           <label>Identidad (opcional)</label>
-          <input value={dni} onChange={e => setDni(e.target.value)} placeholder="0000-0000-00000" />
+          <input value={dni} inputMode="numeric" maxLength={15}
+            onChange={e => setDni(formatearDNI(e.target.value))} placeholder="0000-0000-00000" />
         </div>
         <div className="form-field">
           <label>Relación</label>
@@ -752,16 +772,70 @@ function ModalPersonaCenso({ casa, onCerrar, onListo, onError }: {
 }
 
 // ─── Modal: convertir la casa a participación completa ───────────────────
+/**
+ * Día 73 — convertir dejó de ser "elegí una tarifa".
+ *
+ * EL PROBLEMA: este modal pedía tarifa y día de pago, convertía la casa y
+ * listo. La casa quedaba cobrando cuota, pero su titular seguía siendo
+ * una persona del padrón: sin correo, sin ficha completa y sin enlace de
+ * activación. O sea, una familia a la que el sistema le empieza a cobrar
+ * y que no puede entrar a ver qué debe.
+ *
+ * El texto de abajo decía "después dale acceso desde la lista de la
+ * casa", que es pedirle al administrador que se acuerde de un segundo
+ * paso en otra pantalla, justo cuando ya cerró el modal y cree que
+ * terminó. En la práctica no se hacía.
+ *
+ * Ahora es un asistente de tres pasos: cuota, ficha del titular, y la
+ * confirmación de que el correo llegó. Es el mismo recorrido del alta
+ * normal, porque el resultado es el mismo: una casa que paga y una
+ * persona que entra a la app.
+ *
+ * La cuenta contenedora de un edificio es la excepción de siempre: no
+ * paga cuota, así que se salta el primer paso.
+ */
 function ModalConvertir({ casa, onCerrar, onListo, onError }: {
   casa: Cuenta; onCerrar: () => void; onListo: (nota: string) => void; onError: (t: string) => void;
 }) {
+  const titular = casa.titular;
+  // Día 70 — la administración de un edificio cuyo dueño no vive ahí no
+  // paga cuota nunca (igual que en el alta normal): no se le pide tarifa.
+  const esContenedora = casa.tipo_cuenta === "edificio_contenedor";
+  // Si el titular ya tiene acceso (no es gente de padrón), no hay ficha
+  // que completar: solo falta la parte de la cuota.
+  const necesitaAcceso = !!titular && titular.es_censo !== false && !titular.email;
+
+  const pasos: { id: "cuota" | "titular" | "envio"; titulo: string }[] = [
+    ...(esContenedora ? [] : [{ id: "cuota" as const, titulo: "Cuota" }]),
+    ...(necesitaAcceso ? [{ id: "titular" as const, titulo: "Titular" },
+                          { id: "envio" as const, titulo: "Correo" }] : []),
+  ];
+  const [paso, setPaso] = useState<"cuota" | "titular" | "envio">(pasos[0]?.id ?? "cuota");
+  const indice = Math.max(0, pasos.findIndex(p => p.id === paso));
+
   const [tarifas, setTarifas] = useState<Tarifa[]>([]);
   const [tarifaId, setTarifaId] = useState<number | "">("");
   const [diaPago, setDiaPago] = useState(1);
   const [guardando, setGuardando] = useState(false);
-  // Día 70 — la administración de un edificio cuyo dueño no vive ahí no
-  // paga cuota nunca (igual que en el alta normal): no se le pide tarifa.
-  const esContenedora = casa.tipo_cuenta === "edificio_contenedor";
+  // Día 73 — el error se muestra ACÁ ADENTRO. Antes se mandaba con
+  // onError al panel de atrás, donde queda tapado por este mismo modal:
+  // la acción fallaba y en pantalla no pasaba nada.
+  const [error, setError] = useState("");
+
+  const [f, setF] = useState({
+    email: "",
+    apellido: titular?.apellido || "",
+    telefono: titular?.telefono || "",
+    dni: titular?.dni || "",
+    direccion_exacta: titular?.direccion_exacta || "",
+    profesion: titular?.profesion || "",
+    contacto_emergencia_nombre: titular?.contacto_emergencia_nombre || "",
+    contacto_emergencia_telefono: titular?.contacto_emergencia_telefono || "",
+  });
+  const [foto, setFoto] = useState<File | null>(null);
+  const [errs, setErrs] = useState<Record<string, string>>({});
+  const [convertida, setConvertida] = useState(false);
+
   const titulo = esContenedora
     ? `${casa.identificador} · administración`
     : (casa.nombre_completo || casa.identificador);
@@ -770,62 +844,213 @@ function ModalConvertir({ casa, onCerrar, onListo, onError }: {
     if (!esContenedora) listarTarifas().then(setTarifas).catch(() => setTarifas([]));
   }, [esContenedora]);
 
+  function set(campo: keyof typeof f, valor: string) {
+    setF(p => ({ ...p, [campo]: valor }));
+    setErrs(p => { const n = { ...p }; delete n[campo]; return n; });
+  }
+
+  /** Paso 1 → convierte la casa (genera la cuota prorrateada). */
   async function convertir() {
-    setGuardando(true);
+    if (!esContenedora && tarifaId === "") {
+      setError("Elegí la tarifa que va a pagar esta casa.");
+      return;
+    }
+    setGuardando(true); setError("");
     try {
       const r = await convertirCasaCenso(casa.id, esContenedora ? {} : {
-        tarifa_id: tarifaId === "" ? undefined : Number(tarifaId),
-        dia_pago: diaPago,
+        tarifa_id: Number(tarifaId), dia_pago: diaPago,
       });
-      onListo(`${titulo} ya participa del sistema. ${r.nota}`);
+      setConvertida(true);
+      if (!necesitaAcceso) {
+        onListo(`${titulo} ya participa del sistema. ${r.nota}`);
+        return;
+      }
+      setPaso("titular");
     } catch (e) {
-      onError((e as Error).message);
+      setError((e as Error).message);
     } finally {
       setGuardando(false);
     }
   }
 
+  /** Paso 2 → completa la ficha del titular y le crea el acceso. */
+  async function darAcceso() {
+    const e: Record<string, string> = {};
+    if (!f.email.trim()) e.email = "El correo es obligatorio.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim()))
+      e.email = "El correo no tiene un formato válido.";
+    if (!f.apellido.trim()) e.apellido = "El apellido es obligatorio.";
+    if (!f.telefono.trim()) e.telefono = "El teléfono es obligatorio.";
+    if (!f.dni.trim()) e.dni = "La identidad es obligatoria.";
+    else if (f.dni.replace(/\D/g, "").length !== 13)
+      e.dni = "El DNI debe tener 13 dígitos (0000-0000-00000).";
+    if (!f.direccion_exacta.trim()) e.direccion_exacta = "La dirección exacta es obligatoria.";
+    if (!f.profesion.trim()) e.profesion = "La profesión es obligatoria.";
+    if (!f.contacto_emergencia_nombre.trim())
+      e.contacto_emergencia_nombre = "El contacto de emergencia es obligatorio.";
+    if (!f.contacto_emergencia_telefono.trim())
+      e.contacto_emergencia_telefono = "El teléfono del contacto es obligatorio.";
+    if (!titular?.foto_url && !foto) e.foto = "La foto es obligatoria.";
+    setErrs(e);
+    if (Object.keys(e).length > 0) { setError("Completá lo que falta."); return; }
+
+    setGuardando(true); setError("");
+    try {
+      await darAccesoPersona(titular!.id, {
+        email: f.email.trim().toLowerCase(),
+        apellido: f.apellido.trim(), telefono: f.telefono.trim(), dni: f.dni.trim(),
+        direccion_exacta: f.direccion_exacta.trim(), profesion: f.profesion.trim(),
+        contacto_emergencia_nombre: f.contacto_emergencia_nombre.trim(),
+        contacto_emergencia_telefono: f.contacto_emergencia_telefono.trim(),
+      });
+      if (foto) {
+        try { await subirFotoResidente(casa.id, titular!.id, foto); } catch { /* no bloquea */ }
+      }
+      setPaso("envio");
+    } catch (e2) {
+      setError((e2 as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const campo = (clave: keyof typeof f, etiqueta: string) => (
+    <div className="campo-con-error">
+      <label className="campo-label">{etiqueta} *</label>
+      <input value={f[clave]} className={errs[clave] ? "input-error" : ""}
+        maxLength={clave === "dni" ? 15 : undefined}
+        inputMode={clave === "dni" ? "numeric" : undefined}
+        onChange={ev => set(clave,
+          clave === "dni" ? formatearDNI(ev.target.value)
+          : clave === "apellido" || clave === "contacto_emergencia_nombre"
+            ? capitalizarNombre(ev.target.value)
+          : ev.target.value)} />
+      {errs[clave] && <span className="campo-error">{errs[clave]}</span>}
+    </div>
+  );
+
   return (
-    <div className="modal" onClick={onCerrar}>
-      <div className="modal-body" onClick={e => e.stopPropagation()}>
-        <div className="modal-head">
-          <h3>{titulo} se suma al sistema</h3>
-          <button className="ghost mini" onClick={onCerrar}>✕</button>
-        </div>
-        {esContenedora ? (
-          <div className="ok-box">
-            El dueño solo administra el edificio, así que <strong>no se le genera
-            cuota</strong>. Las cuotas las pagan los apartamentos.
+    <div className="modal" onClick={paso === "envio" ? undefined : onCerrar}>
+      <div className="modal-body modal-alta" onClick={e => e.stopPropagation()}>
+        <div className="modal-alta-head">
+          <div>
+            <h3>{titulo} se suma al sistema</h3>
+            <p className="muted small" style={{ margin: 0, textAlign: "left" }}>
+              {pasos.length > 1 ? `Paso ${indice + 1} de ${pasos.length}` : "Pasa a pagar cuota"}
+            </p>
           </div>
-        ) : (
-        <>
-        <div className="ok-box">
-          Las cuotas empiezan a generarse <strong>desde el mes en curso</strong>.
-          No se le cobran los meses en que estuvo solo en el padrón.
+          {paso !== "envio" && (
+            <button className="modal-x" onClick={onCerrar} aria-label="Cerrar">✕</button>
+          )}
         </div>
-        <div className="form-field">
-          <label>Tarifa</label>
-          <select value={tarifaId} onChange={e => setTarifaId(e.target.value === "" ? "" : Number(e.target.value))}>
-            <option value="">Elegí una tarifa…</option>
-            {tarifas.map(t => (
-              <option key={t.id} value={t.id}>{t.nombre} — L {t.monto}</option>
+
+        {pasos.length > 1 && (
+          <div className="alta-pasos" role="list">
+            {pasos.map((p, i) => (
+              <span key={p.id} role="listitem"
+                className={`alta-paso ${i === indice ? "alta-paso--actual" : ""} ${i < indice ? "alta-paso--hecho" : ""}`}>
+                <span className="alta-paso-num">{i < indice ? "✓" : i + 1}</span>
+                <span className="alta-paso-txt">{p.titulo}</span>
+              </span>
             ))}
-          </select>
-        </div>
-        <div className="form-field">
-          <label>Día de pago</label>
-          <input type="number" min={1} max={30} value={diaPago}
-            onChange={e => setDiaPago(Number(e.target.value))} />
-        </div>
-        </>
+          </div>
         )}
-        <p className="muted small">
-          Después de convertirla, dale acceso a la app a cada persona que lo necesite
-          desde la lista de la casa.
-        </p>
-        <button onClick={convertir} disabled={guardando}>
-          {guardando ? "Convirtiendo…" : "Sumar al sistema"}
-        </button>
+
+        <div className="modal-alta-body">
+          {error && <div className="error" style={{ marginBottom: 12 }}>⚠ {error}</div>}
+
+          {paso === "cuota" && (
+            <>
+              {esContenedora ? (
+                <div className="ok-box">
+                  El dueño solo administra el edificio, así que <strong>no se le
+                  genera cuota</strong>. Las cuotas las pagan los apartamentos.
+                </div>
+              ) : (
+                <>
+                  <div className="ok-box">
+                    Las cuotas empiezan a generarse <strong>desde el mes en curso</strong>,
+                    prorrateadas por los días que quedan. No se le cobran los meses en
+                    que estuvo solo en el padrón.
+                  </div>
+                  <div className="form-field">
+                    <label>Tarifa *</label>
+                    <select value={tarifaId}
+                      onChange={e => { setTarifaId(e.target.value === "" ? "" : Number(e.target.value)); setError(""); }}>
+                      <option value="">Elegí una tarifa…</option>
+                      {tarifas.map(t => (
+                        <option key={t.id} value={t.id}>{t.nombre} — L {t.monto}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label>Día de pago</label>
+                    <input type="number" min={1} max={30} value={diaPago}
+                      onChange={e => setDiaPago(Number(e.target.value))} />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {paso === "titular" && (
+            <>
+              <div className="info-box" style={{ marginBottom: 14 }}>
+                <Info size={15} />
+                <span>
+                  {titular?.nombre} pasa a ser residente con app y cuota, así que
+                  necesita la ficha completa y un correo donde recibir el enlace
+                  de acceso. En el padrón alcanzaba con el nombre.
+                </span>
+              </div>
+              <div className="campo-grupo">
+                <label className="campo-label">Foto *</label>
+                <div className="campo-con-error">
+                  <CapturaFoto valor={foto} error={!!errs.foto}
+                    onCambio={ff => { setFoto(ff); if (ff) setErrs(p => { const n = { ...p }; delete n.foto; return n; }); }} />
+                  {titular?.foto_url && !foto && (
+                    <span className="muted small" style={{ display: "block", textAlign: "left", marginTop: 6 }}>
+                      Ya tiene foto del padrón. Tomá una nueva solo si hace falta.
+                    </span>
+                  )}
+                  {errs.foto && <span className="campo-error">{errs.foto}</span>}
+                </div>
+              </div>
+              <div className="row">{campo("email", "Correo")}{campo("apellido", "Apellido")}</div>
+              <div className="row">{campo("telefono", "Teléfono")}{campo("dni", "Identidad")}</div>
+              <div className="row">{campo("direccion_exacta", "Dirección exacta")}{campo("profesion", "Profesión")}</div>
+              <div className="row">
+                {campo("contacto_emergencia_nombre", "Contacto de emergencia")}
+                {campo("contacto_emergencia_telefono", "Teléfono del contacto")}
+              </div>
+            </>
+          )}
+
+          {paso === "envio" && (
+            <ConfirmacionEnvio
+              cuentaId={casa.id} email={f.email.trim().toLowerCase()}
+              onCorregir={() => { setPaso("titular"); setError(""); }}
+              textoListo="Terminar"
+              onListo={() => onListo(`${titulo} ya participa del sistema y ${titular?.nombre} tiene acceso a la app.`)} />
+          )}
+        </div>
+
+        {paso !== "envio" && (
+          <div className="modal-alta-footer">
+            <button className="ghost" onClick={onCerrar} disabled={guardando}>
+              {convertida ? "Dejar para después" : "Cancelar"}
+            </button>
+            {paso === "cuota" ? (
+              <button onClick={convertir} disabled={guardando}>
+                {guardando ? "Sumando…" : necesitaAcceso ? "Siguiente →" : "Sumar al sistema"}
+              </button>
+            ) : (
+              <button onClick={darAcceso} disabled={guardando}>
+                {guardando ? "Creando acceso…" : "Crear acceso y enviar correo"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -868,6 +1093,9 @@ function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
   const [foto, setFoto] = useState<File | null>(null);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
+  // Día 73 — mismo criterio que los otros modales: el error se ve acá
+  // adentro, no en el panel que queda tapado por este modal.
+  const [error, setError] = useState("");
 
   function set(campo: keyof typeof f, valor: string) {
     setF(p => ({ ...p, [campo]: valor }));
@@ -897,7 +1125,7 @@ function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
     setErrs(e);
     if (Object.keys(e).length > 0) return;
 
-    setGuardando(true);
+    setGuardando(true); setError("");
     try {
       await darAccesoPersona(persona.id, {
         email: f.email.trim().toLowerCase(),
@@ -925,7 +1153,7 @@ function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
       onListo(`${persona.nombre} ya puede usar la app. Se le envió el enlace `
         + `para que defina su contraseña.${avisoFoto}`);
     } catch (e) {
-      onError((e as Error).message);
+      setError((e as Error).message);
     } finally {
       setGuardando(false);
     }
@@ -935,7 +1163,11 @@ function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
     <div className="campo-con-error">
       <label className="campo-label">{etiqueta} *</label>
       <input type={tipo} value={f[clave]} className={errs[clave] ? "input-error" : ""}
-        onChange={e => set(clave, clave === "dni" ? formatearDNI(e.target.value) : e.target.value)}
+        onChange={e => set(clave,
+          clave === "dni" ? formatearDNI(e.target.value)
+          : clave === "apellido" || clave === "contacto_emergencia_nombre"
+            ? capitalizarNombre(e.target.value)
+          : e.target.value)}
         maxLength={clave === "dni" ? 15 : undefined}
         inputMode={clave === "dni" ? "numeric" : undefined} />
       {errs[clave] && <span className="campo-error">{errs[clave]}</span>}
@@ -956,6 +1188,8 @@ function ModalDarAcceso({ persona, casaId, onCerrar, onListo, onError }: {
         </div>
 
         <div className="modal-alta-body">
+          {error && <div className="error" style={{ marginBottom: 12 }}>⚠ {error}</div>}
+
           <div className="info-box" style={{ marginBottom: 14 }}>
             <Info size={15} />
             <span>
