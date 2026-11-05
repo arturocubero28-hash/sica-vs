@@ -189,9 +189,41 @@ docker compose -f docker-compose.prod.yml up -d --build backend worker
 Si el cambio fue en el frontend:
 
 ```bash
+cd /opt/sicavs
+bash deploy/actualizar.sh
+```
+
+El script hace el `git pull`, reconstruye solo lo que cambió y avisa si
+hay cambios de Nginx. Preferilo a los comandos sueltos: en una sola noche
+(Día 73) se nos escaparon tres pasos distintos desplegando a mano.
+
+### A mano, si hace falta
+
+**Panel web** — compilar NO alcanza: Vite escribe en `frontend/dist` y
+Nginx sirve `/var/www/sicavs`. Sin el `cp` el panel sigue viejo.
+
+```bash
 cd /opt/sicavs/frontend
-VITE_API_URL=https://patronatovillasdelsol.com/api/v1 npm run build
+npm run build
 cp -r dist/* /var/www/sicavs/
+```
+
+**Backend** — en producción el código va ADENTRO de la imagen
+(`build: ./backend`, sin volumen), a diferencia de desarrollo, donde está
+montado con hot-reload. Por eso acá `restart backend` no sirve, y `up -d`
+sin `--build` tampoco: recrea el contenedor pero reusa la imagen vieja.
+Dice "Started" y el código nuevo no está.
+
+```bash
+cd /opt/sicavs
+docker compose -f docker-compose.prod.yml up -d --build backend worker
+```
+
+Para confirmar que el código llegó, buscá dentro del contenedor algo que
+solo exista en el cambio nuevo:
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend grep -c "<texto nuevo>" app/api/<archivo>.py
 ```
 
 ## Backups automáticos de la base de datos (Día 60)
