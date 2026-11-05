@@ -92,6 +92,12 @@ services:
       SPACES_REGION: ${SPACES_REGION:-nyc3}
       SPACES_CDN_URL: ${SPACES_CDN_URL:?falta SPACES_CDN_URL en .env}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # Día 73 — el secreto de firma del webhook de Resend. Sin esta línea
+      # la variable puede estar en el .env y NO llega al contenedor: acá
+      # las variables se pasan una por una, no con env_file. El endpoint
+      # /api/v1/webhooks/resend rechaza todo mientras esté vacía, así que
+      # el síntoma es "los rebotes no se detectan" sin ningún error.
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
       LOGO_URL: ${LOGO_URL:-}
       GOOGLE_ISSUER_ID: ${GOOGLE_ISSUER_ID:-}
       GOOGLE_SERVICE_ACCOUNT_EMAIL: ${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}
@@ -130,6 +136,10 @@ services:
       SPACES_REGION: ${SPACES_REGION:-nyc3}
       SPACES_CDN_URL: ${SPACES_CDN_URL}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # Día 73 — el worker no recibe webhooks, pero crea la app completa
+      # (ver el comentario de abajo), y Config la lee al arrancar. Sin
+      # esto, los dos procesos tendrían configuraciones distintas.
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
     # Día 62 — mismo motivo que en backend: notificaciones.inicializar()
     # corre dentro de create_app(), que el worker TAMBIÉN ejecuta (ver
     # tasks/notificaciones_task.py y tasks/correo_task.py) -- sin este
