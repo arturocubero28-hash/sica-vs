@@ -128,7 +128,9 @@ export function DetalleArreglo({ arreglo, onCerrar, onCambio }: {
                   })}
                 </ol>
                 {activo && (
-                  <p className="arr-nota"><Landmark size={15} /><span>Los abonos se cobran en <b>Caja</b>, o el residente sube su comprobante desde la app.</span></p>
+                  <p className="arr-nota"><Landmark size={15} /><span>{arreglo.proposito === "volver_al_padron"
+                    ? <>Los abonos se pagan <b>en Caja</b>. Si la casa ya está en el padrón, la familia no tiene la app para subir comprobantes.</>
+                    : <>Los abonos se cobran en <b>Caja</b>, o el residente sube su comprobante desde la app.</>}</span></p>
                 )}
               </section>
 

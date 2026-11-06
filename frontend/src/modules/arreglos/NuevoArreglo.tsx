@@ -473,7 +473,9 @@ export function NuevoArreglo({ onCreado, onCancelar }: {
                   <span>Si la casa estaba bloqueada, <b>se desbloquea hoy</b>.</span></li>
               )}
               <li><span className="sal-efecto-icono"><Wallet size={18} /></span>
-                <span>Los abonos se cobran en <b>Caja</b>, o el residente sube su comprobante desde la app.</span></li>
+                <span>{enPadron || proposito === "volver_al_padron"
+                  ? <>Los abonos se pagan <b>en Caja</b>: en el padrón la familia ya no tiene la app para subir comprobantes.</>
+                  : <>Los abonos se cobran en <b>Caja</b>, o el residente sube su comprobante desde la app.</>}</span></li>
               <li><span className="sal-efecto-icono"><Ban size={18} /></span>
                 <span>Si un abono se atrasa más de <b>{gracia} días</b>, el arreglo queda incumplido y la deuda
                   vuelve a quedar pendiente{enPadron || proposito === "volver_al_padron"
