@@ -580,6 +580,21 @@ def _aplicar_conversion(cuenta, plan, usuario_actual):
                 "días por cobrar; la primera será la del mes que viene.")
     db.session.flush()   # para que cuenta.id exista si la cuenta es nueva
     ya_existe = Cuota.query.filter_by(cuenta_id=cuenta.id, periodo=datos["periodo"]).first()
+    if ya_existe is not None and ya_existe.nivelada:
+        # Día 75 — la casa ya tuvo una cuota este mes: salió al padrón y
+        # vuelve en el mismo mes. Antes no se generaba nada (la cuota del
+        # mes ya existía) y el resto del mes le salía gratis. No puede haber
+        # dos cuotas del mismo mes, así que se le suman a esa los días desde
+        # que vuelve: queda debiendo solo la diferencia (caja cobra el saldo).
+        from decimal import Decimal
+        anterior = Decimal(str(ya_existe.monto))
+        ya_existe.monto = anterior + Decimal(str(datos["monto"]))
+        ya_existe.monto_original = ya_existe.monto
+        ya_existe.estado = "pendiente"
+        return (base + f" Como ya tenía la cuota de este mes por L {anterior:,.2f} (los días "
+                f"de antes de salir), se le sumaron L {datos['monto']:,.2f} por los "
+                f"{datos['dias_restantes']} días que quedan desde hoy. Vence el "
+                f"{datos['fecha_vencimiento'].strftime('%d/%m/%Y')}.")
     if ya_existe is None:
         db.session.add(Cuota(
             cuenta_id=cuenta.id, periodo=datos["periodo"],

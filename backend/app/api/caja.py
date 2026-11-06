@@ -18,6 +18,13 @@ from app.utils.fechas import mes_es
 
 caja_bp = Blueprint("caja", __name__)
 
+
+def _saldo_cuota(cuota):
+    """Monto de la cuota menos lo que ya se le pagó (pagos aprobados)."""
+    pagado = (db.session.query(db.func.coalesce(db.func.sum(Pago.monto), 0))
+              .filter(Pago.cuota_id == cuota.id, Pago.estado == "aprobado").scalar())
+    return dinero.a_decimal(cuota.monto) - dinero.a_decimal(pagado or 0)
+
 METODOS_VENTANILLA = ("efectivo", "tarjeta_pos")
 
 
@@ -154,12 +161,22 @@ def registrar_pago(usuario_actual):
         return jsonify({"error": {"code": "en_arreglo",
                                   "message": "Esa cuota está dentro de un arreglo de pago. Cobrá el abono del arreglo, no la cuota directamente."}}), 400
 
+    # Día 75 — se cobra el SALDO, no el monto de la cuota. Una cuota puede
+    # tener ya un pago: la de una casa que salió al padrón (pagó los días
+    # de antes) y volvió en el mismo mes (se le sumaron los días nuevos).
+    # Antes se cobraba el monto entero y se le volvía a cobrar lo ya pagado.
+    saldo = _saldo_cuota(cuota)
+    if saldo <= 0:
+        cuota.estado = "pagada"
+        db.session.commit()
+        return jsonify({"error": {"code": "ya_pagada", "message": "Esa cuota ya está pagada"}}), 400
+
     pago = Pago(
         cuota_id=cuota.id,
         cuenta_id=cuota.cuenta_id,
         subido_por=usuario_actual.id,
         metodo=metodo,
-        monto=cuota.monto,
+        monto=saldo,
         referencia=referencia,
         estado="aprobado",                 # pago en ventanilla se aprueba al instante
         revisado_por=usuario_actual.id,
@@ -429,7 +446,8 @@ def buscar_cuenta(usuario_actual):
             "cuotas_pendientes": [{
                 "cuota_id": str(q2.uuid_publico),
                 "mes_label": mes_es(q2.periodo),
-                "monto": dinero.a_float(q2.monto),
+                # Día 75 — lo que falta pagar, no el monto de la cuota.
+                "monto": dinero.a_float(_saldo_cuota(q2)),
                 "estado": q2.estado,
             } for q2 in pendientes],
             "abonos_arreglo": abonos_por_cuenta.get(c.id, []),

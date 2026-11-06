@@ -2484,6 +2484,7 @@ function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
   // padrón. Para que caja cobre solo eso, primero se nivela la cuota.
   const [pagarAntes, setPagarAntes] = useState<string | null>(null);
   const [nivelada, setNivelada] = useState(false);
+  const [seguroSeVa, setSeguroSeVa] = useState(false);
 
   async function simularPadron() {
     setTrabajando(true); setMsg(null); setSimulacion(null); setPagarAntes(null);
@@ -2591,8 +2592,22 @@ function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
                   {!nivelada ? (
                     <>
                       <span>{pagarAntes}</span>
+                      <div className="aviso-nivelar">
+                        <b>Nivelá solo si la familia ya confirmó que deja de pagar.</b>
+                        <span> Al nivelar, la cuota de este mes queda cobrada solo por estos días, así
+                          que la casa <b>tiene que pasar al padrón</b>: si se queda en el sistema, el resto
+                          del mes le sale gratis.</span>
+                        <span> Si después cambia de idea, pasala igual al padrón y volvé a sumarla desde
+                          <b> Padrón → Sumar al sistema</b>: ahí se le cobran los días que quedan del mes,
+                          prorrateados desde ese día.</span>
+                      </div>
+                      <label className="cuota-check" style={{ marginTop: 8 }}>
+                        <input type="checkbox" checked={seguroSeVa} onChange={e => setSeguroSeVa(e.target.checked)} />
+                        <span>La familia ya confirmó que deja de pagar mensualidad</span>
+                      </label>
                       <div style={{ marginTop: 10 }}>
-                        <button className="btn-tabla btn-tabla-editar" onClick={nivelarParaCobrar} disabled={nivelando}>
+                        <button className="btn-tabla btn-tabla-editar" onClick={nivelarParaCobrar}
+                          disabled={nivelando || !seguroSeVa}>
                           ⚖ {nivelando ? "Nivelando…" : `Nivelar al ${new Date(fechaDes + "T00:00:00").toLocaleDateString("es-HN")}`}
                         </button>
                       </div>
@@ -2645,6 +2660,7 @@ function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
               <div className="baja-paso-titulo">Paso 1 · Nivelar el saldo (recomendado)</div>
               <p className="muted small" style={{ margin: "0 0 8px" }}>
                 Si ya se generó una cuota que no va a ocupar completa, se cobra solo por los días ocupados.
+                <b> Nivelá solo si la mudanza es segura</b>: después hay que darla de baja en el paso 2.
               </p>
               <div className="row" style={{ alignItems: "flex-end" }}>
                 <div className="form-field" style={{ flex: 1 }}>

@@ -4553,3 +4553,6 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
 .censo-panel .casa-acciones { flex-wrap: wrap; justify-content: flex-end; max-width: 320px; margin-left: auto; }
 /* Día 75 — cuota que no puede ir en el arreglo (todavía no vence). */
 .cuota-check--fuera { opacity: .6; cursor: not-allowed; }
+/* Día 75 — advertencia antes de nivelar: el monto queda reducido. */
+.aviso-nivelar { margin-top: 10px; padding: 10px 12px; border-radius: 8px;
+  background: #fff; border: 1px solid #fcd34d; color: #78350f; font-size: 13px; line-height: 1.5; }

@@ -289,6 +289,33 @@ with app.app_context():
        Cuota.query.filter_by(cuenta_id=nueva[1]).first().estado == "pagada")
 
 
+print("\n3b. Vuelve a sumarse en el MISMO mes")
+resto = calcular_cuota_prorrateada(600, 5)
+if resto is None:
+    print("  (hoy es fin de mes comercial: no queda fraccion, se omite)")
+else:
+    r = cli.post(f"/api/v1/censo/casas/{S60}/convertir", json={"tarifa_id": 1, "dia_pago": 5}, headers=H)
+    ok("al dia -> se vuelve a sumar (200)", r.status_code == 200)
+    with app.app_context():
+        q = Cuota.query.filter_by(cuenta_id=nueva[1]).all()
+        ok("sigue habiendo UNA sola cuota del mes", len(q) == 1)
+        ok(f"a la cuota se le suman los dias que quedan: {esperado} + {resto['monto']}",
+           float(q[0].monto) == round(esperado + resto["monto"], 2) and q[0].estado == "pendiente")
+    r = cli.get("/api/v1/caja/buscar-cuenta?q=Casa%20Sesenta", headers=HC)
+    pend = r.get_json()["data"][0]["cuotas_pendientes"]
+    ok(f"caja muestra solo lo que falta: L {resto['monto']}",
+       len(pend) == 1 and pend[0]["monto"] == resto["monto"])
+    r = cli.post("/api/v1/caja/pago", json={"cuota_id": q60, "metodo": "efectivo"}, headers=HC)
+    ok("caja cobra -> 200", r.status_code in (200, 201))
+    with app.app_context():
+        from app.models.cuenta import Pago
+        montos = sorted(float(x.monto) for x in Pago.query.filter_by(cuenta_id=nueva[1]).all())
+        ok(f"se cobro {resto['monto']}, no la cuota entera otra vez",
+           montos == sorted([esperado, resto["monto"]]))
+        ok("y la cuota queda pagada",
+           Cuota.query.filter_by(cuenta_id=nueva[1]).first().estado == "pagada")
+
+
 print("\n4. Cancelar un arreglo sin nada vencido no bloquea la casa")
 with app.app_context():
     otra = casa_completa("Paola")
