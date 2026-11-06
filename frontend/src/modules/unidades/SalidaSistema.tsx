@@ -478,7 +478,7 @@ function DesgloseDeuda({ d }: { d: SimulacionBaja["deuda"] }) {
 }
 
 export function Aviso({ tono, icono, titulo, monto, children }: {
-  tono: "cobrar" | "bloqueo" | "ok"; icono: React.ReactNode; titulo: string;
+  tono: "cobrar" | "bloqueo" | "ok" | "info"; icono: React.ReactNode; titulo: string;
   monto?: number; children?: React.ReactNode;
 }) {
   return (

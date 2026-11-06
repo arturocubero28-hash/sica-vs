@@ -4760,3 +4760,137 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
 @media (prefers-reduced-motion: reduce) {
   .sal-cuerpo, .sal-listo-marca, .sal-gira { animation: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Día 75 — NUEVO ARREGLO y DETALLE (modules/arreglos/*). Reutiliza el
+   sistema .sal-* de «Salida del sistema»; acá solo lo propio del arreglo.
+   La pieza central es el calendario de abonos (.arr-calendario).
+   ══════════════════════════════════════════════════════════════════════ */
+.sal-modal.sal-pagina { max-height: none; max-width: 860px; margin: 0 auto; overflow: visible;
+  box-shadow: 0 4px 24px rgba(2, 46, 69, .07); }
+.sal-pagina .sal-cuerpo { overflow: visible; }
+.sal-pagina .sal-pie { border-radius: 0 0 18px 18px; }
+.sal-modal .sal-camino.sel { border-color: var(--marca-azul); background: #eef4fa; }
+
+/* Casa */
+.arr .sal-input-icono .arr-buscar { width: 100%; padding-left: 36px; font-size: 15px; }
+.arr-casas { display: flex; flex-direction: column; gap: 6px; max-height: 420px; overflow-y: auto; padding: 2px; }
+.sal-modal .arr-casa { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 12px;
+  background: #fff; color: var(--sal-tinta); border: 1.5px solid var(--sal-linea); border-radius: 12px;
+  padding: 10px 14px; text-align: left; font-weight: 400; transition: border-color .15s ease, background-color .15s ease; }
+.sal-modal .arr-casa:hover:not(:disabled) { background: var(--sal-suave); border-color: var(--marca-azul);
+  color: var(--sal-tinta); transform: none; box-shadow: none; }
+.arr-casa-icono { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+  background: #e8f0f7; color: var(--marca-azul); }
+.arr-casa-texto { display: flex; flex-direction: column; min-width: 0; }
+.arr-casa-texto b { font-size: 15px; }
+.arr-casa-texto span { font-size: 13px; color: var(--sal-gris); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arr-casa-deuda { font-size: 12.5px; font-weight: 600; color: var(--sal-gris); white-space: nowrap; }
+.arr-casa-deuda.con { color: var(--sal-mal-tx); background: var(--sal-mal-bg); padding: 4px 10px; border-radius: 999px; }
+.arr-casa--sin { opacity: .7; }
+
+/* Cuotas */
+.arr-cuotas { display: flex; flex-direction: column; gap: 6px; }
+.arr-cuota { display: grid; grid-template-columns: 22px 1fr auto; grid-template-rows: auto auto; column-gap: 12px;
+  align-items: center; padding: 12px 16px; border: 1.5px solid var(--sal-linea); border-radius: 12px; cursor: pointer;
+  background: #fff; transition: border-color .15s ease, background-color .15s ease; }
+.arr-cuota input { grid-row: span 2; width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--marca-azul); }
+.arr-cuota-mes { font-weight: 700; font-size: 15px; }
+.arr-cuota-estado { grid-column: 2; font-size: 13px; color: var(--sal-gris); }
+.arr-cuota-estado.vencida { color: var(--sal-mal-tx); font-weight: 600; }
+.arr-cuota-monto { grid-row: 1 / span 2; grid-column: 3; font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+.arr-cuota.sel { border-color: var(--marca-azul); background: #f3f7fb; }
+.arr-cuota.fuera { cursor: not-allowed; background: var(--sal-suave); }
+.arr-cuota.fuera .arr-cuota-mes, .arr-cuota.fuera .arr-cuota-monto { color: #94a3b8; }
+.arr-total { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 18px; border-radius: 12px;
+  background: var(--marca-azul); color: #fff; }
+.arr-total span { font-size: 14.5px; opacity: .85; }
+.arr-total b { font-size: 24px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+
+/* Plan: campos + calendario en vivo */
+.arr-plan { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+.arr-plan-campos { display: flex; flex-direction: column; gap: 18px; }
+.sal-campo small { font-weight: 400; font-size: 12.5px; color: var(--sal-gris); }
+.arr-input-lps { display: flex; align-items: center; border: 1px solid #d6deea; border-radius: 9px; background: #fff;
+  max-width: 220px; }
+.arr-input-lps i { font-style: normal; font-weight: 700; color: var(--sal-gris); padding: 0 4px 0 12px; }
+.arr-input-lps--pct i { padding: 0 12px 0 4px; }
+.arr-input-lps input { border: none; flex: 1; min-width: 0; font-size: 15px; }
+.arr-input-lps:focus-within { border-color: var(--marca-azul); }
+.arr-corto { max-width: 120px; }
+.arr-chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sal-modal .arr-chip { background: #fff; color: var(--sal-tinta); border: 1.5px solid var(--sal-linea); border-radius: 999px;
+  padding: 8px 16px; font-size: 14px; font-weight: 600; min-width: 46px; }
+.sal-modal .arr-chip:hover:not(:disabled) { border-color: var(--marca-azul); background: #fff; color: var(--sal-tinta);
+  transform: none; box-shadow: none; }
+.sal-modal .arr-chip.sel { background: var(--marca-azul); border-color: var(--marca-azul); color: #fff; }
+.arr-chip-input { width: 72px; padding: 8px 10px; border-radius: 999px; text-align: center; font-size: 14px; }
+.arr-chip-otro { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 400; color: var(--sal-gris); }
+
+.arr-calendario { position: sticky; top: 12px; border-radius: 16px; background: var(--marca-azul); color: #fff;
+  padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.arr-calendario-cabeza { display: flex; flex-direction: column; }
+.arr-calendario-cabeza span { font-size: 14px; opacity: .8; }
+.arr-calendario-cabeza b { font-size: 34px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.arr-calendario-cabeza small { font-size: 13px; opacity: .8; }
+.arr-abonos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px;
+  max-height: 260px; overflow-y: auto; }
+.arr-abonos li { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: center; padding: 7px 10px;
+  border-radius: 9px; background: rgba(255, 255, 255, .08); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.arr-abonos li.prima { background: rgba(255, 255, 255, .18); }
+.arr-abono-n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 11.5px;
+  font-weight: 700; background: rgba(255, 255, 255, .16); }
+.arr-abono-monto { font-weight: 700; }
+.arr-cuentas { margin: 0; display: grid; gap: 6px; font-size: 13.5px; }
+.arr-cuentas div { display: flex; justify-content: space-between; gap: 12px; }
+.arr-cuentas dt { font-weight: 400; } .arr-cuentas dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.arr-calendario .arr-cuentas dt { opacity: .8; }
+.arr-cuentas .total { padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, .2); font-size: 14.5px; }
+.arr-cuentas .total dd { font-weight: 800; }
+.arr-sin-recargo { margin: 0; font-size: 12.5px; opacity: .75; }
+
+.arr-descuento { border: 1.5px dashed var(--sal-linea); border-radius: 14px; padding: 14px 16px; }
+.arr-descuento .sal-check { margin-top: 0; }
+.arr-descuento.abierto { border-style: solid; border-color: var(--sal-cobrar-borde); background: var(--sal-cobrar-bg); }
+.arr-descuento-explica { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin-top: 12px; color: var(--sal-cobrar-tx); }
+.arr-descuento-explica p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+.arr-descuento-campos { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.arr-descuento-campos .arr-input-lps { max-width: 130px; }
+.arr-aviso-campo { margin: 0; display: flex; gap: 8px; align-items: center; color: var(--sal-mal-tx); font-weight: 600; font-size: 14px; }
+.arr-listo-botones { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+/* Aviso informativo (azul): ni bueno ni malo, solo lo importante */
+.sal-aviso--info { background: #eef4fa; border-color: #c4d6e8; color: var(--marca-azul); }
+.sal-aviso--info .sal-aviso-icono { color: var(--marca-azul); }
+
+/* Detalle: abonos como línea de tiempo */
+.arr-sub { margin: 0 0 12px; font-size: 15px; color: var(--sal-tinta); }
+.arr-linea > li { padding-bottom: 12px; }
+.arr-linea-fila { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 3px; }
+.arr-linea-fila > span:first-child { display: flex; flex-direction: column; }
+.arr-linea-fila b { font-size: 15px; color: var(--sal-tinta); font-variant-numeric: tabular-nums; margin: 0; display: inline; }
+.arr-linea-fila small { font-size: 13px; color: var(--sal-gris); }
+.sal-lista.arr-linea > li.vencido .sal-lista-marca { background: var(--sal-mal-ac); border-color: var(--sal-mal-ac); color: #fff; }
+.arr-nota { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 0; font-size: 13.5px; color: var(--sal-gris); line-height: 1.5; }
+.arr-nota svg { flex-shrink: 0; margin-top: 2px; }
+.arr-nota--texto { padding: 12px 14px; background: var(--sal-suave); border-radius: 10px; white-space: pre-line; }
+.arr-cuentas--detalle { padding: 14px 16px; border: 1px solid var(--sal-linea); border-radius: 14px; font-size: 14px; }
+.arr-cuentas--detalle .total { border-top-color: var(--sal-linea); }
+.arr-cuentas .desc dd { color: var(--sal-ok-tx); }
+.sal-modal .arr-btn-cancelar { color: var(--sal-mal-tx); }
+.sal-modal .arr-btn-cancelar:hover:not(:disabled) { background: var(--sal-mal-bg); color: var(--sal-mal-tx); }
+.sal-campo textarea { font-size: 15px; color: var(--sal-tinta); padding: 10px 12px; border: 1px solid #d6deea;
+  border-radius: 9px; font-family: inherit; resize: vertical; }
+
+@media (max-width: 760px) {
+  .arr-plan { grid-template-columns: 1fr; }
+  .arr-calendario { position: static; }
+}
+@media (max-width: 640px) {
+  .sal-modal.sal-pagina { border-radius: 16px; }
+  .sal-modal .arr-casa { grid-template-columns: 36px 1fr; }
+  .arr-casa-deuda { grid-column: 2; justify-self: start; }
+}
+.arr-calendario .arr-cuentas .desc dd { color: #9be7b4; }
+.arr-chip-input.sel { border-color: var(--marca-azul); box-shadow: inset 0 0 0 1px var(--marca-azul); }
+.arr-abonos { max-height: 340px; }
