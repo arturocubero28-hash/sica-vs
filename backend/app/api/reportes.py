@@ -144,7 +144,7 @@ def reporte_financiero(usuario_actual):
     # no pagó agosto, y además arrastra 2 meses más", sin que eso cambie a
     # qué categoría pertenece la cuenta para el mes que se está mirando.
     todas_pendientes = (scope_cuotas(Cuota.query, usuario_actual)
-                        .filter(Cuota.estado != "pagada")
+                        .filter(Cuota.estado.notin_(["pagada", "anulada"]))
                         .order_by(Cuota.periodo.asc()).all())
     pendientes_por_cuenta = defaultdict(list)
     for c in todas_pendientes:
@@ -293,7 +293,9 @@ def mora_por_casa(usuario_actual):
     # deber nada todavía. Se agrega el filtro de fecha: solo cuentan las
     # cuotas cuyo vencimiento YA PASÓ.
     cuotas = scope_cuotas(Cuota.query, usuario_actual).filter(
-        Cuota.estado != "pagada",
+        # Día 75 — "anulada" tampoco es deuda: es una cuota que la
+        # nivelación dejó en 0 porque la casa ya no estaba ese mes.
+        Cuota.estado.notin_(["pagada", "anulada"]),
         Cuota.fecha_vencimiento < hoy,
     ).order_by(Cuota.periodo.asc()).all()
 
@@ -693,7 +695,7 @@ def reporte_ejecutivo(usuario_actual):
 
     # ── Cartera vencida total (todas las cuotas no pagadas ya vencidas) ──
     cuotas_vencidas = (scope_cuotas(Cuota.query, usuario_actual)
-                       .filter(Cuota.estado != "pagada", Cuota.fecha_vencimiento < hoy)
+                       .filter(Cuota.estado.notin_(["pagada", "anulada"]), Cuota.fecha_vencimiento < hoy)
                        .all())
     cartera_vencida = dinero.suma(c.monto for c in cuotas_vencidas)
     casas_en_mora = len({c.cuenta_id for c in cuotas_vencidas})

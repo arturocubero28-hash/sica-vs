@@ -288,6 +288,26 @@ with app.app_context():
     ok("la cuota vuelve a pendiente (no a vencida)", q.estado == "pendiente")
     ok("y la casa NO queda bloqueada", not c.bloqueada)
 
+
+print("\n5. Una cuota anulada por la nivelacion no es deuda")
+with app.app_context():
+    an = casa_completa("Anulada")
+    viejo = dt.date(HOY.year - 1, 1, 1)
+    db.session.add(Cuota(id=nid(), cuenta_id=an[1], periodo=viejo, monto=0,
+                         monto_original=600, nivelada=True,
+                         fecha_vencimiento=viejo.replace(month=2, day=5), estado="anulada"))
+    c = Cuenta.query.get(an[1]); c.bloqueada = True; c.estado = "en_mora"
+    db.session.commit()
+    ok("con solo una anulada vencida, la casa no tiene cuotas vencidas",
+       not Cuenta.query.get(an[1]).tiene_deuda_vencida())
+    cc = Cuenta.query.get(an[1]); cc.intentar_desbloquear(); db.session.commit()
+    ok("...y se puede desbloquear", not Cuenta.query.get(an[1]).bloqueada)
+r = cli.get("/api/v1/arreglos/cuenta/" + an[0] + "/cuotas-pendientes", headers=H)
+ok("no aparece entre las cuotas para un arreglo", r.get_json()["data"] == [])
+r = cli.get("/api/v1/caja/buscar-cuenta?q=Casa%20Anulada", headers=HC)
+res = (r.get_json() or {}).get("data") or []
+ok("caja no la ofrece para cobrar", r.status_code == 200 and res and res[0]["cuotas_pendientes"] == [])
+
 print()
 if fallos:
     print(f"FALLARON {len(fallos)}:")

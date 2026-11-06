@@ -153,7 +153,7 @@ def cuotas_pendientes_cuenta(usuario_actual, cuenta_uuid):
     # Cuotas no pagadas y que NO estén ya en un arreglo activo
     cuotas = (Cuota.query
               .filter(Cuota.cuenta_id == cuenta.id,
-                      Cuota.estado.notin_(["pagada", "en_arreglo"]))
+                      Cuota.estado.notin_(["pagada", "en_arreglo", "anulada"]))
               .order_by(Cuota.periodo.asc())
               .all())
     return jsonify({"data": [c.to_dict() for c in cuotas]})

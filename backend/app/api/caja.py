@@ -383,7 +383,7 @@ def buscar_cuenta(usuario_actual):
     if cuenta_ids:
         cuotas = (Cuota.query
                   .filter(Cuota.cuenta_id.in_(cuenta_ids),
-                          Cuota.estado.notin_(["pagada", "en_arreglo"]))
+                          Cuota.estado.notin_(["pagada", "en_arreglo", "anulada"]))
                   .order_by(Cuota.periodo.asc()).all())
         for q2 in cuotas:
             cuotas_por_cuenta.setdefault(q2.cuenta_id, []).append(q2)

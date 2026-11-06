@@ -175,12 +175,17 @@ class Cuenta(db.Model):
         True si la cuenta tiene al menos una cuota vencida sin pagar.
         Las cuotas congeladas en un arreglo ('en_arreglo') NO cuentan como
         deuda vencida: el arreglo es el mecanismo activo de pago.
+
+        Día 75 — ni las 'anulada': la nivelación anula (en L 0) la cuota de
+        un mes en que la casa ya no estaba. Antes contaban como deuda, y en
+        cuanto pasaba su fecha de vencimiento la casa no se podía
+        desbloquear y su titular quedaba marcado como moroso.
         """
         from app.models.cuenta import Cuota
         hoy = dt.date.today()
         vencida = (Cuota.query
                    .filter(Cuota.cuenta_id == self.id,
-                           Cuota.estado.notin_(["pagada", "en_arreglo"]),
+                           Cuota.estado.notin_(["pagada", "en_arreglo", "anulada"]),
                            Cuota.fecha_vencimiento < hoy)
                    .first())
         return vencida is not None

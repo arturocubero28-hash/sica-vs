@@ -188,7 +188,7 @@ def listar_cuentas(usuario_actual):
 
     # Conteo de cuotas pendientes/vencidas por cuenta, en UNA query (evita N+1).
     pendientes_raw = (db.session.query(Cuota.cuenta_id, func.count(Cuota.id))
-                      .filter(Cuota.estado.notin_(["pagada", "en_arreglo"]))
+                      .filter(Cuota.estado.notin_(["pagada", "en_arreglo", "anulada"]))
                       .group_by(Cuota.cuenta_id).all())
     pendientes_por_cuenta = {cid: n for cid, n in pendientes_raw}
 
@@ -404,7 +404,7 @@ def crear_cuenta(usuario_actual):
                     or cuenta_prev.estado in ("moroso", "en_mora")
                     or Cuota.query.filter(
                         Cuota.cuenta_id == cuenta_prev.id,
-                        Cuota.estado.notin_(["pagada", "en_arreglo"]),
+                        Cuota.estado.notin_(["pagada", "en_arreglo", "anulada"]),
                         Cuota.fecha_vencimiento < dt.date.today(),
                     ).first() is not None
                 )
