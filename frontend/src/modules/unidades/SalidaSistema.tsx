@@ -53,15 +53,18 @@ const PASOS: Record<Camino, { id: Paso; nombre: string }[]> = {
   ],
 };
 
-export function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
+export function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada, inicial }: {
   cuenta: Cuenta; onCerrar: () => void; onBajaCompletada: () => void;
+  /** Día 75 — abrir directo en un camino (p. ej. después de firmar un
+   *  arreglo «para volver al padrón»), sin la pregunta inicial. */
+  inicial?: Camino;
 }) {
   const nombre = cuenta.identificador || (cuenta.apartamento ? `Apto ${cuenta.apartamento}` : "la casa");
   // ResidenteDTO.nombre ya es el nombre completo (nombre + apellido).
   const titular = cuenta.titular?.nombre || "el titular";
 
-  const [camino, setCamino] = useState<Camino | null>(null);
-  const [paso, setPaso] = useState<Paso>("camino");
+  const [camino, setCamino] = useState<Camino | null>(inicial ?? null);
+  const [paso, setPaso] = useState<Paso>(inicial ? "fecha" : "camino");
   const [fecha, setFecha] = useState(hoyLocal());
   const [motivo, setMotivo] = useState("");
 
@@ -459,8 +462,10 @@ function ResumenPadron({ sim }: { sim: ResultadoVolverPadron }) {
     );
   }
   return (
-    <Aviso tono="ok" icono={<Check size={24} />} titulo="No debe nada: puede pasar al padrón">
-      {sim.arreglo && <p>Su arreglo de pago sigue igual: los abonos se cobran en caja.</p>}
+    <Aviso tono="ok" icono={<Check size={24} />}
+      titulo={sim.arreglo ? "Puede pasar al padrón" : "No debe nada: puede pasar al padrón"}>
+      {sim.arreglo && <p>Lo que debe está en su arreglo de pago: faltan {L(sim.arreglo.saldo_pendiente)},
+        que se siguen cobrando en caja desde el padrón.</p>}
     </Aviso>
   );
 }
@@ -523,7 +528,7 @@ function EfectosAccesos({ a, vuelve }: { a: AccesosCasa; vuelve?: boolean }) {
  * en gris claro los de antes del alta y rayados los posteriores a la salida.
  * Si no hay cuota del mes que nivelar, no dibuja nada.
  */
-function MesesCobrados({ ajustes }: { ajustes: AjusteNivelacion[] }) {
+export function MesesCobrados({ ajustes }: { ajustes: AjusteNivelacion[] }) {
   const prorr = ajustes.filter(a => a.accion === "prorrateada");
   const anuladas = ajustes.filter(a => a.accion === "anulada");
   if (!prorr.length && !anuladas.length) return null;

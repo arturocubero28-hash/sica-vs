@@ -4894,3 +4894,6 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
 .arr-calendario .arr-cuentas .desc dd { color: #9be7b4; }
 .arr-chip-input.sel { border-color: var(--marca-azul); box-shadow: inset 0 0 0 1px var(--marca-azul); }
 .arr-abonos { max-height: 340px; }
+/* Día 75 — cuota del mes que entra al arreglo cobrada solo hasta hoy */
+.arr-cuota-monto s { display: block; text-align: right; font-size: 12.5px; font-weight: 400; color: #94a3b8; }
+.arr-cuota.parcial .arr-cuota-estado { color: var(--sal-cobrar-tx); font-weight: 600; }

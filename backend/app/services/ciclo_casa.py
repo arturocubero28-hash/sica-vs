@@ -74,82 +74,91 @@ def inicio_de_cobro(cuota):
     return 1
 
 
-def nivelar_cuotas(cuotas, fecha_des):
+def tramo_nivelado(cuota, fecha_des):
     """
-    Deja cada cuota impaga en lo que corresponde a los días que la casa
-    estuvo, si deja de pagar en fecha_des (se muda o vuelve al padrón).
+    Cálculo PURO (no modifica nada) de cómo quedaría una cuota si la casa deja
+    de pagar en fecha_des. Lo usan nivelar_cuotas (que lo aplica) y el panel
+    del arreglo (que lo muestra antes de firmar). Devuelve un dict con
+    accion = "igual" | "anulada" | "prorrateada".
 
     MODELO DE COBRO (Día 62, el que usan el alta y el cron mensual): la
     cuota de un mes cobra los días de ESE mes, en mes comercial de 30 días,
     y vence el día de pago del mes SIGUIENTE. La primera cuota de una casa
-    nueva arranca el día siguiente al alta.
-
-    Por eso, para la cuota del mes en que deja de pagar se cobran los días
-    desde que empezó a cobrar esa cuota hasta fecha_des, inclusive:
+    nueva arranca el día siguiente al alta. Para la cuota del mes en que
+    deja de pagar se cobran los días desde que empezó a cobrar esa cuota
+    hasta fecha_des, inclusive:
 
         alta el 2 de noviembre → la cuota cobra del 3 al 30 (28 días)
         deja de pagar el 6     → se cobran del 3 al 6 (4 días)
 
-    Las de meses anteriores se consumieron completas y no se tocan; las de
-    meses posteriores se anulan.
+    Las de meses anteriores se consumieron completas; las de meses
+    posteriores se anulan.
+    """
+    periodo = cuota.periodo
+    baseline = float(cuota.monto_original if cuota.monto_original is not None else cuota.monto)
+    inicio = inicio_de_cobro(cuota)
+    dias_cubiertos = 31 - inicio
+    base = {"periodo": periodo.isoformat(), "monto_original": baseline}
+    mes_cuota = (periodo.year, periodo.month)
+    mes_salida = (fecha_des.year, fecha_des.month)
+    if mes_salida > mes_cuota:
+        return {**base, "accion": "igual", "monto_final": float(cuota.monto)}
+    dia_salida = min(fecha_des.day, 30)
+    if mes_salida < mes_cuota or dia_salida < inicio:
+        return {**base, "accion": "anulada", "monto_final": 0.0}
+    dias = dia_salida - inicio + 1
+    diario = baseline / dias_cubiertos
+    return {**base, "accion": "prorrateada", "dias_ocupados": dias,
+            "desde_dia": inicio, "hasta_dia": dia_salida,
+            "monto_diario": round(diario, 2), "monto_final": round(diario * dias, 2)}
+
+
+def nivelar_cuotas(cuotas, fecha_des):
+    """
+    Deja cada cuota impaga en lo que corresponde a los días que la casa
+    estuvo, si deja de pagar en fecha_des (se muda o vuelve al padrón). El
+    cálculo está en tramo_nivelado.
 
     Día 75 — corregido. Antes contaba los días desde el día de pago DEL
     MISMO mes (el modelo de cobro anterior al Día 62) y tomaba el monto ya
-    prorrateado como si fuera un mes completo: a una casa dada de alta el 2
-    que se iba el 6 le cobraba mal, y si se iba antes del día de pago, nada.
+    prorrateado como si fuera un mes completo.
 
     No hace commit.
     """
     ajustes = []
     for cuota in cuotas:
-        periodo = cuota.periodo  # primer día del mes del período
+        t = tramo_nivelado(cuota, fecha_des)
+        if t["accion"] == "igual":
+            continue  # ese mes lo vivió entero: la cuota queda como estaba
         # Fijar el monto original SOLO la primera vez — evita que nivelaciones
         # repetidas sigan achicando el monto sobre un valor ya reducido.
         if cuota.monto_original is None:
             cuota.monto_original = cuota.monto
-        baseline = float(cuota.monto_original)
-        inicio = inicio_de_cobro(cuota)
-        dias_cubiertos = 31 - inicio
         pagado = monto_pagado_cuota(cuota)
-
-        mes_cuota = (periodo.year, periodo.month)
-        mes_salida = (fecha_des.year, fecha_des.month)
-        if mes_salida > mes_cuota:
-            continue  # ese mes lo vivió entero: la cuota queda como estaba
-        dia_salida = min(fecha_des.day, 30)
-        if mes_salida < mes_cuota or dia_salida < inicio:
-            # Se fue antes de que esta cuota empezara a cobrar → anularla
+        if t["accion"] == "anulada":
             cuota.monto = pagado  # dejarla en lo ya pagado
             cuota.estado = "pagada" if pagado > 0 else "anulada"
             cuota.nivelada = True
-            ajustes.append({
-                "periodo": periodo.isoformat(),
-                "accion": "anulada",
-                "monto_original": baseline,
-                "monto_final": float(cuota.monto),
-            })
+            ajustes.append({**t, "monto_final": float(cuota.monto)})
             continue
-
-        dias_ocupados = dia_salida - inicio + 1
-        monto_diario = baseline / dias_cubiertos
-        monto_nivelado = round(monto_diario * dias_ocupados, 2)
-        cuota.monto = max(monto_nivelado, pagado)  # nunca menos de lo ya pagado
+        cuota.monto = max(t["monto_final"], pagado)  # nunca menos de lo ya pagado
         cuota.nivelada = True
         if pagado >= float(cuota.monto):
             cuota.estado = "pagada"
-        ajustes.append({
-            "periodo": periodo.isoformat(),
-            "accion": "prorrateada",
-            "dias_ocupados": dias_ocupados,
-            # Día 75 — el tramo, para que el panel dibuje el mes: se cobra
-            # del día desde_dia al hasta_dia (comerciales, 1-30).
-            "desde_dia": inicio,
-            "hasta_dia": dia_salida,
-            "monto_diario": round(monto_diario, 2),
-            "monto_original": baseline,
-            "monto_final": float(cuota.monto),
-        })
+        ajustes.append({**t, "monto_final": float(cuota.monto)})
     return ajustes
+
+
+def restaurar_nivelacion(cuota):
+    """
+    Día 75 — deshace la nivelación de una cuota: vuelve a su monto completo.
+    Para cuando la nivelación estaba condicionada a que la casa saliera (un
+    arreglo «para volver al padrón» que se cancela o se incumple con la casa
+    todavía en el sistema). No hace commit.
+    """
+    if cuota.nivelada and cuota.monto_original is not None:
+        cuota.monto = cuota.monto_original
+        cuota.nivelada = False
 
 
 def cuotas_fuera_de_arreglo(cuenta):

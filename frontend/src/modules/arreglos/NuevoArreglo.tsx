@@ -7,7 +7,7 @@ import {
   listarCuentas, cuotasPendientesCuenta, crearArreglo,
   type Cuenta, type CuotaDTO, type PropositoArreglo, type ArregloDTO,
 } from "../../api/client";
-import { Aviso } from "../unidades/SalidaSistema";
+import { Aviso, MesesCobrados, ModalDarBaja } from "../unidades/SalidaSistema";
 
 /* ═══════════════════════════════════════════════════════════════════════
    Día 75 — NUEVO ARREGLO DE PAGO, paso a paso.
@@ -68,6 +68,9 @@ export function NuevoArreglo({ onCreado, onCancelar }: {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
   const [creado, setCreado] = useState<ArregloDTO | null>(null);
+  // Día 75 — al terminar un arreglo «para volver al padrón», se abre ahí
+  // mismo la salida del sistema: la casa no se queda con el mes a medias.
+  const [salida, setSalida] = useState(false);
 
   useEffect(() => { listarCuentas().then(setCuentas).catch(() => setCuentas([])); }, []);
 
@@ -94,7 +97,15 @@ export function NuevoArreglo({ onCreado, onCancelar }: {
   // al salir se cobra solo por los días que la casa estuvo (Día 75).
   const hoy = hoyLocal();
   const noVence = (c: CuotaDTO) => c.fecha_vencimiento >= hoy;
-  const excluida = (c: CuotaDTO) => proposito === "volver_al_padron" && noVence(c);
+  // Día 75 — para volver al padrón, la cuota del mes en curso SÍ entra, pero
+  // cobrada solo hasta hoy (el backend la nivela al crear el arreglo). Queda
+  // afuera solo si no vivió ningún día cobrado, o si es de un mes futuro.
+  const paraPadron = proposito === "volver_al_padron";
+  const tramo = (c: CuotaDTO) => (paraPadron ? c.al_salir_hoy : undefined);
+  const excluida = (c: CuotaDTO) => paraPadron && noVence(c) &&
+    (!c.al_salir_hoy || c.al_salir_hoy.accion === "anulada");
+  const montoEn = (c: CuotaDTO) => tramo(c)?.accion === "prorrateada" ? tramo(c)!.monto_final : c.monto;
+  const cuotaNivelada = (cuotas || []).find(c => sel.includes(c.id) && tramo(c)?.accion === "prorrateada");
   const elegibles = (cuotas || []).filter(c => !excluida(c));
   useEffect(() => {
     // Al entrar a cuotas: marcar las elegibles. Al cambiar el propósito, sacar las excluidas.
@@ -103,7 +114,7 @@ export function NuevoArreglo({ onCreado, onCancelar }: {
   }, [cuotas, proposito]);
 
   // ── Plan (mismo cálculo que el backend) ──────────────────────────────
-  const deudaOriginal = redondear((cuotas || []).filter(c => sel.includes(c.id)).reduce((t, c) => t + c.monto, 0));
+  const deudaOriginal = redondear((cuotas || []).filter(c => sel.includes(c.id)).reduce((t, c) => t + montoEn(c), 0));
   const pctValido = conDescuento ? Math.min(Math.max(pct || 0, 0), 99.99) : 0;
   const descuento = redondear(deudaOriginal * pctValido / 100);
   const deuda = redondear(deudaOriginal - descuento);
@@ -274,22 +285,29 @@ export function NuevoArreglo({ onCreado, onCancelar }: {
                 {cuotas.map(c => {
                   const fuera = excluida(c);
                   const marcada = !fuera && sel.includes(c.id);
+                  const t = tramo(c);
+                  const parcial = t?.accion === "prorrateada";
                   return (
-                    <label key={c.id} className={`arr-cuota ${marcada ? "sel" : ""} ${fuera ? "fuera" : ""}`}>
+                    <label key={c.id} className={`arr-cuota ${marcada ? "sel" : ""} ${fuera ? "fuera" : ""} ${parcial ? "parcial" : ""}`}>
                       <input type="checkbox" checked={marcada} disabled={fuera}
                         onChange={() => setSel(s => s.includes(c.id) ? s.filter(x => x !== c.id) : [...s, c.id])} />
                       <span className="arr-cuota-mes">{c.mes_label}</span>
                       <span className={`arr-cuota-estado ${noVence(c) ? "" : "vencida"}`}>
-                        {fuera ? "Aún no vence · no va en el arreglo"
+                        {fuera ? "No vivió ningún día cobrado este mes · no va en el arreglo"
+                          : parcial ? `Solo los días que ya vivió: del ${t!.desde_dia} al ${t!.hasta_dia} (${t!.dias_ocupados} ${t!.dias_ocupados === 1 ? "día" : "días"})`
                           : noVence(c) ? `Vence el ${fechaCorta(new Date(c.fecha_vencimiento + "T00:00:00"))}`
                           : `Vencida desde el ${fechaCorta(new Date(c.fecha_vencimiento + "T00:00:00"))}`}
                       </span>
-                      <span className="arr-cuota-monto">{L(c.monto)}</span>
+                      <span className="arr-cuota-monto">
+                        {L(montoEn(c))}
+                        {parcial && <s>{L(c.monto)}</s>}
+                      </span>
                     </label>
                   );
                 })}
               </div>
             )}
+            {cuotaNivelada && <MesesCobrados ajustes={[cuotaNivelada.al_salir_hoy!]} />}
             {sel.length > 0 && (
               <div className="arr-total">
                 <span>{sel.length === 1 ? "1 cuota" : `${sel.length} cuotas`} en el arreglo</span>
@@ -429,6 +447,14 @@ export function NuevoArreglo({ onCreado, onCancelar }: {
         {/* ── 5. Confirmar ────────────────────────────────────────────── */}
         {paso === "confirmar" && cuenta && (
           <>
+            {cuotaNivelada && !enPadron && (
+              <Aviso tono="cobrar" icono={<AlertTriangle size={24} />} titulo="La casa tiene que pasar al padrón hoy">
+                <p>La cuota de {cuotaNivelada.mes_label.split(" ")[0].toLowerCase()} entra cobrada solo hasta hoy,
+                  porque la familia deja de pagar mensualidad. Al terminar, pasala al padrón con el botón que
+                  aparece: si se queda en el sistema, el resto del mes le sale gratis.</p>
+                <p>Si el arreglo se cancela con la casa todavía en el sistema, la cuota vuelve a su monto completo.</p>
+              </Aviso>
+            )}
             <Aviso tono="info" icono={<Handshake size={24} />}
               titulo={numAbonos === 1 ? "1 abono de" : `${numAbonos} abonos de`} monto={montoAbono}>
               <p>{proposito === "volver_al_padron" ? "Para saldar la deuda y volver al padrón." : "Para ponerse al día y seguir pagando."}
@@ -439,7 +465,8 @@ export function NuevoArreglo({ onCreado, onCancelar }: {
             <ul className="sal-efectos">
               <li><span className="sal-efecto-icono"><CalendarDays size={18} /></span>
                 <span>Entran {sel.length === 1 ? "1 cuota" : `${sel.length} cuotas`}:{" "}
-                  {(cuotas || []).filter(c => sel.includes(c.id)).map(c => c.mes_label).join(", ")}.
+                  {(cuotas || []).filter(c => sel.includes(c.id))
+                    .map(c => tramo(c)?.accion === "prorrateada" ? `${c.mes_label} (${tramo(c)!.dias_ocupados} días)` : c.mes_label).join(", ")}.
                   Mientras el arreglo esté al día, <b>no generan mora</b>.</span></li>
               {!enPadron && (
                 <li><span className="sal-efecto-icono"><ShieldCheck size={18} /></span>
@@ -468,11 +495,20 @@ export function NuevoArreglo({ onCreado, onCancelar }: {
             <h3>Arreglo creado para {nombreCasa}</h3>
             <p>{creado.num_abonos === 1 ? "1 abono" : `${creado.num_abonos} abonos`} de {L(creado.monto_por_abono)}
               {creado.proximo_abono ? `. El primero vence el ${fechaCorta(new Date(creado.proximo_abono.fecha_pactada + "T00:00:00"))}.` : "."}
-              {proposito === "volver_al_padron" && !enPadron ? " Ya puede pasar al padrón desde Casas y residentes." : ""}</p>
-            <div className="arr-listo-botones">
-              <button className="sal-btn sal-btn--fantasma" onClick={onCancelar}>Volver a la lista</button>
-              <button className="sal-btn sal-btn--principal" onClick={() => onCreado(creado)}>Ver el arreglo</button>
-            </div>
+              {paraPadron && !enPadron ? " Ahora falta pasar la casa al padrón." : ""}</p>
+            {paraPadron && !enPadron ? (
+              <div className="arr-listo-botones">
+                <button className="sal-btn sal-btn--fantasma" onClick={() => onCreado(creado)}>Ver el arreglo</button>
+                <button className="sal-btn sal-btn--principal" onClick={() => setSalida(true)}>
+                  <Home size={16} /> Pasar {nombreCasa} al padrón ahora
+                </button>
+              </div>
+            ) : (
+              <div className="arr-listo-botones">
+                <button className="sal-btn sal-btn--fantasma" onClick={onCancelar}>Volver a la lista</button>
+                <button className="sal-btn sal-btn--principal" onClick={() => onCreado(creado)}>Ver el arreglo</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -493,6 +529,12 @@ export function NuevoArreglo({ onCreado, onCancelar }: {
             </button>
           )}
         </footer>
+      )}
+
+      {salida && cuenta && creado && (
+        <ModalDarBaja cuenta={cuenta} inicial="padron"
+          onCerrar={() => setSalida(false)}
+          onBajaCompletada={() => { setSalida(false); onCreado(creado); }} />
       )}
     </div>
   );

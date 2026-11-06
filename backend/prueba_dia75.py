@@ -263,10 +263,8 @@ with app.app_context():
     q = Cuota.query.filter_by(cuenta_id=nueva[1]).first()
     ok("simular no toco la cuota", float(q.monto) == 560 and not q.nivelada)
 
-r = arreglo(S60, proposito="volver_al_padron")
-ok("un arreglo 'para volver al padron' con esa cuota -> 400 cuota_no_vencida",
-   codigo(r) == "cuota_no_vencida")
-ok("...y el mensaje lo explica", "todavía no vence" in r.get_json()["error"]["message"])
+# (El arreglo con la cuota del mes en curso se prueba en 3d, con otra casa:
+# esta sigue el camino de pagar los días en caja.)
 
 r = cli.post(f"/api/v1/unidades/cuentas/{S60}/nivelar-saldo",
              json={"fecha_desocupacion": HOY.isoformat()}, headers=H)
@@ -351,6 +349,51 @@ with app.app_context():
     ok("queda de baja debiendo solo los dias",
        not Cuenta.query.get(mu[1]).activa and
        float(Cuota.query.filter_by(cuenta_id=mu[1]).first().monto) == esperado)
+
+
+print("\n3d. Arreglo para volver al padron: entran los dias que ya vivio este mes")
+with app.app_context():
+    ar = casa_completa("ConArreglo", vencidas=1)       # debe un mes atrasado (600)
+    db.session.add(Cuota(id=nid(), cuenta_id=ar[1], periodo=per, monto=560,
+                         fecha_vencimiento=venc, estado="pendiente", cobra_desde_dia=3))
+    db.session.commit()
+r = cli.get(f"/api/v1/arreglos/cuenta/{ar[0]}/cuotas-pendientes", headers=H)
+lst = r.get_json()["data"]
+actual = [c for c in lst if c.get("al_salir_hoy")]
+ok("las cuotas pendientes traen el calculo de la del mes, hasta hoy",
+   len(actual) == 1 and actual[0]["al_salir_hoy"].get("monto_final") == esperado)
+r = arreglo(ar[0], proposito="volver_al_padron")
+d = r.get_json().get("data") or {}
+if esperado > 0:
+    ok("se crea con la cuota del mes adentro -> 201", r.status_code == 201)
+    ok(f"la deuda es lo atrasado + los dias de este mes: 600 + {esperado}",
+       d.get("deuda_total") == round(600 + esperado, 2))
+    with app.app_context():
+        q = Cuota.query.filter_by(cuenta_id=ar[1], periodo=per).first()
+        ok("esa cuota quedo nivelada y en el arreglo", q.nivelada and q.estado == "en_arreglo"
+           and float(q.monto) == esperado)
+    r2 = cli.post(f"/api/v1/arreglos/{d['id']}/proposito", json={"proposito": "ponerse_al_dia"}, headers=H)
+    ok("no se puede pasar a 'ponerse al dia' con una cuota nivelada -> 409", codigo(r2) == "tiene_cuota_nivelada")
+    r2 = cli.post(f"/api/v1/arreglos/{d['id']}/cancelar", json={"motivo": "cambio de idea"}, headers=H)
+    ok("se cancela -> 200", r2.status_code == 200)
+    with app.app_context():
+        q = Cuota.query.filter_by(cuenta_id=ar[1], periodo=per).first()
+        ok("la casa sigue en el sistema: la cuota vuelve a su monto completo",
+           float(q.monto) == 560 and not q.nivelada and q.estado == "pendiente")
+    r = arreglo(ar[0], proposito="volver_al_padron")
+    d = r.get_json()["data"]
+    r = cli.post(f"/api/v1/unidades/cuentas/{ar[0]}/volver-al-padron", json={}, headers=H)
+    ok("con el arreglo firmado pasa al padron sin cobrar nada aparte -> 200", r.status_code == 200)
+    with app.app_context():
+        a = ArregloPago.query.filter_by(uuid_publico=_uuid.UUID(d["id"])).first()
+        from app.api.arreglos import _descongelar_y_bloquear
+        _descongelar_y_bloquear(a, "incumplido", "prueba")
+        db.session.commit()
+        q = Cuota.query.filter_by(cuenta_id=ar[1], periodo=per).first()
+        ok("si incumple YA en el padron, la cuota queda nivelada (no vuelve al mes entero)",
+           float(q.monto) == esperado and q.nivelada)
+r = cli.get("/api/v1/arreglos/cuenta/" + ar[0] + "/cuotas-pendientes", headers=H)
+ok("(control) responde para la casa propia", r.status_code == 200)
 
 
 print("\n4. Cancelar un arreglo sin nada vencido no bloquea la casa")

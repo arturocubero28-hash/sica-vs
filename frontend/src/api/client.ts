@@ -625,6 +625,9 @@ export const historialProveedores = (params: {
 
 // ── CUOTAS Y PAGOS ────────────────────────────────────────────────────────────
 export interface CuotaDTO {
+  /** Día 75 — solo en cuotas-pendientes, para la cuota del mes en curso:
+   *  cómo quedaría si la casa deja de pagar hoy (arreglo «para volver al padrón»). */
+  al_salir_hoy?: AjusteNivelacion;
   id: string; periodo: string; mes_label: string;
   monto: number; fecha_vencimiento: string; estado: string;
   created_at: string; pagos?: PagoDTO[];

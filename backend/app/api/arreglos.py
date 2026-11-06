@@ -146,8 +146,11 @@ def detalle_arreglo(usuario_actual, uuid):
 @roles_required("admin", "super_admin")
 @requiere_funcion_plan("cuotas")
 def cuotas_pendientes_cuenta(usuario_actual, cuenta_uuid):
+    from app.utils.residencial import pertenece_a_mi_residencial
+    from app.services.ciclo_casa import tramo_nivelado
     cuenta = Cuenta.query.filter_by(uuid_publico=cuenta_uuid).first()
-    if not cuenta:
+    # Día 75 — también de la residencial de quien pregunta (antes no se miraba).
+    if not cuenta or not pertenece_a_mi_residencial(cuenta.unidad, usuario_actual):
         return _err("no_encontrada", "Cuenta no encontrada", 404)
 
     # Cuotas no pagadas y que NO estén ya en un arreglo activo
@@ -156,7 +159,17 @@ def cuotas_pendientes_cuenta(usuario_actual, cuenta_uuid):
                       Cuota.estado.notin_(["pagada", "en_arreglo", "anulada"]))
               .order_by(Cuota.periodo.asc())
               .all())
-    return jsonify({"data": [c.to_dict() for c in cuotas]})
+    # Día 75 — para un arreglo «para volver al padrón», la cuota del mes en
+    # curso entra nivelada hasta hoy. Se manda el cálculo para que el panel
+    # lo muestre antes de firmar (es el mismo que aplica crear_arreglo).
+    hoy = dt.date.today()
+    datos = []
+    for c in cuotas:
+        d = c.to_dict()
+        if (c.periodo.year, c.periodo.month) == (hoy.year, hoy.month) and c.fecha_vencimiento >= hoy:
+            d["al_salir_hoy"] = tramo_nivelado(c, hoy)
+        datos.append(d)
+    return jsonify({"data": datos})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -183,8 +196,11 @@ def crear_arreglo(usuario_actual):
     }
     """
     data = request.get_json(silent=True) or {}
+    from app.utils.residencial import pertenece_a_mi_residencial
     cuenta = Cuenta.query.filter_by(uuid_publico=data.get("cuenta_id")).first()
-    if not cuenta:
+    # Día 75 — también de la residencial de quien lo arma (antes no se miraba:
+    # con el uuid de una casa ajena se le podía armar un arreglo).
+    if not cuenta or not pertenece_a_mi_residencial(cuenta.unidad, usuario_actual):
         return _err("no_encontrada", "Cuenta no encontrada", 404)
 
     # Día 74 — para qué se firma. Se pregunta siempre: no todas las casas
@@ -228,18 +244,29 @@ def crear_arreglo(usuario_actual):
             return _err("cuota_no_elegible",
                         f"La cuota de {mes_es(c.periodo)} no se puede incluir (ya pagada o en otro arreglo)", 400)
 
-    # Día 75 — si la casa firma para volver al padrón, la cuota del mes en
-    # curso (que todavía no vence) NO va en el arreglo: al volver al padrón
-    # se nivela a los días que la casa estuvo. Si entrara acá, quedaría
-    # congelada por el monto entero y se le cobraría el mes completo.
+    # Día 75 — si la casa firma para volver al padrón, el arreglo salda TODO
+    # lo que debe, incluidos los días que ya vivió este mes: la cuota del mes
+    # en curso entra NIVELADA hasta hoy (no por el mes entero). Si el arreglo
+    # se cancela o se incumple con la casa todavía en el sistema, esa cuota
+    # vuelve a su monto completo (_descongelar_y_bloquear). Una cuota de un
+    # mes que todavía no empezó no puede entrar.
     if proposito == "volver_al_padron":
+        from app.services.ciclo_casa import nivelar_cuotas
         hoy_ = dt.date.today()
-        for c in cuotas:
-            if c.fecha_vencimiento >= hoy_:
-                return _err("cuota_no_vencida",
-                            f"La cuota de {MESES[c.periodo.month - 1]} todavía no vence. Al volver al "
-                            "padrón se cobra solo por los días que la casa estuvo, así que no va en el "
-                            "arreglo: el arreglo es para las cuotas atrasadas.", 400)
+        for c in list(cuotas):
+            mes_c, mes_h = (c.periodo.year, c.periodo.month), (hoy_.year, hoy_.month)
+            if mes_c > mes_h:
+                return _err("cuota_futura",
+                            f"La cuota de {MESES[c.periodo.month - 1]} es de un mes que todavía no "
+                            "empezó: no puede entrar en el arreglo.", 400)
+            if mes_c == mes_h and c.fecha_vencimiento >= hoy_ and not c.nivelada:
+                nivelar_cuotas([c], hoy_)
+                if c.estado in ("pagada", "anulada"):
+                    cuotas.remove(c)   # con lo ya pagado alcanzaba: no queda nada
+        if not cuotas:
+            db.session.rollback()
+            return _err("sin_cuotas", "Con la cuota de este mes cobrada solo hasta hoy, no queda "
+                        "nada por incluir en el arreglo.", 400)
 
     # ── Cálculos financieros ──────────────────────────────────────────────
     deuda_original = _money(sum(Decimal(str(c.monto)) for c in cuotas))
@@ -476,6 +503,15 @@ def cambiar_proposito(usuario_actual, uuid):
         return _err("casa_en_padron",
                     "La casa ya está en el padrón. Para seguir pagando mensualidad, "
                     "primero tiene que volver a sumarse.", 400)
+    # Día 75 — un arreglo para volver al padrón puede tener la cuota del mes
+    # cobrada solo hasta el día que se firmó. Si ahora la casa sigue pagando,
+    # ese monto ya no corresponde: hay que rehacer el arreglo.
+    if nuevo == "ponerse_al_dia" and any(c.nivelada for c in arreglo.cuotas):
+        mes = next(MESES[c.periodo.month - 1] for c in arreglo.cuotas if c.nivelada)
+        return _err("tiene_cuota_nivelada",
+                    f"Este arreglo incluye la cuota de {mes} cobrada solo hasta el día que se firmó, "
+                    "porque la casa iba a volver al padrón. Para que siga pagando, cancelalo (esa "
+                    "cuota vuelve a su monto completo) y firmá uno nuevo «para ponerse al día».", 409)
     if nuevo != arreglo.proposito:
         hoy = dt.date.today().strftime("%d/%m/%Y")
         quien = f"{usuario_actual.nombre} {usuario_actual.apellido}".strip()
@@ -518,11 +554,18 @@ def _descongelar_y_bloquear(arreglo, nuevo_estado, motivo):
     arreglo.estado = nuevo_estado
     arreglo.motivo_cierre = motivo[:255]
     hoy = dt.date.today()
+    cuenta = arreglo.cuenta
+    sigue_en_sistema = bool(cuenta and cuenta.activa and not cuenta.es_censo)
+    from app.services.ciclo_casa import restaurar_nivelacion
     for c in arreglo.cuotas:
         if c.estado == "en_arreglo":
             # Vuelve a vencida (descongelada)
             c.estado = "vencida" if c.fecha_vencimiento < hoy else "pendiente"
-    cuenta = arreglo.cuenta
+            # Día 75 — la cuota del mes nivelada al firmar «para volver al
+            # padrón» estaba cobrada solo hasta ese día porque la casa se iba.
+            # Si la casa sigue en el sistema, vuelve a su monto completo.
+            if sigue_en_sistema:
+                restaurar_nivelacion(c)
     # Día 74 — una casa del padrón (o una que ya se mudó) NO se bloquea: no
     # tiene servicio de cuotas que cortar, y a la gente del padrón el guardia
     # la identifica igual. La deuda queda pendiente a su nombre y le impide
