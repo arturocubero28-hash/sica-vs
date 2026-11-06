@@ -689,13 +689,35 @@ def create_app(config_class=Config):
                    created_at TIMESTAMPTZ DEFAULT NOW()
                )""",
         ]
-        for sql in columnas:
+        # Día 74 — gunicorn levanta 4 procesos y cada uno arma la app, así
+        # que los 4 corrían estas migraciones AL MISMO TIEMPO. Dos creando el
+        # mismo índice en el mismo instante chocaban ("duplicate key value
+        # violates unique constraint pg_class_relname_nsp_index"). El
+        # candado de Postgres hace que entren de a uno: el primero migra y
+        # los demás encuentran todo hecho. Se toma en una conexión aparte
+        # porque el candado vive mientras viva esa conexión.
+        candado = None
+        if db.engine.dialect.name == "postgresql":
             try:
-                db.session.execute(text(sql))
-                db.session.commit()
+                candado = db.engine.connect()
+                candado.execute(text("SELECT pg_advisory_lock(740001)"))
             except Exception as e:
-                db.session.rollback()
-                app.logger.warning(f"Migración de columna omitida: {e}")
+                app.logger.warning(f"Sin candado de migración: {e}")
+                candado = None
+        try:
+            for sql in columnas:
+                try:
+                    db.session.execute(text(sql))
+                    db.session.commit()
+                except Exception as e:
+                    db.session.rollback()
+                    app.logger.warning(f"Migración de columna omitida: {e}")
+        finally:
+            if candado is not None:
+                try:
+                    candado.execute(text("SELECT pg_advisory_unlock(740001)"))
+                finally:
+                    candado.close()
 
     # ── Hook de auditoría forense ──────────────────────────────────────────────
     # Registra automáticamente cada request a la API en log_auditoria.
