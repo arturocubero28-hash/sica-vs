@@ -305,6 +305,21 @@ def volver_al_padron(cuenta, fecha, usuario_actual):
                       f"La casa tiene L {total_vencido:,.2f} en cuotas vencidas. Para volver al "
                       "padrón tiene que pagarlas en caja, o firmar un arreglo de pago "
                       "«para volver al padrón».", 409)
+    # Día 75 — decisión del usuario: lo que queda por pagar FUERA de un
+    # arreglo (los días que estuvo este mes) se paga ANTES de salir, como
+    # quien cierra la cuenta al irse. Así no queda nada que perseguir
+    # después. Para que caja cobre el monto nivelado y no la cuota entera,
+    # primero hay que nivelarla a la fecha (endpoint nivelar-saldo); el
+    # panel lo ofrece con un botón.
+    if total_fuera > 0:
+        dias = [a for a in ajustes if a["accion"] == "prorrateada"]
+        detalle = ""
+        if len(dias) == 1:
+            detalle = f" por los {dias[0]['dias_ocupados']} días que estuvo en el mes"
+        return None, ("pagar_antes_de_salir",
+                      f"Antes de pasar al padrón, la casa tiene que pagar en caja L {total_fuera:,.2f}"
+                      f"{detalle}. Nivelá la cuota a la fecha {fecha.strftime('%d/%m/%Y')} para "
+                      "que caja cobre solo eso, y después volvé a pasarla al padrón.", 409)
 
     cuenta.modo_participacion = "censo"
     cuenta.tarifa_id = None

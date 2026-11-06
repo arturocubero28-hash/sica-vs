@@ -2480,11 +2480,30 @@ function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
     finally { setTrabajando(false); }
   }
 
+  // Día 75 — los días que estuvo este mes se pagan ANTES de pasar al
+  // padrón. Para que caja cobre solo eso, primero se nivela la cuota.
+  const [pagarAntes, setPagarAntes] = useState<string | null>(null);
+  const [nivelada, setNivelada] = useState(false);
+
   async function simularPadron() {
-    setTrabajando(true); setMsg(null); setSimulacion(null);
+    setTrabajando(true); setMsg(null); setSimulacion(null); setPagarAntes(null);
     try { setSimulacion(await volverAlPadron(cuenta.id, { fecha: fechaDes, simular: true })); }
-    catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+    catch (e) {
+      const err = e as Error & { code?: string };
+      if (err.code === "pagar_antes_de_salir") setPagarAntes(err.message);
+      else setMsg({ tipo: "err", texto: err.message });
+    }
     finally { setTrabajando(false); }
+  }
+
+  async function nivelarParaCobrar() {
+    setNivelando(true); setMsg(null);
+    try {
+      const res = await nivelarSaldo(cuenta.id, fechaDes);
+      setAjustes(res.ajustes);
+      setNivelada(true);
+    } catch (e) { setMsg({ tipo: "err", texto: (e as Error).message }); }
+    finally { setNivelando(false); }
   }
 
   async function confirmarPadron() {
@@ -2530,7 +2549,7 @@ function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
             <input type="radio" name="camino" checked={camino === "padron"} onChange={() => elegir("padron")} />
             <b>Sigue viviendo acá, pero deja de pagar mensualidad</b>
             <span className="muted small">Vuelve al padrón: el guardia la sigue identificando, pero sin app.
-              Si tiene cuotas atrasadas, primero tiene que firmar un arreglo de pago «para volver al padrón». La cuota de este mes se cobra solo por los días que estuvo.</span>
+              Si tiene cuotas atrasadas, primero tiene que firmar un arreglo de pago «para volver al padrón». Los días que estuvo este mes se pagan en caja antes de salir.</span>
           </label>
           <label className={`proposito-op ${camino === "mudanza" ? "sel" : ""}`}>
             <input type="radio" name="camino" checked={camino === "mudanza"} onChange={() => elegir("mudanza")} />
@@ -2564,6 +2583,35 @@ function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
                 {trabajando && !simulacion ? "Calculando…" : "Ver qué va a pasar"}
               </button>
             </div>
+
+            {pagarAntes && (
+              <div className="info-box warn" style={{ marginTop: 12 }}>
+                <AlertTriangle size={15} />
+                <div>
+                  {!nivelada ? (
+                    <>
+                      <span>{pagarAntes}</span>
+                      <div style={{ marginTop: 10 }}>
+                        <button className="btn-tabla btn-tabla-editar" onClick={nivelarParaCobrar} disabled={nivelando}>
+                          ⚖ {nivelando ? "Nivelando…" : `Nivelar al ${new Date(fechaDes + "T00:00:00").toLocaleDateString("es-HN")}`}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span><b>Listo, la cuota quedó nivelada.</b> Ahora:</span>
+                      <ol style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                        <li>Cobrá en <b>Caja</b> la cuota de {nombre}
+                          {ajustes && ajustes.filter(a => a.accion === "prorrateada").map((a, i) =>
+                            <span key={i}> (L {a.monto_final.toFixed(2)})</span>)}.</li>
+                        <li>Volvé acá y tocá <b>«Ver qué va a pasar»</b> para pasarla al padrón.</li>
+                      </ol>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+            {pagarAntes && nivelada && ajustesTabla(ajustes)}
 
             {simulacion && (
               <div className="padron-simulacion">

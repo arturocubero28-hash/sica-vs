@@ -248,27 +248,45 @@ S60 = nueva[0]
 esperado = round(560 / 28 * (min(HOY.day, 30) - 2), 2) if HOY.day >= 3 else 0
 
 r = cli.post(f"/api/v1/unidades/cuentas/{S60}/volver-al-padron", json={"simular": True}, headers=H)
-dd = r.get_json().get("data") or {}
-ok("ya NO exige arreglo por una cuota que no ha vencido -> 200", r.status_code == 200)
-ok(f"la simulacion cobra solo los dias que estuvo (L {esperado})",
-   dd.get("queda_debiendo_fuera_de_arreglo") == esperado)
-ok("y nada de eso esta vencido", dd.get("queda_vencido_fuera_de_arreglo") == 0)
+ok("ya NO exige arreglo por una cuota que no ha vencido",
+   codigo(r) != "deuda_sin_arreglo")
+ok("pero exige pagar ANTES los dias que estuvo -> 409 pagar_antes_de_salir",
+   r.status_code == 409 and codigo(r) == "pagar_antes_de_salir")
+msj = r.get_json()["error"]["message"]
+ok(f"...y dice cuanto: L {esperado:,.2f}", f"L {esperado:,.2f}" in msj)
+with app.app_context():
+    q = Cuota.query.filter_by(cuenta_id=nueva[1]).first()
+    ok("simular no toco la cuota", float(q.monto) == 560 and not q.nivelada)
 
 r = arreglo(S60, proposito="volver_al_padron")
 ok("un arreglo 'para volver al padron' con esa cuota -> 400 cuota_no_vencida",
    codigo(r) == "cuota_no_vencida")
 ok("...y el mensaje lo explica", "todavía no vence" in r.get_json()["error"]["message"])
 
-r = cli.post(f"/api/v1/unidades/cuentas/{S60}/volver-al-padron", json={}, headers=H)
-ok("vuelve al padron -> 200", r.status_code == 200)
+r = cli.post(f"/api/v1/unidades/cuentas/{S60}/nivelar-saldo",
+             json={"fecha_desocupacion": HOY.isoformat()}, headers=H)
+ok("se nivela la cuota a la fecha -> 200", r.status_code == 200)
 with app.app_context():
     q = Cuota.query.filter_by(cuenta_id=nueva[1]).first()
-    ok("la cuota queda pendiente por los dias que estuvo", float(q.monto) == esperado
-       and q.estado in ("pendiente", "pagada", "anulada"))
-if esperado > 0:
-    r = cli.post(f"/api/v1/censo/casas/{S60}/convertir", json={"tarifa_id": 1, "dia_pago": 5}, headers=H)
-    ok("no puede volver a sumarse sin pagar esos dias -> 400 deuda_pendiente",
-       codigo(r) == "deuda_pendiente")
+    ok(f"la cuota queda en L {esperado}", float(q.monto) == esperado)
+    q60 = str(q.uuid_publico)
+r = cli.post(f"/api/v1/unidades/cuentas/{S60}/volver-al-padron", json={}, headers=H)
+ok("sin pagar todavia no pasa -> 409", codigo(r) == "pagar_antes_de_salir")
+
+with app.app_context():
+    from app.models.caja import SesionCaja
+    db.session.add(SesionCaja(cajero_id=3, monto_inicial=0, estado="abierta"))
+    db.session.commit()
+r = cli.post("/api/v1/caja/pago", json={"cuota_id": q60, "metodo": "efectivo"}, headers=HC)
+ok(f"caja cobra L {esperado} -> 200", r.status_code in (200, 201))
+if r.status_code not in (200, 201):
+    print("     ", r.get_json())
+r = cli.post(f"/api/v1/unidades/cuentas/{S60}/volver-al-padron", json={}, headers=H)
+ok("pagado, ahora si pasa al padron -> 200", r.status_code == 200)
+with app.app_context():
+    ok("y no queda debiendo nada",
+       Cuenta.query.get(nueva[1]).es_censo and
+       Cuota.query.filter_by(cuenta_id=nueva[1]).first().estado == "pagada")
 
 
 print("\n4. Cancelar un arreglo sin nada vencido no bloquea la casa")
