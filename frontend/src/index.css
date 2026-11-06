@@ -4556,3 +4556,207 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
 /* Día 75 — advertencia antes de nivelar: el monto queda reducido. */
 .aviso-nivelar { margin-top: 10px; padding: 10px 12px; border-radius: 8px;
   background: #fff; border: 1px solid #fcd34d; color: #78350f; font-size: 13px; line-height: 1.5; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Día 75 — SALIDA DEL SISTEMA (modules/unidades/SalidaSistema.tsx)
+   Un asistente por pasos. Lo único llamativo es la barra del mes; el
+   resto es calmo, y los colores de estado se usan solo con significado:
+   ámbar = hay que cobrar, rojo = no se puede / se va debiendo, verde = ok.
+   ══════════════════════════════════════════════════════════════════════ */
+.sal-modal {
+  --sal-tinta: #15283b; --sal-gris: #5f6f82; --sal-linea: #e3e9f1; --sal-suave: #f5f8fc;
+  --sal-cobrar-bg: #fff8eb; --sal-cobrar-borde: #f2c879; --sal-cobrar-tx: #7c4400; --sal-cobrar-ac: #c86f00;
+  --sal-mal-bg: #fff2f1; --sal-mal-borde: #f0b7b3; --sal-mal-tx: #7f1d1d; --sal-mal-ac: #d42a2a;
+  --sal-ok-bg: #effbf3; --sal-ok-borde: #a9e2bf; --sal-ok-tx: #14532d; --sal-ok-ac: #16a34a;
+  background: #fff; color: var(--sal-tinta); width: 100%; max-width: 680px;
+  max-height: 92vh; border-radius: 18px; display: flex; flex-direction: column;
+  box-shadow: 0 24px 60px rgba(10, 30, 50, .28); overflow: hidden;
+}
+.sal-cabeza { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+  padding: 22px 24px 0; }
+.sal-cabeza h2 { margin: 0; font-size: 20px; line-height: 1.25; color: var(--marca-azul); letter-spacing: -.01em; }
+.sal-cabeza p { margin: 4px 0 0; font-size: 13.5px; color: var(--sal-gris); }
+.sal-modal .sal-cerrar { background: var(--sal-suave); color: var(--sal-gris); padding: 8px; border-radius: 10px;
+  display: inline-flex; flex-shrink: 0; }
+.sal-modal .sal-cerrar:hover:not(:disabled) { background: var(--sal-linea); color: var(--sal-tinta);
+  transform: none; box-shadow: none; }
+
+/* Pasos: es una secuencia real, por eso van numerados */
+.sal-pasos { list-style: none; display: flex; margin: 18px 24px 0; padding: 0 0 16px;
+  border-bottom: 1px solid var(--sal-linea); gap: 6px; }
+.sal-pasos li { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 13px;
+  color: var(--sal-gris); position: relative; }
+.sal-pasos li:not(:last-child)::after { content: ""; flex: 1; height: 2px; background: var(--sal-linea);
+  border-radius: 2px; margin-right: 4px; }
+.sal-pasos li.hecho:not(:last-child)::after { background: var(--sal-ok-ac); }
+.sal-pasos-num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: 12.5px; background: var(--sal-suave); border: 1.5px solid var(--sal-linea);
+  flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.sal-pasos li.actual { color: var(--sal-tinta); font-weight: 700; }
+.sal-pasos li.actual .sal-pasos-num { background: var(--marca-azul); border-color: var(--marca-azul); color: #fff; }
+.sal-pasos li.hecho .sal-pasos-num { background: var(--sal-ok-ac); border-color: var(--sal-ok-ac); color: #fff; }
+
+.sal-cuerpo { padding: 20px 24px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;
+  animation: sal-entra .22s ease-out; }
+@keyframes sal-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.sal-pregunta { margin: 0; font-size: 17px; color: var(--sal-tinta); }
+
+/* Paso 1: dos caminos */
+.sal-caminos { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sal-modal .sal-camino { background: #fff; color: var(--sal-tinta); border: 1.5px solid var(--sal-linea);
+  border-radius: 14px; padding: 18px; text-align: left; display: flex; flex-direction: column; gap: 10px;
+  font-weight: 400; transition: border-color .15s ease, background-color .15s ease; }
+.sal-modal .sal-camino:hover:not(:disabled) { background: var(--sal-suave); border-color: var(--marca-azul);
+  color: var(--sal-tinta); transform: none; box-shadow: none; }
+.sal-camino b { font-size: 15.5px; line-height: 1.35; }
+.sal-camino ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--sal-gris); line-height: 1.5; }
+.sal-camino-icono { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+  background: #e8f0f7; color: var(--marca-azul); }
+.sal-camino-icono--mudanza { background: #fdf0e1; color: #b45309; }
+
+/* Campos */
+.sal-fila-fecha { display: flex; gap: 12px; flex-wrap: wrap; }
+.sal-campo { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--sal-gris); }
+.sal-campo--ancho { flex: 1; min-width: 220px; }
+.sal-campo input { font-size: 15px; color: var(--sal-tinta); }
+.sal-input-icono { position: relative; }
+.sal-input-icono svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--sal-gris);
+  pointer-events: none; }
+.sal-input-icono input { padding-left: 36px; }
+.sal-cargando { color: var(--sal-gris); font-size: 14px; padding: 8px 0; }
+.sal-recalculando { opacity: .55; transition: opacity .15s ease; }
+
+/* La barra del mes — la pieza central */
+.sal-meses { display: flex; flex-direction: column; gap: 14px; }
+.sal-mes { margin: 0; padding: 16px; border: 1px solid var(--sal-linea); border-radius: 14px; background: var(--sal-suave); }
+.sal-mes figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  flex-wrap: wrap; margin-bottom: 12px; }
+.sal-mes-nombre { font-weight: 700; font-size: 14.5px; }
+.sal-mes-nombre::first-letter { text-transform: uppercase; }
+.sal-mes-cuenta { font-size: 14px; color: var(--sal-gris); font-variant-numeric: tabular-nums; }
+.sal-mes-cuenta b { color: var(--sal-tinta); font-size: 16px; }
+.sal-mes-cuenta s { margin-left: 8px; color: #94a3b8; }
+.sal-barra { display: grid; grid-template-columns: repeat(30, 1fr); gap: 3px; }
+.sal-barra span { height: 30px; border-radius: 4px; }
+.sal-barra .antes { background: #e7ecf2; }
+.sal-barra .cobra { background: var(--marca-azul); }
+.sal-barra .libre { background: repeating-linear-gradient(135deg, #fff 0 4px, #dfe6ee 4px 7px);
+  box-shadow: inset 0 0 0 1px #dfe6ee; }
+.sal-barra-escala { display: grid; grid-template-columns: repeat(30, 1fr); gap: 3px; margin-top: 4px;
+  font-size: 11px; color: var(--sal-gris); text-align: center; font-variant-numeric: tabular-nums; }
+.sal-leyenda { list-style: none; display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 0; padding: 0;
+  font-size: 12.5px; color: var(--sal-gris); }
+.sal-leyenda li { display: flex; align-items: center; gap: 6px; }
+.sal-leyenda i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.sal-leyenda i.antes { background: #e7ecf2; }
+.sal-leyenda i.cobra { background: var(--marca-azul); }
+.sal-leyenda i.libre { background: repeating-linear-gradient(135deg, #fff 0 3px, #dfe6ee 3px 5px);
+  box-shadow: inset 0 0 0 1px #dfe6ee; }
+.sal-mes-anulada { margin: 0; font-size: 13.5px; color: var(--sal-gris); }
+
+/* Avisos grandes */
+.sal-aviso { border-radius: 14px; padding: 18px 20px; border: 1.5px solid; }
+.sal-aviso--cobrar { background: var(--sal-cobrar-bg); border-color: var(--sal-cobrar-borde); color: var(--sal-cobrar-tx); }
+.sal-aviso--bloqueo { background: var(--sal-mal-bg); border-color: var(--sal-mal-borde); color: var(--sal-mal-tx); }
+.sal-aviso--ok { background: var(--sal-ok-bg); border-color: var(--sal-ok-borde); color: var(--sal-ok-tx); }
+.sal-aviso-cabeza { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; }
+.sal-aviso-cabeza h4 { margin: 0; font-size: 18px; line-height: 1.3; }
+.sal-aviso-icono { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: #fff; }
+.sal-aviso--cobrar .sal-aviso-icono { color: var(--sal-cobrar-ac); }
+.sal-aviso--bloqueo .sal-aviso-icono { color: var(--sal-mal-ac); }
+.sal-aviso--ok .sal-aviso-icono { color: var(--sal-ok-ac); }
+.sal-aviso-monto { font-size: 30px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  white-space: nowrap; }
+.sal-aviso-texto { margin: 12px 0 0 58px; font-size: 14.5px; line-height: 1.55; }
+.sal-aviso-texto p { margin: 0 0 8px; }
+.sal-aviso-texto p:last-child { margin-bottom: 0; }
+.sal-opciones { margin: 4px 0 0; padding-left: 18px; }
+.sal-opciones li { margin-bottom: 6px; }
+.sal-desglose { margin: 0 0 10px; display: grid; gap: 4px; }
+.sal-desglose div { display: flex; justify-content: space-between; gap: 12px; }
+.sal-desglose dt { font-weight: 400; } .sal-desglose dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Lista de lo que falta hacer (paso Cobro) */
+.sal-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.sal-lista > li { display: grid; grid-template-columns: 30px 1fr; gap: 14px; position: relative; padding-bottom: 20px; color: var(--sal-gris); }
+.sal-lista > li:last-child { padding-bottom: 0; }
+.sal-lista > li:not(:last-child)::before { content: ""; position: absolute; left: 14px; top: 32px; bottom: 2px;
+  width: 2px; background: var(--sal-linea); }
+.sal-lista > li.hecho:not(:last-child)::before { background: var(--sal-ok-ac); }
+.sal-lista-marca { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: 13px; background: #fff; border: 2px solid var(--sal-linea); color: var(--sal-gris); }
+.sal-lista > li.actual { color: var(--sal-tinta); }
+.sal-lista > li.actual .sal-lista-marca { border-color: var(--marca-azul); color: var(--marca-azul); }
+.sal-lista > li.hecho .sal-lista-marca { background: var(--sal-ok-ac); border-color: var(--sal-ok-ac); color: #fff; }
+.sal-lista > li > div > b { display: block; font-size: 15px; color: inherit; margin-top: 4px; }
+.sal-lista p { margin: 4px 0 0; font-size: 14px; line-height: 1.5; }
+.sal-lista .sal-btn { margin-top: 12px; }
+.sal-cuidado { display: grid; grid-template-columns: auto 1fr; gap: 12px; margin-top: 12px; padding: 14px 16px;
+  border-radius: 12px; background: var(--sal-cobrar-bg); border: 1.5px solid var(--sal-cobrar-borde); color: var(--sal-cobrar-tx); }
+.sal-cuidado svg { color: var(--sal-cobrar-ac); margin-top: 1px; }
+.sal-cuidado b { margin: 0; font-size: 15px; }
+.sal-cuidado p { margin-top: 6px; font-size: 13.5px; }
+.sal-check { display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; font-size: 14px; color: var(--sal-tinta);
+  cursor: pointer; line-height: 1.4; }
+.sal-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--marca-azul); flex-shrink: 0; padding: 0; }
+.sal-check--fuerte { font-weight: 700; color: var(--sal-mal-tx); }
+.sal-check--fuerte input { accent-color: var(--sal-mal-ac); }
+.sal-nota-falta { color: var(--sal-mal-tx); font-weight: 600; }
+.sal-nota-ok { color: var(--sal-ok-tx); font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.sal-pie-nota { margin: 0; font-size: 13px; color: var(--sal-gris); }
+.sal-gira { animation: sal-gira 1s linear infinite; }
+@keyframes sal-gira { to { transform: rotate(360deg); } }
+
+/* Confirmar: qué va a pasar */
+.sal-efectos { list-style: none; margin: 0; padding: 0; border: 1px solid var(--sal-linea); border-radius: 14px; }
+.sal-efectos li { display: grid; grid-template-columns: 36px 1fr; gap: 12px; align-items: center; padding: 13px 16px;
+  font-size: 14.5px; line-height: 1.45; }
+.sal-efectos li + li { border-top: 1px solid var(--sal-linea); }
+.sal-efecto-icono { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--sal-suave); color: var(--marca-azul); }
+
+/* Listo */
+.sal-listo { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 18px 8px 6px; }
+.sal-listo h3 { margin: 6px 0 0; font-size: 21px; color: var(--sal-tinta); }
+.sal-listo p { margin: 0 0 10px; max-width: 46ch; color: var(--sal-gris); font-size: 14.5px; line-height: 1.55; }
+.sal-listo-marca { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--sal-ok-ac); color: #fff; animation: sal-marca .45s cubic-bezier(.2, 1.4, .4, 1) both; }
+@keyframes sal-marca { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.sal-error { display: flex; gap: 8px; align-items: flex-start; padding: 12px 14px; border-radius: 10px;
+  background: var(--sal-mal-bg); color: var(--sal-mal-tx); font-size: 14px; font-weight: 600; }
+
+/* Pie y botones */
+.sal-pie { display: flex; justify-content: space-between; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--sal-linea);
+  background: #fff; }
+.sal-modal .sal-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 20px;
+  border-radius: 11px; font-size: 15px; font-weight: 700; }
+.sal-modal .sal-btn:hover:not(:disabled) { transform: none; box-shadow: none; }
+.sal-modal .sal-btn--principal { background: var(--marca-naranja); color: #fff; }
+.sal-modal .sal-btn--principal:hover:not(:disabled) { background: var(--marca-naranja); filter: brightness(.94); color: #fff; }
+.sal-modal .sal-btn--peligro { background: #c81e1e; color: #fff; }
+.sal-modal .sal-btn--peligro:hover:not(:disabled) { background: #a91a1a; color: #fff; }
+.sal-modal .sal-btn--secundario { background: #fff; color: var(--marca-azul); border: 1.5px solid var(--marca-azul);
+  padding: 10px 16px; font-size: 14.5px; }
+.sal-modal .sal-btn--secundario:hover:not(:disabled) { background: #eef4fa; color: var(--marca-azul); }
+.sal-modal .sal-btn--fantasma { background: transparent; color: var(--sal-gris); padding-left: 8px; }
+.sal-modal .sal-btn--fantasma:hover:not(:disabled) { background: var(--sal-suave); color: var(--sal-tinta); }
+
+@media (max-width: 640px) {
+  .sal-fondo { padding: 0; align-items: flex-end; }
+  .sal-modal { max-height: 96vh; border-radius: 18px 18px 0 0; }
+  .sal-cabeza { padding: 18px 16px 0; }
+  .sal-pasos { margin: 14px 16px 0; }
+  .sal-pasos li:not(.actual) .sal-pasos-nombre { display: none; }
+  .sal-cuerpo { padding: 16px; }
+  .sal-pie { padding: 12px 16px; }
+  .sal-caminos { grid-template-columns: 1fr; }
+  .sal-barra, .sal-barra-escala { gap: 2px; }
+  .sal-barra span { height: 24px; border-radius: 3px; }
+  .sal-aviso-cabeza { grid-template-columns: auto 1fr; }
+  .sal-aviso-monto { grid-column: 1 / -1; font-size: 28px; }
+  .sal-aviso-texto { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sal-cuerpo, .sal-listo-marca, .sal-gira { animation: none; }
+}

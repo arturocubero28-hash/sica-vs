@@ -646,19 +646,44 @@ def dar_baja_cuenta(usuario_actual, cuenta_uuid):
         return _err("ya_de_baja", "Esta cuenta ya está dada de baja.", 400)
 
     data = request.get_json(silent=True) or {}
+    from app.services.ciclo_casa import nivelar_cuotas, cuotas_fuera_de_arreglo, contar_accesos
+
+    # Día 75 — si viene fecha_salida, la cuota del mes se nivela EN LA MISMA
+    # transacción que la baja. Antes eran dos pasos (Nivelar saldo, y
+    # después Dar de baja): si el admin nivelaba y no terminaba, la casa
+    # quedaba en el sistema con el mes cobrado a medias.
+    ajustes = []
+    fecha_salida = None
+    if data.get("fecha_salida"):
+        try:
+            fecha_salida = dt.date.fromisoformat(data["fecha_salida"])
+        except ValueError:
+            return _err("fecha_invalida", "Formato de fecha inválido (YYYY-MM-DD).", 400)
+        if fecha_salida > dt.date.today():
+            return _err("fecha_invalida", "La fecha de salida no puede ser futura.", 400)
+        ajustes = nivelar_cuotas(cuotas_fuera_de_arreglo(cuenta), fecha_salida)
+        db.session.flush()
+
     deuda = estado_deuda(cuenta)
+    if data.get("simular"):
+        afectados = contar_accesos(cuenta)
+        db.session.rollback()
+        return jsonify({"data": {"simulado": True, "ajustes": ajustes,
+                                 "deuda": deuda, "afectados": afectados}})
+
     if deuda["total"] > 0 and not data.get("confirmar_deuda"):
+        db.session.rollback()
         return _err("saldo_pendiente",
                     f"La casa debe L {deuda['total']:,.2f}. Si se muda igual, la deuda queda "
                     "a nombre del titular y no va a poder darse de alta en otra casa hasta "
-                    "pagarla. Antes podés usar 'Nivelar saldo' para cobrar solo los días "
-                    "que ocupó este mes.", 400)
+                    "pagarla.", 400)
 
-    tarjetas_desactivadas = dar_de_baja(cuenta, data.get("motivo") or "Mudanza")
+    tarjetas_desactivadas = dar_de_baja(cuenta, data.get("motivo") or "Mudanza", fecha_salida)
     db.session.commit()
     d = cuenta.to_dict()
     d["tarjetas_desactivadas"] = tarjetas_desactivadas
     d["deuda_pendiente"] = deuda["total"]
+    d["ajustes"] = ajustes
     return jsonify({"data": d})
 
 
@@ -688,14 +713,21 @@ def volver_al_padron(usuario_actual, cuenta_uuid):
         return _err("fecha_invalida", "Formato de fecha inválido (YYYY-MM-DD).", 400)
 
     resumen, err = ciclo_casa.volver_al_padron(cuenta, fecha, usuario_actual)
+
+    if data.get("simular"):
+        db.session.rollback()
+        # Día 75 — al simular, un "todavía no se puede" con números (debe X,
+        # tiene que cobrar Y) no es un error: es lo que el panel tiene que
+        # explicar. Se devuelve 200 con puede=false y el impedimento.
+        if resumen is not None:
+            return jsonify({"data": {
+                "simulado": True, "puede": err is None,
+                "impedimento": {"code": err[0], "message": err[1]} if err else None,
+                **resumen}})
     if err:
         db.session.rollback()
         code, msg, status = err
         return _err(code, msg, status)
-
-    if data.get("simular"):
-        db.session.rollback()
-        return jsonify({"data": {"simulado": True, **resumen}})
 
     db.session.commit()
     return jsonify({"data": {"simulado": False, "casa": cuenta.to_dict(), **resumen}})

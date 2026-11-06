@@ -141,6 +141,11 @@ def nivelar_cuotas(cuotas, fecha_des):
             "periodo": periodo.isoformat(),
             "accion": "prorrateada",
             "dias_ocupados": dias_ocupados,
+            # Día 75 — el tramo, para que el panel dibuje el mes: se cobra
+            # del día desde_dia al hasta_dia (comerciales, 1-30).
+            "desde_dia": inicio,
+            "hasta_dia": dia_salida,
+            "monto_diario": round(monto_diario, 2),
             "monto_original": baseline,
             "monto_final": float(cuota.monto),
         })
@@ -245,6 +250,22 @@ def suspender_accesos(cuenta):
     return resumen
 
 
+def contar_accesos(cuenta):
+    """Lo que se apagaría al sacar la casa del sistema, sin tocar nada.
+    Para que el panel lo muestre ANTES de confirmar."""
+    from app.models.cuenta import Tarjeta, TarjetaVirtual, CredencialBLE
+    from app.models.visita import Visita
+    return {
+        "usuarios": sum(1 for r in cuenta.residentes
+                        if r.activo and r.usuario is not None and r.usuario.activo
+                        and not r.usuario.es_censo),
+        "tarjetas": Tarjeta.query.filter_by(cuenta_id=cuenta.id, estado="activa").count(),
+        "credenciales": sum(m.query.filter_by(cuenta_id=cuenta.id, estado="activa").count()
+                            for m in (TarjetaVirtual, CredencialBLE)),
+        "visitas": Visita.query.filter_by(cuenta_id=cuenta.id, estado="activa").count(),
+    }
+
+
 def reactivar_suspendidos(cuenta):
     """Al volver a sumarse: prende solo a quienes se apagó por el padrón."""
     n = 0
@@ -259,10 +280,14 @@ def reactivar_suspendidos(cuenta):
 
 def volver_al_padron(cuenta, fecha, usuario_actual):
     """
-    Regla 1. Valida y aplica, SIN commit. Devuelve (resumen, None) o
-    (None, (code, mensaje, status)). Si devuelve error, quien llama tiene que
-    hacer rollback: la nivelación ya se aplicó en la sesión para poder medir
-    cuánto queda debiendo.
+    Regla 1. Valida y aplica, SIN commit. Devuelve:
+      (resumen, None)  → se aplicó;
+      (resumen, err)   → no se puede todavía, pero hay números que mostrar
+                         (cuánto debe, los días del mes): el panel los usa
+                         para explicar qué falta;
+      (None, err)      → no se puede y no hay nada que mostrar.
+    err = (code, mensaje, status). Si hay error, quien llama hace rollback:
+    la nivelación ya se aplicó en la sesión para poder medir lo que queda.
     """
     from app.models.cuenta import Cuenta
 
@@ -285,6 +310,16 @@ def volver_al_padron(cuenta, fecha, usuario_actual):
                       "SEGUIR pagando. Si ahora quiere volver al padrón, cambiá el propósito "
                       "del arreglo (en Arreglos de pago) y volvé a intentarlo.", 409)
 
+    # ¿La cuota del mes ya estaba nivelada? (el admin niveló, fue a caja y
+    # volvió): el panel salta ese paso.
+    ya_nivelada = any(c.nivelada for c in cuotas_fuera_de_arreglo(cuenta)
+                      if (c.periodo.year, c.periodo.month) == (fecha.year, fecha.month))
+    # Si ya se cobró, ya no está entre las impagas: también cuenta como hecho.
+    from app.models.cuenta import Cuota as _Cuota
+    ya_nivelada = ya_nivelada or _Cuota.query.filter(
+        _Cuota.cuenta_id == cuenta.id, _Cuota.nivelada.is_(True),
+        _Cuota.periodo == dt.date(fecha.year, fecha.month, 1)).first() is not None
+
     # La cuota del mes se nivela a los días que estuvo; las de meses
     # posteriores se anulan. Mismo cálculo que "Nivelar saldo" en una mudanza.
     ajustes = nivelar_cuotas(cuotas_fuera_de_arreglo(cuenta), fecha)
@@ -300,8 +335,17 @@ def volver_al_padron(cuenta, fecha, usuario_actual):
     vencidas = [c for c in fuera if c.fecha_vencimiento < hoy]
     total_vencido = round(sum(saldo_cuota(c) for c in vencidas), 2)
     total_fuera = round(sum(saldo_cuota(c) for c in fuera), 2)
+    resumen = {
+        "ajustes": ajustes,
+        "queda_debiendo_fuera_de_arreglo": total_fuera,
+        "queda_vencido_fuera_de_arreglo": total_vencido,
+        "a_cobrar_antes_de_salir": round(total_fuera - total_vencido, 2) if arr is None else total_fuera,
+        "ya_nivelada": ya_nivelada,
+        "arreglo": estado_deuda(cuenta)["arreglo"],
+        "afectados": contar_accesos(cuenta),
+    }
     if total_vencido > 0 and arr is None:
-        return None, ("deuda_sin_arreglo",
+        return resumen, ("deuda_sin_arreglo",
                       f"La casa tiene L {total_vencido:,.2f} en cuotas vencidas. Para volver al "
                       "padrón tiene que pagarlas en caja, o firmar un arreglo de pago "
                       "«para volver al padrón».", 409)
@@ -316,7 +360,7 @@ def volver_al_padron(cuenta, fecha, usuario_actual):
         detalle = ""
         if len(dias) == 1:
             detalle = f" por los {dias[0]['dias_ocupados']} días que estuvo en el mes"
-        return None, ("pagar_antes_de_salir",
+        return resumen, ("pagar_antes_de_salir",
                       f"Antes de pasar al padrón, la casa tiene que pagar en caja L {total_fuera:,.2f}"
                       f"{detalle}. Nivelá la cuota a la fecha {fecha.strftime('%d/%m/%Y')} para "
                       "que caja cobre solo eso, y después volvé a pasarla al padrón.", 409)
@@ -343,14 +387,8 @@ def volver_al_padron(cuenta, fecha, usuario_actual):
             if cont is not None and not cont.es_censo:
                 cont.modo_participacion = "censo"
 
-    suspendidos = suspender_accesos(cuenta)
-    return {
-        "ajustes": ajustes,
-        "queda_debiendo_fuera_de_arreglo": total_fuera,
-        "queda_vencido_fuera_de_arreglo": total_vencido,
-        "arreglo": estado_deuda(cuenta)["arreglo"],
-        "suspendidos": suspendidos,
-    }, None
+    resumen["suspendidos"] = suspender_accesos(cuenta)
+    return resumen, None
 
 
 def dar_de_baja(cuenta, motivo, fecha=None):

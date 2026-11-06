@@ -248,12 +248,17 @@ S60 = nueva[0]
 esperado = round(560 / 28 * (min(HOY.day, 30) - 2), 2) if HOY.day >= 3 else 0
 
 r = cli.post(f"/api/v1/unidades/cuentas/{S60}/volver-al-padron", json={"simular": True}, headers=H)
-ok("ya NO exige arreglo por una cuota que no ha vencido",
-   codigo(r) != "deuda_sin_arreglo")
-ok("pero exige pagar ANTES los dias que estuvo -> 409 pagar_antes_de_salir",
-   r.status_code == 409 and codigo(r) == "pagar_antes_de_salir")
-msj = r.get_json()["error"]["message"]
-ok(f"...y dice cuanto: L {esperado:,.2f}", f"L {esperado:,.2f}" in msj)
+sim = r.get_json()["data"]
+imp = sim.get("impedimento") or {}
+ok("ya NO exige arreglo por una cuota que no ha vencido", imp.get("code") != "deuda_sin_arreglo")
+ok("pero exige pagar ANTES los dias que estuvo (simular: 200, puede=false)",
+   r.status_code == 200 and sim["puede"] is False and imp.get("code") == "pagar_antes_de_salir")
+ok(f"...y dice cuanto: L {esperado:,.2f}", sim["a_cobrar_antes_de_salir"] == esperado
+   and f"L {esperado:,.2f}" in imp.get("message", ""))
+aj = sim["ajustes"][0] if sim["ajustes"] else {}
+ok("trae el tramo de dias para dibujar el mes (desde el 3)",
+   aj.get("desde_dia") == 3 and aj.get("hasta_dia") == min(HOY.day, 30))
+ok("todavia no estaba nivelada", sim["ya_nivelada"] is False)
 with app.app_context():
     q = Cuota.query.filter_by(cuenta_id=nueva[1]).first()
     ok("simular no toco la cuota", float(q.monto) == 560 and not q.nivelada)
@@ -272,6 +277,8 @@ with app.app_context():
     q60 = str(q.uuid_publico)
 r = cli.post(f"/api/v1/unidades/cuentas/{S60}/volver-al-padron", json={}, headers=H)
 ok("sin pagar todavia no pasa -> 409", codigo(r) == "pagar_antes_de_salir")
+r = cli.post(f"/api/v1/unidades/cuentas/{S60}/volver-al-padron", json={"simular": True}, headers=H)
+ok("la simulacion ya sabe que esta nivelada", r.get_json()["data"]["ya_nivelada"] is True)
 
 with app.app_context():
     from app.models.caja import SesionCaja
@@ -314,6 +321,36 @@ else:
            montos == sorted([esperado, resto["monto"]]))
         ok("y la cuota queda pagada",
            Cuota.query.filter_by(cuenta_id=nueva[1]).first().estado == "pagada")
+
+
+print("\n3c. Mudanza: nivelar y dar de baja en un solo paso")
+with app.app_context():
+    mu = casa_completa("Mudanza")
+    db.session.add(Cuota(id=nid(), cuenta_id=mu[1], periodo=per, monto=560,
+                         fecha_vencimiento=venc, estado="pendiente", cobra_desde_dia=3))
+    db.session.commit()
+r = cli.post(f"/api/v1/unidades/cuentas/{mu[0]}/baja",
+             json={"simular": True, "fecha_salida": HOY.isoformat()}, headers=H)
+d = r.get_json()["data"]
+ok("simular la mudanza muestra lo que va a deber, ya nivelado",
+   r.status_code == 200 and d["deuda"]["total"] == esperado)
+ok("...cuanta gente pierde la app", d["afectados"]["usuarios"] == 1)
+with app.app_context():
+    ok("...y no toco nada", float(Cuota.query.filter_by(cuenta_id=mu[1]).first().monto) == 560)
+if esperado > 0:
+    r = cli.post(f"/api/v1/unidades/cuentas/{mu[0]}/baja",
+                 json={"fecha_salida": HOY.isoformat()}, headers=H)
+    ok("con deuda y sin confirmar -> 400, y tampoco nivela",
+       codigo(r) == "saldo_pendiente")
+    with app.app_context():
+        ok("...la cuota sigue entera", float(Cuota.query.filter_by(cuenta_id=mu[1]).first().monto) == 560)
+r = cli.post(f"/api/v1/unidades/cuentas/{mu[0]}/baja",
+             json={"fecha_salida": HOY.isoformat(), "confirmar_deuda": True, "motivo": "x"}, headers=H)
+ok("confirmando: nivela y da de baja juntos -> 200", r.status_code == 200)
+with app.app_context():
+    ok("queda de baja debiendo solo los dias",
+       not Cuenta.query.get(mu[1]).activa and
+       float(Cuota.query.filter_by(cuenta_id=mu[1]).first().monto) == esperado)
 
 
 print("\n4. Cancelar un arreglo sin nada vencido no bloquea la casa")

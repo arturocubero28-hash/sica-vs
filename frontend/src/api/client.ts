@@ -351,19 +351,47 @@ export function urlFotoResidente(nombreArchivo: string): string {
 /** Día 74 — baja por mudanza. Si la casa debe, el backend responde
  *  `saldo_pendiente` y hay que volver a llamar con confirmar_deuda: la
  *  deuda queda a nombre del titular. */
-export const darBajaCuenta = (id: string, body: { motivo?: string; confirmar_deuda?: boolean } = {}) =>
-  request<Cuenta & { deuda_pendiente: number }>(`/unidades/cuentas/${id}/baja`, {
+export const darBajaCuenta = (id: string, body: {
+  motivo?: string; confirmar_deuda?: boolean;
+  /** Día 75 — nivela la cuota del mes a esta fecha en la misma operación. */
+  fecha_salida?: string;
+} = {}) =>
+  request<Cuenta & { deuda_pendiente: number; ajustes: AjusteNivelacion[] }>(`/unidades/cuentas/${id}/baja`, {
     method: "POST", body: JSON.stringify(body),
   });
+
+/** Día 75 — vista previa de una mudanza, sin tocar nada. */
+export interface SimulacionBaja {
+  simulado: true; ajustes: AjusteNivelacion[]; deuda: DeudaCasa; afectados: AccesosCasa;
+}
+export const simularBajaCuenta = (id: string, fechaSalida: string) =>
+  request<SimulacionBaja>(`/unidades/cuentas/${id}/baja`, {
+    method: "POST", body: JSON.stringify({ simular: true, fecha_salida: fechaSalida }),
+  });
+
+/** Día 75 — cómo quedó (o quedaría) una cuota al nivelarla a una fecha. */
+export interface AjusteNivelacion {
+  periodo: string; accion: "anulada" | "prorrateada" | string;
+  monto_original: number; monto_final: number;
+  dias_ocupados?: number; desde_dia?: number; hasta_dia?: number; monto_diario?: number;
+}
+export interface AccesosCasa { usuarios: number; tarjetas: number; credenciales: number; visitas: number }
 
 /** Día 74 — lo que pasa (o pasaría, con simular) al volver al padrón. */
 export interface ResultadoVolverPadron {
   simulado: boolean;
+  /** Día 75 — al simular: si ya se puede, o qué lo impide. */
+  puede?: boolean;
+  impedimento?: { code: "pagar_antes_de_salir" | "deuda_sin_arreglo" | string; message: string } | null;
   casa?: Cuenta;
-  ajustes: { periodo: string; accion: string; dias_ocupados?: number; monto_original: number; monto_final: number }[];
+  ajustes: AjusteNivelacion[];
   queda_debiendo_fuera_de_arreglo: number;
+  queda_vencido_fuera_de_arreglo: number;
+  a_cobrar_antes_de_salir: number;
+  ya_nivelada: boolean;
   arreglo: DeudaCasa["arreglo"];
-  suspendidos: { usuarios: number; tarjetas: number; credenciales: number; visitas: number };
+  afectados: AccesosCasa;
+  suspendidos?: AccesosCasa;
 }
 export const volverAlPadron = (id: string, body: { fecha?: string; simular?: boolean } = {}) =>
   request<ResultadoVolverPadron>(`/unidades/cuentas/${id}/volver-al-padron`, {

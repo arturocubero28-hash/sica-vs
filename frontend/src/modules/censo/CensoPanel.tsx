@@ -8,6 +8,7 @@ import {
 import {
   UserPlus, Camera, ArrowUpRight, ChevronDown, ChevronRight, Home, Building2, Info, LogOut, AlertTriangle,
 } from "lucide-react";
+import { Aviso } from "../unidades/SalidaSistema";
 import { ModalFotoResidente } from "../../components/ModalFotoResidente";
 import { CapturaFoto } from "../../components/CapturaFoto";
 import { formatearDNI } from "../../utils/dni";
@@ -543,68 +544,73 @@ function FilaPersonas({ casa, onMsg, onCambio, onDarAcceso }: {
 }
 
 // ─── Día 74 — Modal: la familia se mudó ─────────────────────────────────
+// Día 75 — mismo lenguaje visual que «Salida del sistema» (SalidaSistema.tsx):
+// la deuda, si la hay, se ve en grande ANTES de confirmar, no después.
 function ModalMudanza({ casa, onCerrar, onListo }: {
   casa: CasaPadron; onCerrar: () => void; onListo: (texto: string) => void;
 }) {
   const [motivo, setMotivo] = useState("");
   const [trabajando, setTrabajando] = useState(false);
   const [error, setError] = useState("");
-  const [avisoDeuda, setAvisoDeuda] = useState<string | null>(null);
+  const [aceptaDeuda, setAceptaDeuda] = useState(false);
   const nombre = casa.nombre_completo || casa.identificador || "la casa";
+  const titular = casa.titular?.nombre || "el titular";
+  const deuda = casa.deuda?.total ?? 0;
 
-  async function confirmar(conDeuda: boolean) {
+  async function confirmar() {
     setTrabajando(true); setError("");
     try {
-      const r = await mudanzaCasaCenso(casa.id, { motivo: motivo.trim() || "Se mudó", confirmar_deuda: conDeuda });
+      const r = await mudanzaCasaCenso(casa.id, { motivo: motivo.trim() || "Se mudó", confirmar_deuda: aceptaDeuda });
       onListo(r.deuda_pendiente > 0
-        ? `${nombre} salió del padrón. La deuda de L ${r.deuda_pendiente.toFixed(2)} queda a nombre del titular.`
+        ? `${nombre} salió del padrón. La deuda de L ${r.deuda_pendiente.toFixed(2)} queda a nombre de ${titular}.`
         : `${nombre} salió del padrón. Queda libre para la próxima familia.`);
-    } catch (e) {
-      const err = e as Error & { code?: string };
-      if (err.code === "saldo_pendiente" && !conDeuda) setAvisoDeuda(err.message);
-      else setError(err.message);
-    } finally { setTrabajando(false); }
+    } catch (e) { setError((e as Error).message); }
+    finally { setTrabajando(false); }
   }
 
   return (
-    <div className="modal" onClick={() => !trabajando && onCerrar()}>
-      <div className="modal-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
-        <div className="modal-head">
-          <h3>Se mudó — {nombre}</h3>
-          <button className="ghost mini" onClick={onCerrar} disabled={trabajando}>✕</button>
+    <div className="modal sal-fondo" onClick={() => !trabajando && onCerrar()}>
+      <div className="sal-modal" role="dialog" aria-modal="true" aria-labelledby="mud-titulo"
+        onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <header className="sal-cabeza">
+          <div>
+            <h2 id="mud-titulo">Se mudó · {nombre}</h2>
+            <p>Titular: {titular}</p>
+          </div>
+          <button className="sal-cerrar" onClick={onCerrar} disabled={trabajando} aria-label="Cerrar">✕</button>
+        </header>
+        <div className="sal-cuerpo">
+          {deuda > 0 ? (
+            <Aviso tono="bloqueo" icono={<AlertTriangle size={24} />} titulo="Se va debiendo" monto={deuda}>
+              <p>{casa.deuda?.arreglo ? "Le faltan abonos de su arreglo de pago. " : ""}La deuda queda a nombre
+                de <b>{titular}</b>, y no va a poder darse de alta en otra casa de la residencial hasta pagarla.</p>
+              <label className="sal-check sal-check--fuerte">
+                <input type="checkbox" checked={aceptaDeuda} onChange={e => setAceptaDeuda(e.target.checked)} />
+                <span>Entiendo: sale del padrón con la deuda pendiente</span>
+              </label>
+            </Aviso>
+          ) : null}
+          <ul className="sal-efectos">
+            <li><span className="sal-efecto-icono"><LogOut size={18} /></span>
+              <span>Sale del padrón: el guardia <b>ya no la va a encontrar</b> al identificar a quien entra.</span></li>
+            <li><span className="sal-efecto-icono"><Home size={18} /></span>
+              <span>La casa queda libre para registrar a la familia que llegue.</span></li>
+            <li><span className="sal-efecto-icono"><Info size={18} /></span>
+              <span>No se borra nada: quedan sus personas y sus entradas como historial.</span></li>
+          </ul>
+          <label className="sal-campo">
+            <span>Motivo (queda en el historial)</span>
+            <input value={motivo} placeholder="Se fueron a Tegucigalpa" onChange={e => setMotivo(e.target.value)} />
+          </label>
+          {error && <div className="sal-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
         </div>
-        <p className="muted small" style={{ marginTop: 0 }}>
-          La casa sale del padrón y el guardia ya no la va a encontrar. No se borra nada:
-          quedan sus personas y sus accesos registrados como historial, y la casa queda
-          libre para registrar a la familia que llegue.
-        </p>
-        <label className="campo" style={{ display: "block" }}>
-          <span className="muted small">Motivo (queda en el historial)</span>
-          <input value={motivo} placeholder="Ej. Se fueron a Tegucigalpa"
-            onChange={e => setMotivo(e.target.value)} style={{ width: "100%", marginTop: 4 }} />
-        </label>
-        {error && <div className="error" style={{ marginTop: 10 }}>{error}</div>}
-        {avisoDeuda ? (
-          <div className="info-box warn" style={{ marginTop: 12 }}>
-            <AlertTriangle size={15} />
-            <div>
-              <span>{avisoDeuda}</span>
-              <div className="row-btns" style={{ marginTop: 10, gap: 8 }}>
-                <button className="ghost" onClick={() => setAvisoDeuda(null)} disabled={trabajando}>Volver</button>
-                <button style={{ background: "#c81e1e" }} onClick={() => confirmar(true)} disabled={trabajando}>
-                  {trabajando ? "Procesando…" : "Se fue igual: sacarla con la deuda"}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="row-btns" style={{ marginTop: 14, justifyContent: "flex-end", gap: 8 }}>
-            <button className="ghost" onClick={onCerrar} disabled={trabajando}>Cancelar</button>
-            <button style={{ background: "#c81e1e" }} onClick={() => confirmar(false)} disabled={trabajando}>
-              {trabajando ? "Procesando…" : "Sacar del padrón"}
-            </button>
-          </div>
-        )}
+        <footer className="sal-pie">
+          <button className="sal-btn sal-btn--fantasma" onClick={onCerrar} disabled={trabajando}>Cancelar</button>
+          <button className="sal-btn sal-btn--peligro" onClick={confirmar}
+            disabled={trabajando || (deuda > 0 && !aceptaDeuda)}>
+            {trabajando ? "Guardando…" : `Sacar ${nombre} del padrón`}
+          </button>
+        </footer>
       </div>
     </div>
   );
