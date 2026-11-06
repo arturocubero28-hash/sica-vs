@@ -83,7 +83,8 @@ export function App() {
 
   if (cargando) return <div className="center">Cargando…</div>;
 
-  if (vista === "activar") return <ActivarCuenta token={tokenUrl} onActivado={onLogin} />;
+  // Día 75 — activar NO abre la sesión: muestra la confirmación y dónde entrar.
+  if (vista === "activar") return <ActivarCuenta token={tokenUrl} onIrAlLogin={() => setVista("login")} />;
   if (vista === "recuperar") return <RecuperarPassword onVolver={() => setVista("login")} />;
   if (vista === "reset") return <ResetPassword token={tokenUrl} onOk={() => setVista("login")} />;
 
@@ -584,11 +585,19 @@ function CambioObligatorio({ usuario, onListo }: { usuario: Usuario; onListo: (u
 }
 
 // ─── Activar cuenta ──────────────────────────────────────────
-function ActivarCuenta({ token, onActivado }: { token: string; onActivado: (u: Usuario) => void }) {
+// Día 75 — pedido del usuario: después de crear la clave NO se entra
+// directo al panel. Se confirma que la cuenta quedó activa y se muestra
+// dónde entrar: el panel web o la app. El backend sigue devolviendo un
+// token (compatibilidad), pero acá no se guarda: no queda sesión abierta.
+const URL_PLAY_STORE = "https://play.google.com/store/apps/details?id=com.villasdelsol.sica_vs_app";
+
+function ActivarCuenta({ token, onIrAlLogin }: { token: string; onIrAlLogin: () => void }) {
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [activado, setActivado] = useState<{ nombre: string; email: string } | null>(null);
+  const [yaUsado, setYaUsado] = useState("");
 
   async function activar() {
     if (!passwordValida(password)) { setError("La contraseña no cumple los requisitos mínimos"); return; }
@@ -596,25 +605,89 @@ function ActivarCuenta({ token, onActivado }: { token: string; onActivado: (u: U
     setError(""); setEnviando(true);
     try {
       const data = await activarCuenta(token, password);
-      setToken(data.token);
-      onActivado(data.usuario);
+      // Sacar el token de la URL: el enlace ya se usó.
       window.history.replaceState({}, "", "/");
-    } catch (e) { setError((e as Error).message); }
+      setActivado({ nombre: (data.usuario?.nombre || "").split(" ")[0], email: data.usuario?.email || "" });
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      if (err.code === "ya_activada") { window.history.replaceState({}, "", "/"); setYaUsado(err.message); }
+      else setError(err.message);
+    }
     finally { setEnviando(false); }
+  }
+
+  if (activado) {
+    const urlPanel = window.location.origin;
+    return (
+      <div className="center act-fondo">
+        <div className="card act-card">
+          <span className="sal-listo-marca act-marca"><Check size={34} strokeWidth={3} /></span>
+          <h1>¡Gracias{activado.nombre ? `, ${activado.nombre}` : ""}!</h1>
+          <p className="act-lead">Tu clave fue creada y tu cuenta está activa.</p>
+          <p className="act-sub">Ya podés entrar{activado.email ? <> con <b>{activado.email}</b></> : null} desde
+            cualquiera de estos dos lugares:</p>
+
+          <div className="act-opciones">
+            <section className="act-opcion">
+              <span className="act-opcion-icono"><Monitor size={22} /></span>
+              <div>
+                <h2>Panel web</h2>
+                <p>Desde la computadora o el navegador del teléfono.</p>
+                <a className="act-enlace" href={urlPanel}
+                  onClick={e => { e.preventDefault(); onIrAlLogin(); }}>{urlPanel.replace(/^https?:\/\//, "")}</a>
+                <button className="act-btn" onClick={onIrAlLogin}>Iniciar sesión</button>
+              </div>
+            </section>
+            <section className="act-opcion">
+              <span className="act-opcion-icono"><Smartphone size={22} /></span>
+              <div>
+                <h2>App Residencial Villas del Sol</h2>
+                <p>Para generar tus QR de visita y recibir avisos en el teléfono.</p>
+                <div className="act-tiendas">
+                  <a className="act-tienda" href={URL_PLAY_STORE} target="_blank" rel="noopener noreferrer">
+                    <Download size={18} />
+                    <span><small>Disponible en</small>Google Play</span>
+                  </a>
+                  <span className="act-tienda act-tienda--pendiente" title="Próximamente en App Store">
+                    <Smartphone size={18} />
+                    <span><small>Próximamente en</small>App Store</span>
+                  </span>
+                </div>
+              </div>
+            </section>
+          </div>
+          <p className="act-pie">Usá el mismo correo y la clave que acabás de crear, en el panel o en la app.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (yaUsado) {
+    return (
+      <div className="center act-fondo">
+        <div className="card login-card">
+          <img src="/logo-vs.png" alt="Villas del Sol" className="login-logo" />
+          <h1>Tu cuenta ya está activa</h1>
+          <p className="muted">{yaUsado}</p>
+          <button onClick={onIrAlLogin}>Iniciar sesión</button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="center">
-      <div className="card">
-        <h1>Activar tu cuenta</h1>
-        <p className="muted">Define tu contraseña para acceder al sistema</p>
+      <div className="card login-card">
+        <img src="/logo-vs.png" alt="Villas del Sol" className="login-logo" />
+        <h1>Activá tu cuenta</h1>
+        <p className="muted">Creá tu clave para entrar al sistema de Villas del Sol.</p>
         <CampoPassword placeholder="Nueva contraseña" value={password} autoComplete="new-password"
           onChange={setPassword} />
         {password && <RequisitosPassword password={password} />}
         <CampoPassword placeholder="Confirmar contraseña" value={password2} autoComplete="new-password"
           onChange={setPassword2} onEnter={activar} />
         {error && <div className="error">{error}</div>}
-        <button onClick={activar} disabled={enviando}>{enviando ? "Activando…" : "Activar cuenta"}</button>
+        <button onClick={activar} disabled={enviando}>{enviando ? "Creando tu clave…" : "Crear mi clave"}</button>
       </div>
     </div>
   );

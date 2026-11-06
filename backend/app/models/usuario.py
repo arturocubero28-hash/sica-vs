@@ -115,6 +115,11 @@ class Usuario(db.Model):
     # teléfono asignado a un punto específico (ACCESS-04, Auditoría Día 35).
     punto_acceso_actual = db.Column(db.String(80))
     ultimo_acceso = db.Column(db.DateTime(timezone=True))
+    # Día 75 — cuándo se usó el enlace de activación. El enlace es un JWT sin
+    # estado que vale 48 h: sin esta marca se podía usar de nuevo, y alguien
+    # desactivado por la administración (o cuya casa volvió al padrón) se
+    # reactivaba solo con el enlace viejo. Ahora sirve una sola vez.
+    activado_en = db.Column(db.DateTime(timezone=True))
     created_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=dt.datetime.utcnow,
                            onupdate=dt.datetime.utcnow)

@@ -656,6 +656,12 @@ def create_app(config_class=Config):
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS suspendido_por_padron BOOLEAN NOT NULL DEFAULT FALSE",
             # Día 75 — desde qué día cobra una cuota prorrateada.
             "ALTER TABLE cuotas ADD COLUMN IF NOT EXISTS cobra_desde_dia SMALLINT",
+            # Día 75 — el enlace de activación sirve una sola vez. Las cuentas
+            # que ya se usaron (activas, o que alguna vez iniciaron sesión)
+            # quedan marcadas para que un enlace viejo no las reactive.
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activado_en TIMESTAMPTZ",
+            "UPDATE usuarios SET activado_en = COALESCE(ultimo_acceso, NOW()) "
+            "WHERE activado_en IS NULL AND (activo OR ultimo_acceso IS NOT NULL)",
 
             # ── Día 72 · Sesión persistente de la app ────────────────────────
             # Token de renovación (solo su hash) para que la app no vuelva a

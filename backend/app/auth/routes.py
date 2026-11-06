@@ -389,8 +389,18 @@ def activar_cuenta():
                                              "sin funcionar, pedile a la administración que "
                                              "termine tu registro."}}), 404
 
+    # Día 75 — el enlace sirve UNA vez. Antes se podía volver a usar durante
+    # 48 h: cambiaba la clave y, peor, reactivaba a alguien que la
+    # administración había desactivado o cuya casa había vuelto al padrón.
+    if usuario.activado_en is not None or usuario.activo or usuario.suspendido_por_padron:
+        return jsonify({"error": {"code": "ya_activada",
+                                  "message": "Este enlace ya se usó: tu cuenta ya fue activada. "
+                                             "Iniciá sesión con tu correo y tu clave; si no la "
+                                             "recordás, usá «¿Olvidaste tu contraseña?»."}}), 409
+
     usuario.set_password(password)
     usuario.activo = True
+    usuario.activado_en = dt.datetime.now(dt.timezone.utc)
     db.session.commit()
 
     token = generar_token(usuario)

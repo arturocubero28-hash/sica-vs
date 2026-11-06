@@ -433,6 +433,30 @@ r = cli.get("/api/v1/caja/buscar-cuenta?q=Casa%20Anulada", headers=HC)
 res = (r.get_json() or {}).get("data") or []
 ok("caja no la ofrece para cobrar", r.status_code == 200 and res and res[0]["cuotas_pendientes"] == [])
 
+
+print("\n6. El enlace de activacion sirve una sola vez")
+import jwt as _jwt
+with app.app_context():
+    import secrets as _sec
+    nu = Usuario(id=nid(), nombre="Nueva", apellido="Activa", email="nueva@x.com", rol="residente", activo=False)
+    nu.set_password(_sec.token_urlsafe(32)); db.session.add(nu); db.session.commit()
+    nu_id = nu.id
+    tok = _jwt.encode({"sub": "nueva@x.com", "proposito": "activacion",
+                       "exp": dt.datetime.utcnow() + dt.timedelta(hours=48)},
+                      app.config["JWT_SECRET"], algorithm="HS256")
+r = cli.post("/api/v1/auth/activar", json={"token": tok, "password": "Clave#2026a"})
+ok("la primera vez activa -> 200", r.status_code == 200)
+r = cli.post("/api/v1/auth/activar", json={"token": tok, "password": "Otra#2026b"})
+ok("la segunda vez -> 409 ya_activada", r.status_code == 409 and codigo(r) == "ya_activada")
+ok("...y la clave no cambio", cli.post("/api/v1/auth/login",
+   json={"email": "nueva@x.com", "password": "Clave#2026a"}).status_code == 200)
+with app.app_context():
+    u = Usuario.query.get(nu_id); u.activo = False; db.session.commit()   # la administracion la desactiva
+r = cli.post("/api/v1/auth/activar", json={"token": tok, "password": "Otra#2026b"})
+ok("desactivada por la administracion, el enlace viejo NO la reactiva", codigo(r) == "ya_activada")
+with app.app_context():
+    ok("...sigue desactivada", not Usuario.query.get(nu_id).activo)
+
 print()
 if fallos:
     print(f"FALLARON {len(fallos)}:")
