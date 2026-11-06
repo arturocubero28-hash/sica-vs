@@ -13,6 +13,7 @@ from app.auth.security import roles_required, requiere_funcion_plan
 from app.utils import dinero
 from app.utils.residencial import (scope_cuotas, scope_pagos, scope_cuentas,
                                    scope_eventos)
+from app.utils.fechas import mes_es
 
 reportes_bp = Blueprint("reportes", __name__)
 
@@ -123,7 +124,7 @@ def reporte_financiero(usuario_actual):
     anio = int(request.args.get("anio", hoy.year))
     mes = int(request.args.get("mes", hoy.month))
     periodo = dt.date(anio, mes, 1)
-    label = periodo.strftime("%B %Y")
+    label = mes_es(periodo)
     cuotas = scope_cuotas(Cuota.query, usuario_actual).filter(
         Cuota.periodo == periodo).all()
 
@@ -324,7 +325,7 @@ def mora_por_casa(usuario_actual):
             dias = (hoy - c.fecha_vencimiento).days
             meses.append({
                 "periodo": c.periodo.isoformat(),
-                "mes_label": c.periodo.strftime("%B %Y"),
+                "mes_label": mes_es(c.periodo),
                 "monto": dinero.a_float(monto),
                 "estado": c.estado,
                 "vencimiento": c.fecha_vencimiento.isoformat(),

@@ -15,6 +15,7 @@ import datetime as dt
 from sqlalchemy import event
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.extensions import db
+from app.utils.fechas import mes_es
 
 
 def _uuid_col():
@@ -617,6 +618,11 @@ class Cuota(db.Model):
     arreglo_id        = db.Column(db.BigInteger, db.ForeignKey("arreglos_pago.id"))  # si está en un arreglo
     monto_original    = db.Column(db.Numeric(10, 2))  # monto pleno antes de nivelar (se fija una sola vez)
     nivelada          = db.Column(db.Boolean, nullable=False, default=False)
+    # Día 75 — día comercial (1-30) desde el que cobra esta cuota. NULL o 1
+    # = mes completo. La primera cuota de una casa nueva arranca el día
+    # SIGUIENTE al alta (utils/cuotas.py), y la nivelación necesita saberlo
+    # para cobrar solo los días que la casa realmente estuvo.
+    cobra_desde_dia   = db.Column(db.SmallInteger)
     created_at        = db.Column(db.DateTime(timezone=True), default=_now)
     updated_at        = db.Column(db.DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -627,7 +633,7 @@ class Cuota(db.Model):
         d = {
             "id":               str(self.uuid_publico),
             "periodo":          self.periodo.isoformat(),
-            "mes_label":        self.periodo.strftime("%B %Y"),
+            "mes_label":        mes_es(self.periodo),
             "monto":            float(self.monto),
             "fecha_vencimiento": self.fecha_vencimiento.isoformat(),
             "estado":           self.estado,
@@ -908,7 +914,7 @@ class ArregloPago(db.Model):
         if con_detalle:
             d["abonos"] = [a.to_dict() for a in sorted(self.abonos, key=lambda x: x.numero)]
             d["meses_incluidos"] = [
-                {"mes_label": c.periodo.strftime("%B %Y"), "monto": float(c.monto)}
+                {"mes_label": mes_es(c.periodo), "monto": float(c.monto)}
                 for c in sorted(self.cuotas, key=lambda x: x.periodo)
             ]
         return d

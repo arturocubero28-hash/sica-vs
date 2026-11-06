@@ -584,7 +584,7 @@ def _aplicar_conversion(cuenta, plan, usuario_actual):
         db.session.add(Cuota(
             cuenta_id=cuenta.id, periodo=datos["periodo"],
             monto=datos["monto"], fecha_vencimiento=datos["fecha_vencimiento"],
-            estado="pendiente",
+            estado="pendiente", cobra_desde_dia=datos["cobra_desde_dia"],
         ))
     return (base + f" Se le generó la cuota de este mes prorrateada: "
             f"L {datos['monto']} por {datos['dias_restantes']} días, "

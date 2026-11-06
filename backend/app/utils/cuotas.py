@@ -82,4 +82,6 @@ def calcular_cuota_prorrateada(monto_tarifa, dia_pago, hoy=None):
         "monto": monto_prorrateado,
         "fecha_vencimiento": vencimiento,
         "dias_restantes": dias_restantes,
+        # Día 75 — primer día comercial cobrado (el siguiente al alta).
+        "cobra_desde_dia": efectivo_dia + 1,
     }

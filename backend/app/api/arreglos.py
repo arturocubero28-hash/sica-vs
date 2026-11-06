@@ -18,6 +18,7 @@ from app.extensions import db
 from app.models.cuenta import Cuenta, Cuota, Pago, ArregloPago, AbonoArreglo
 from app.auth.security import roles_required, requiere_funcion_plan
 from app.extensions import limiter
+from app.utils.fechas import mes_es
 
 arreglos_bp = Blueprint("arreglos", __name__)
 
@@ -47,6 +48,9 @@ def _arreglo_es_mio(arreglo, usuario_actual):
         return True
     return rid_arreglo == rid_usuario
 
+
+MESES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+         "agosto", "septiembre", "octubre", "noviembre", "diciembre")
 
 PROPOSITOS = ("ponerse_al_dia", "volver_al_padron")
 
@@ -222,7 +226,20 @@ def crear_arreglo(usuario_actual):
     for c in cuotas:
         if c.estado in ("pagada", "en_arreglo"):
             return _err("cuota_no_elegible",
-                        f"La cuota de {c.periodo.strftime('%B %Y')} no se puede incluir (ya pagada o en otro arreglo)", 400)
+                        f"La cuota de {mes_es(c.periodo)} no se puede incluir (ya pagada o en otro arreglo)", 400)
+
+    # Día 75 — si la casa firma para volver al padrón, la cuota del mes en
+    # curso (que todavía no vence) NO va en el arreglo: al volver al padrón
+    # se nivela a los días que la casa estuvo. Si entrara acá, quedaría
+    # congelada por el monto entero y se le cobraría el mes completo.
+    if proposito == "volver_al_padron":
+        hoy_ = dt.date.today()
+        for c in cuotas:
+            if c.fecha_vencimiento >= hoy_:
+                return _err("cuota_no_vencida",
+                            f"La cuota de {MESES[c.periodo.month - 1]} todavía no vence. Al volver al "
+                            "padrón se cobra solo por los días que la casa estuvo, así que no va en el "
+                            "arreglo: el arreglo es para las cuotas atrasadas.", 400)
 
     # ── Cálculos financieros ──────────────────────────────────────────────
     deuda_original = _money(sum(Decimal(str(c.monto)) for c in cuotas))
@@ -510,6 +527,10 @@ def _descongelar_y_bloquear(arreglo, nuevo_estado, motivo):
     # tiene servicio de cuotas que cortar, y a la gente del padrón el guardia
     # la identifica igual. La deuda queda pendiente a su nombre y le impide
     # volver a sumarse al sistema hasta que la pague.
-    if cuenta and cuenta.activa and not cuenta.es_censo:
+    # Día 75 — y solo si queda algo VENCIDO. Cancelar un arreglo que solo
+    # tenía la cuota del mes en curso (todavía sin vencer) bloqueaba la casa
+    # por una deuda que no estaba atrasada.
+    hay_vencidas = any(c.estado == "vencida" for c in arreglo.cuotas)
+    if cuenta and cuenta.activa and not cuenta.es_censo and hay_vencidas:
         cuenta.estado = "en_mora"
         cuenta.bloqueada = True

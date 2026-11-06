@@ -23,6 +23,7 @@ from app.auth.security import token_required, roles_required, requiere_funcion_p
 from app.utils.archivos import guardar_imagen_segura, servir_archivo_seguro, EXT_DOCUMENTO
 from app.utils import dinero
 from app.services.cuota_almacenamiento import registrar_archivo_existente, vincular_pago
+from app.utils.fechas import mes_es
 
 cuotas_bp = Blueprint("cuotas", __name__)
 
@@ -109,7 +110,7 @@ def mis_cuotas(usuario_actual):
     for p in pagos_ap:
         # Etiqueta de a qué corresponde el pago
         if p.cuota_id and p.cuota:
-            etiqueta = p.cuota.periodo.strftime("%B %Y")
+            etiqueta = mes_es(p.cuota.periodo)
         elif p.abono_id:
             ab = AbonoArreglo.query.get(p.abono_id)
             etiqueta = f"Abono {ab.numero}" if ab else "Abono de arreglo"
@@ -191,7 +192,7 @@ def subir_comprobante(usuario_actual, uuid_cuota):
         return jsonify({"error": {
             "code": "CUOTA_ANTERIOR_PENDIENTE",
             "message": f"Tenés una cuota anterior sin pagar: "
-                       f"{cuota_anterior_pendiente.periodo.strftime('%B %Y')}. "
+                       f"{mes_es(cuota_anterior_pendiente.periodo)}. "
                        f"Pagá esa primero."}}), 409
 
     # Uno o varios comprobantes (ej. depósito en dos partes) — se aceptan
@@ -403,7 +404,7 @@ def pagos_pendientes(usuario_actual):
         d = p.to_dict()
         d["unidad"] = p.cuenta.unidad.identificador if p.cuenta and p.cuenta.unidad else None
         d["periodo"] = p.cuota.periodo.isoformat() if p.cuota else None
-        d["mes_label"] = p.cuota.periodo.strftime("%B %Y") if p.cuota else None
+        d["mes_label"] = mes_es(p.cuota.periodo) if p.cuota else None
         resultado.append(d)
     return jsonify({"data": resultado})
 

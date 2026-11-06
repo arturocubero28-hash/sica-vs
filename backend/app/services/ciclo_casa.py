@@ -51,31 +51,76 @@ def saldo_cuota(cuota):
     return round(max(float(cuota.monto) - monto_pagado_cuota(cuota), 0.0), 2)
 
 
-def nivelar_cuotas(cuotas, fecha_des, dia_pago_cfg):
+def inicio_de_cobro(cuota):
     """
-    Prorratea las cuotas impagas a la fecha en que la casa deja de pagar.
-    Una cuota cuyo ciclo empieza después de esa fecha se anula; la del ciclo
-    en curso se cobra solo por los días ocupados (mes comercial de 30 días).
+    Día comercial (1-30) desde el que cobra la cuota.
 
-    Se movió acá desde el endpoint "Nivelar saldo" para que volver al padrón
-    nivele EXACTAMENTE igual. No hace commit.
+    Día 75 — la primera cuota de una casa nueva NO cubre el mes entero: va
+    del día siguiente al alta hasta el 30 (utils/cuotas.py). Desde el Día 75
+    eso queda guardado en cobra_desde_dia. Para las cuotas creadas antes se
+    deduce del monto: si es menor que la tarifa de la casa, cubre
+    monto / (tarifa / 30) días contados hacia atrás desde el 30.
+    """
+    if cuota.cobra_desde_dia:
+        return max(1, min(int(cuota.cobra_desde_dia), 30))
+    from app.models.cuenta import Cuenta
+    cuenta = Cuenta.query.get(cuota.cuenta_id)
+    tarifa = getattr(getattr(cuenta, "tarifa", None), "monto", None)
+    base = float(cuota.monto_original if cuota.monto_original is not None else cuota.monto)
+    if tarifa and float(tarifa) > 0 and base < float(tarifa) - 0.01:
+        dias = round(base / (float(tarifa) / 30))
+        if 1 <= dias < 30:
+            return 31 - dias
+    return 1
+
+
+def nivelar_cuotas(cuotas, fecha_des):
+    """
+    Deja cada cuota impaga en lo que corresponde a los días que la casa
+    estuvo, si deja de pagar en fecha_des (se muda o vuelve al padrón).
+
+    MODELO DE COBRO (Día 62, el que usan el alta y el cron mensual): la
+    cuota de un mes cobra los días de ESE mes, en mes comercial de 30 días,
+    y vence el día de pago del mes SIGUIENTE. La primera cuota de una casa
+    nueva arranca el día siguiente al alta.
+
+    Por eso, para la cuota del mes en que deja de pagar se cobran los días
+    desde que empezó a cobrar esa cuota hasta fecha_des, inclusive:
+
+        alta el 2 de noviembre → la cuota cobra del 3 al 30 (28 días)
+        deja de pagar el 6     → se cobran del 3 al 6 (4 días)
+
+    Las de meses anteriores se consumieron completas y no se tocan; las de
+    meses posteriores se anulan.
+
+    Día 75 — corregido. Antes contaba los días desde el día de pago DEL
+    MISMO mes (el modelo de cobro anterior al Día 62) y tomaba el monto ya
+    prorrateado como si fuera un mes completo: a una casa dada de alta el 2
+    que se iba el 6 le cobraba mal, y si se iba antes del día de pago, nada.
+
+    No hace commit.
     """
     ajustes = []
     for cuota in cuotas:
         periodo = cuota.periodo  # primer día del mes del período
-        # Inicio real del ciclo: día de pago del mes del período
-        inicio_ciclo = dt.date(periodo.year, periodo.month, min(dia_pago_cfg, 28))
-
         # Fijar el monto original SOLO la primera vez — evita que nivelaciones
         # repetidas sigan achicando el monto sobre un valor ya reducido.
         if cuota.monto_original is None:
             cuota.monto_original = cuota.monto
         baseline = float(cuota.monto_original)
+        inicio = inicio_de_cobro(cuota)
+        dias_cubiertos = 31 - inicio
+        pagado = monto_pagado_cuota(cuota)
 
-        if fecha_des < inicio_ciclo:
-            # Se fue antes de que empezara este ciclo → anular la cuota
-            cuota.monto = monto_pagado_cuota(cuota)  # dejarla en lo ya pagado
-            cuota.estado = "pagada" if cuota.monto > 0 else "anulada"
+        mes_cuota = (periodo.year, periodo.month)
+        mes_salida = (fecha_des.year, fecha_des.month)
+        if mes_salida > mes_cuota:
+            continue  # ese mes lo vivió entero: la cuota queda como estaba
+        dia_salida = min(fecha_des.day, 30)
+        if mes_salida < mes_cuota or dia_salida < inicio:
+            # Se fue antes de que esta cuota empezara a cobrar → anularla
+            cuota.monto = pagado  # dejarla en lo ya pagado
+            cuota.estado = "pagada" if pagado > 0 else "anulada"
             cuota.nivelada = True
             ajustes.append({
                 "periodo": periodo.isoformat(),
@@ -83,24 +128,22 @@ def nivelar_cuotas(cuotas, fecha_des, dia_pago_cfg):
                 "monto_original": baseline,
                 "monto_final": float(cuota.monto),
             })
-        else:
-            # Días ocupados dentro del ciclo (mes comercial 30 días)
-            dias_ocupados = min((fecha_des - inicio_ciclo).days + 1, 30)
-            monto_diario = baseline / 30
-            monto_nivelado = round(monto_diario * dias_ocupados, 2)
-            pagado = monto_pagado_cuota(cuota)
+            continue
 
-            cuota.monto = max(monto_nivelado, pagado)  # nunca menos de lo ya pagado
-            cuota.nivelada = True
-            if pagado >= cuota.monto:
-                cuota.estado = "pagada"
-            ajustes.append({
-                "periodo": periodo.isoformat(),
-                "accion": "prorrateada",
-                "dias_ocupados": dias_ocupados,
-                "monto_original": baseline,
-                "monto_final": float(cuota.monto),
-            })
+        dias_ocupados = dia_salida - inicio + 1
+        monto_diario = baseline / dias_cubiertos
+        monto_nivelado = round(monto_diario * dias_ocupados, 2)
+        cuota.monto = max(monto_nivelado, pagado)  # nunca menos de lo ya pagado
+        cuota.nivelada = True
+        if pagado >= float(cuota.monto):
+            cuota.estado = "pagada"
+        ajustes.append({
+            "periodo": periodo.isoformat(),
+            "accion": "prorrateada",
+            "dias_ocupados": dias_ocupados,
+            "monto_original": baseline,
+            "monto_final": float(cuota.monto),
+        })
     return ajustes
 
 
@@ -221,7 +264,7 @@ def volver_al_padron(cuenta, fecha, usuario_actual):
     hacer rollback: la nivelación ya se aplicó en la sesión para poder medir
     cuánto queda debiendo.
     """
-    from app.models.cuenta import Cuenta, ConfigResidencial
+    from app.models.cuenta import Cuenta
 
     if not cuenta.activa:
         return None, ("cuenta_inactiva", "Esta casa está dada de baja.", 400)
@@ -242,19 +285,26 @@ def volver_al_padron(cuenta, fecha, usuario_actual):
                       "SEGUIR pagando. Si ahora quiere volver al padrón, cambiá el propósito "
                       "del arreglo (en Arreglos de pago) y volvé a intentarlo.", 409)
 
-    # La cuota del mes se nivela a la fecha; las de ciclos posteriores se
-    # anulan. Mismo cálculo que "Nivelar saldo" en una mudanza.
-    cfg = ConfigResidencial.get(usuario_actual.residencial_id)
-    ajustes = nivelar_cuotas(cuotas_fuera_de_arreglo(cuenta), fecha, cfg.dia_pago)
+    # La cuota del mes se nivela a los días que estuvo; las de meses
+    # posteriores se anulan. Mismo cálculo que "Nivelar saldo" en una mudanza.
+    ajustes = nivelar_cuotas(cuotas_fuera_de_arreglo(cuenta), fecha)
     db.session.flush()
 
+    # Día 75 — el arreglo es para la deuda ATRASADA, no para la cuota del mes
+    # en curso. Antes se exigía arreglo por cualquier saldo, y a una casa
+    # dada de alta el 2 que volvía al padrón el 6 se le pedía firmar un
+    # arreglo por una cuota que ni siquiera había vencido. Ahora lo que
+    # todavía no vence (ya nivelado) queda pendiente y se paga en caja; solo
+    # lo vencido necesita arreglo.
     fuera = cuotas_fuera_de_arreglo(cuenta)
+    vencidas = [c for c in fuera if c.fecha_vencimiento < hoy]
+    total_vencido = round(sum(saldo_cuota(c) for c in vencidas), 2)
     total_fuera = round(sum(saldo_cuota(c) for c in fuera), 2)
-    if total_fuera > 0 and arr is None:
+    if total_vencido > 0 and arr is None:
         return None, ("deuda_sin_arreglo",
-                      f"Con la cuota nivelada al {fecha.strftime('%d/%m/%Y')}, la casa debe "
-                      f"L {total_fuera:,.2f}. Para volver al padrón tiene que pagarlo en caja, "
-                      "o firmar un arreglo de pago «para volver al padrón».", 409)
+                      f"La casa tiene L {total_vencido:,.2f} en cuotas vencidas. Para volver al "
+                      "padrón tiene que pagarlas en caja, o firmar un arreglo de pago "
+                      "«para volver al padrón».", 409)
 
     cuenta.modo_participacion = "censo"
     cuenta.tarifa_id = None
@@ -282,6 +332,7 @@ def volver_al_padron(cuenta, fecha, usuario_actual):
     return {
         "ajustes": ajustes,
         "queda_debiendo_fuera_de_arreglo": total_fuera,
+        "queda_vencido_fuera_de_arreglo": total_vencido,
         "arreglo": estado_deuda(cuenta)["arreglo"],
         "suspendidos": suspendidos,
     }, None

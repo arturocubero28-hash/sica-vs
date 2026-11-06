@@ -470,7 +470,7 @@ def crear_cuenta(usuario_actual):
             db.session.add(Cuota(
                 cuenta_id=cuenta.id, periodo=datos["periodo"],
                 monto=datos["monto"], fecha_vencimiento=datos["fecha_vencimiento"],
-                estado="pendiente",
+                estado="pendiente", cobra_desde_dia=datos["cobra_desde_dia"],
             ))
 
     marcar_usada(verif, usuario, cuenta.id)   # misma transacción
@@ -735,7 +735,7 @@ def nivelar_saldo(usuario_actual, cuenta_uuid):
     dia_pago_cfg = cfg.dia_pago
 
     from app.services.ciclo_casa import nivelar_cuotas
-    ajustes = nivelar_cuotas(cuotas, fecha_des, dia_pago_cfg)
+    ajustes = nivelar_cuotas(cuotas, fecha_des)
 
     db.session.commit()
     return jsonify({"data": {
@@ -1434,6 +1434,7 @@ def activar_cuotas(usuario_actual):
         cuota = Cuota(
             cuenta_id=casa.id, periodo=datos["periodo"], monto=datos["monto"],
             fecha_vencimiento=datos["fecha_vencimiento"], estado="pendiente",
+            cobra_desde_dia=datos["cobra_desde_dia"],
         )
         db.session.add(cuota)
         generadas += 1

@@ -4551,3 +4551,5 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
 /* Con "Se mudó" la fila del padrón tiene tres botones: que bajen de línea
    en vez de esconderse detrás del scroll horizontal de la tabla. */
 .censo-panel .casa-acciones { flex-wrap: wrap; justify-content: flex-end; max-width: 320px; margin-left: auto; }
+/* Día 75 — cuota que no puede ir en el arreglo (todavía no vence). */
+.cuota-check--fuera { opacity: .6; cursor: not-allowed; }

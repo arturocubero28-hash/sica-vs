@@ -14,6 +14,7 @@ from app.models.cuenta import Cuenta, Cuota, Pago, Tarjeta, Residente, TipoTarje
 from app.models.usuario import Usuario
 from app.auth.security import roles_required, requiere_funcion_plan
 from app.utils import dinero
+from app.utils.fechas import mes_es
 
 caja_bp = Blueprint("caja", __name__)
 
@@ -427,7 +428,7 @@ def buscar_cuenta(usuario_actual):
             "residentes": residentes_casa,
             "cuotas_pendientes": [{
                 "cuota_id": str(q2.uuid_publico),
-                "mes_label": q2.periodo.strftime("%B %Y"),
+                "mes_label": mes_es(q2.periodo),
                 "monto": dinero.a_float(q2.monto),
                 "estado": q2.estado,
             } for q2 in pendientes],

@@ -2530,7 +2530,7 @@ function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada }: {
             <input type="radio" name="camino" checked={camino === "padron"} onChange={() => elegir("padron")} />
             <b>Sigue viviendo acá, pero deja de pagar mensualidad</b>
             <span className="muted small">Vuelve al padrón: el guardia la sigue identificando, pero sin app.
-              Si debe, primero tiene que firmar un arreglo de pago «para volver al padrón».</span>
+              Si tiene cuotas atrasadas, primero tiene que firmar un arreglo de pago «para volver al padrón». La cuota de este mes se cobra solo por los días que estuvo.</span>
           </label>
           <label className={`proposito-op ${camino === "mudanza" ? "sel" : ""}`}>
             <input type="radio" name="camino" checked={camino === "mudanza"} onChange={() => elegir("mudanza")} />

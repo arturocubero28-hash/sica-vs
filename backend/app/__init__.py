@@ -654,6 +654,8 @@ def create_app(config_class=Config):
             # para que, si la casa se vuelve a sumar, se prendan SOLO esos y
             # no alguien que la administración había desactivado por otra razón.
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS suspendido_por_padron BOOLEAN NOT NULL DEFAULT FALSE",
+            # Día 75 — desde qué día cobra una cuota prorrateada.
+            "ALTER TABLE cuotas ADD COLUMN IF NOT EXISTS cobra_desde_dia SMALLINT",
 
             # ── Día 72 · Sesión persistente de la app ────────────────────────
             # Token de renovación (solo su hash) para que la app no vuelva a

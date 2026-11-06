@@ -144,6 +144,19 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
     setSeleccionadas(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
   }
 
+  // Día 75 — una cuota que todavía no vence (la del mes en curso) no va en
+  // un arreglo para volver al padrón: al volver, se cobra solo por los días
+  // que la casa estuvo. Fecha local, no UTC: de noche en Honduras el UTC ya
+  // es mañana.
+  const hoyLocal = new Date().toLocaleDateString("en-CA");
+  const noVence = (c: CuotaDTO) => c.fecha_vencimiento >= hoyLocal;
+  const excluirNoVencidas = proposito === "volver_al_padron";
+  useEffect(() => {
+    if (excluirNoVencidas)
+      setSeleccionadas(s => s.filter(id => { const c = cuotas.find(x => x.id === id); return !c || !noVence(c); }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excluirNoVencidas, cuotas]);
+
   // Cálculos en vivo
   const deudaOriginal = cuotas.filter(c => seleccionadas.includes(c.id)).reduce((s, c) => s + c.monto, 0);
   const pct = conDescuento ? Math.min(Math.max(descuentoPct, 0), 99.99) : 0;
@@ -204,19 +217,26 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
             <p className="muted small">Esta cuenta no tiene cuotas pendientes elegibles.</p>
           ) : (
             <div className="cuotas-check-list">
-              {cuotas.map(c => (
-                <label key={c.id} className="cuota-check">
-                  <input type="checkbox" checked={seleccionadas.includes(c.id)} onChange={() => toggleCuota(c.id)} />
-                  <span>{c.mes_label}</span>
-                  <span className="muted small">{L(c.monto)}</span>
-                </label>
-              ))}
+              {cuotas.map(c => {
+                const fuera = excluirNoVencidas && noVence(c);
+                return (
+                  <label key={c.id} className={`cuota-check ${fuera ? "cuota-check--fuera" : ""}`}
+                    title={fuera ? "Todavía no vence: al volver al padrón se cobra solo por los días que la casa estuvo" : undefined}>
+                    <input type="checkbox" disabled={fuera}
+                      checked={!fuera && seleccionadas.includes(c.id)} onChange={() => toggleCuota(c.id)} />
+                    <span>{c.mes_label}</span>
+                    <span className="muted small">
+                      {fuera ? "Aún no vence · no va en el arreglo" : L(c.monto)}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      {seleccionadas.length > 0 && (
+      {(seleccionadas.length > 0 || proposito !== "") && (
         <>
           <div className="campo-grupo" style={{ marginTop: 14 }}>
             <label className="campo-label">3. ¿Para qué se firma?</label>
@@ -243,6 +263,14 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
             )}
           </div>
 
+          {seleccionadas.length === 0 ? (
+            <div className="info-box" style={{ marginTop: 12 }}>
+              <Info size={15} />
+              <span>Esta casa no tiene cuotas atrasadas, así que <b>no necesita un arreglo</b> para volver
+                al padrón. Hacelo directo desde <b>Casas y residentes → Salida del sistema</b>: la cuota de
+                este mes se cobra solo por los días que la casa estuvo.</span>
+            </div>
+          ) : (<>
           <div className="campo-grupo" style={{ marginTop: 14 }}>
             <label className="campo-label">4. Descuento (opcional)</label>
             <label className="cuota-check">
@@ -345,11 +373,13 @@ function CrearArreglo({ onCreado }: { onCreado: () => void }) {
               {abonoInicial > 0 && " La prima es el primer abono a cobrar (vence hoy)."}
             </p>
           </div>
+          </>)}
         </>
       )}
 
       {msg && <div className="error" style={{ marginTop: 10 }}>{msg}</div>}
-      <button className="agregar-miembro-btn" onClick={crear} disabled={guardando} style={{ marginTop: 14 }}>
+      <button className="agregar-miembro-btn" onClick={crear}
+        disabled={guardando || seleccionadas.length === 0} style={{ marginTop: 14 }}>
         {guardando ? "Creando…" : "Crear arreglo de pago"}
       </button>
     </div>
