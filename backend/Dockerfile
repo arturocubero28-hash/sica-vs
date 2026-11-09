@@ -8,8 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsm6 libxext6 libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Día 76 — requirements.lock fija la versión exacta de TODO (también lo que
+# traen las librerías por su cuenta). Ver el encabezado de ese archivo.
+COPY requirements.txt requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.txt -c requirements.lock
 
 COPY . .
 
