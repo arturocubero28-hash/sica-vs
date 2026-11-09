@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Video, Building2, Users, ScrollText, CreditCard, Receipt,
   Handshake, TrendingUp, Ticket, Megaphone, User, Settings, Monitor, Home,
   QrCode, ClipboardList, Shield, Building, Sun, Moon, Menu as MenuIcon,
-  Fingerprint, ArrowRight, ArrowLeft, Check, Smartphone, Download, Truck,
+  Fingerprint, ArrowRight, ArrowLeft, Check, Smartphone, Download, Truck, LifeBuoy,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -837,6 +837,8 @@ function navParaRol(rol: Rol): NavItem[] {
       { id: "historial", label: "Mis visitas", icon: ClipboardList },
       { id: "cuotas", label: "Mis cuotas", icon: CreditCard },
       { id: "cuenta", label: "Mi cuenta", icon: User },
+      // Día 76 — teléfono y correo de la administración para dudas y quejas
+      { id: "ayuda", label: "Ayuda", icon: LifeBuoy },
       { id: "perfil", label: "Mi perfil", icon: Settings },
     ];
   }

@@ -4926,3 +4926,97 @@ label.icono-accion { display: inline-flex; align-items: center; justify-content:
   .act-card { padding: 28px 18px 22px; }
   .act-opciones { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   Día 76 — cuentas para pagar, ayuda para residentes
+   ============================================================ */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+/* Lo que ya abonó de una cuota */
+.cuota-abonado { font-size: 12.5px; color: #7c4400; background: #fff8eb; border: 1px solid #f2d9a6;
+  border-radius: 8px; padding: 4px 8px; margin-top: 4px; display: inline-block; }
+
+/* Residente: cuentas a las que transferir */
+.cb-res { background: #fff; border: 1.5px solid #e9eef5; border-radius: 14px; padding: 16px; }
+.cb-res-cabeza h3 { margin: 0; font-size: 15px; color: var(--marca-azul); display: flex; align-items: center; gap: 8px; }
+.cb-res-cabeza p { margin: 4px 0 12px; font-size: 13px; color: var(--gris); line-height: 1.45; }
+.cb-res-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.cb-res-fila { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 0; border-top: 1px dashed #dce4ef; }
+.cb-res-fila:first-child { border-top: none; padding-top: 4px; }
+.cb-res-datos { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cb-res-banco { font-size: 13px; font-weight: 700; color: #475569; }
+.cb-res-numero { font-size: 20px; font-weight: 800; color: var(--marca-azul); letter-spacing: .03em;
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.cb-res-detalle { font-size: 12.5px; color: var(--gris); }
+.cb-res .cb-res-copiar { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;
+  background: #fff; color: var(--marca-azul); border: 1.5px solid #c9d5e6; border-radius: 999px;
+  padding: 8px 14px; font-size: 13.5px; font-weight: 700; min-width: 104px; justify-content: center; }
+.cb-res .cb-res-copiar:hover:not(:disabled) { background: #eef4fb; color: var(--marca-azul); border-color: #b2c2d8;
+  transform: none; box-shadow: none; }
+.cb-res .cb-res-copiar.hecho, .cb-res .cb-res-copiar.hecho:hover { background: #16a34a; border-color: #16a34a; color: #fff; }
+.cb-res--compacta { padding: 10px 12px; background: #f6f9fd; border-color: #dfe7f2; }
+.cb-res-intro { margin: 0 0 6px; font-size: 13px; color: #475569; display: flex; align-items: center; gap: 6px; }
+.cb-res--compacta .cb-res-numero { font-size: 17px; }
+.cb-res--compacta .cb-res-fila { padding: 8px 0; }
+.modal-pago .cb-res { margin: 4px 0 10px; }
+
+/* Admin: lista y formulario de cuentas */
+.cb-vacio { background: #fff8eb; border: 1px solid #f2d9a6; color: #7c4400; border-radius: 10px;
+  padding: 10px 14px; font-size: 13px; line-height: 1.5; }
+.cb-vacio p { margin: 0; }
+.cb-admin-lista { list-style: none; margin: 0; padding: 0; border: 1px solid #e3e9f2; border-radius: 12px; overflow: hidden; }
+.cb-admin-lista > li + li { border-top: 1px solid #eef2f8; }
+.cb-admin-fila { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; flex-wrap: wrap; }
+.cb-admin-datos { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.cb-admin-datos b { font-size: 13.5px; color: #334155; }
+.cb-admin-numero { font-size: 17px; font-weight: 800; color: var(--marca-azul); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+.cb-admin-datos small { font-size: 12px; color: #8a94a2; }
+.cb-admin-acciones { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cb-admin-acciones button { display: inline-flex; align-items: center; gap: 5px; }
+.cb-confirmar span { font-size: 13px; font-weight: 600; color: #7f1d1d; }
+button.cb-btn-peligro { background: #d42a2a; color: #fff; border: none; }
+button.cb-btn-peligro:hover:not(:disabled) { background: #b91c1c; color: #fff; }
+.cb-form { padding: 14px; background: #f6f9fd; border: 1px solid #dfe7f2; border-radius: 12px; margin-top: 10px; }
+.cb-admin-lista .cb-form { margin: 0; border: none; border-radius: 0; }
+.cb-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.cb-form .config-field input, .cb-form .config-field select, .ay-cfg-grid .config-field input {
+  width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--borde, #d6deea); font-size: 14px; }
+.ay-cfg-grid { max-width: 620px; }
+@media (max-width: 640px) {
+  .cb-form-grid { grid-template-columns: 1fr; }
+  .cb-res-fila { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .cb-res .cb-res-copiar { width: 100%; }
+}
+
+/* Residente: sección Ayuda */
+.ay { display: flex; flex-direction: column; gap: 18px; }
+.ay-cabeza { display: flex; gap: 16px; align-items: flex-start; }
+.ay-icono { width: 52px; height: 52px; border-radius: 16px; flex-shrink: 0; display: grid; place-items: center;
+  background: #fff1e3; color: #c86f00; }
+.ay-cabeza h2 { margin: 2px 0 6px; font-size: 21px; line-height: 1.25; color: var(--marca-azul); letter-spacing: -.01em; }
+.ay-cabeza p { margin: 0; font-size: 14.5px; color: #475569; line-height: 1.6; max-width: 60ch; }
+.ay-canales { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.ay-canal { border: 1.5px solid #e3e9f2; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.ay-canal-top { display: flex; gap: 12px; align-items: center; }
+.ay-canal-icono { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: #eaf1fb; color: var(--marca-azul); flex-shrink: 0; }
+.ay-canal-titulo { display: block; font-weight: 700; color: var(--marca-azul); font-size: 15px; }
+.ay-canal-nota { display: block; font-size: 12.5px; color: var(--gris); }
+.ay-canal-valor { font-size: 19px; font-weight: 800; color: #15283b; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.ay-canal-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+.ay-btn { flex: 1; min-width: 140px; text-align: center; background: var(--marca-naranja); color: #fff; font-weight: 700;
+  border-radius: 10px; padding: 11px 14px; text-decoration: none; font-size: 14px; }
+.ay-btn:hover { background: #e07b18; }
+.ay-btn:focus-visible { outline: 2px solid var(--marca-azul); outline-offset: 2px; }
+.ay .ay-btn-copiar { display: inline-flex; align-items: center; gap: 6px; background: #fff; color: var(--marca-azul);
+  border: 1.5px solid #c9d5e6; border-radius: 10px; padding: 10px 14px; font-weight: 700; font-size: 14px; }
+.ay .ay-btn-copiar:hover:not(:disabled) { background: #eef4fb; color: var(--marca-azul); transform: none; box-shadow: none; }
+.ay .ay-btn-copiar.hecho, .ay .ay-btn-copiar.hecho:hover { background: #16a34a; border-color: #16a34a; color: #fff; }
+.ay-sin-contacto { background: #f6f9fd; border: 1px solid #dfe7f2; border-radius: 14px; padding: 16px 18px; }
+.ay-sin-contacto p { margin: 0 0 4px; font-size: 14px; color: #475569; }
+.ay-pie { margin: 0; font-size: 13px; color: var(--gris); }
+@media (max-width: 520px) {
+  .ay-cabeza { flex-direction: column; gap: 10px; }
+}

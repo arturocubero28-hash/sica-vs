@@ -259,6 +259,12 @@ function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
         <div key={c.cuenta_id} className="caja-resultado">
           <div className="caja-resultado-head">
             <b>{c.identificador}</b> · {c.titular}
+            {c.dada_de_baja && (
+              <span className="pill amber" style={{ marginLeft: 8 }}
+                title={c.motivo_baja ? `Motivo: ${c.motivo_baja}` : undefined}>
+                Dada de baja · deuda pendiente
+              </span>
+            )}
           </div>
           {c.cuotas_pendientes.length === 0 && (!c.abonos_arreglo || c.abonos_arreglo.length === 0) ? (
             <span className="muted small">Sin cuotas pendientes</span>
@@ -742,7 +748,8 @@ function ModalVenderTarjeta({ onCerrar, onVendida }: {
                   placeholder="Buscar por casa o titular…" />
                 <button className="ghost mini" onClick={buscar}>Buscar</button>
               </div>
-              {resultados.map(c => (
+              {/* Día 76 — a una casa dada de baja no se le venden tarjetas. */}
+              {resultados.filter(c => !c.dada_de_baja).map(c => (
                 <button key={c.cuenta_id} type="button" className="venta-casa-opcion"
                   onClick={() => setCasaSel(c)}>
                   {c.identificador} · {c.titular}

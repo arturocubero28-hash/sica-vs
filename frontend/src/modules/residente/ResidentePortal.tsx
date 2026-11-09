@@ -6,6 +6,7 @@ import {
 import { CuotasResidente } from "./CuotasResidente";
 import { HomeResidente } from "./HomeResidente";
 import { MiEdificio } from "./MiEdificio";
+import { AyudaResidente } from "./AyudaResidente";
 import { TarjetaQR, descargarTarjetaQR, generarTarjetaQR } from "../../components/TarjetaQR";
 import { useMiResidencial } from "../../hooks/useMiResidencial";
 import { Car, Package, RefreshCw, User, AlertTriangle } from "lucide-react";
@@ -90,6 +91,7 @@ export function ResidentePortal({ seccion = "home" }: { seccion?: string }) {
       {seccion === "cuotas" && <CuotasResidente />}
       {seccion === "edificio" && <MiEdificio />}
       {seccion === "cuenta" && cuenta && <EstadoCuenta data={cuenta} />}
+      {seccion === "ayuda" && <AyudaResidente />}
     </div>
   );
 }

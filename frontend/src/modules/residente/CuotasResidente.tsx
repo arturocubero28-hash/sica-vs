@@ -4,6 +4,10 @@ import { misCuotas, subirComprobante, subirComprobanteAbono, urlReciboPDF,
 import { AlertTriangle, Paperclip, Handshake, Receipt } from "lucide-react";
 import { comprimirImagenWebp } from "../../utils/comprimirImagen";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
+import { CuentasParaPagar } from "../../components/CuentasParaPagar";
+
+/** Día 76 — lo que falta pagar de la cuota (si ya abonó una parte, no el monto entero). */
+const saldoDe = (c: CuotaDTO) => c.saldo ?? c.monto;
 
 const estadoLabel: Record<string, string> = {
   pendiente: "Pendiente", en_revision: "En revisión", pagada: "Pagada", vencida: "Vencida",
@@ -112,6 +116,9 @@ export function CuotasResidente() {
               </div>
             </section>
           )}
+
+          {/* Día 76 — a dónde transferir (lo configura la administración) */}
+          {totalPend > 0 && <div style={{ marginTop: 18 }}><CuentasParaPagar /></div>}
         </>
       )}
 
@@ -197,7 +204,12 @@ function CuotaCard({ cuota, onPagar, esLaMasAntigua = true }: {
       <div className="cuota-card-top">
         <div>
           <div className="cuota-mes">{cuota.mes_label}</div>
-          <div className="cuota-monto">L {cuota.monto.toFixed(2)}</div>
+          <div className="cuota-monto">L {(cuota.estado === "pagada" ? cuota.monto : saldoDe(cuota)).toFixed(2)}</div>
+          {cuota.estado !== "pagada" && (cuota.pagado ?? 0) > 0 && (
+            <div className="cuota-abonado">
+              Falta pagar · ya abonaste L {cuota.pagado!.toFixed(2)} de L {cuota.monto.toFixed(2)}
+            </div>
+          )}
         </div>
         <span className={`pill ${estadoColor[cuota.estado] || ""}`}>
           {estadoLabel[cuota.estado] || cuota.estado}
@@ -260,7 +272,7 @@ function FormPago({ cuota, onCerrar, onExito }: {
 }) {
   const [archivos, setArchivos] = useState<File[]>([]);
   const [previews, setPrevius] = useState<string[]>([]);
-  const [monto, setMonto] = useState(String(cuota.monto));
+  const [monto, setMonto] = useState(String(saldoDe(cuota)));
   const [referencia, setReferencia] = useState("");
   const [subiendo, setSubiendo] = useState(false);
   const [error, setError] = useState("");
@@ -309,10 +321,11 @@ function FormPago({ cuota, onCerrar, onExito }: {
         </div>
 
         <div className="form-pago">
+          <CuentasParaPagar compacta />
           <div className="form-field">
             <label>Monto transferido (L)</label>
             <input type="number" value={monto} onChange={e => setMonto(e.target.value)}
-              placeholder={String(cuota.monto)} step="0.01" />
+              placeholder={String(saldoDe(cuota))} step="0.01" />
           </div>
           <div className="form-field">
             <label>Referencia / N° de transacción</label>
@@ -418,6 +431,7 @@ function FormPagoAbono({ abono, onCerrar, onExito }: {
             <button className="ghost mini" onClick={onCerrar}>✕</button>
           </div>
           <p className="muted small">Monto del abono: L {abono.monto.toFixed(2)}</p>
+          <CuentasParaPagar compacta />
 
           <label className="campo-label">Monto a pagar</label>
           <input type="number" value={monto} onChange={e => setMonto(e.target.value)} />

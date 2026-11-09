@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { CuentasBancariasPanel, ContactoAyudaPanel } from "./PagosYAyudaConfig";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { getMe, cambiarPassword, listarSesiones, cerrarSesion, cerrarOtrasSesiones,
   registrarHuella, listarCredencialesHuella, eliminarCredencialHuella, soportaHuella,
@@ -638,6 +639,9 @@ function ConfigPanel() {
   return (
     <div>
       <MiResidencialPanel />
+      {/* Día 76 — a dónde pagan los residentes y a quién le escriben */}
+      <CuentasBancariasPanel />
+      <ContactoAyudaPanel />
 
       {errorPlan ? <FuncionNoIncluida mensaje={errorPlan} /> : !cfg ? (
         <p className="muted">Cargando configuración…</p>

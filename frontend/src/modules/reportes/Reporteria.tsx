@@ -119,11 +119,18 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
     doc.text(`Total recaudado: ${L(data!.total_recaudado)}`, 14, 52);
     doc.text(`Total pendiente: ${L(data!.total_pendiente)}`, 14, 58);
     doc.text(`Cobranza: ${data!.pct_cobranza}%`, 14, 64);
+    // Día 76 — lo perdonado en arreglos con descuento va aparte: no entró
+    // dinero, pero tampoco se debe.
+    const descuentos = data!.detalle_descuentos || [];
+    let y = 72;
+    if ((data!.total_descontado ?? 0) > 0) {
+      doc.text(`Descontado en arreglos de pago: ${L(data!.total_descontado!)}`, 14, 70);
+      y = 78;
+    }
 
     // Día 62 — 3 tablas en vez de 2 (mora / pago pendiente / al día), cada
     // una arrancando debajo de la anterior; si no cabe, autoTable pasa
     // sola a la página siguiente.
-    let y = 72;
     doc.setFontSize(11);
     doc.setTextColor(200, 30, 30);
     doc.text(`Cuentas en mora (${data!.cuentas_en_mora.length})`, 14, y);
@@ -162,6 +169,20 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
       headStyles: { fillColor: [22, 101, 52] },
     });
 
+    if (descuentos.length > 0) {
+      y = ((doc as any).lastAutoTable?.finalY ?? y) + 14;
+      if (y > 250) { doc.addPage(); y = 20; }
+      doc.setFontSize(11);
+      doc.setTextColor(91, 33, 182);
+      doc.text(`Descuentos en arreglos de pago (${descuentos.length})`, 14, y);
+      autoTable(doc, {
+        startY: y + 4,
+        head: [["Unidad", "Titular", "Descuento", "Monto", "Autorizó"]],
+        body: descuentos.map(d => [d.unidad, d.titular, `${d.descuento_pct} %`, L(d.monto), d.autorizado_por || "—"]),
+        headStyles: { fillColor: [91, 33, 182] },
+      });
+    }
+
     doc.save(`reporte-financiero-${data!.mes_label.replace(/\s/g, "-")}.pdf`);
   }
 
@@ -176,6 +197,7 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
       ["Total esperado", data!.total_esperado],
       ["Total recaudado", data!.total_recaudado],
       ["Total pendiente", data!.total_pendiente],
+      ["Descontado en arreglos", data!.total_descontado ?? 0],
       ["Cobranza %", data!.pct_cobranza],
       ["Cuentas al día", data!.cuentas_al_dia_count],
       ["Cuentas con pago pendiente", data!.cuentas_pago_pendiente_count],
@@ -207,6 +229,17 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
       ...data!.cuentas_al_dia.map(a => [a.unidad, a.titular, a.correo || "", a.telefono || ""]),
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(alDia), "Al día");
+
+    if ((data!.detalle_descuentos || []).length > 0) {
+      const desc = [
+        ["Unidad", "Titular", "Descuento %", "Monto descontado", "Autorizó", "Fecha", "Estado del arreglo"],
+        ...data!.detalle_descuentos!.map(d => [
+          d.unidad, d.titular, d.descuento_pct, d.monto, d.autorizado_por || "",
+          d.autorizado_en ? new Date(d.autorizado_en).toLocaleDateString("es-HN") : "", d.estado_arreglo,
+        ]),
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(desc), "Descuentos");
+    }
 
     XLSX.writeFile(wb, `reporte-financiero-${data!.mes_label.replace(/\s/g, "-")}.xlsx`);
   }
@@ -266,6 +299,12 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
             <div className="metric-top"><span className="metric-label">Cantidad de pagos</span><span className="metric-icon">#</span></div>
             <div className="metric-valor" style={{ fontSize: 22 }}>{data.total_pagos ?? 0}</div>
           </div>
+          {(data.total_descontado ?? 0) > 0 && (
+            <div className="metric-card gris" title="Descuentos autorizados en arreglos de pago dentro de estas fechas.">
+              <div className="metric-top"><span className="metric-label">Descuentos autorizados</span><span className="metric-icon">−</span></div>
+              <div className="metric-valor" style={{ fontSize: 22 }}>{L(data.total_descontado!)}</div>
+            </div>
+          )}
         </div>
       ) : (
       <div className="metric-grid">
@@ -281,6 +320,12 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
           <div className="metric-top"><span className="metric-label">Pendiente</span><span className="metric-icon">!</span></div>
           <div className="metric-valor" style={{ fontSize: 22 }}>{L(data.total_pendiente)}</div>
         </div>
+        {(data.total_descontado ?? 0) > 0 && (
+          <div className="metric-card gris" title="Lo perdonado en arreglos de pago con descuento. No entró como dinero, pero tampoco se debe.">
+            <div className="metric-top"><span className="metric-label">Descontado en arreglos</span><span className="metric-icon">−</span></div>
+            <div className="metric-valor" style={{ fontSize: 22 }}>{L(data.total_descontado!)}</div>
+          </div>
+        )}
         <div className={`metric-card ${data.pct_cobranza >= 70 ? "verde" : "rojo"}`}>
           <div className="metric-top"><span className="metric-label">Cobranza</span><span className="metric-icon">%</span></div>
           <div className="metric-valor">{data.pct_cobranza}%</div>
@@ -309,6 +354,8 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
             { nombre: "Esperado", valor: data.total_esperado, color: "#044a6e" },
             { nombre: "Recaudado", valor: data.total_recaudado, color: "#1d8a4a" },
             { nombre: "Pendiente", valor: data.total_pendiente, color: "#F48723" },
+            ...((data.total_descontado ?? 0) > 0
+              ? [{ nombre: "Descontado", valor: data.total_descontado!, color: "#6b7480" }] : []),
           ]} />
           {data.recaudado_por_metodo && (
             <GraficoDona titulo="Recaudado por método de pago" datos={[
@@ -413,6 +460,38 @@ function ReporteFinancieroVista({ residencial }: { residencial: ResidencialParaP
           </div>
         )}
       </div>
+      )}
+
+      {/* Día 76 — descuentos de arreglos: quién, cuánto y quién lo autorizó */}
+      {(data.detalle_descuentos?.length ?? 0) > 0 && (
+        <div className="dash-card">
+          <h3>Descuentos en arreglos de pago ({data.detalle_descuentos!.length})</h3>
+          <p className="muted small">
+            {esRango
+              ? "Descuentos autorizados entre las fechas seleccionadas. Es deuda perdonada: no entró como dinero."
+              : <>La parte de las cuotas de {data.mes_label} que se perdonó en un arreglo. Por eso
+                  esperado = recaudado + pendiente + descontado.</>}
+          </p>
+          <div className="scroll-x">
+            <table className="data">
+              <thead><tr><th>Unidad</th><th>Titular</th><th>Descuento</th><th>Monto</th><th>Autorizó</th><th>Arreglo</th></tr></thead>
+              <tbody>
+                {data.detalle_descuentos!.map((d, i) => (
+                  <tr key={i}>
+                    <td>{d.unidad}</td>
+                    <td>{d.titular}</td>
+                    <td>{d.descuento_pct} %</td>
+                    <td>{L(d.monto)}</td>
+                    <td className="small">{d.autorizado_por || "—"}
+                      {d.autorizado_en && <span className="muted"> · {new Date(d.autorizado_en).toLocaleDateString("es-HN")}</span>}</td>
+                    <td><span className={`pill ${d.estado_arreglo === "activo" ? "amber" : "green"}`}>
+                      {d.estado_arreglo === "activo" ? "Activo" : "Completado"}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Día 62 — reemplaza las 2 secciones binarias (morosos/al día) por 3

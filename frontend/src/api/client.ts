@@ -630,6 +630,8 @@ export interface CuotaDTO {
   al_salir_hoy?: AjusteNivelacion;
   id: string; periodo: string; mes_label: string;
   monto: number; fecha_vencimiento: string; estado: string;
+  /** Día 76 — lo ya pagado (pagos aprobados) y lo que falta. */
+  pagado?: number; saldo?: number;
   created_at: string; pagos?: PagoDTO[];
   pago_rechazado?: boolean; nota_rechazo?: string; en_revision?: boolean;
   pago?: { id: string; numero_recibo?: number; metodo: string; revisado_en?: string };
@@ -795,6 +797,13 @@ export interface ReporteFinancieroDTO {
   cuentas_en_mora: CuentaConDeudaDTO[];
   tendencia: TendenciaDTO[];
   detalle_pagos?: PagoDetalleDTO[]; total_pagos?: number;
+  /** Día 76 — lo perdonado en arreglos con descuento (aparte de lo recaudado). */
+  total_descontado?: number;
+  detalle_descuentos?: DescuentoDetalleDTO[];
+}
+export interface DescuentoDetalleDTO {
+  unidad: string; titular: string; descuento_pct: number; monto: number;
+  autorizado_por: string | null; autorizado_en: string | null; estado_arreglo: string;
 }
 export interface MesMoraDTO {
   periodo: string; mes_label: string; monto: number; estado: string;
@@ -990,6 +999,8 @@ export interface AbonoCajaDTO {
 }
 export interface CuentaCajaDTO {
   cuenta_id: string; identificador: string; titular: string;
+  /** Día 76 — casa que se mudó debiendo: aparece solo para cobrarle. */
+  dada_de_baja?: boolean; motivo_baja?: string | null;
   residentes?: { id: string; nombre: string }[];
   cuotas_pendientes: CuotaPendienteCaja[];
   abonos_arreglo?: AbonoCajaDTO[];
@@ -1585,6 +1596,9 @@ export interface ResidencialDTO {
   nombre: string;
   direccion: string | null;
   telefono: string | null;
+  /** Día 76 — contacto de servicio al cliente (sección «Ayuda» del residente). */
+  telefono_ayuda?: string | null;
+  email_ayuda?: string | null;
   logo_archivo: string | null;
   // Día 47: siempre vienen con un valor (el elegido, o el de fábrica si la
   // residencial nunca lo personalizó) — nunca llegan en null.
@@ -1612,8 +1626,30 @@ export interface ResidencialDTO {
 export const getMiResidencial = () =>
   request<ResidencialDTO | null>("/unidades/mi-residencial");
 
-export const setMiResidencial = (body: { nombre?: string; color_primario?: string; color_secundario?: string }) =>
+export const setMiResidencial = (body: {
+  nombre?: string; color_primario?: string; color_secundario?: string;
+  telefono_ayuda?: string; email_ayuda?: string;
+}) =>
   request<ResidencialDTO>("/unidades/mi-residencial", { method: "PUT", body: JSON.stringify(body) });
+
+// ── Día 76 — cuentas bancarias autorizadas para pagar ──────────────────────
+// El admin las configura; los residentes las ven junto a sus cuotas.
+export type TipoCuentaBancaria = "ahorro" | "cheques";
+export interface CuentaBancariaDTO {
+  id: string; banco: string; numero: string;
+  titular: string | null; tipo: TipoCuentaBancaria | null;
+}
+export interface CuentaBancariaBody {
+  banco?: string; numero?: string; titular?: string; tipo?: TipoCuentaBancaria | "";
+}
+const CB_URL = "/unidades/mi-residencial/cuentas-bancarias";
+export const getCuentasBancarias = () => request<CuentaBancariaDTO[]>(CB_URL);
+export const crearCuentaBancaria = (body: CuentaBancariaBody) =>
+  request<CuentaBancariaDTO>(CB_URL, { method: "POST", body: JSON.stringify(body) });
+export const editarCuentaBancaria = (id: string, body: CuentaBancariaBody) =>
+  request<CuentaBancariaDTO>(`${CB_URL}/${id}`, { method: "PUT", body: JSON.stringify(body) });
+export const borrarCuentaBancaria = (id: string) =>
+  request<{ borrada: boolean }>(`${CB_URL}/${id}`, { method: "DELETE" });
 
 export async function subirLogoResidencial(archivo: File): Promise<ResidencialDTO> {
   const token = getToken();
