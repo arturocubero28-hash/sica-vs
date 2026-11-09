@@ -18,6 +18,52 @@ from app.utils.fechas import mes_es
 reportes_bp = Blueprint("reportes", __name__)
 
 
+def _descuentos(usuario_actual):
+    """
+    Día 76 — descuentos de arreglos de pago que siguen en pie (arreglo
+    activo o completado: si se canceló o se incumplió, las cuotas volvieron
+    a deberse enteras y el descuento ya no corre).
+
+    El descuento es un porcentaje sobre toda la deuda del arreglo, así que
+    a cada cuota le toca su parte: monto × %. Devuelve
+    {cuota_id: (parte_decimal, arreglo)}.
+    """
+    from app.models.cuenta import ArregloPago
+    from app.utils.residencial import residencial_id_filtro
+    from app.models.cuenta import Cuenta, Unidad
+    q = ArregloPago.query.filter(ArregloPago.estado.in_(["activo", "completado"]),
+                                 ArregloPago.descuento_pct.isnot(None), ArregloPago.descuento_pct > 0)
+    rid = residencial_id_filtro(usuario_actual)
+    if rid is not None:
+        q = (q.join(Cuenta, ArregloPago.cuenta_id == Cuenta.id)
+              .join(Unidad, Cuenta.unidad_id == Unidad.id).filter(Unidad.residencial_id == rid))
+    partes = {}
+    for arr in q.all():
+        pct = dinero.a_decimal(arr.descuento_pct) / 100
+        for c in arr.cuotas:
+            partes[c.id] = (dinero.a_decimal(c.monto) * pct, arr)
+    return partes
+
+
+def _fila_descuento(arr, monto):
+    cuenta = arr.cuenta
+    unidad = cuenta.unidad.identificador if cuenta and cuenta.unidad else "—"
+    titular = "—"
+    if cuenta:
+        tit = next((r for r in cuenta.residentes if r.rol_cuenta == "titular"), None)
+        if tit and tit.usuario:
+            titular = f"{tit.usuario.nombre} {tit.usuario.apellido}"
+    aut = arr.autorizador_descuento
+    return {
+        "unidad": unidad, "titular": titular,
+        "descuento_pct": float(arr.descuento_pct),
+        "monto": dinero.a_float(monto),
+        "autorizado_por": f"{aut.nombre} {aut.apellido}" if aut else None,
+        "autorizado_en": arr.descuento_autorizado_en.isoformat() if arr.descuento_autorizado_en else None,
+        "estado_arreglo": arr.estado,
+    }
+
+
 @reportes_bp.get("/financiero")
 @roles_required("admin", "super_admin")
 @requiere_funcion_plan("cuotas")
@@ -95,8 +141,26 @@ def reporte_financiero(usuario_actual):
             })
         detalle_pagos.sort(key=lambda x: x["fecha"] or "", reverse=True)
 
+        # Día 76 — lo perdonado en arreglos en este rango: los descuentos
+        # AUTORIZADOS entre esas fechas (el arreglo entero), aparte de lo
+        # recaudado, que es dinero que entró.
+        from app.models.cuenta import ArregloPago
+        vistos, detalle_desc = set(), []
+        for _cid, (_parte, arr) in _descuentos(usuario_actual).items():
+            f = arr.descuento_autorizado_en
+            if arr.id in vistos or not f:
+                continue
+            if f.tzinfo is None:
+                f = f.replace(tzinfo=dt.timezone.utc)
+            if ini <= f <= fin:
+                vistos.add(arr.id)
+                detalle_desc.append(_fila_descuento(arr, dinero.a_decimal(arr.descuento_monto or 0)))
+        detalle_desc.sort(key=lambda x: x["autorizado_en"] or "", reverse=True)
+
         return jsonify({"data": {
             "modo": "rango",
+            "total_descontado": round(sum(d["monto"] for d in detalle_desc), 2),
+            "detalle_descuentos": detalle_desc,
             "periodo": desde.isoformat(),
             "mes_label": label,
             "total_esperado": 0.0,
@@ -201,15 +265,27 @@ def reporte_financiero(usuario_actual):
     cuentas_al_dia.sort(key=lambda f: f["unidad"])
 
     # ── Totales del período seleccionado (esperado/recaudado/pendiente) ──
+    # Día 76 — una cuota de un arreglo con descuento no se cobra entera: su
+    # parte del descuento se perdonó. Antes contaba como recaudada (si el
+    # arreglo se completó) o como pendiente (si sigue activo), y el reporte
+    # inflaba lo uno o lo otro. Ahora: esperado = recaudado + perdonado + pendiente.
+    partes_desc = _descuentos(usuario_actual)
     total_esperado = dinero.CERO
     total_recaudado = dinero.CERO
+    total_descontado = dinero.CERO
+    desc_por_arreglo = {}
     for c in cuotas:
         monto = dinero.a_decimal(c.monto)
         total_esperado += monto
+        parte, arr = partes_desc.get(c.id, (dinero.CERO, None))
+        if arr is not None:
+            total_descontado += parte
+            prev = desc_por_arreglo.get(arr.id, (arr, dinero.CERO))
+            desc_por_arreglo[arr.id] = (arr, prev[1] + parte)
         if c.estado == "pagada":
-            total_recaudado += monto
+            total_recaudado += monto - parte
 
-    total_pendiente = total_esperado - total_recaudado
+    total_pendiente = total_esperado - total_recaudado - total_descontado
     pct_cobranza = float(total_recaudado / total_esperado * 100) if total_esperado > 0 else 0
 
     # ── Desglose de lo recaudado por método de pago ──────────────────────────
@@ -241,9 +317,10 @@ def reporte_financiero(usuario_actual):
         qs = scope_cuotas(Cuota.query, usuario_actual).filter(
             Cuota.periodo == p).all()
         esperado = dinero.suma(x.monto for x in qs)
-        recaudado = dinero.suma(x.monto for x in qs if x.estado == "pagada")
+        recaudado = dinero.suma(dinero.a_decimal(x.monto) - partes_desc.get(x.id, (dinero.CERO, None))[0]
+                                for x in qs if x.estado == "pagada")
         tendencia.append({
-            "mes_label": p.strftime("%b %Y"),
+            "mes_label": f"{mes_es(p)[:3]} {p.year}",
             "esperado": dinero.a_float(esperado),
             "recaudado": dinero.a_float(recaudado),
         })
@@ -255,6 +332,9 @@ def reporte_financiero(usuario_actual):
         "total_esperado": dinero.a_float(total_esperado),
         "total_recaudado": dinero.a_float(total_recaudado),
         "total_pendiente": dinero.a_float(total_pendiente),
+        "total_descontado": dinero.a_float(total_descontado),
+        "detalle_descuentos": sorted((_fila_descuento(a, m) for a, m in desc_por_arreglo.values()),
+                                     key=lambda x: -x["monto"]),
         "pct_cobranza": round(pct_cobranza, 1),
         "recaudado_por_metodo": {
             "efectivo": dinero.a_float(por_metodo.get("efectivo", dinero.CERO)),

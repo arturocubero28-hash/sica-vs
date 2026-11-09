@@ -460,10 +460,10 @@ def solicitar_recuperacion():
     # escritura pendiente en esta función, se dispara ya mismo. Async vía
     # Celery para no demorar la respuesta HTTP con la llamada a Resend.
     try:
-        from app.tasks.correo_task import enviar_correo_reset_task
+        from app.tasks.correo_task import encolar_correo_reset
         from app.models.residencial import Residencial
         residencial = Residencial.query.get(usuario.residencial_id) if usuario.residencial_id else None
-        enviar_correo_reset_task.delay(
+        encolar_correo_reset(
             email, token_reset, residencial.nombre if residencial else "SICA-VS")
     except Exception:
         pass  # un correo que no sale no debe romper la respuesta al usuario

@@ -18,6 +18,7 @@ Sobre la creación de usuarios de residentes:
     Por ahora el token se devuelve en la respuesta para pruebas.
 """
 import os
+import re
 import secrets
 import datetime as dt
 
@@ -482,10 +483,10 @@ def crear_cuenta(usuario_actual):
     # mandar otro le haría llegar dos enlaces a la persona.
     if verif is None:
         try:
-            from app.tasks.correo_task import enviar_correo_activacion_task
+            from app.tasks.correo_task import encolar_correo_activacion
             from app.models.residencial import Residencial
             residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
-            enviar_correo_activacion_task.delay(
+            encolar_correo_activacion(
                 usuario.email, usuario.nombre, token_o_error,
                 residencial.nombre if residencial else "Residencial")
         except Exception:
@@ -888,10 +889,10 @@ def agregar_miembro(usuario_actual, cuenta_uuid):
     # con la verificación (si no, le llegarían dos enlaces).
     if verif is None:
         try:
-            from app.tasks.correo_task import enviar_correo_activacion_task
+            from app.tasks.correo_task import encolar_correo_activacion
             from app.models.residencial import Residencial
             residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
-            enviar_correo_activacion_task.delay(
+            encolar_correo_activacion(
                 usuario.email, usuario.nombre, token_o_error,
                 residencial.nombre if residencial else "Residencial")
         except Exception:
@@ -1076,10 +1077,10 @@ def regenerar_enlace(usuario_actual, cuenta_uuid, residente_uuid):
     db.session.commit()
 
     try:
-        from app.tasks.correo_task import enviar_correo_activacion_task
+        from app.tasks.correo_task import encolar_correo_activacion
         from app.models.residencial import Residencial
         residencial = Residencial.query.get(usuario_actual.residencial_id) if usuario_actual.residencial_id else None
-        enviar_correo_activacion_task.delay(
+        encolar_correo_activacion(
             usuario.email, usuario.nombre, token_activacion,
             residencial.nombre if residencial else "Residencial", es_reenvio=True)
     except Exception:
@@ -1615,8 +1616,148 @@ def editar_mi_residencial(usuario_actual):
                                                      f"(ej. #022E45): {campo}"}}), 400
             setattr(r, campo, valor.upper())
 
+    # Día 76 — contacto de servicio al cliente (sección "Ayuda" del
+    # residente). "" lo borra: la sección muestra entonces solo lo que haya.
+    if "telefono_ayuda" in body:
+        tel = re.sub(r"\s+", " ", (body["telefono_ayuda"] or "").strip())
+        if tel:
+            digitos = re.sub(r"\D", "", tel)
+            if not re.fullmatch(r"[0-9+\-() ]{7,30}", tel) or not 7 <= len(digitos) <= 15:
+                return jsonify({"error": {"code": "telefono_invalido",
+                                          "message": "El teléfono solo puede tener números, espacios, "
+                                                     "guiones y un + al principio (ej. 2550-1234)."}}), 400
+        r.telefono_ayuda = tel or None
+    if "email_ayuda" in body:
+        correo = (body["email_ayuda"] or "").strip().lower()
+        if correo and (len(correo) > 160 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", correo)):
+            return jsonify({"error": {"code": "email_invalido",
+                                      "message": "El correo de ayuda no tiene un formato válido."}}), 400
+        r.email_ayuda = correo or None
+
     db.session.commit()
     return jsonify({"data": r.to_dict()})
+
+
+# =====================================================================
+# Día 76 — CUENTAS BANCARIAS AUTORIZADAS PARA PAGAR
+#
+# El admin las configura; cualquier usuario de la residencial las ve (los
+# residentes, en la app y el portal, junto a sus cuotas). Ver
+# app/models/cuenta_bancaria.py.
+# =====================================================================
+def _datos_cuenta_bancaria(body, parcial=False):
+    """Valida el cuerpo. Devuelve (dict_de_campos, None) o (None, respuesta)."""
+    import re
+    from app.models.cuenta_bancaria import TIPOS_CUENTA
+
+    def err(code, msg):
+        return None, (jsonify({"error": {"code": code, "message": msg}}), 400)
+
+    campos = {}
+    if not parcial or "banco" in body:
+        banco = re.sub(r"\s+", " ", (body.get("banco") or "").strip())
+        if not 2 <= len(banco) <= 80:
+            return err("banco_invalido", "Escribí el nombre del banco.")
+        campos["banco"] = banco
+    if not parcial or "numero" in body:
+        numero = re.sub(r"\s+", " ", (body.get("numero") or "").strip())
+        digitos = re.sub(r"\D", "", numero)
+        if not re.fullmatch(r"[0-9\- ]{4,40}", numero) or len(digitos) < 4:
+            return err("numero_invalido",
+                       "El número de cuenta solo puede tener números, espacios y guiones.")
+        campos["numero"] = numero
+    if "titular" in body:
+        titular = re.sub(r"\s+", " ", (body.get("titular") or "").strip())
+        if len(titular) > 120:
+            return err("titular_largo", "El nombre del titular no puede superar 120 caracteres.")
+        campos["titular"] = titular or None
+    if "tipo" in body:
+        tipo = (body.get("tipo") or "").strip().lower() or None
+        if tipo is not None and tipo not in TIPOS_CUENTA:
+            return err("tipo_invalido", "El tipo de cuenta tiene que ser ahorro o cheques.")
+        campos["tipo"] = tipo
+    return campos, None
+
+
+def _cuentas_bancarias_de(residencial_id):
+    from app.models.cuenta_bancaria import CuentaBancaria
+    return (CuentaBancaria.query.filter_by(residencial_id=residencial_id)
+            .order_by(CuentaBancaria.orden.asc(), CuentaBancaria.created_at.asc()).all())
+
+
+@cuentas_bp.get("/mi-residencial/cuentas-bancarias")
+@token_required
+def listar_cuentas_bancarias(usuario_actual):
+    """Cualquier usuario de la residencial: el residente las necesita para
+    saber a dónde transferir."""
+    if not usuario_actual.residencial_id:
+        return jsonify({"data": []})
+    return jsonify({"data": [c.to_dict() for c in _cuentas_bancarias_de(usuario_actual.residencial_id)]})
+
+
+@cuentas_bp.post("/mi-residencial/cuentas-bancarias")
+@roles_required("admin", "super_admin")
+def crear_cuenta_bancaria(usuario_actual):
+    from app.models.cuenta_bancaria import CuentaBancaria, MAX_CUENTAS
+    if not usuario_actual.residencial_id:
+        return jsonify({"error": {"code": "sin_residencial",
+                                  "message": "Tu usuario no tiene una residencial asignada"}}), 400
+    campos, err = _datos_cuenta_bancaria(request.get_json(silent=True) or {})
+    if err:
+        return err
+    existentes = _cuentas_bancarias_de(usuario_actual.residencial_id)
+    if len(existentes) >= MAX_CUENTAS:
+        return jsonify({"error": {"code": "demasiadas_cuentas",
+                                  "message": f"Se pueden configurar hasta {MAX_CUENTAS} cuentas."}}), 400
+    if any(c.banco.lower() == campos["banco"].lower()
+           and re.sub(r"\D", "", c.numero) == re.sub(r"\D", "", campos["numero"]) for c in existentes):
+        return jsonify({"error": {"code": "cuenta_repetida",
+                                  "message": "Esa cuenta ya está en la lista."}}), 409
+    c = CuentaBancaria(residencial_id=usuario_actual.residencial_id,
+                       orden=(max((x.orden for x in existentes), default=0) + 1), **campos)
+    db.session.add(c)
+    db.session.commit()
+    return jsonify({"data": c.to_dict()}), 201
+
+
+@cuentas_bp.put("/mi-residencial/cuentas-bancarias/<cuenta_uuid>")
+@roles_required("admin", "super_admin")
+def editar_cuenta_bancaria(usuario_actual, cuenta_uuid):
+    c = _cuenta_bancaria_mia(cuenta_uuid, usuario_actual)
+    if c is None:
+        return jsonify({"error": {"code": "no_encontrada", "message": "Cuenta no encontrada"}}), 404
+    campos, err = _datos_cuenta_bancaria(request.get_json(silent=True) or {}, parcial=True)
+    if err:
+        return err
+    for k, v in campos.items():
+        setattr(c, k, v)
+    db.session.commit()
+    return jsonify({"data": c.to_dict()})
+
+
+@cuentas_bp.delete("/mi-residencial/cuentas-bancarias/<cuenta_uuid>")
+@roles_required("admin", "super_admin")
+def borrar_cuenta_bancaria(usuario_actual, cuenta_uuid):
+    c = _cuenta_bancaria_mia(cuenta_uuid, usuario_actual)
+    if c is None:
+        return jsonify({"error": {"code": "no_encontrada", "message": "Cuenta no encontrada"}}), 404
+    db.session.delete(c)
+    db.session.commit()
+    return jsonify({"data": {"borrada": True}})
+
+
+def _cuenta_bancaria_mia(cuenta_uuid, usuario_actual):
+    """Solo cuentas de la residencial de quien opera."""
+    import uuid as _uuid
+    from app.models.cuenta_bancaria import CuentaBancaria
+    try:
+        u = _uuid.UUID(str(cuenta_uuid))
+    except ValueError:
+        return None
+    c = CuentaBancaria.query.filter_by(uuid_publico=u).first()
+    if c is None or c.residencial_id != usuario_actual.residencial_id:
+        return None
+    return c
 
 
 @cuentas_bp.post("/mi-residencial/logo")

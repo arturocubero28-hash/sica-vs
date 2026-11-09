@@ -24,3 +24,25 @@ def enviar_correo_reset_task(email, token, nombre_residencial):
     with app.app_context():
         from app.services import correo
         return correo.enviar_correo_reset(email, token, nombre_residencial)
+
+
+# ── Día 76 — encolar, o mandar en el momento si Redis no responde ─────────
+#
+# Antes cada lugar hacía tarea.delay(...) dentro de un try. Con Redis caído
+# el .delay fallaba y el correo se perdía en silencio (el de recuperar
+# contraseña, con un "pass"). Celery y el limitador dependen de Redis; el
+# correo no: lo manda Resend por HTTP. Si no se puede encolar, se manda ahí
+# mismo, en el proceso de la petición (tarda un segundo más, pero llega).
+
+from app.tasks.encolar import encolar as _encolar  # noqa: E402
+
+
+def encolar_correo_activacion(email, nombre, token, nombre_residencial, es_reenvio=False):
+    from app.services import correo
+    _encolar(enviar_correo_activacion_task, correo.enviar_correo_activacion,
+             email, nombre, token, nombre_residencial, es_reenvio)
+
+
+def encolar_correo_reset(email, token, nombre_residencial):
+    from app.services import correo
+    _encolar(enviar_correo_reset_task, correo.enviar_correo_reset, email, token, nombre_residencial)

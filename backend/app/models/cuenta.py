@@ -644,6 +644,15 @@ class Cuota(db.Model):
             "estado":           self.estado,
             "created_at":       self.created_at.isoformat(),
         }
+        # Día 76 — cuánto ya se pagó y cuánto falta. Una cuota puede tener un
+        # pago aprobado y aun así no estar saldada: la de una casa que salió
+        # al padrón (pagó los días de antes) y volvió en el mismo mes (se le
+        # sumaron los días nuevos). Caja ya cobraba el saldo (Día 75); el
+        # portal y la app mostraban el monto entero.
+        pagado = float(self.pagos.filter_by(estado="aprobado")
+                       .with_entities(db.func.coalesce(db.func.sum(Pago.monto), 0)).scalar() or 0)
+        d["pagado"] = round(pagado, 2)
+        d["saldo"] = 0.0 if self.estado in ("pagada", "anulada") else round(max(float(self.monto) - pagado, 0), 2)
         # Si el último pago fue rechazado, exponer el motivo para que el residente reintente
         ultimo = self.pagos.order_by(Pago.created_at.desc()).first()
         if ultimo and ultimo.estado == "rechazado":

@@ -698,11 +698,11 @@ def _enviar_activacion(email, nombre, token, usuario_actual):
     """Siempre DESPUÉS del commit: un correo para un usuario que no quedó
     guardado es peor que no mandar nada (lección del Día 61)."""
     try:
-        from app.tasks.correo_task import enviar_correo_activacion_task
+        from app.tasks.correo_task import encolar_correo_activacion
         from app.models.residencial import Residencial
         residencial = (Residencial.query.get(usuario_actual.residencial_id)
                        if usuario_actual.residencial_id else None)
-        enviar_correo_activacion_task.delay(
+        encolar_correo_activacion(
             email, nombre, token, residencial.nombre if residencial else "Residencial")
     except Exception:
         current_app.logger.exception("No se pudo encolar el correo de activación a %s", email)

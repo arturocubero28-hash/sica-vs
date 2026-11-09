@@ -57,6 +57,12 @@ class Residencial(db.Model):
     # creación (crear_residencial), no como constraint de base de datos.
     direccion = db.Column(db.String(255))
     telefono = db.Column(db.String(30))
+    # Día 76 — contacto de servicio al cliente que el residente ve en la
+    # sección "Ayuda" de la app y del portal (dudas, quejas, sugerencias).
+    # Aparte de "telefono" a propósito: ese es el de la oficina y puede no
+    # ser el que atiende a los residentes.
+    telefono_ayuda = db.Column(db.String(30))
+    email_ayuda = db.Column(db.String(160))
     logo_archivo = db.Column(db.String(255))  # nombre de archivo guardado (mismo patrón que comunicados/comprobantes)
     # Día 47 — colores personalizables. Formato hex ("#022E45"), validado en
     # el endpoint de escritura, no como constraint de base (mismo criterio
@@ -119,6 +125,8 @@ class Residencial(db.Model):
             "nombre": self.nombre,
             "direccion": self.direccion,
             "telefono": self.telefono,
+            "telefono_ayuda": self.telefono_ayuda,
+            "email_ayuda": self.email_ayuda,
             "logo_archivo": self.logo_archivo,
             # Día 47: siempre se devuelve un color EFECTIVO (el elegido, o
             # el de fábrica si nunca se personalizó) — el frontend nunca

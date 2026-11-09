@@ -22,6 +22,16 @@ celery = Celery(
              "app.tasks.latido"],   # <-- registra las tareas
 )
 
+# Día 76 — si Redis no responde, encolar falla RÁPIDO (y quien encola cae a
+# su respaldo: ver encolar_correo_* en correo_task.py), en vez de dejar la
+# petición colgada varios segundos reintentando la conexión.
+celery.conf.broker_connection_timeout = 2
+celery.conf.broker_transport_options = {"socket_connect_timeout": 2}
+celery.conf.redis_socket_connect_timeout = 2
+celery.conf.task_publish_retry_policy = {
+    "max_retries": 1, "interval_start": 0, "interval_step": 0.5, "interval_max": 0.5,
+}
+
 celery.conf.timezone = "America/Tegucigalpa"
 celery.conf.enable_utc = False   # respetar el timezone configurado
 

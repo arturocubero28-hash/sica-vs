@@ -61,7 +61,31 @@ def create_app(config_class=Config):
     # worker). El fix real: setear la clave de configuración de Flask
     # que la librería sí lee, ANTES de init_app().
     app.config["RATELIMIT_STORAGE_URI"] = app.config["REDIS_URL"]
+    # Día 76 — si Redis se cae, el limitador NO tumba la API. Antes, con
+    # Redis caído, cada petición con límite (el login entre ellas) fallaba
+    # con 500: nadie podía entrar al sistema, ni el guardia en la caseta.
+    # Ahora cuenta en memoria mientras Redis no responde (por proceso: menos
+    # exacto, pero sigue frenando la fuerza bruta) y vuelve a Redis solo.
+    # Los timeouts cortos evitan que cada petición se quede esperando a un
+    # Redis que no contesta.
+    app.config.setdefault("RATELIMIT_IN_MEMORY_FALLBACK_ENABLED", True)
+    app.config.setdefault("RATELIMIT_SWALLOW_ERRORS", True)
+    app.config.setdefault("RATELIMIT_STORAGE_OPTIONS",
+                          {"socket_connect_timeout": 1, "socket_timeout": 1})
     limiter.init_app(app)
+
+    # Día 76 — lo que de verdad necesita Redis (el reto de las llaves de
+    # acceso / huella, webauthn) responde "no disponible por un momento" en
+    # vez de un 500 con traza.
+    import redis as _redis_lib
+
+    @app.errorhandler(_redis_lib.exceptions.ConnectionError)
+    @app.errorhandler(_redis_lib.exceptions.TimeoutError)
+    def _redis_caido(e):
+        app.logger.error("Redis no responde: %s", e)
+        return jsonify({"error": {"code": "servicio_no_disponible",
+                                  "message": "Esta función no está disponible en este momento. "
+                                             "Probá de nuevo en unos minutos o entrá con tu contraseña."}}), 503
 
     # --- Importar modelos (para que SQLAlchemy / Migrate los conozca) ---
     # Cada dueño de módulo agrega aquí su import cuando cree sus modelos.
@@ -76,6 +100,7 @@ def create_app(config_class=Config):
     from app.models.token_revocado import TokenRevocado  # noqa: F401  blacklist JWT
     from app.models.sesion_activa import SesionActiva  # noqa: F401  sesiones/dispositivos
     from app.models.verificacion_correo import VerificacionCorreo  # noqa: F401  verificar correo antes de crear cuentas (Día 73)
+    from app.models.cuenta_bancaria import CuentaBancaria  # noqa: F401  cuentas autorizadas para pagar (Día 76)
     from app.models.credencial_webauthn import CredencialWebAuthn  # noqa: F401  biometría WebAuthn
     from app.models.dispositivo import Dispositivo  # noqa: F401  Raspberry Pi de accesos
     from app.models.residencial import Residencial  # noqa: F401  bases multi-residencial (Día 37)
@@ -662,6 +687,10 @@ def create_app(config_class=Config):
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS activado_en TIMESTAMPTZ",
             "UPDATE usuarios SET activado_en = COALESCE(ultimo_acceso, NOW()) "
             "WHERE activado_en IS NULL AND (activo OR ultimo_acceso IS NOT NULL)",
+            # ── Día 76 ──
+            # Contacto de servicio al cliente para la sección "Ayuda".
+            "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS telefono_ayuda VARCHAR(30)",
+            "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS email_ayuda VARCHAR(160)",
 
             # ── Día 72 · Sesión persistente de la app ────────────────────────
             # Token de renovación (solo su hash) para que la app no vuelva a

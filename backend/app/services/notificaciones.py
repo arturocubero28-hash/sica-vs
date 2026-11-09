@@ -134,22 +134,22 @@ def notificar_cuenta(cuenta, titulo, cuerpo, datos=None):
 def notificar_usuario_async(usuario_id, titulo, cuerpo, datos=None):
     """Encola el envío a un usuario en Celery. Devuelve de inmediato.
     Si Celery no está disponible, cae al envío síncrono como respaldo."""
-    try:
-        from app.tasks.notificaciones_task import enviar_push_usuario
-        enviar_push_usuario.delay(usuario_id, titulo, cuerpo, datos)
-    except Exception:
-        # Respaldo: si no se pudo encolar, enviar síncrono
-        try:
-            notificar_usuario(usuario_id, titulo, cuerpo, datos)
-        except Exception:
-            pass
+    # Día 76 — con Redis caído, .delay() se quedaba ~20 s reintentando antes
+    # de caer al respaldo. encolar() mira primero si Redis responde.
+    from app.tasks.notificaciones_task import enviar_push_usuario
+    from app.tasks.encolar import encolar
+    encolar(enviar_push_usuario, notificar_usuario, usuario_id, titulo, cuerpo, datos)
 
 
 def notificar_cuenta_async(cuenta_id, titulo, cuerpo, datos=None):
     """Encola el envío a una cuenta en Celery. Devuelve de inmediato.
     Recibe cuenta_id (no el objeto) porque la tarea corre en otro proceso."""
-    try:
-        from app.tasks.notificaciones_task import enviar_push_cuenta
-        enviar_push_cuenta.delay(cuenta_id, titulo, cuerpo, datos)
-    except Exception:
-        pass
+    # Día 76 — si no se puede encolar, se envía en el momento (antes se perdía).
+    from app.tasks.notificaciones_task import enviar_push_cuenta
+    from app.tasks.encolar import encolar
+
+    def _directo(cid, t, c, d):
+        from app.models.cuenta import Cuenta
+        cuenta = Cuenta.query.get(cid)
+        return notificar_cuenta(cuenta, t, c, d) if cuenta else 0
+    encolar(enviar_push_cuenta, _directo, cuenta_id, titulo, cuerpo, datos)

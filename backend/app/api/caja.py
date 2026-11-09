@@ -374,10 +374,23 @@ def buscar_cuenta(usuario_actual):
     # Filtrar en SQL por identificador de unidad o nombre/apellido del titular,
     # en vez de cargar las 500 cuentas y filtrar en Python. Precarga unidad y
     # residentes->usuario para no disparar lazy loads por cada resultado.
+    # Día 76 — también las casas dadas de baja (mudanza) que se fueron
+    # debiendo: la deuda queda a nombre del titular y, si vuelve a pagar,
+    # caja tiene que poder encontrarla. Solo si deben algo (cuotas impagas o
+    # un arreglo activo); una baja saldada no tiene nada que hacer en caja.
+    from app.models.cuenta import ArregloPago as _Arr
+    con_deuda = (db.session.query(Cuota.cuenta_id)
+                 .filter(Cuota.estado.notin_(["pagada", "en_arreglo", "anulada"])))
+    con_arreglo = db.session.query(_Arr.cuenta_id).filter(_Arr.estado == "activo")
+    # Día 76 — y solo de la residencial del cajero/admin. Antes la búsqueda
+    # no filtraba: un cajero encontraba casas de cualquier residencial.
+    rid = usuario_actual.residencial_id if usuario_actual.rol in ("cajero", "admin", "supervisor") else None
     cuentas = (
         Cuenta.query
-        .filter(Cuenta.activa.is_(True))
+        .filter(or_(Cuenta.activa.is_(True),
+                    Cuenta.id.in_(con_deuda), Cuenta.id.in_(con_arreglo)))
         .outerjoin(Unidad, Cuenta.unidad_id == Unidad.id)
+        .filter(Unidad.residencial_id == rid if rid is not None else db.true())
         .outerjoin(Residente, (Residente.cuenta_id == Cuenta.id) &
                               (Residente.rol_cuenta == "titular"))
         .outerjoin(Usuario, Residente.usuario_id == Usuario.id)
@@ -440,6 +453,10 @@ def buscar_cuenta(usuario_actual):
         ]
         resultados.append({
             "cuenta_id": str(c.uuid_publico),
+            # Día 76 — para que el cajero sepa que cobra una deuda de alguien
+            # que ya se fue (y no le ofrezca vender tarjetas).
+            "dada_de_baja": not c.activa,
+            "motivo_baja": c.motivo_baja if not c.activa else None,
             "identificador": identificador or "Casa",
             "titular": nombre_titular or "— sin titular —",
             "residentes": residentes_casa,
