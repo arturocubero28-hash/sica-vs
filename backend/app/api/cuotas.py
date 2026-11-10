@@ -538,7 +538,12 @@ def revisar_pago(usuario_actual, uuid_pago):
                 # Si ya venció su fecha, vuelve a 'vencido'; si no, 'pendiente'.
                 abono.estado = "vencido" if abono.fecha_pactada < dt.date.today() else "pendiente"
         elif pago.cuota:
-            pago.cuota.estado = "pendiente"
+            # Día 76 — si ya pasó su vencimiento vuelve a 'vencida', no a
+            # 'pendiente' (antes una cuota atrasada con el comprobante
+            # rechazado quedaba como si todavía no venciera hasta que
+            # corriera la tarea de mora).
+            q = pago.cuota
+            q.estado = "vencida" if q.fecha_vencimiento < dt.date.today() else "pendiente"
 
     db.session.commit()
 
