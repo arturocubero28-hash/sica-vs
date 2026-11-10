@@ -6,7 +6,10 @@ import { comprimirImagenWebp } from "../../utils/comprimirImagen";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
 import { CuentasParaPagar } from "../../components/CuentasParaPagar";
 
-/** Día 76 — lo que falta pagar de la cuota (si ya abonó una parte, no el monto entero). */
+/** Día 76 — lo que falta pagar de la cuota. Las cuotas se pagan completas;
+    solo hay un pago previo cuando la casa salió a mitad de mes, pagó esos
+    días en caja y volvió a sumarse el mismo mes (se le suman los días que
+    quedan a la misma cuota). En cualquier otro caso saldo = monto. */
 const saldoDe = (c: CuotaDTO) => c.saldo ?? c.monto;
 
 const estadoLabel: Record<string, string> = {
@@ -207,7 +210,7 @@ function CuotaCard({ cuota, onPagar, esLaMasAntigua = true }: {
           <div className="cuota-monto">L {(cuota.estado === "pagada" ? cuota.monto : saldoDe(cuota)).toFixed(2)}</div>
           {cuota.estado !== "pagada" && (cuota.pagado ?? 0) > 0 && (
             <div className="cuota-abonado">
-              Falta pagar · ya abonaste L {cuota.pagado!.toFixed(2)} de L {cuota.monto.toFixed(2)}
+              Ya pagaste L {cuota.pagado!.toFixed(2)} de este mes; la cuota completa es L {cuota.monto.toFixed(2)}
             </div>
           )}
         </div>
