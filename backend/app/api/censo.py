@@ -848,6 +848,11 @@ def mudanza_padron(usuario_actual, cuenta_uuid):
                         "Sacá primero a los que se fueron.", 400)
 
     data = request.get_json(silent=True) or {}
+    # Día 76 — un comprobante sin revisar no es un pago todavía.
+    from app.services.ciclo_casa import impedimento_en_revision
+    imp = impedimento_en_revision(cuenta, "sacarla del padrón")
+    if imp is not None:
+        return _err(*imp)
     deuda = estado_deuda(cuenta)
     if deuda["total"] > 0 and not data.get("confirmar_deuda"):
         return _err("saldo_pendiente",

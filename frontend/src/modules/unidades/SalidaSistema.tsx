@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import {
   Home, Truck, Check, AlertTriangle, Users, CreditCard, QrCode, Handshake,
   Scale, Wallet, ArrowLeft, X, Ban, CalendarDays, RefreshCw, Info,
+  FileClock,
 } from "lucide-react";
 import {
   volverAlPadron, simularBajaCuenta, darBajaCuenta, nivelarSaldo,
-  type Cuenta, type ResultadoVolverPadron, type SimulacionBaja, type AjusteNivelacion,
+  type Cuenta, type ResultadoVolverPadron, type SimulacionBaja, type AjusteNivelacion, type EnRevision,
   type AccesosCasa,
 } from "../../api/client";
 
@@ -77,7 +78,7 @@ export function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada, inicial }: {
 
   const [seguroSeVa, setSeguroSeVa] = useState(false);
   const [aceptaDeuda, setAceptaDeuda] = useState(false);
-  const [avisoPago, setAvisoPago] = useState<"" | "falta" | "ok">("");
+  const [avisoPago, setAvisoPago] = useState<"" | "falta" | "ok" | "revision">("");
   const ultimaSim = useRef(0);
 
   // ── Simulación: al entrar al paso de fecha y cada vez que cambia ──────
@@ -132,7 +133,7 @@ export function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada, inicial }: {
     const r = await simular("padron", fecha) as ResultadoVolverPadron | undefined;
     setTrabajando(false);
     if (r?.puede) { setAvisoPago("ok"); setTimeout(() => setPaso("confirmar"), 900); }
-    else setAvisoPago("falta");
+    else setAvisoPago(r?.impedimento?.code === "comprobante_en_revision" ? "revision" : "falta");
   }
 
   async function confirmar() {
@@ -150,12 +151,17 @@ export function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada, inicial }: {
   // ── Qué sigue después del paso de fecha ───────────────────────────────
   const imp = simPadron?.impedimento?.code;
   const deudaBaja = simBaja?.deuda.total ?? 0;
+  // Día 76 — un comprobante sin revisar no es un pago: hasta que el admin
+  // lo apruebe o lo rechace, la casa no sale del sistema.
+  const enRevision = camino === "padron"
+    ? (imp === "comprobante_en_revision" ? simPadron?.en_revision ?? null : null)
+    : simBaja?.deuda.en_revision ?? null;
 
   function continuarDesdeFecha() {
     if (camino === "padron") setPaso(simPadron?.puede ? "confirmar" : "cobro");
     else setPaso("confirmar");
   }
-  const puedeContinuarFecha = !calculando && !bloqueo && (
+  const puedeContinuarFecha = !calculando && !bloqueo && !enRevision && (
     camino === "mudanza" ? !!simBaja : !!simPadron && imp !== "deuda_sin_arreglo");
 
   const pasos = camino ? PASOS[camino] : PASOS.padron;
@@ -248,6 +254,9 @@ export function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada, inicial }: {
                 <div className={calculando ? "sal-recalculando" : ""}>
                   <MesesCobrados ajustes={(camino === "padron" ? simPadron!.ajustes : simBaja!.ajustes)} />
 
+                  {enRevision ? (
+                    <AvisoEnRevision r={enRevision} verificando={calculando} onVerificar={() => simular()} />
+                  ) : <>
                   {camino === "padron" && simPadron && (
                     <ResumenPadron sim={simPadron} />
                   )}
@@ -260,6 +269,7 @@ export function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada, inicial }: {
                         </Aviso>
                       : <Aviso tono="ok" icono={<Check size={22} />} titulo="Se va sin deber nada" />
                   )}
+                  </>}
                 </div>
               )}
             </>
@@ -320,6 +330,11 @@ export function ModalDarBaja({ cuenta, onCerrar, onBajaCompletada, inicial }: {
                       <p className="sal-nota-falta">Todavía no aparece el pago. Revisá que caja lo haya registrado.</p>
                     )}
                     {avisoPago === "ok" && <p className="sal-nota-ok"><Check size={14} /> Pago recibido</p>}
+                    {avisoPago === "revision" && simPadron.en_revision && (
+                      <p className="sal-nota-falta">El residente subió un comprobante por {L(simPadron.en_revision.monto)} desde
+                        la app y todavía no está revisado. Revisalo en <b>Pagos</b>: si lo aprobás, ya está pagado;
+                        si lo rechazás, se cobra en caja. Después volvé a verificar.</p>
+                    )}
                   </div>
                 </li>
                 <li>
@@ -466,6 +481,27 @@ function ResumenPadron({ sim }: { sim: ResultadoVolverPadron }) {
       titulo={sim.arreglo ? "Puede pasar al padrón" : "No debe nada: puede pasar al padrón"}>
       {sim.arreglo && <p>Lo que debe está en su arreglo de pago: faltan {L(sim.arreglo.saldo_pendiente)},
         que se siguen cobrando en caja desde el padrón.</p>}
+    </Aviso>
+  );
+}
+
+function AvisoEnRevision({ r, verificando, onVerificar }: {
+  r: EnRevision; verificando: boolean; onVerificar: () => void;
+}) {
+  return (
+    <Aviso tono="bloqueo" icono={<FileClock size={24} />}
+      titulo={r.cantidad === 1 ? "Hay un comprobante sin revisar" : `Hay ${r.cantidad} comprobantes sin revisar`}
+      monto={r.monto}>
+      <p>El residente subió un comprobante de pago desde la app, pero la administración todavía no lo
+        revisó. Hasta que se revise no es un pago: si se rechaza, la casa sigue debiendo.</p>
+      <ul className="sal-opciones">
+        <li>Andá a <b>Pagos</b> y revisalo. <b>Si lo aprobás</b>, queda pagado.</li>
+        <li><b>Si lo rechazás</b>, lo que falta se cobra en caja.</li>
+      </ul>
+      <button className="sal-btn sal-btn--secundario" onClick={onVerificar} disabled={verificando}>
+        <RefreshCw size={16} className={verificando ? "sal-gira" : ""} />
+        {verificando ? "Verificando…" : "Ya lo revisé: verificar"}
+      </button>
     </Aviso>
   );
 }

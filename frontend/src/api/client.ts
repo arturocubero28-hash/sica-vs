@@ -221,12 +221,15 @@ export interface DeudaCasa {
   cuotas_fuera_de_arreglo: number;
   total: number;
   al_dia: boolean;
+  /** Día 76 — comprobantes subidos que la administración todavía no revisó. */
+  en_revision?: EnRevision | null;
   arreglo: null | {
     id: string; proposito: string; saldo_pendiente: number;
     abonos_pagados: number; abonos_total: number; atrasado: boolean;
     proximo_abono: AbonoDTO | null;
   };
 }
+export interface EnRevision { cantidad: number; monto: number }
 export const listarCenso = () =>
   request<{ casas: (Cuenta & { deuda?: DeudaCasa })[]; total: number; resumen?: ResumenPadron }>("/censo");
 
@@ -392,6 +395,7 @@ export interface ResultadoVolverPadron {
   arreglo: DeudaCasa["arreglo"];
   afectados: AccesosCasa;
   suspendidos?: AccesosCasa;
+  en_revision?: EnRevision | null;
 }
 export const volverAlPadron = (id: string, body: { fecha?: string; simular?: boolean } = {}) =>
   request<ResultadoVolverPadron>(`/unidades/cuentas/${id}/volver-al-padron`, {

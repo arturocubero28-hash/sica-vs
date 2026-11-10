@@ -672,6 +672,14 @@ def dar_baja_cuenta(usuario_actual, cuenta_uuid):
         return jsonify({"data": {"simulado": True, "ajustes": ajustes,
                                  "deuda": deuda, "afectados": afectados}})
 
+    # Día 76 — con un comprobante sin revisar la casa parecía «sin deuda» y
+    # se daba de baja. No se puede confirmar «igual»: primero se revisa.
+    from app.services.ciclo_casa import impedimento_en_revision
+    imp = impedimento_en_revision(cuenta, "darla de baja")
+    if imp is not None:
+        db.session.rollback()
+        return _err(*imp)
+
     if deuda["total"] > 0 and not data.get("confirmar_deuda"):
         db.session.rollback()
         return _err("saldo_pendiente",
@@ -1911,6 +1919,12 @@ def resolver_solicitud_baja(usuario_actual, solicitud_uuid):
     if accion == "aprobar":
         # Dar de baja la cuenta — mismas validaciones universales que /baja
         cuenta = solicitud.cuenta
+
+        # Día 76 — un comprobante sin revisar no es un pago todavía.
+        from app.services.ciclo_casa import impedimento_en_revision
+        imp = impedimento_en_revision(cuenta, "aprobar la baja")
+        if imp is not None:
+            return _err(*imp)
 
         # REQUISITO: saldo en 0
         cuotas_pendientes = Cuota.query.filter(

@@ -169,6 +169,43 @@ def cuotas_fuera_de_arreglo(cuenta):
             .order_by(Cuota.periodo.asc()).all())
 
 
+def pagos_en_revision(cuenta):
+    """
+    Día 76 — comprobantes que el residente subió y la administración todavía
+    no revisó (de cuotas o de abonos de un arreglo).
+
+    Mientras un comprobante está en revisión, la cuota queda en estado
+    'en_revision' y deja de contarse como impaga. Pero no es dinero todavía:
+    el admin lo puede rechazar. Antes, con un comprobante sin revisar, la
+    casa aparecía como que «no debe nada» y se podía dar de baja o pasar al
+    padrón; si después el comprobante se rechazaba, la deuda quedaba a
+    nombre de alguien que ya no está en el sistema.
+    """
+    from app.models.cuenta import Pago
+    return (Pago.query.filter(Pago.cuenta_id == cuenta.id, Pago.estado == "en_revision")
+            .order_by(Pago.id.asc()).all())
+
+
+def resumen_en_revision(cuenta):
+    """{cantidad, monto} de los comprobantes sin revisar, o None si no hay."""
+    pagos = pagos_en_revision(cuenta)
+    if not pagos:
+        return None
+    return {"cantidad": len(pagos), "monto": round(sum(float(p.monto) for p in pagos), 2)}
+
+
+def impedimento_en_revision(cuenta, que="sacar la casa del sistema"):
+    """(code, mensaje, 409) si hay comprobantes sin revisar; si no, None."""
+    r = resumen_en_revision(cuenta)
+    if r is None:
+        return None
+    cuantos = "un comprobante" if r["cantidad"] == 1 else f"{r['cantidad']} comprobantes"
+    return ("comprobante_en_revision",
+            f"La casa tiene {cuantos} de pago sin revisar (L {r['monto']:,.2f}). Antes de "
+            f"{que}, revisalo en Pagos: si lo aprobás, queda pagado; si lo rechazás, se "
+            "cobra en caja.", 409)
+
+
 def arreglo_activo(cuenta):
     from app.models.cuenta import ArregloPago
     return ArregloPago.query.filter_by(cuenta_id=cuenta.id, estado="activo").first()
@@ -201,6 +238,8 @@ def estado_deuda(cuenta):
         }
     d["total"] = round(total_fuera + (d["arreglo"]["saldo_pendiente"] if d["arreglo"] else 0), 2)
     d["al_dia"] = total_fuera == 0 and not (d["arreglo"] and d["arreglo"]["atrasado"])
+    # Día 76 — lo que está pagado «a medias»: comprobantes sin revisar.
+    d["en_revision"] = resumen_en_revision(cuenta)
     return d
 
 
@@ -352,7 +391,12 @@ def volver_al_padron(cuenta, fecha, usuario_actual):
         "ya_nivelada": ya_nivelada,
         "arreglo": estado_deuda(cuenta)["arreglo"],
         "afectados": contar_accesos(cuenta),
+        "en_revision": resumen_en_revision(cuenta),
     }
+    # Día 76 — un comprobante sin revisar no es un pago todavía.
+    imp = impedimento_en_revision(cuenta, "pasarla al padrón")
+    if imp is not None:
+        return resumen, imp
     if total_vencido > 0 and arr is None:
         return resumen, ("deuda_sin_arreglo",
                       f"La casa tiene L {total_vencido:,.2f} en cuotas vencidas. Para volver al "

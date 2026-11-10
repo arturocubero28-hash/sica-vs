@@ -341,6 +341,62 @@ except Exception:
     ok("si tampoco se puede enviar, no tumba la peticion", False)
 _enc._REDIS_OK.update(ok=True, hasta=0.0)
 
+print("\n7. Comprobante sin revisar: la casa no sale del sistema")
+
+
+def casa_con_comprobante(nombre):
+    """Casa con la cuota del mes y un comprobante subido que nadie revisó."""
+    with app.app_context():
+        cu_uuid, cid, _ = casa(nombre, 1)
+        per = HOY.replace(day=1)
+        y, m = (per.year + 1, 1) if per.month == 12 else (per.year, per.month + 1)
+        q = Cuota(id=nid(), cuenta_id=cid, periodo=per, monto=600,
+                  fecha_vencimiento=dt.date(y, m, 5), estado="en_revision")
+        db.session.add(q); db.session.flush()
+        pg = Pago(id=nid(), cuota_id=q.id, cuenta_id=cid, subido_por=1, metodo="transferencia",
+                  monto=600, estado="en_revision")
+        db.session.add(pg); db.session.commit()
+        return cu_uuid, cid, q.id, pg.id
+
+
+REV = casa_con_comprobante("Revision")
+B = f"/api/v1/unidades/cuentas/{REV[0]}/baja"
+sim = cli.post(B, json={"simular": True, "fecha_salida": HOY.isoformat()}, headers=H).get_json()["data"]
+ok("la simulacion de la baja muestra el comprobante sin revisar",
+   (sim["deuda"].get("en_revision") or {}).get("monto") == 600)
+r = cli.post(B, json={"fecha_salida": HOY.isoformat(), "confirmar_deuda": True}, headers=H)
+ok("dar de baja -> 409 comprobante_en_revision (ni confirmando la deuda)",
+   r.status_code == 409 and codigo(r) == "comprobante_en_revision")
+with app.app_context():
+    ok("...y la casa sigue en el sistema", Cuenta.query.get(REV[1]).activa is True)
+VP = f"/api/v1/unidades/cuentas/{REV[0]}/volver-al-padron"
+d = cli.post(VP, json={"simular": True}, headers=H).get_json()["data"]
+ok("volver al padron (simulado): no se puede, y dice por que",
+   d["puede"] is False and d["impedimento"]["code"] == "comprobante_en_revision"
+   and d["en_revision"]["monto"] == 600)
+r = cli.post(VP, json={}, headers=H)
+ok("volver al padron -> 409", r.status_code == 409 and codigo(r) == "comprobante_en_revision")
+with app.app_context():
+    ok("...y sigue pagando mensualidad", Cuenta.query.get(REV[1]).modo_participacion == "completa")
+with app.app_context():
+    pg = Pago.query.get(REV[3]); pg.estado = "aprobado"
+    Cuota.query.get(REV[2]).estado = "pagada"
+    db.session.commit()
+sim = cli.post(B, json={"simular": True, "fecha_salida": HOY.isoformat()}, headers=H).get_json()["data"]
+ok("aprobado: ya no hay nada en revision", sim["deuda"].get("en_revision") is None)
+r = cli.post(B, json={"fecha_salida": HOY.isoformat()}, headers=H)
+ok("...y se da de baja sin deber nada", r.status_code == 200 and r.get_json()["data"]["deuda_pendiente"] == 0)
+
+RECH = casa_con_comprobante("Rechazo")
+with app.app_context():
+    Pago.query.get(RECH[3]).estado = "rechazado"
+    Cuota.query.get(RECH[2]).estado = "pendiente"
+    db.session.commit()
+sim = cli.post(f"/api/v1/unidades/cuentas/{RECH[0]}/baja",
+               json={"simular": True, "fecha_salida": HOY.isoformat()}, headers=H).get_json()["data"]
+ok("rechazado: la cuota vuelve a ser deuda (nivelada a los dias del mes)",
+   sim["deuda"].get("en_revision") is None and sim["deuda"]["total"] > 0)
+
 print()
 if fallos:
     print(f"FALLARON {len(fallos)}:")
