@@ -160,6 +160,18 @@ def registrar_pago(usuario_actual):
     if cuota.estado == "en_arreglo":
         return jsonify({"error": {"code": "en_arreglo",
                                   "message": "Esa cuota está dentro de un arreglo de pago. Cobrá el abono del arreglo, no la cuota directamente."}}), 400
+    # Día 76 — una cuota de otra residencial no se cobra en esta caja.
+    rid = usuario_actual.residencial_id
+    unidad = cuota.cuenta.unidad if cuota.cuenta else None
+    if rid is not None and unidad is not None and unidad.residencial_id not in (None, rid):
+        return jsonify({"error": {"code": "cuota_no_encontrada", "message": "Cuota no encontrada"}}), 404
+    # Día 76 — si el residente ya subió un comprobante para esta cuota y nadie
+    # lo revisó, cobrarla en caja es cobrarla dos veces cuando lo aprueben.
+    if cuota.estado == "en_revision":
+        return jsonify({"error": {"code": "comprobante_en_revision",
+                                  "message": "El residente ya subió un comprobante para esta cuota y está "
+                                             "esperando revisión. Que la administración lo revise en Pagos "
+                                             "(si lo rechaza, se cobra acá)."}}), 409
 
     # Día 75 — se cobra el SALDO, no el monto de la cuota. Una cuota puede
     # tener ya un pago: la de una casa que salió al padrón (pagó los días
@@ -428,12 +440,18 @@ def buscar_cuenta(usuario_actual):
                                 ArregloPago.estado == "activo").all())
         for arr in arreglos_act:
             pend = [a for a in arr.abonos if a.estado in ("pendiente", "vencido")]
+            from app.models.cuenta import Pago as _Pago
+            en_rev = {p.abono_id for p in _Pago.query.filter(
+                _Pago.abono_id.in_([a.id for a in pend] or [0]), _Pago.estado == "en_revision")}
             for a in sorted(pend, key=lambda x: x.numero):
                 abonos_por_cuenta.setdefault(arr.cuenta_id, []).append({
                     "arreglo_id": str(arr.uuid_publico),
                     "abono_id": str(a.uuid_publico),
                     "numero": a.numero,
-                    "total_abonos": arr.num_abonos,
+                    # Día 76 — num_abonos no cuenta la prima: salía «Abono 3/2».
+                    "total_abonos": len(arr.abonos),
+                    "es_prima": bool(arr.abono_inicial and a.numero == 1),
+                    "en_revision": a.id in en_rev,
                     "monto": dinero.a_float(a.monto),
                     "fecha_pactada": a.fecha_pactada.isoformat(),
                     "estado": a.estado,
@@ -466,7 +484,11 @@ def buscar_cuenta(usuario_actual):
                 # Día 75 — lo que falta pagar, no el monto de la cuota.
                 "monto": dinero.a_float(_saldo_cuota(q2)),
                 "estado": q2.estado,
+                # Día 76 — para el detalle del cobro
+                "monto_cuota": dinero.a_float(q2.monto),
+                "fecha_vencimiento": q2.fecha_vencimiento.isoformat(),
             } for q2 in pendientes],
+            "bloqueada": bool(c.bloqueada),
             "abonos_arreglo": abonos_por_cuenta.get(c.id, []),
         })
     return jsonify({"data": resultados})

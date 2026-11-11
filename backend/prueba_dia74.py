@@ -299,7 +299,17 @@ with app.app_context():
 r = cli.post(f"/api/v1/censo/casas/{U}/convertir", json={"tarifa_id": 1, "dia_pago": 5}, headers=H)
 ok("con un abono vencido -> 400 arreglo_atrasado", codigo(r) == "arreglo_atrasado")
 r = cli.post(f"/api/v1/arreglos/{ARR_Z}/abonos/{ab1}/cobrar", json={"metodo": "efectivo"}, headers=HC)
+ok("sin caja abierta no se cobra el abono -> 400 sin_caja", codigo(r) == "sin_caja")
+with app.app_context():
+    from app.models.caja import SesionCaja
+    db.session.add(SesionCaja(cajero_id=3, monto_inicial=0, estado="abierta"))
+    db.session.commit()
+r = cli.post(f"/api/v1/arreglos/{ARR_Z}/abonos/{ab1}/cobrar", json={"metodo": "efectivo"}, headers=HC)
 ok("el cajero cobra el abono -> 200", r.status_code == 200)
+ok("...y la respuesta trae el pago para el recibo",
+   (r.get_json()["data"].get("pago") or {}).get("numero_recibo") is not None)
+_pdf = cli.get(f"/api/v1/recibos/{r.get_json()['data']['pago']['id']}/pdf", headers=HC)
+ok("el recibo del abono se genera (PDF)", _pdf.status_code == 200 and _pdf.data[:4] == b"%PDF")
 ok("...y el arreglo NO se da por completado (faltan 2)",
    r.get_json()["data"]["estado"] == "activo")
 r = cli.post(f"/api/v1/censo/casas/{U}/convertir", json={"tarifa_id": 1, "dia_pago": 5}, headers=H)

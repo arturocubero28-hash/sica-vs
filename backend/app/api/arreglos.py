@@ -411,11 +411,18 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
         return _err("arreglo_no_activo",
                     f"El arreglo está {arreglo.estado}; no se pueden cobrar abonos", 400)
 
-    abono = AbonoArreglo.query.filter_by(uuid_publico=abono_uuid, arreglo_id=arreglo.id).first()
+    # Día 76 — FOR UPDATE, igual que el cobro de una cuota: sin el candado,
+    # un doble clic cobraba el mismo abono dos veces.
+    abono = (AbonoArreglo.query.filter_by(uuid_publico=abono_uuid, arreglo_id=arreglo.id)
+             .with_for_update().first())
     if not abono:
         return _err("abono_no_encontrado", "Abono no encontrado", 404)
     if abono.estado == "pagado":
         return _err("ya_pagado", "Ese abono ya fue pagado", 400)
+    if Pago.query.filter_by(abono_id=abono.id, estado="en_revision").first():
+        return _err("comprobante_en_revision",
+                    "El residente ya subió un comprobante para este abono y está esperando revisión. "
+                    "Que la administración lo revise en Pagos (si lo rechaza, se cobra acá).", 409)
 
     data = request.get_json(silent=True) or {}
     metodo = data.get("metodo")
@@ -431,6 +438,10 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
             sesion_id = sesion.id
     except Exception:
         pass
+    # Día 76 — igual que una cuota: sin caja abierta no se cobra (el dinero
+    # tiene que quedar en el arqueo de alguna sesión).
+    if sesion_id is None:
+        return _err("sin_caja", "Abrí la caja antes de cobrar abonos", 400)
 
     # Registrar el pago (aprobado al instante, como cualquier cobro de ventanilla)
     pago = Pago(
@@ -475,7 +486,11 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
             cuenta.intentar_desbloquear()
 
     db.session.commit()
-    return jsonify({"data": arreglo.to_dict(con_detalle=True)})
+    # Día 76 — se devuelve también el pago: la caja lo necesita para el
+    # recibo (antes no lo tenía y el botón «Imprimir recibo» daba error).
+    d = arreglo.to_dict(con_detalle=True)
+    d["pago"] = pago.to_dict()
+    return jsonify({"data": d})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

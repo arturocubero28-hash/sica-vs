@@ -431,6 +431,8 @@ else:
     ok("pasa al padron -> 200", r.status_code == 200)
     det = cli.get(f"/api/v1/arreglos/{arr['id']}", headers=H).get_json()["data"]
     ab1 = sorted(det["abonos"], key=lambda a: a["numero"])[0]
+    if cli.get("/api/v1/caja/estado", headers=HC).get_json()["data"].get("abierta") is not True:
+        cli.post("/api/v1/caja/abrir", json={}, headers=HC)
     r = cli.post(f"/api/v1/arreglos/{arr['id']}/abonos/{ab1['id']}/cobrar",
                  json={"metodo": "efectivo"}, headers=HC)
     ok("caja cobra el abono 1 -> 200", r.status_code == 200)
