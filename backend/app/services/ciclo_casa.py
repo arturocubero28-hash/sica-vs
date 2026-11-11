@@ -34,6 +34,7 @@ LAS REGLAS (definidas con el patronato):
 import datetime as dt
 
 from app.extensions import db
+from app.utils.fechas import mes_es
 
 
 IMPAGAS = ("pendiente", "parcial", "vencida")
@@ -241,6 +242,127 @@ def estado_deuda(cuenta):
     # Día 76 — lo que está pagado «a medias»: comprobantes sin revisar.
     d["en_revision"] = resumen_en_revision(cuenta)
     return d
+
+
+def _dinero(x):
+    from decimal import Decimal, ROUND_HALF_UP
+    return Decimal(str(x)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def quitar_cuotas_de_arreglo(arr, salen, parte, motivo, quien):
+    """
+    Día 76 — saca del arreglo `salen` (cuotas cuya parte financiada era
+    `parte`) y reparte lo que falta en los abonos que quedan.
+
+    Lo ya pagado no se toca. Si al sacarlas lo abonado ya cubre la deuda que
+    queda, se devuelve un error: no hay forma honesta de devolver ese
+    sobrante desde acá. No hace commit.
+    """
+    from decimal import Decimal
+    parte = _dinero(parte)
+    original = _dinero(arr.deuda_original if arr.deuda_original is not None else arr.deuda_total)
+    nuevo_original = original - parte
+    pct = _dinero(arr.descuento_pct or 0)
+    nuevo_desc = _dinero(nuevo_original * pct / 100) if pct > 0 else Decimal("0.00")
+    nuevo_total = nuevo_original - nuevo_desc
+    pagado = sum((_dinero(a.monto) for a in arr.abonos if a.estado == "pagado"), Decimal("0.00"))
+    falta = nuevo_total - pagado
+    pendientes = sorted((a for a in arr.abonos if a.estado in ("pendiente", "vencido")),
+                        key=lambda a: a.numero)
+    if falta < 0 or (falta > 0 and not pendientes):
+        return ("arreglo_sobrepagado",
+                f"Lo abonado al arreglo (L {pagado:,.2f}) ya cubre la deuda que queda sin esas cuotas "
+                f"(L {nuevo_total:,.2f}). Revisá el caso a mano antes de seguir.", 409)
+
+    for c in salen:
+        c.arreglo_id = None
+        c.estado = "pendiente"
+    arr.deuda_original = nuevo_original
+    arr.descuento_monto = nuevo_desc if pct > 0 else arr.descuento_monto
+    arr.deuda_total = nuevo_total
+    arr.saldo_financiado = nuevo_total - _dinero(arr.abono_inicial or 0)
+    hoy = dt.date.today()
+    if falta == 0:
+        for a in pendientes:
+            db.session.delete(a)
+        arr.num_abonos = len(arr.abonos) - len(pendientes)
+        arr.estado = "completado"
+        arr.completado_en = dt.datetime.now(dt.timezone.utc)
+        arr.motivo_cierre = "Lo abonado cubrió la deuda que quedó"
+        for c in arr.cuotas:
+            if c not in salen:
+                c.estado = "pagada"
+    else:
+        base = _dinero(falta / len(pendientes))
+        for i, a in enumerate(pendientes):
+            a.monto = base if i < len(pendientes) - 1 else falta - base * (len(pendientes) - 1)
+        arr.monto_por_abono = base
+    arr.nota = (f"{arr.nota or ''}\n[{hoy.strftime('%d/%m/%Y')}] {quien}: {motivo}").strip()[:500]
+    return None
+
+
+def preparar_regreso_con_arreglo(cuenta, quien, aplicar=False):
+    """
+    Día 76 — una casa del padrón que vuelve a sumarse con un arreglo activo.
+
+    Caso real (casa 2): firmó un arreglo «para volver al padrón» que incluía
+    la cuota del mes en curso nivelada hasta el día de la firma, pasó al
+    padrón, pagó un abono y volvió a sumarse ESE MISMO MES. Al volver, a esa
+    cuota (que seguía dentro del arreglo) se le sumaron los días que faltan
+    y quedó «pendiente»: los días antes de salir se cobraban dos veces, en
+    el arreglo y en la cuota.
+
+    Regla: esa cuota entró al arreglo SOLO porque la casa se iba. Si vuelve
+    el mismo mes, sale del arreglo y se paga normal (con los días que faltan
+    sumados); el arreglo queda con la deuda vieja y los abonos que faltan se
+    recalculan. Además el arreglo pasa a ser «para ponerse al día», porque
+    la casa ya no se va. Si vuelve en otro mes, la cuota nivelada es deuda
+    vieja de verdad y se queda en el arreglo.
+
+    Devuelve (texto_para_el_admin | None, error | None). Con aplicar=False
+    solo valida (no cambia nada).
+    """
+    arr = arreglo_activo(cuenta)
+    if arr is None:
+        return None, None
+    hoy = dt.date.today()
+    salen = [c for c in arr.cuotas
+             if c.nivelada and (c.periodo.year, c.periodo.month) == (hoy.year, hoy.month)]
+    if not aplicar:
+        if not salen:
+            return None, None
+        from decimal import Decimal
+        parte = sum((_dinero(c.monto) for c in salen), Decimal("0.00"))
+        original = _dinero(arr.deuda_original if arr.deuda_original is not None else arr.deuda_total)
+        pct = _dinero(arr.descuento_pct or 0)
+        resto = original - parte
+        resto = resto - (_dinero(resto * pct / 100) if pct > 0 else 0)
+        pagado = sum((_dinero(a.monto) for a in arr.abonos if a.estado == "pagado"), Decimal("0.00"))
+        if pagado > resto:
+            return None, ("arreglo_sobrepagado",
+                          f"Lo abonado al arreglo (L {pagado:,.2f}) ya supera la deuda vieja "
+                          f"(L {resto:,.2f}). Revisá el caso a mano antes de sumarla.", 409)
+        return None, None
+
+    textos = []
+    if salen:
+        from decimal import Decimal
+        parte = sum((_dinero(c.monto) for c in salen), Decimal("0.00"))
+        mes = mes_es(salen[0].periodo)
+        err = quitar_cuotas_de_arreglo(
+            arr, salen, parte,
+            f"la casa volvió a sumarse el mismo mes; la cuota de {mes} salió del arreglo "
+            "(se paga normal) y se recalcularon los abonos que faltan.", quien)
+        if err:
+            return None, err
+        textos.append(f"La cuota de {mes} salió del arreglo de pago y se paga normal; "
+                      "los abonos que faltan se recalcularon.")
+    if arr.estado == "activo" and arr.proposito == "volver_al_padron":
+        arr.proposito = "ponerse_al_dia"
+        arr.nota = (f"{arr.nota or ''}\n[{hoy.strftime('%d/%m/%Y')}] {quien}: la casa volvió a "
+                    "sumarse; el arreglo sigue «para ponerse al día».").strip()[:500]
+        textos.append("El arreglo sigue activo, ahora «para ponerse al día».")
+    return (" ".join(textos) or None), None
 
 
 def puede_volver_a_sumarse(cuenta):

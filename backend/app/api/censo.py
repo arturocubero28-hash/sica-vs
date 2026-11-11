@@ -497,6 +497,12 @@ def _preparar_conversion(cuenta, data, usuario_actual):
     impedimento = puede_volver_a_sumarse(cuenta)
     if impedimento:
         return None, _err(impedimento[0], impedimento[1], 400)
+    # Día 76 — si vuelve con un arreglo que tiene la cuota de este mes
+    # adentro, esa cuota sale del arreglo: se valida que se pueda.
+    from app.services.ciclo_casa import preparar_regreso_con_arreglo
+    _, err_arr = preparar_regreso_con_arreglo(cuenta, "", aplicar=False)
+    if err_arr:
+        return None, _err(*err_arr)
 
     # Si la residencial no tiene cuotas en su plan, la casa pasa a completa
     # igual (gana app y credenciales) pero sin tarifa — mismo criterio que
@@ -530,6 +536,18 @@ def _aplicar_conversion(cuenta, plan, usuario_actual):
     Pasa la casa a 'completa' y le genera la primera cuota prorrateada.
     NO hace commit. Devuelve la nota para mostrarle al administrador.
     """
+    # Día 76 — primero el arreglo (si vuelve con uno): la cuota de este mes
+    # tiene que salir de él ANTES de sumarle los días que faltan.
+    from app.services.ciclo_casa import preparar_regreso_con_arreglo
+    quien = f"{usuario_actual.nombre} {usuario_actual.apellido}".strip()
+    texto_arr, err_arr = preparar_regreso_con_arreglo(cuenta, quien, aplicar=True)
+    if err_arr:   # _preparar_conversion ya lo validó: no debería pasar
+        raise ValueError(err_arr[1])
+    nota = _aplicar_conversion_cuotas(cuenta, plan, usuario_actual)
+    return f"{nota} {texto_arr}" if texto_arr else nota
+
+
+def _aplicar_conversion_cuotas(cuenta, plan, usuario_actual):
     tarifa = plan["tarifa"]
     # Día 74 — si la casa ya había estado en el sistema y volvió al padrón,
     # su gente recupera la app (solo quien se apagó por el padrón).

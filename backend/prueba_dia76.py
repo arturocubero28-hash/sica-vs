@@ -397,6 +397,66 @@ sim = cli.post(f"/api/v1/unidades/cuentas/{RECH[0]}/baja",
 ok("rechazado: la cuota vuelve a ser deuda (nivelada a los dias del mes)",
    sim["deuda"].get("en_revision") is None and sim["deuda"]["total"] > 0)
 
+print("\n8. Arreglo para volver al padron, abono y regreso el MISMO mes (caso casa 2)")
+from app.utils.cuotas import calcular_cuota_prorrateada   # noqa: E402
+with app.app_context():
+    from app.models.cuenta import ConfigResidencial, AbonoArreglo
+    _dia_cfg = ConfigResidencial.get(1).dia_pago
+resto_mes = calcular_cuota_prorrateada(600, _dia_cfg)
+if resto_mes is None:
+    print("  (hoy es fin de mes comercial: no queda fraccion, se omite)")
+else:
+    with app.app_context():
+        DOS = casa("Dos", 1)
+        oct_ = mes_atras(1)
+        db.session.add(Cuota(id=nid(), cuenta_id=DOS[1], periodo=oct_, monto=600,
+                             fecha_vencimiento=HOY.replace(day=1), estado="vencida"))
+        per = HOY.replace(day=1)
+        y, m = (per.year + 1, 1) if per.month == 12 else (per.year, per.month + 1)
+        db.session.add(Cuota(id=nid(), cuenta_id=DOS[1], periodo=per, monto=600,
+                             fecha_vencimiento=dt.date(y, m, 1), estado="pendiente"))
+        db.session.commit()
+    ids = [c["id"] for c in cli.get(f"/api/v1/arreglos/cuenta/{DOS[0]}/cuotas-pendientes",
+                                    headers=H).get_json()["data"]]
+    r = cli.post("/api/v1/arreglos", json={"cuenta_id": DOS[0], "cuotas": ids, "num_abonos": 3,
+                                           "proposito": "volver_al_padron"}, headers=H)
+    ok("arreglo para volver al padron con octubre y el mes en curso -> 201", r.status_code == 201)
+    arr = r.get_json()["data"]
+    with app.app_context():
+        nov = Cuota.query.filter_by(cuenta_id=DOS[1], periodo=per).first()
+        nivelado = float(nov.monto)
+    ok(f"el mes en curso entra nivelado hasta hoy (L {nivelado})",
+       nivelado < 600 and abs(arr["deuda_total"] - (600 + nivelado)) < 0.01)
+    r = cli.post(f"/api/v1/unidades/cuentas/{DOS[0]}/volver-al-padron", json={}, headers=H)
+    ok("pasa al padron -> 200", r.status_code == 200)
+    det = cli.get(f"/api/v1/arreglos/{arr['id']}", headers=H).get_json()["data"]
+    ab1 = sorted(det["abonos"], key=lambda a: a["numero"])[0]
+    r = cli.post(f"/api/v1/arreglos/{arr['id']}/abonos/{ab1['id']}/cobrar",
+                 json={"metodo": "efectivo"}, headers=HC)
+    ok("caja cobra el abono 1 -> 200", r.status_code == 200)
+    with app.app_context():
+        pg = Pago.query.filter_by(cuenta_id=DOS[1]).order_by(Pago.id.desc()).first()
+        ok("el pago del abono queda vinculado al abono", pg.abono_id is not None)
+    r = cli.post(f"/api/v1/censo/casas/{DOS[0]}/convertir", json={"tarifa_id": 1, "dia_pago": 5}, headers=H)
+    ok("vuelve a sumarse el mismo mes -> 200", r.status_code == 200)
+    if r.status_code != 200:
+        print("     ", r.get_json())
+    with app.app_context():
+        nov = Cuota.query.filter_by(cuenta_id=DOS[1], periodo=per).first()
+        a = ArregloPago.query.filter_by(cuenta_id=DOS[1]).first()
+        ok("la cuota del mes SALIO del arreglo y se paga normal",
+           nov.arreglo_id is None and nov.estado == "pendiente")
+        ok(f"...con los dias de antes y los que faltan: {nivelado} + {resto_mes['monto']}",
+           abs(float(nov.monto) - (nivelado + resto_mes["monto"])) < 0.01)
+        ok("el arreglo queda solo con octubre (L 600)", float(a.deuda_total) == 600)
+        pend = [x for x in a.abonos if x.estado == "pendiente"]
+        ok("los abonos que faltan suman lo que falta de octubre",
+           abs(sum(float(x.monto) for x in pend) - (600 - ab1["monto"])) < 0.01 and len(pend) == 2)
+        ok("y el arreglo pasa a ser para ponerse al dia", a.proposito == "ponerse_al_dia")
+        deuda = float(a.deuda_total) - a.total_abonado() + float(nov.monto)
+        ok(f"cuadra: debe {deuda:.2f} = octubre + el mes - lo abonado",
+           abs(deuda - (600 + nivelado + resto_mes["monto"] - ab1["monto"])) < 0.01)
+
 print()
 if fallos:
     print(f"FALLARON {len(fallos)}:")

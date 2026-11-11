@@ -691,6 +691,10 @@ def create_app(config_class=Config):
             # Contacto de servicio al cliente para la sección "Ayuda".
             "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS telefono_ayuda VARCHAR(30)",
             "ALTER TABLE residenciales ADD COLUMN IF NOT EXISTS email_ayuda VARCHAR(160)",
+            # Día 76 — los abonos cobrados en caja quedaban sin pagos.abono_id
+            # (solo el abono apuntaba al pago). Se completa el vínculo.
+            "UPDATE pagos p SET abono_id = a.id FROM abonos_arreglo a "
+            "WHERE a.pago_id = p.id AND p.abono_id IS NULL",
 
             # ── Día 72 · Sesión persistente de la app ────────────────────────
             # Token de renovación (solo su hash) para que la app no vuelva a

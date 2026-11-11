@@ -435,6 +435,7 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
     # Registrar el pago (aprobado al instante, como cualquier cobro de ventanilla)
     pago = Pago(
         cuota_id=None,
+        abono_id=abono.id,   # Día 76 — antes quedaba sin vínculo: el historial no sabía qué era
         cuenta_id=arreglo.cuenta_id,
         subido_por=usuario_actual.id,
         metodo=metodo,
