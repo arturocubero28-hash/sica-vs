@@ -457,6 +457,26 @@ else:
         ok(f"cuadra: debe {deuda:.2f} = octubre + el mes - lo abonado",
            abs(deuda - (600 + nivelado + resto_mes["monto"] - ab1["monto"])) < 0.01)
 
+print("\n9. Recalcular abonos respeta la prima pactada")
+with app.app_context():
+    from decimal import Decimal
+    from app.models.cuenta import AbonoArreglo
+    from app.services.ciclo_casa import repartir_en_abonos
+    a = ArregloPago(id=nid(), cuenta_id=DESC[1], deuda_total=1973.33, abono_inicial=300,
+                    saldo_financiado=1673.33, num_abonos=2, monto_por_abono=916.67)
+    db.session.add(a); db.session.flush()
+    abs_ = [AbonoArreglo(arreglo_id=a.id, numero=n, monto=m, fecha_pactada=HOY, estado=e)
+            for n, m, e in ((1, 300, "vencido"), (2, 916.67, "pendiente"), (3, 916.66, "pendiente"))]
+    db.session.add_all(abs_); db.session.flush()
+    repartir_en_abonos(a, Decimal("1973.33"), abs_)
+    ok("la prima sin pagar sigue en L 300", float(abs_[0].monto) == 300)
+    ok("el resto se reparte en los abonos normales (836.67 + 836.66)",
+       float(abs_[1].monto) == 836.67 and float(abs_[2].monto) == 836.66)
+    repartir_en_abonos(a, Decimal("250.00"), abs_)
+    ok("si los normales no alcanzan, se ajusta tambien la prima (suma exacta)",
+       abs(sum(float(x.monto) for x in abs_) - 250) < 0.001)
+    db.session.rollback()
+
 print()
 if fallos:
     print(f"FALLARON {len(fallos)}:")

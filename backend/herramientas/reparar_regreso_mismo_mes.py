@@ -36,10 +36,37 @@ sys.path.insert(0, ".")
 from app import create_app                                   # noqa: E402
 from app.extensions import db                                # noqa: E402
 from app.models.cuenta import Cuota, ArregloPago             # noqa: E402
-from app.services.ciclo_casa import quitar_cuotas_de_arreglo, _dinero  # noqa: E402
+from app.services.ciclo_casa import (quitar_cuotas_de_arreglo, repartir_en_abonos,  # noqa: E402
+                                     _dinero, _prima)
 from app.utils.fechas import mes_es                          # noqa: E402
 
 APLICAR = "--aplicar" in sys.argv
+
+
+def corregir_primas():
+    """
+    La primera versión de esta reparación repartió lo que faltaba también en
+    la PRIMA pendiente (casa 4: la prima de L 300 pasó a L 657.78). La prima
+    es lo que la familia acordó dar al firmar: se le devuelve su monto y el
+    resto se reparte en los abonos normales.
+    """
+    tocados = ArregloPago.query.filter(ArregloPago.estado == "activo",
+                                       ArregloPago.nota.ilike("%reparación Día 76%")).all()
+    for arr in tocados:
+        prima = _prima(arr)
+        if prima is None or prima.estado == "pagado" or _dinero(prima.monto) == _dinero(arr.abono_inicial):
+            continue
+        casa = arr.cuenta.unidad.identificador if arr.cuenta and arr.cuenta.unidad else f"arreglo {arr.id}"
+        pagado = sum((_dinero(a.monto) for a in arr.abonos if a.estado == "pagado"), Decimal("0.00"))
+        falta = _dinero(arr.deuda_total) - pagado
+        pendientes = sorted((a for a in arr.abonos if a.estado in ("pendiente", "vencido")),
+                            key=lambda a: a.numero)
+        antes = {a.numero: a.monto for a in pendientes}
+        arr.monto_por_abono = repartir_en_abonos(arr, falta, pendientes)
+        print(f"\n── Casa {casa} · prima del arreglo {arr.id}: vuelve a L {arr.abono_inicial}")
+        for a in pendientes:
+            print(f"      abono {a.numero}: {a.estado} L {antes[a.numero]}  ->  L {a.monto}")
+        print(f"   suma de lo pendiente: L {sum(_dinero(a.monto) for a in pendientes)} (falta L {falta})")
 
 
 def main():
@@ -49,9 +76,9 @@ def main():
                  .filter(ArregloPago.estado == "activo", Cuota.estado == "pendiente")
                  .order_by(Cuota.id).all())
         malas = [c for c in malas if c.cuenta and c.cuenta.activa and not c.cuenta.es_censo]
+        corregir_primas()
         if not malas:
-            print("No hay casas en ese estado. Nada que reparar.")
-            return
+            print("No hay casas con la cuota del mes cobrada dos veces.")
 
         for c in malas:
             arr = c.arreglo if hasattr(c, "arreglo") and c.arreglo else ArregloPago.query.get(c.arreglo_id)

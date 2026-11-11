@@ -285,7 +285,7 @@ def quitar_cuotas_de_arreglo(arr, salen, parte, motivo, quien):
     if falta == 0:
         for a in pendientes:
             db.session.delete(a)
-        arr.num_abonos = len(arr.abonos) - len(pendientes)
+        arr.num_abonos = max(len(arr.abonos) - len(pendientes) - (1 if _prima(arr) else 0), 0)
         arr.estado = "completado"
         arr.completado_en = dt.datetime.now(dt.timezone.utc)
         arr.motivo_cierre = "Lo abonado cubrió la deuda que quedó"
@@ -293,12 +293,40 @@ def quitar_cuotas_de_arreglo(arr, salen, parte, motivo, quien):
             if c not in salen:
                 c.estado = "pagada"
     else:
-        base = _dinero(falta / len(pendientes))
-        for i, a in enumerate(pendientes):
-            a.monto = base if i < len(pendientes) - 1 else falta - base * (len(pendientes) - 1)
-        arr.monto_por_abono = base
+        arr.monto_por_abono = repartir_en_abonos(arr, falta, pendientes)
     arr.nota = (f"{arr.nota or ''}\n[{hoy.strftime('%d/%m/%Y')}] {quien}: {motivo}").strip()[:500]
     return None
+
+
+def _prima(arr):
+    """El abono 1 cuando el arreglo se firmó con prima (abono_inicial)."""
+    if not arr.abono_inicial or _dinero(arr.abono_inicial) <= 0:
+        return None
+    return next((a for a in arr.abonos if a.numero == 1), None)
+
+
+def repartir_en_abonos(arr, falta, pendientes):
+    """
+    Reparte `falta` en los abonos `pendientes` (ordenados por número).
+    Día 76 — la PRIMA pactada no se toca si todavía no se pagó: es el monto
+    que la familia acordó dar al firmar. Lo que falta se reparte parejo en
+    los abonos normales (el último absorbe el redondeo). Solo si los abonos
+    normales no alcanzan a absorber el cambio se ajusta también la prima.
+    Devuelve el monto base por abono. No hace commit.
+    """
+    prima = _prima(arr)
+    prima = prima if prima in pendientes else None
+    normales = [a for a in pendientes if a is not prima]
+    if prima is not None:
+        monto_prima = _dinero(arr.abono_inicial)
+        resto = falta - monto_prima
+        if normales and resto > 0:
+            prima.monto = monto_prima
+            pendientes, falta = normales, resto
+    base = _dinero(falta / len(pendientes))
+    for i, a in enumerate(pendientes):
+        a.monto = base if i < len(pendientes) - 1 else falta - base * (len(pendientes) - 1)
+    return base
 
 
 def preparar_regreso_con_arreglo(cuenta, quien, aplicar=False):
