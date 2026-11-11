@@ -451,7 +451,10 @@ def cobrar_abono(usuario_actual, uuid, abono_uuid):
         subido_por=usuario_actual.id,
         metodo=metodo,
         monto=abono.monto,
-        referencia=(data.get("referencia") or f"Abono {abono.numero}/{arreglo.num_abonos} arreglo")[:120],
+        # Día 76 — num_abonos no cuenta la prima: salía «Abono 3/2».
+        referencia=(data.get("referencia") or (
+            "Prima del arreglo" if arreglo.abono_inicial and float(arreglo.abono_inicial) > 0 and abono.numero == 1
+            else f"Abono {abono.numero}/{len(arreglo.abonos)} arreglo"))[:120],
         estado="aprobado",
         revisado_por=usuario_actual.id,
         revisado_en=dt.datetime.now(dt.timezone.utc),

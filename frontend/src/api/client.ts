@@ -996,15 +996,22 @@ export const editarUsuario = (uuid: string, body: {
   request<UsuarioAdminDTO>(`/usuarios/${uuid}`, { method: "PUT", body: JSON.stringify(body) });
 
 // ── CAJA ──────────────────────────────────────────────────────────────────────
-export interface CuotaPendienteCaja { cuota_id: string; mes_label: string; monto: number; estado: string; }
+export interface CuotaPendienteCaja {
+  cuota_id: string; mes_label: string; monto: number; estado: string;
+  /** Día 76 — monto entero de la cuota (monto es lo que falta) y su vencimiento. */
+  monto_cuota?: number; fecha_vencimiento?: string;
+}
 export interface AbonoCajaDTO {
   arreglo_id: string; abono_id: string; numero: number; total_abonos: number;
   monto: number; fecha_pactada: string; estado: string;
+  /** Día 76 */
+  es_prima?: boolean; en_revision?: boolean;
 }
 export interface CuentaCajaDTO {
   cuenta_id: string; identificador: string; titular: string;
   /** Día 76 — casa que se mudó debiendo: aparece solo para cobrarle. */
   dada_de_baja?: boolean; motivo_baja?: string | null;
+  bloqueada?: boolean;
   residentes?: { id: string; nombre: string }[];
   cuotas_pendientes: CuotaPendienteCaja[];
   abonos_arreglo?: AbonoCajaDTO[];
@@ -1375,7 +1382,8 @@ export const cambiarPropositoArreglo = (uuid: string, proposito: PropositoArregl
   request<ArregloDTO>(`/arreglos/${uuid}/proposito`, { method: "POST", body: JSON.stringify({ proposito }) });
 
 export const cobrarAbono = (arregloUuid: string, abonoUuid: string, metodo: string, referencia?: string) =>
-  request<ArregloDTO>(`/arreglos/${arregloUuid}/abonos/${abonoUuid}/cobrar`,
+  // Día 76 — trae también el pago, para el recibo.
+  request<ArregloDTO & { pago?: { id: string; numero_recibo?: number | null } }>(`/arreglos/${arregloUuid}/abonos/${abonoUuid}/cobrar`,
     { method: "POST", body: JSON.stringify({ metodo, referencia }) });
 
 export const cancelarArreglo = (uuid: string, motivo?: string) =>

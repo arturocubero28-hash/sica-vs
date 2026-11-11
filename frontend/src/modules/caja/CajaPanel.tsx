@@ -1,15 +1,16 @@
 import { useState, useEffect } from "react";
 import {
-  estadoCaja, abrirCaja, saldoApertura, buscarCuentaCaja, registrarPagoCaja, cerrarCaja,
+  estadoCaja, abrirCaja, saldoApertura, buscarCuentaCaja, cerrarCaja,
   reportarDescuadre, solicitarSalida, solicitarIngreso, urlConstanciaCaja, urlReciboPDF,
-  listarTiposTarjeta, venderTarjetaCaja, cobrarAbono,
+  listarTiposTarjeta, venderTarjetaCaja,
   type SesionCajaDTO, type CuentaCajaDTO, type TipoTarjetaDTO,
 } from "../../api/client";
 import { L } from "../../utils/formato";
 import { InfoTip } from "../../components/InfoTip";
 import { LectorTarjeta } from "../unidades/LectorTarjeta";
-import { AlertTriangle, Banknote, CreditCard, FileText, LockOpen, Receipt, Ticket } from "lucide-react";
+import { AlertTriangle, Banknote, CreditCard, FileText, LockOpen, Printer, Ticket } from "lucide-react";
 import { FuncionNoIncluida } from "../../components/FuncionNoIncluida";
+import { CobroVentanilla } from "./CobroVentanilla";
 
 export function CajaPanel() {
   const [sesion, setSesion] = useState<SesionCajaDTO | null>(null);
@@ -60,7 +61,7 @@ export function CajaPanel() {
       {/* Layout POS: cobro a la izquierda (protagonista), arqueo a la derecha */}
       <div className="pos-grid">
         <div className="pos-main">
-          <RegistrarPago onRegistrado={recargar} />
+          <CobroVentanilla cajero={sesion.cajero} onRegistrado={recargar} />
 
           {/* Pagos de la sesión: debajo del cobro, en la columna principal */}
           <div className="dash-card pos-pagos-card">
@@ -70,7 +71,7 @@ export function CajaPanel() {
             ) : (
               <div className="scroll-x">
                 <table className="data">
-                  <thead><tr><th>Hora</th><th>Monto</th><th>Método</th><th>Referencia</th></tr></thead>
+                  <thead><tr><th>Hora</th><th>Monto</th><th>Método</th><th>Referencia</th><th></th></tr></thead>
                   <tbody>
                     {sesion.pagos.map(p => (
                       <tr key={p.id}>
@@ -78,6 +79,8 @@ export function CajaPanel() {
                         <td>{L(p.monto)}</td>
                         <td><span className="pill">{p.metodo === "efectivo" ? "Efectivo" : "Tarjeta POS"}</span></td>
                         <td>{p.referencia || "—"}</td>
+                        <td><a className="pos-recibo-link" href={urlReciboPDF(p.id)} target="_blank" rel="noreferrer"
+                          title="Imprimir el recibo de este pago"><Printer size={14} /> Recibo</a></td>
                       </tr>
                     ))}
                   </tbody>
@@ -171,170 +174,6 @@ function AbrirCaja({ onAbierta }: { onAbierta: () => void }) {
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function RegistrarPago({ onRegistrado }: { onRegistrado: () => void }) {
-  const [busqueda, setBusqueda] = useState("");
-  const [resultados, setResultados] = useState<CuentaCajaDTO[]>([]);
-  const [buscando, setBuscando] = useState(false);
-  const [seleccion, setSeleccion] = useState<{ cuotaId?: string; arregloId?: string; abonoId?: string; label: string; monto: number } | null>(null);
-  const [metodo, setMetodo] = useState("efectivo");
-  const [referencia, setReferencia] = useState("");
-  const [pagaCon, setPagaCon] = useState("");
-  const [msg, setMsg] = useState("");
-  const [ultimoRecibo, setUltimoRecibo] = useState<{ uuid: string; numero?: number | null; label: string; monto: number; vuelto: number } | null>(null);
-
-  const montoPagaCon = parseFloat(pagaCon || "0");
-  const vuelto = seleccion && montoPagaCon > 0 ? montoPagaCon - seleccion.monto : 0;
-
-  async function buscar() {
-    if (!busqueda.trim()) return;
-    setBuscando(true);
-    try { setResultados(await buscarCuentaCaja(busqueda)); }
-    finally { setBuscando(false); }
-  }
-
-  async function cobrar() {
-    if (!seleccion) return;
-    setMsg("");
-    try {
-      let reciboUuid = "", reciboNum: number | undefined;
-      if (seleccion.abonoId && seleccion.arregloId) {
-        // Cobro de un abono de arreglo de pago
-        await cobrarAbono(seleccion.arregloId, seleccion.abonoId, metodo, referencia);
-        // El abono no devuelve un pago con recibo directo; mostramos confirmación simple
-      } else if (seleccion.cuotaId) {
-        const res = await registrarPagoCaja({ cuota_id: seleccion.cuotaId, metodo, referencia });
-        reciboUuid = res.pago.id; reciboNum = res.pago.numero_recibo;
-      }
-      const vueltoFinal = metodo === "efectivo" && montoPagaCon > 0 ? vuelto : 0;
-      setUltimoRecibo({
-        uuid: reciboUuid, numero: reciboNum,
-        label: seleccion.label, monto: seleccion.monto, vuelto: vueltoFinal,
-      });
-      setMsg("");
-      setSeleccion(null); setBusqueda(""); setResultados([]); setReferencia(""); setPagaCon("");
-      onRegistrado();
-    } catch (e) { setMsg((e as Error).message); }
-  }
-
-  return (
-    <div className="dash-card pos-cobro-card">
-      <h3 className="pos-cobro-titulo"><Banknote size={16} /> Cobrar en ventanilla</h3>
-      <div className="caja-buscar-row pos-buscar">
-        <input placeholder="Buscar casa o titular…" value={busqueda} autoFocus
-          onChange={e => setBusqueda(e.target.value)} onKeyDown={e => e.key === "Enter" && buscar()} />
-        <button className="cuota-btn-pagar pos-buscar-btn" onClick={buscar} disabled={buscando}>
-          {buscando ? "…" : "Buscar"}
-        </button>
-      </div>
-
-      {/* Comprobante tras cobrar */}
-      {ultimoRecibo && (
-        <div className="recibo-cobro">
-          <div className="recibo-cobro-head">
-            <span className="recibo-check">✓</span>
-            <div>
-              <div className="recibo-cobro-titulo">Pago registrado</div>
-              <div className="muted small">{ultimoRecibo.label} — {L(ultimoRecibo.monto)}
-                {ultimoRecibo.numero ? ` · Recibo REC-${String(ultimoRecibo.numero).padStart(6, "0")}` : ""}</div>
-            </div>
-          </div>
-          {ultimoRecibo.vuelto > 0 && (
-            <div className="recibo-vuelto">Vuelto entregado: <b>{L(ultimoRecibo.vuelto)}</b></div>
-          )}
-          <div className="recibo-cobro-acciones">
-            <a className="cuota-btn-pagar" href={urlReciboPDF(ultimoRecibo.uuid)} target="_blank" rel="noreferrer"
-              style={{ textDecoration: "none", textAlign: "center" }}>
-              <Receipt size={16} /> Imprimir recibo
-            </a>
-            <button className="ghost" onClick={() => setUltimoRecibo(null)}>Cobrar otro</button>
-          </div>
-        </div>
-      )}
-
-      {resultados.map(c => (
-        <div key={c.cuenta_id} className="caja-resultado">
-          <div className="caja-resultado-head">
-            <b>{c.identificador}</b> · {c.titular}
-            {c.dada_de_baja && (
-              <span className="pill amber" style={{ marginLeft: 8 }}
-                title={c.motivo_baja ? `Motivo: ${c.motivo_baja}` : undefined}>
-                Dada de baja · deuda pendiente
-              </span>
-            )}
-          </div>
-          {c.cuotas_pendientes.length === 0 && (!c.abonos_arreglo || c.abonos_arreglo.length === 0) ? (
-            <span className="muted small">Sin cuotas pendientes</span>
-          ) : (
-            <div className="caja-cuotas">
-              {c.cuotas_pendientes.map(q => (
-                <button key={q.cuota_id}
-                  className={`caja-cuota-chip ${seleccion?.cuotaId === q.cuota_id ? "on" : ""}`}
-                  onClick={() => setSeleccion({ cuotaId: q.cuota_id, label: `${c.identificador} · ${q.mes_label}`, monto: q.monto })}>
-                  {q.mes_label} — {L(q.monto)}
-                </button>
-              ))}
-              {(c.abonos_arreglo || []).map(a => (
-                <button key={a.abono_id}
-                  className={`caja-cuota-chip arreglo ${seleccion?.abonoId === a.abono_id ? "on" : ""}`}
-                  onClick={() => setSeleccion({ arregloId: a.arreglo_id, abonoId: a.abono_id, label: `${c.identificador} · Abono ${a.numero}/${a.total_abonos}`, monto: a.monto })}>
-                  Abono {a.numero}/{a.total_abonos} — {L(a.monto)}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-
-      {seleccion && (
-        <div className="caja-cobro">
-          <div className="caja-cobro-info">
-            Cobrando: <b>{seleccion.label}</b> — <b>{L(seleccion.monto)}</b>
-          </div>
-          <div className="caja-cobro-metodo">
-            <label className={metodo === "efectivo" ? "on" : ""}>
-              <input type="radio" checked={metodo === "efectivo"} onChange={() => setMetodo("efectivo")} /> Efectivo
-            </label>
-            <label className={metodo === "tarjeta_pos" ? "on" : ""}>
-              <input type="radio" checked={metodo === "tarjeta_pos"} onChange={() => setMetodo("tarjeta_pos")} /> Tarjeta (POS)
-            </label>
-          </div>
-          {metodo === "tarjeta_pos" && (
-            <input placeholder="N° de voucher / referencia POS" value={referencia}
-              onChange={e => setReferencia(e.target.value)} />
-          )}
-          {metodo === "efectivo" && (
-            <div className="vuelto-box">
-              <div className="form-field" style={{ margin: 0 }}>
-                <label>¿Con cuánto paga el residente?</label>
-                <input type="number" min="0" value={pagaCon}
-                  onChange={e => setPagaCon(e.target.value)}
-                  placeholder={`Mínimo ${seleccion.monto}`} />
-              </div>
-              {montoPagaCon > 0 && (
-                vuelto < 0 ? (
-                  <div className="vuelto-resultado falta">
-                    Falta: <b>{L(Math.abs(vuelto))}</b> (el pago no cubre la cuota)
-                  </div>
-                ) : (
-                  <div className="vuelto-resultado ok">
-                    Vuelto a entregar: <b>{L(vuelto)}</b>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-          <button className="cuota-btn-pagar full" onClick={cobrar}
-            disabled={metodo === "efectivo" && montoPagaCon > 0 && vuelto < 0}>
-            Confirmar pago {L(seleccion.monto)}
-          </button>
-        </div>
-      )}
-
-      {msg && <div className={msg.startsWith("✓") ? "cuota-ok" : "error"} style={{ marginTop: 10 }}>{msg}</div>}
     </div>
   );
 }

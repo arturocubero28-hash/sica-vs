@@ -335,12 +335,31 @@ def _generar_pdf_recibo(pago, cfg):
 
     # Concepto: si el pago corresponde a una cuota con período conocido, se
     # arma "Pago de cuota — Agosto 2026" en vez del genérico de antes.
-    concepto = pago.referencia or "Pago de cuota"
-    if not pago.referencia and pago.cuota and pago.cuota.periodo:
-        meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
-                 "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    #
+    # Día 76 — el concepto sale de LO QUE SE PAGÓ (cuota o abono), no de la
+    # referencia: en un pago con POS la referencia es el número de voucher y
+    # el recibo decía «Concepto: AUT-55821». La referencia va junto a la
+    # forma de pago. Solo un pago sin cuota ni abono (venta de tarjeta, por
+    # ejemplo) usa la referencia como concepto, como antes.
+    meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+             "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    abono = None
+    if pago.abono_id:
+        from app.models.cuenta import AbonoArreglo
+        abono = AbonoArreglo.query.get(pago.abono_id)
+    if pago.cuota and pago.cuota.periodo:
         p = pago.cuota.periodo
         concepto = f"Pago de cuota — {meses[p.month - 1].capitalize()} {p.year}"
+    elif abono is not None and abono.arreglo is not None:
+        arr = abono.arreglo
+        if arr.abono_inicial and float(arr.abono_inicial) > 0 and abono.numero == 1:
+            concepto = "Prima de arreglo de pago"
+        else:
+            concepto = f"Abono {abono.numero} de {len(arr.abonos)} — arreglo de pago"
+    else:
+        concepto = pago.referencia or "Pago de cuota"
+    if (pago.cuota or abono is not None) and pago.referencia and pago.metodo != "efectivo":
+        metodo_label = f"{metodo_label} · {pago.referencia[:18]}"
 
     def _icono(tipo, cx, cy, color):
         """
